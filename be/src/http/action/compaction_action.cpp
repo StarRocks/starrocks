@@ -38,6 +38,9 @@
 #include <sstream>
 #include <string>
 
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/tracer.h"
@@ -49,6 +52,7 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
@@ -58,10 +62,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
 #include "util/json_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -273,7 +274,8 @@ Status CompactionAction::_handle_show_repairs(HttpRequest* req, std::string* jso
         need_to_repair.PushBack(item, root.GetAllocator());
     }
     root.AddMember("need_to_repair", need_to_repair, root.GetAllocator());
-    root.AddMember("need_to_repair_num", tablets_with_small_segment_files.size(), root.GetAllocator());
+    root.AddMember("need_to_repair_num", static_cast<uint64_t>(tablets_with_small_segment_files.size()),
+                   root.GetAllocator());
 
     rapidjson::Document executed;
     executed.SetArray();
@@ -295,7 +297,7 @@ Status CompactionAction::_handle_show_repairs(HttpRequest* req, std::string* jso
         executed.PushBack(item, root.GetAllocator());
     }
     root.AddMember("executed_task", executed, root.GetAllocator());
-    root.AddMember("executed_task_num", tasks.size(), root.GetAllocator());
+    root.AddMember("executed_task_num", static_cast<uint64_t>(tasks.size()), root.GetAllocator());
 
     rapidjson::StringBuffer strbuf;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
@@ -324,6 +326,7 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
         // do all tablets
         for (auto& itr : tablets_with_small_segment_files) {
             vector<uint32_t> rowsetids;
+            rowsetids.reserve(itr.second.size());
             for (const auto& rowset_segments_pair : itr.second) {
                 rowsetids.emplace_back(rowset_segments_pair.first);
             }

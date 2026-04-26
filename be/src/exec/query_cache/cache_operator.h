@@ -17,7 +17,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_param.h"
 #include "exec/query_cache/lane_arbiter.h"
@@ -28,6 +28,10 @@ namespace pipeline {
 class PipelineDriver;
 using DriverRawPtr = PipelineDriver*;
 } // namespace pipeline
+
+namespace lake {
+class TabletManager;
+} // namespace lake
 
 namespace query_cache {
 class PerLaneBuffer;
@@ -76,6 +80,7 @@ private:
                                           int64_t version);
     bool _should_passthrough(size_t num_rows, size_t num_bytes);
     ChunkPtr _pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer);
+    lake::TabletManager* _lake_tablet_manager = nullptr;
     CacheManagerRawPtr _cache_mgr;
     const CacheParam& _cache_param;
     LaneArbiterPtr _lane_arbiter;

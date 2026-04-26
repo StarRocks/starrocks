@@ -22,19 +22,25 @@
 #include <mutex>
 #include <thread>
 
+#include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/empty_set_operator.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
-#include "util/runtime_profile.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 #pragma GCC push_options
 #pragma GCC optimize("no-inline")
@@ -112,24 +118,24 @@ TEST(TimerThreadTest, test) {
             int32_t& changed;
             std::counting_semaphore<>& s;
         };
-        Timer noop(changed, s);
+        auto noop = std::make_shared<Timer>(changed, s);
         //
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
         timespec s1 = abstime;
         s1.tv_sec -= 10;
         // schedule a expired task
-        ASSERT_OK(timer.schedule(&noop, s1));
+        ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
-        noop.unschedule(&timer);
+        noop->unschedule(&timer);
         ASSERT_TRUE(changed);
 
         timespec s2 = abstime;
         s2.tv_sec += 3600;
         // schedule a task
         changed = false;
-        ASSERT_OK(timer.schedule(&noop, s2));
+        ASSERT_OK(timer.schedule(noop.get(), s2));
         sleep(1);
-        noop.unschedule(&timer);
+        noop->unschedule(&timer);
         ASSERT_FALSE(changed);
     }
     {
@@ -145,16 +151,16 @@ TEST(TimerThreadTest, test) {
             int32_t& changed;
             std::counting_semaphore<>& s;
         };
-        SleepTimer noop(changed, s);
+        auto noop = std::make_shared<SleepTimer>(changed, s);
         //
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
         timespec s1 = abstime;
         s1.tv_sec -= 10;
         // schedule a expired task
-        ASSERT_OK(timer.schedule(&noop, s1));
+        ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
         // will wait util timer finished
-        noop.unschedule(&timer);
+        noop->unschedule(&timer);
         ASSERT_TRUE(changed);
     }
 }
@@ -166,9 +172,13 @@ public:
         _dummy_fragment_ctx = std::make_shared<FragmentContext>();
         _exec_group = std::make_shared<NormalExecutionGroup>();
         _runtime_state = std::make_shared<RuntimeState>();
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
         _runtime_state->_obj_pool = std::make_shared<ObjectPool>();
         _runtime_state->set_query_ctx(_dummy_query_ctx.get());
         _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get());
+        _runtime_state->set_fragment_dict_state(_dummy_fragment_ctx->dict_state());
         _runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");
         _dummy_fragment_ctx->set_runtime_state(std::move(_runtime_state));
         _runtime_state = _dummy_fragment_ctx->runtime_state_ptr();
@@ -209,6 +219,8 @@ TEST_F(PipelineObserverTest, basic_test) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
     const auto& driver_queue = tx.driver_queue;
 
@@ -231,6 +243,8 @@ TEST_F(PipelineObserverTest, test_obs) {
     factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_in_blocked(true);
@@ -250,6 +264,8 @@ TEST_F(PipelineObserverTest, test_cancel) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
@@ -268,6 +284,8 @@ TEST_F(PipelineObserverTest, test_add_blocked_driver) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
@@ -281,6 +299,8 @@ TEST_F(PipelineObserverTest, race_scheduler_observer) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);

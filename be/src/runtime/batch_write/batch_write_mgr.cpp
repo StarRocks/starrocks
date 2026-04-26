@@ -14,15 +14,19 @@
 
 #include "runtime/batch_write/batch_write_mgr.h"
 
+#include "base/metrics.h"
+#include "base/testutil/sync_point.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_merge_commit_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "testutil/sync_point.h"
-#include "util/metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -236,7 +240,7 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
                                                             io_buf.size(), copy_size)));
     }
     ctx->buffer->pos += io_buf.size();
-    ctx->buffer->flip();
+    ctx->buffer->flip_to_read();
     ctx->receive_bytes = io_buf.size();
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->status = append_data(ctx);

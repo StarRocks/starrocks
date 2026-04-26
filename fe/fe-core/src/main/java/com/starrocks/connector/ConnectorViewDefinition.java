@@ -48,7 +48,7 @@ public class ConnectorViewDefinition {
         this.columns = columns;
         this.inlineViewDef = inlineViewDef;
         this.alterDialect = alterDialect;
-        this.properties = properties;
+        this.properties = properties == null ? Maps.newHashMap() : properties;
     }
 
     public static ConnectorViewDefinition fromCreateViewStmt(CreateViewStmt stmt) {
@@ -60,7 +60,7 @@ public class ConnectorViewDefinition {
                 stmt.getColumns(),
                 stmt.getInlineViewDef(),
                 AlterViewStmt.AlterDialectType.NONE,
-                Maps.newHashMap());
+                stmt.getProperties());
     }
 
     public static ConnectorViewDefinition fromAlterViewStmt(AlterViewStmt stmt) {

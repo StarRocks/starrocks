@@ -14,16 +14,20 @@
 
 #pragma once
 
+#ifdef __APPLE__
+#include <sys/mount.h>
+#else
 #include <sys/statfs.h>
+#endif
 
 #include <atomic>
 #include <memory>
 #include <utility>
 
+#include "base/random/random.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
-#include "util/random.h"
 
 namespace starrocks::spill {
 
@@ -96,12 +100,20 @@ public:
 
     StatusOr<DirPtr> acquire_writable_dir(const AcquireDirOptions& opts);
 
+    // Read-only snapshot of the managed directories; used by metrics hooks
+    // to aggregate spill disk usage.
+    std::vector<DirPtr> dirs() const { return _dirs; }
+
 private:
     bool is_same_disk(const std::string& path1, const std::string& path2) {
         struct statfs stat1, stat2;
         statfs(path1.c_str(), &stat1);
         statfs(path2.c_str(), &stat2);
+#ifdef __APPLE__
+        return stat1.f_fsid.val[0] == stat2.f_fsid.val[0] && stat1.f_fsid.val[1] == stat2.f_fsid.val[1];
+#else
         return stat1.f_fsid.__val[0] == stat2.f_fsid.__val[0] && stat1.f_fsid.__val[1] == stat2.f_fsid.__val[1];
+#endif
     }
 
     std::vector<DirPtr> _dirs;

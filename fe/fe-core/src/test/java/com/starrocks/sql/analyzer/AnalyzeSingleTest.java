@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -301,6 +302,33 @@ public class AnalyzeSingleTest {
         // Test ambiguous reference
         analyzeSuccess("select v1, v1 from t0 order by v1");
         analyzeFail("select v1 as v, v2 as v from t0 order by v");
+        analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
+    }
+
+    @Test
+    public void testOrderAll() {
+        // Simple test
+        analyzeSuccess("select v1 from t0 order by all");
+        analyzeSuccess("select v1 from t0 order by all nulls first");
+        analyzeSuccess("select v1 from t0 order by all nulls last");
+        analyzeSuccess("select v1 from t0 order by all limit 2, 10");
+
+        // Test output scope resolve
+        analyzeSuccess("select v1+1 as v from t0 order by all");
+        analyzeSuccess("select v1+2 as v,* from t0 order by all nulls first");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v1+1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v order by all");
+
+        // Test order by with aggregation
+        analyzeSuccess("select v1, sum(v2) from t0 group by v1 order by all");
+        analyzeSuccess("select v1,v3,sum(v2) from t0 group by v1,v3 order by all nulls first");
+
+        // Test ambiguous reference
+        analyzeFail("select v1, v1 from t0 order by v1, all");
+        analyzeSuccess("select v1 as v, v2 as v from t0 order by all");
+        analyzeSuccess("select v1, v1 from t0 order by all");
         analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
     }
 
@@ -602,6 +630,24 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testAlterTask() {
+        StatementBase statementBase = analyzeSuccess("alter task if exists t1 resume");
+        Assertions.assertTrue(statementBase instanceof AlterTaskStmt);
+        AlterTaskStmt alterTaskStmt = (AlterTaskStmt) statementBase;
+        Assertions.assertTrue(alterTaskStmt.isIfExists());
+        Assertions.assertEquals(AlterTaskStmt.AlterAction.RESUME, alterTaskStmt.getAction());
+
+        statementBase = analyzeSuccess("alter task t1 suspend");
+        alterTaskStmt = (AlterTaskStmt) statementBase;
+        Assertions.assertEquals(AlterTaskStmt.AlterAction.SUSPEND, alterTaskStmt.getAction());
+
+        statementBase = analyzeSuccess("alter task t1 set ('session.query_timeout'='5000')");
+        alterTaskStmt = (AlterTaskStmt) statementBase;
+        Assertions.assertEquals(AlterTaskStmt.AlterAction.SET, alterTaskStmt.getAction());
+        Assertions.assertEquals("5000", alterTaskStmt.getProperties().get("session.query_timeout"));
+    }
+
+    @Test
     public void testLowCard() {
         String sql = "select * from test.t0 [_META_]";
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
@@ -632,8 +678,12 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
 
         analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
-                "Getting syntax error from line 1, column 35 to line 1, column 45. " +
-                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+                "Getting syntax error from line 1, column 34 to line 1, column 46. " +
+                        "Detail message: The number of children in expr are 6 exceeded the maximum limit 5");
+
+        analyzeFail("select * from test.t0 where v1 in ('1','2','3','4','5','6')",
+                "Getting syntax error from line 1, column 34 to line 1, column 58. " +
+                        "Detail message: The number of children in expr are 6 exceeded the maximum limit 5");
 
         analyzeFail("select [1,2,3,4,5,6]",
                 "Getting syntax error from line 1, column 8 to line 1, column 18. " +

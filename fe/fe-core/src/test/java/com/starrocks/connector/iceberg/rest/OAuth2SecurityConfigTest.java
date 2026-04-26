@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.JWT;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
 
@@ -57,6 +58,14 @@ public class OAuth2SecurityConfigTest {
         properties.put("oauth2.scope", "PRINCIPAL");
         config = OAuth2SecurityConfigBuilder.build(properties);
         Assertions.assertEquals(NONE, config.getSecurity());
+        
+        // Test JWT security
+        properties = new HashMap<>();
+        properties.put("security", "jwt");
+        properties.put("oauth2.token", "jwt-token-value");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        Assertions.assertEquals(JWT, config.getSecurity());
+        Assertions.assertEquals("jwt-token-value", config.getToken().get());
     }
 
     @Test
@@ -76,5 +85,17 @@ public class OAuth2SecurityConfigTest {
         config = OAuth2SecurityConfigBuilder.build(properties);
         oauth2Properties = new OAuth2SecurityProperties(config);
         Assertions.assertEquals(0, oauth2Properties.get().size());
+        
+        // Test JWT properties
+        properties = new HashMap<>();
+        properties.put("security", "jwt");
+        properties.put("oauth2.token", "jwt-token-value");
+        properties.put("oauth2.audience", "test-audience");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        oauth2Properties = new OAuth2SecurityProperties(config);
+        Assertions.assertEquals("jwt-token-value", oauth2Properties.get().get(OAuth2Properties.TOKEN));
+        Assertions.assertEquals("test-audience", oauth2Properties.get().get(OAuth2Properties.AUDIENCE));
+        // check token refresh disabled for JWT
+        Assertions.assertEquals("false", oauth2Properties.get().get(OAuth2Properties.TOKEN_REFRESH_ENABLED));
     }
 }

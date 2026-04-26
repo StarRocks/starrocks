@@ -20,6 +20,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -27,6 +28,8 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TKeyRange;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -45,6 +48,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         Config.tablet_sched_disable_colocate_overall_balance = true;
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @AfterEach
@@ -81,7 +85,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 " WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
                 "THEN l_shipdate ELSE NULL END, 3))), 2) ELSE NULL END) from lineitem";
         String plan = getCostExplain(sql);
-        assertContains(plan, "concat-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
+        assertContains(plan, "CONCAT-->[-Infinity, Infinity, 0.7037037037037036, 3.0, 411.8] ESTIMATE");
     }
 
     @Test
@@ -779,31 +783,31 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
         assertContains(plan, "* month-->[1.0, 12.0, 0.0, 1.0, 12.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT day(P_PARTKEY) AS day FROM part GROUP BY day ORDER BY day DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "day-->[1.0, 31.0, 0.0, 1.0, 31.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT hour(P_PARTKEY) AS hour FROM part GROUP BY hour ORDER BY hour DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, " hour-->[0.0, 23.0, 0.0, 1.0, 24.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT minute(P_PARTKEY) AS minute FROM part GROUP BY minute ORDER BY minute DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "minute-->[0.0, 59.0, 0.0, 1.0, 60.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT second(P_PARTKEY) AS second FROM part GROUP BY second ORDER BY second DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "* second-->[0.0, 59.0, 0.0, 1.0, 60.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
     }
 
     @Test
@@ -811,11 +815,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // check cardinality is not 0
         String sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) = 6";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "cardinality=11111111");
+        assertContains(plan, "cardinality=11320755");
 
         sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) in (6)";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "cardinality=11111111");
+        assertContains(plan, "cardinality=11320755");
     }
 
     @Test
@@ -898,8 +902,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select (case when `O_ORDERKEY` = 0 then 'ALGERIA' when `O_ORDERKEY` = 1 then 'ARGENTINA' end) a " +
                 "from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "cardinality: 2");
-        assertContains(plan, "* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0]");
+        assertContains(plan, "cardinality: 3");
+        assertContains(plan, "* case-->[-Infinity, Infinity, 0.3333333333333333, 16.0, 2.0]");
 
         sql = "select (case when `O_ORDERKEY` = 0 then O_ORDERSTATUS when `O_ORDERKEY` = 1 then 'ARGENTINA' " +
                 "else 'other' end) a from orders group by 1";
@@ -1463,6 +1467,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  equal join conjunct: [1: d_datekey, INT, true] = [18: d_datekey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (18: d_datekey), remote = false\n" +
+                "  |  output columns: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 35\n" +
                 "  |  cardinality: 2300\n" +
                 "  |  \n" +
                 "  |----2:AGGREGATE (update finalize)");
@@ -1501,7 +1506,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "39:Project\n" +
                 "  |  <slot 2> : 2: N_NAME\n" +
                 "  |  <slot 64> : if(CAST(42: C_NATIONKEY AS DOUBLE) > 44: C_ACCTBAL, 31: O_ORDERPRIORITY, " +
-                "CAST(33: O_SHIPPRIORITY AS VARCHAR(15)))\n" +
+                "CAST(33: O_SHIPPRIORITY AS VARCHAR))\n" +
                 "  |  \n" +
                 "  38:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -1602,18 +1607,20 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testOneTabletDistinctAgg() throws Exception {
-        String sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
-                + "  |  output: sum(3: sum), group_concat(2: name, ',')\n"
-                + "  |  group by: 1: id\n"
-                + "  |  \n"
-                + "  1:AGGREGATE (update serialize)\n"
-                + "  |  output: sum(1: id)\n"
-                + "  |  group by: 1: id, 2: name\n"
-                + "  |  \n"
-                + "  0:OlapScanNode");
+        String sql;
+        String plan;
+
+        sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: sum), group_concat(2: name, ',')\n" +
+                "  |  group by: 1: id\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(1: id)\n" +
+                "  |  group by: 1: id, 2: name\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         sql = "select n_name,count(distinct n_regionkey,n_name) from nation group by n_name";
         plan = getFragmentPlan(sql);
@@ -1700,5 +1707,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n"
                 + "  |  \n"
                 + "  2:ANALYTIC");
+    }
+
+    @Test
+    public void testPartitionRangeGen() throws Exception {
+        String sql = "select * from lineitem_partition where L_SHIPDATE = cast(abs('19950101') as date);";
+        ExecPlan p = getExecPlan(sql);
+        OlapScanNode scanNodes = (OlapScanNode) p.getScanNodes().get(0);
+        List<TScanRangeLocations> locations = scanNodes.getScanRangeLocations(0);
+        List<TKeyRange> keyRange = locations.get(0).getScan_range().getInternal_scan_range().getPartition_column_ranges();
+        Assertions.assertEquals(1, keyRange.size());
+        Assertions.assertEquals(19920101, keyRange.get(0).begin_key);
+        Assertions.assertEquals(19930101, keyRange.get(0).end_key);
+        Assertions.assertEquals(1, scanNodes.getPartitionConjuncts().size());
     }
 }

@@ -14,16 +14,20 @@
 
 #include "table_function_table_sink.h"
 
+#include "common/runtime_profile.h"
 #include "connector/file_chunk_sink.h"
 #include "exec/data_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_file_writer.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -41,7 +45,7 @@ Status TableFunctionTableSink::init(const TDataSink& thrift_sink, RuntimeState* 
 
 Status TableFunctionTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     std::stringstream title;
     title << "TableFunctionTableSink (frag_id=" << state->fragment_instance_id() << ")";
     _profile = _pool->add(new RuntimeProfile(title.str()));
@@ -49,7 +53,7 @@ Status TableFunctionTableSink::prepare(RuntimeState* state) {
 }
 
 Status TableFunctionTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -57,8 +61,8 @@ Status TableFunctionTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status TableFunctionTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+Status TableFunctionTableSink::close(RuntimeState* state, const Status& exec_status) {
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 
@@ -79,6 +83,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     DCHECK(target_table.columns.size() == output_exprs.size());
 
     std::vector<std::string> column_names;
+    column_names.reserve(target_table.columns.size());
     for (const auto& column : target_table.columns) {
         column_names.push_back(column.column_name);
     }
@@ -91,7 +96,8 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     if (target_table.__isset.partition_column_ids) {
         sink_ctx->partition_column_indices = target_table.partition_column_ids;
     }
-    sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
+    auto* query_execution_services = runtime_state->query_execution_services();
+    sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     sink_ctx->format = target_table.file_format;
     if (target_table.__isset.target_max_file_size) {
         sink_ctx->max_file_size = target_table.target_max_file_size;
@@ -107,6 +113,17 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     }
     if (target_table.__isset.csv_row_delimiter) {
         sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = target_table.csv_row_delimiter;
+    }
+    if (target_table.__isset.csv_include_header && target_table.csv_include_header) {
+        sink_ctx->options[formats::CSVWriterOptions::INCLUDE_HEADER] = "true";
+    }
+    if (target_table.__isset.csv_enclose) {
+        sink_ctx->options[formats::CSVWriterOptions::ENCLOSE] =
+                std::string(1, static_cast<char>(target_table.csv_enclose));
+    }
+    if (target_table.__isset.csv_escape) {
+        sink_ctx->options[formats::CSVWriterOptions::ESCAPE] =
+                std::string(1, static_cast<char>(target_table.csv_escape));
     }
     if (target_table.__isset.parquet_use_legacy_encoding && target_table.parquet_use_legacy_encoding) {
         sink_ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";
@@ -127,21 +144,22 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
                 pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
 
     } else {
         std::vector<TExpr> partition_exprs;
+        partition_exprs.reserve(target_table.partition_column_ids.size());
         for (auto id : target_table.partition_column_ids) {
             partition_exprs.push_back(output_exprs[id]);
         }
         std::vector<ExprContext*> partition_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                       runtime_state));
         auto ops = context->interpolate_local_key_partition_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     }
 
     return Status::OK();

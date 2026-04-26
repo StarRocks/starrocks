@@ -106,12 +106,12 @@ public class ResultReceiver {
                     }
                 }
                 TStatusCode code = TStatusCode.findByValue(pResult.status.statusCode);
+                rowBatch.setQueryStatistics(pResult.queryStatistics);
                 if (code != TStatusCode.OK) {
                     status.setPstatus(pResult.status);
-                    return null;
+                    return rowBatch;
                 }
 
-                rowBatch.setQueryStatistics(pResult.queryStatistics);
 
                 if (packetIdx != pResult.packetSeq) {
                     LOG.warn("receive packet failed, expect={}, receive={}", packetIdx, pResult.packetSeq);

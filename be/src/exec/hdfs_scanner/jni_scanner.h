@@ -19,9 +19,11 @@
 #include "common/status.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "jni.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
+
+class HiveTableDescriptor;
 
 class JniScanner : public HdfsScanner {
 public:

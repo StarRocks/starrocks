@@ -74,7 +74,7 @@ public class MetaRecoveryDaemonTest {
                 .getTable(database.getFullName(), "tbl_recover");
         Partition partition = table.getPartition("tbl_recover");
         MaterializedIndex index = partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
         for (Tablet tablet : index.getTablets()) {
             for (Replica replica : tablet.getAllReplicas()) {
                 Assertions.assertEquals(2L, replica.getVersion());
@@ -124,14 +124,14 @@ public class MetaRecoveryDaemonTest {
 
         // change replica version
         LocalTablet localTablet = (LocalTablet) partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
                 .get(0).getTablets().get(0);
         long version = 3;
         for (Replica replica : localTablet.getAllReplicas()) {
             replica.updateForRestore(++version, 10, 10);
         }
         LocalTablet localTablet2 = (LocalTablet) partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
                 .get(0).getTablets().get(0);
         for (Replica replica : localTablet2.getAllReplicas()) {
             replica.updateForRestore(4, 10, 10);

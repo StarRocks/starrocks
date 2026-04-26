@@ -354,10 +354,11 @@ public class ColocateMetaService {
         }
 
         public void updateBackendPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
-            colocateIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info2 =
                     ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info2);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info2, wal -> {
+                colocateIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+            });
             colocateIndex.markGroupUnstable(groupId, true);
         }
     }

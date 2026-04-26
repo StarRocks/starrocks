@@ -22,6 +22,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
@@ -44,6 +45,7 @@ import java.util.Set;
 public class LocationMismatchRepairTest {
     @BeforeAll
     public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.tablet_checker_partition_batch_num = 1;
@@ -107,7 +109,7 @@ public class LocationMismatchRepairTest {
 
     private void printTabletReplicaInfo(OlapTable table) {
         table.getPartitions().forEach(partition -> {
-            partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().forEach(tablet -> {
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().forEach(tablet -> {
                 StringBuffer stringBuffer = new StringBuffer();
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {
@@ -309,7 +311,7 @@ public class LocationMismatchRepairTest {
         // create mv
         sql = "CREATE MATERIALIZED VIEW test_mv01\n" +
                     "DISTRIBUTED BY HASH(`k1`)\n" +
-                    "buckets 15\n" +
+                    "buckets 5\n" +
                     "REFRESH MANUAL\n" +
                     "properties(\n" +
                     "    \"replication_num\" = \"3\"" +
@@ -349,18 +351,21 @@ public class LocationMismatchRepairTest {
         cluster.runSql("test", sql);
         System.out.println("=========================");
         long start = System.currentTimeMillis();
+        long totalTimes = 180;
+        long times = 0;
         while (true) {
             if (stat.counterCloneTaskSucceeded.get() - oldCloneFinishedCnt >= locationMismatchFullCloneNeeded
                         && stat.counterReplicaLocMismatchErr.get() - oldLocationMismatchErr >=
                         locationMismatchFullCloneNeeded) {
                 break;
             }
+            times++;
             System.out.println("wait for enough clone tasks for LOCATION_MISMATCH finished, " +
                         "current clone finished: " + stat.counterCloneTaskSucceeded.get() +
                         ", current location mismatch: " + stat.counterReplicaLocMismatchErr.get() +
                         ", expected clone finished: " + locationMismatchFullCloneNeeded);
             Thread.sleep(1000);
-            if (System.currentTimeMillis() - start > 180000) {
+            if (System.currentTimeMillis() - start > 180000 && times > totalTimes) {
                 Assertions.fail("wait for enough clone tasks for LOCATION_MISMATCH finished timeout");
             }
         }

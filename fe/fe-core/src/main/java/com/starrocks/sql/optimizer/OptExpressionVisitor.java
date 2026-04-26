@@ -43,6 +43,14 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalDelta(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitLogicalVersion(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitLogicalLimit(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -84,6 +92,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitLogicalValues(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitLogicalRawValues(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 
@@ -182,6 +194,14 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+    public R visitPhysicalBenchmarkScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalCacheStatsScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
     public R visitPhysicalProject(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -238,6 +258,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitPhysicalRawValues(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitPhysicalRepeat(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -274,18 +298,6 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
-    public R visitPhysicalStreamScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
-    }
-
-    public R visitPhysicalStreamJoin(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
-    }
-
-    public R visitPhysicalStreamAgg(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
-    }
-
     public R visitPhysicalTableFunctionTableScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -299,6 +311,14 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalConcatenater(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalFetch(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalLookUp(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

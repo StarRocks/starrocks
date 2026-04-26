@@ -15,7 +15,7 @@
 package com.starrocks.statistic.sample;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 public class PrimitiveTypeColumnStats extends ColumnStats {
 
@@ -34,7 +34,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getDateSize() {
+    public String getDataSize() {
         String typeSize;
         if (columnType.getPrimitiveType().isCharFamily()) {
             typeSize = "IFNULL(SUM(CHAR_LENGTH(column_key)) / COUNT(1), 0)";

@@ -37,6 +37,7 @@ dependencies {
     implementation("com.google.code.gson:gson")
     implementation("io.netty:netty-handler")
     implementation("org.roaringbitmap:RoaringBitmap")
+    implementation("at.yawk.lz4:lz4-java")
 
     // Provided scope dependencies - equivalent to compileOnly in Gradle
     compileOnly("commons-codec:commons-codec")
@@ -76,8 +77,16 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+tasks.named<JavaCompile>("compileJava") {
+    dependsOn("checkstyleMain")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
+}
+
 checkstyle {
-    toolVersion = project.findProperty("puppycrawl.version") as String? ?: "10.21.1"
+    toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
 }
 
@@ -85,6 +94,8 @@ tasks.withType<Checkstyle> {
     exclude("**/jmockit/**/*")
     isShowViolations = true
     ignoreFailures = false
+    // Avoid circular dependency: Checkstyle should not depend on compiled classes.
+    classpath = files()
 }
 
 // Equivalent to Maven Assembly plugin to create a jar with dependencies

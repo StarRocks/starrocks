@@ -35,10 +35,10 @@
 package com.starrocks.sql.analyzer.mvpattern;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.PrimitiveType;
 
 public class MVColumnHLLUnionPattern implements MVColumnPattern {
     @Override
@@ -47,7 +47,7 @@ public class MVColumnHLLUnionPattern implements MVColumnPattern {
             return false;
         }
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
-        String fnNameString = fnExpr.getFnName().getFunction();
+        String fnNameString = fnExpr.getFunctionName();
         if (!fnNameString.equalsIgnoreCase(FunctionSet.HLL_UNION)) {
             return false;
         }
@@ -60,7 +60,7 @@ public class MVColumnHLLUnionPattern implements MVColumnPattern {
             }
         } else if (fnExpr.getChild(0) instanceof FunctionCallExpr) {
             FunctionCallExpr child0FnExpr = (FunctionCallExpr) fnExpr.getChild(0);
-            if (!child0FnExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH)) {
+            if (!child0FnExpr.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH)) {
                 return false;
             }
             return true;

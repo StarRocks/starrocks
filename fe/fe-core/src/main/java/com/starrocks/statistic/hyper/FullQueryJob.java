@@ -26,11 +26,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class FullQueryJob extends HyperQueryJob {
-    protected FullQueryJob(ConnectContext context, Database db,
+    protected FullQueryJob(ConnectContext context, long analyzeId, Database db,
                            Table table,
                            List<ColumnStats> columnStats,
                            List<Long> partitionIdList) {
-        super(context, db, table, columnStats, partitionIdList);
+        super(context, analyzeId, db, table, columnStats, partitionIdList);
     }
 
     @Override

@@ -1,0 +1,340 @@
+-- name: test_iceberg_metadata_delete_transform
+create external catalog iceberg_transform_${uuid0}
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "${hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false"
+);
+-- result:
+-- !result
+create database iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}
+properties ("location" = "oss://${oss_bucket}/test_transform_delete/${uuid0}/db");
+-- result:
+-- !result
+create table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform (
+    id INT,
+    name STRING,
+    event_time DATETIME
+)
+PARTITION BY year(event_time);
+-- result:
+-- !result
+insert into iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform values
+(1, 'Alice', '2022-06-15 10:00:00'),
+(2, 'Bob', '2022-08-20 14:30:00'),
+(3, 'Charlie', '2023-01-10 09:00:00'),
+(4, 'David', '2023-12-25 16:00:00'),
+(5, 'Eve', '2024-03-05 11:00:00');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform where year(event_time) = 2022", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform where year(event_time) = 2022;
+-- result:
+-- !result
+select * from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform order by id;
+-- result:
+3	Charlie	2023-01-10 09:00:00
+4	David	2023-12-25 16:00:00
+5	Eve	2024-03-05 11:00:00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform where event_time >= '2023-06-01'", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform where event_time >= '2023-06-01';
+-- result:
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+drop table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_year_transform force;
+-- result:
+-- !result
+create table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform (
+    id INT,
+    name STRING,
+    event_date DATE
+)
+PARTITION BY month(event_date);
+-- result:
+-- !result
+insert into iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform values
+(1, 'Jan2023', '2023-01-15'),
+(2, 'Jan2023b', '2023-01-25'),
+(3, 'Feb2023', '2023-02-10'),
+(4, 'Feb2023b', '2023-02-20'),
+(5, 'Mar2023', '2023-03-05');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform where month(event_date) = 1", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform where month(event_date) = 1
+
+select * from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform order by id;
+-- result:
+E: (1064, "Getting syntax error at line 3, column 0. Detail message: Unexpected input 'select', the most similar input is {<EOF>, ';'}.")
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform$snapshots order by committed_at desc limit 1;
+-- result:
+append	None
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform where event_date = '2023-02-10'", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform where event_date = '2023-02-10';
+-- result:
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+drop table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_month_transform force;
+-- result:
+-- !result
+create table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform (
+    id INT,
+    name STRING,
+    event_date DATE
+)
+PARTITION BY day(event_date);
+-- result:
+-- !result
+insert into iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform values
+(1, 'Day1', '2023-01-01'),
+(2, 'Day1b', '2023-01-01'),
+(3, 'Day2', '2023-01-02'),
+(4, 'Day3', '2023-01-03'),
+(5, 'Day3b', '2023-01-03');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform where day(event_date) = 1", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform where day(event_date) = 1;
+-- result:
+-- !result
+select * from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform order by id;
+-- result:
+3	Day2	2023-01-02
+4	Day3	2023-01-03
+5	Day3b	2023-01-03
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	None
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform where event_date = '2023-01-02'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform where event_date = '2023-01-02';
+-- result:
+-- !result
+select * from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform order by id;
+-- result:
+4	Day3	2023-01-03
+5	Day3b	2023-01-03
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+drop table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_day_transform force;
+-- result:
+-- !result
+create table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform (
+    id INT,
+    name STRING,
+    category STRING
+)
+PARTITION BY bucket(category, 4);
+-- result:
+-- !result
+insert into iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform values
+(1, 'A', 'Electronics'),
+(2, 'B', 'Electronics'),
+(3, 'C', 'Clothing'),
+(4, 'D', 'Clothing'),
+(5, 'E', 'Food');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform where category = 'Electronics'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform where category = 'Electronics';
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform where category in ('Clothing', 'Food')", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform where category in ('Clothing', 'Food');
+-- result:
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	3
+-- !result
+drop table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_bucket_transform force;
+-- result:
+-- !result
+create table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform (
+    id INT,
+    name STRING,
+    code STRING
+)
+PARTITION BY truncate(code, 3);
+-- result:
+-- !result
+insert into iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform values
+(1, 'A', 'ABC123'),
+(2, 'B', 'ABC456'),
+(3, 'C', 'DEF789'),
+(4, 'D', 'DEF012'),
+(5, 'E', 'XYZ345');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform where code = 'ABC123'", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform where code = 'ABC123';
+-- result:
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform where code like 'ABC%'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform where code like 'ABC%';
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+drop table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_truncate_transform force;
+-- result:
+-- !result
+create table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_hour_transform (
+    id INT,
+    name STRING,
+    event_time DATETIME
+)
+PARTITION BY hour(event_time);
+-- result:
+-- !result
+insert into iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_hour_transform values
+(1, 'Hour10', '2023-01-01 10:30:00'),
+(2, 'Hour10b', '2023-01-01 10:45:00'),
+(3, 'Hour14', '2023-01-01 14:00:00'),
+(4, 'Hour14b', '2023-01-01 14:30:00'),
+(5, 'Hour18', '2023-01-01 18:00:00');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_hour_transform where hour(event_time) = 10", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_hour_transform where hour(event_time) = 10;
+-- result:
+-- !result
+select * from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_hour_transform order by id;
+-- result:
+3	Hour14	2023-01-01 14:00:00
+4	Hour14b	2023-01-01 14:30:00
+5	Hour18	2023-01-01 18:00:00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_hour_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+drop table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_hour_transform force;
+-- result:
+-- !result
+create table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform (
+    id INT,
+    name STRING,
+    event_date DATE,
+    region STRING
+)
+PARTITION BY year(event_date), region;
+-- result:
+-- !result
+insert into iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform values
+(1, 'A', '2023-06-15', 'North'),
+(2, 'B', '2023-07-20', 'North'),
+(3, 'C', '2023-08-10', 'South'),
+(4, 'D', '2024-01-05', 'East'),
+(5, 'E', '2024-02-15', 'West');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform where year(event_date) = 2023 and region = 'North'", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform where year(event_date) = 2023 and region = 'North';
+-- result:
+-- !result
+select * from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform order by id;
+-- result:
+3	C	2023-08-10	South
+4	D	2024-01-05	East
+5	E	2024-02-15	West
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+function: assert_explain_contains("delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform where event_date = '2024-01-05'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform where event_date = '2024-01-05';
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+drop table iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0}.test_mixed_transform force;
+-- result:
+-- !result
+drop database iceberg_transform_${uuid0}.iceberg_transform_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_transform_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_transform_delete/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

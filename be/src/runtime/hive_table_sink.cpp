@@ -14,9 +14,13 @@
 
 #include "hive_table_sink.h"
 
+#include "common/runtime_profile.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -34,7 +38,7 @@ Status HiveTableSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
 
 Status HiveTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     std::stringstream title;
     title << "IcebergTableSink (frag_id=" << state->fragment_instance_id() << ")";
     _profile = _pool->add(new RuntimeProfile(title.str()));
@@ -42,7 +46,7 @@ Status HiveTableSink::prepare(RuntimeState* state) {
 }
 
 Status HiveTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -50,8 +54,8 @@ Status HiveTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status HiveTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+Status HiveTableSink::close(RuntimeState* state, const Status& exec_status) {
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 
@@ -72,7 +76,8 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
     sink_ctx->partition_column_names = t_hive_sink.partition_column_names;
     sink_ctx->data_column_evaluators = ColumnExprEvaluator::from_exprs(data_exprs, runtime_state);
     sink_ctx->partition_column_evaluators = ColumnExprEvaluator::from_exprs(partition_exprs, runtime_state);
-    sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
+    auto* query_execution_services = runtime_state->query_execution_services();
+    sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     sink_ctx->format = t_hive_sink.file_format;
     sink_ctx->compression_type = t_hive_sink.compression_type;
     if (t_hive_sink.__isset.target_max_file_size) {
@@ -82,6 +87,9 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
         DCHECK(boost::iequals(t_hive_sink.file_format, formats::TEXTFILE));
         sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = DEFAULT_FIELD_DELIM;
         sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = DEFAULT_LINE_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::COLLECTION_DELIM] = DEFAULT_COLLECTION_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::MAPKEY_DELIM] = DEFAULT_MAPKEY_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::IS_HIVE] = "true";
 
         // use customized value if specified
         if (t_hive_sink.text_file_desc.__isset.field_delim) {
@@ -89,6 +97,13 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
         }
         if (t_hive_sink.text_file_desc.__isset.line_delim) {
             sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = t_hive_sink.text_file_desc.line_delim;
+        }
+        if (t_hive_sink.text_file_desc.__isset.collection_delim) {
+            sink_ctx->options[formats::CSVWriterOptions::COLLECTION_DELIM] =
+                    t_hive_sink.text_file_desc.collection_delim;
+        }
+        if (t_hive_sink.text_file_desc.__isset.mapkey_delim) {
+            sink_ctx->options[formats::CSVWriterOptions::MAPKEY_DELIM] = t_hive_sink.text_file_desc.mapkey_delim;
         }
     }
     sink_ctx->fragment_context = fragment_ctx;
@@ -103,16 +118,16 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
                 pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                       runtime_state));
         auto ops = context->interpolate_local_key_partition_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     }
 
     return Status::OK();

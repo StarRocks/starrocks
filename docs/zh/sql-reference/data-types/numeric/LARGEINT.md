@@ -15,8 +15,18 @@ displayed_sidebar: docs
 ```sql
 CREATE TABLE largeIntDemo (
     pk LARGEINT COMMENT "range [-2^127 + 1 ~ 2^127 - 1]"
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(pk)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk);
+DISTRIBUTED BY HASH(pk) BUCKETS 1;
+
+INSERT INTO largeIntDemo VALUES (10000000000000000000000000);
+```
+
+```Plaintext
+MySQL > SELECT * FROM largeIntDemo;
++----------------------------+
+| pk                         |
++----------------------------+
+| 10000000000000000000000000 |
++----------------------------+
 ```

@@ -433,4 +433,8 @@ public class SSLChannelImp implements SSLChannel {
         replaceBuffer.put(buffer);
         return replaceBuffer;
     }
+
+    public SSLDecoder createDecoder() {
+        return new SSLDecoder(sslEngine, peerNetData, peerAppData);
+    }
 }

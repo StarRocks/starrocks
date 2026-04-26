@@ -17,20 +17,18 @@ package com.starrocks.connector.partitiontraits;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -108,6 +106,12 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public void setPinnedVersionRange(TvrVersionRange range) {
+        super.setPinnedVersionRange(range);
+        delegate.setPinnedVersionRange(range);
+    }
+
+    @Override
     public PartitionKey createEmptyKey() {
         return delegate.createEmptyKey();
     }
@@ -146,19 +150,6 @@ public class CachedPartitionTraits extends DefaultTraits {
     @Override
     public List<Column> getPartitionColumns() {
         return delegate.getPartitionColumns();
-    }
-
-    @Override
-    public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
-            throws AnalysisException {
-        return getCacheWithException("getPartitionKeyRange",
-                () -> delegate.getPartitionKeyRange(partitionColumn, partitionExpr), () -> Maps.newHashMap());
-    }
-
-    @Override
-    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
-        return getCacheWithException("getPartitionList",
-                () -> delegate.getPartitionCells(partitionColumns), () -> Maps.newHashMap());
     }
 
     @Override

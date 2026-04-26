@@ -39,7 +39,8 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "common/config.h"
+#include "base/crypto/md5.h"
+#include "common/config_udf_fwd.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "fs/fs_util.h"
@@ -47,7 +48,6 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "util/md5.h"
 
 int main(int argc, char* argv[]);
 
@@ -179,7 +179,7 @@ TEST_F(UserFunctionCacheTest, download_normal) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        (void)cache.get_libpath(fid, URL, jar_md5sum, TFunctionBinaryType::SRJAR, &libpath);
+        (void)cache.get_libpath(fid, URL, jar_md5sum, TFunctionBinaryType::SRJAR, &libpath, TCloudConfiguration{});
     }
 }
 
@@ -205,7 +205,7 @@ TEST_F(UserFunctionCacheTest, download_wasm) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.wasm", real_port);
-        (void)cache.get_libpath(fid, URL, wasm_md5sum, TFunctionBinaryType::SRJAR, &libpath);
+        (void)cache.get_libpath(fid, URL, wasm_md5sum, TFunctionBinaryType::SRJAR, &libpath, TCloudConfiguration{});
     }
 }
 

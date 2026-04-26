@@ -18,6 +18,7 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
     java
+    checkstyle
     id("com.baidu.jprotobuf") version "1.2.1"
 }
 
@@ -47,6 +48,7 @@ java {
 dependencies {
     // Internal project dependencies
     implementation(project(":fe-grammar"))
+    implementation(project(":fe-type"))
     implementation(project(":fe-parser"))
     implementation(project(":fe-spi"))
     implementation(project(":fe-testing"))
@@ -65,9 +67,11 @@ dependencies {
         exclude(group = "org.codehaus.jackson", module = "jackson-mapper-asl")
         exclude(group = "org.ini4j", module = "ini4j")
         exclude(group = "org.antlr", module = "antlr4")
+        exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("com.aliyun.odps:odps-sdk-table-api") {
         exclude(group = "org.antlr", module = "antlr4")
+        exclude(group = "org.lz4", module = "lz4-pure-java")
     }
     implementation("com.azure:azure-identity")
     implementation("com.azure:azure-storage-blob")
@@ -192,6 +196,7 @@ dependencies {
         exclude(group = "io.netty", module = "*")
         exclude(group = "org.glassfish", module = "javax.el")
         exclude(group = "org.apache.zookeeper", module = "zookeeper")
+        exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.hudi:hudi-hadoop-mr") {
         exclude(group = "org.glassfish", module = "javax.el")
@@ -214,7 +219,13 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core")
     implementation("org.apache.logging.log4j:log4j-layout-template-json")
     implementation("org.apache.logging.log4j:log4j-slf4j-impl")
-    implementation("org.apache.paimon:paimon-bundle")
+    implementation("org.apache.paimon:paimon-bundle") {
+        exclude(group = "org.lz4", module = "lz4-java")
+        // https://avd.aquasec.com/nvd/cve-2024-7254
+        exclude(group = "com.google.protobuf", module = "protobuf-java")
+        // https://avd.aquasec.com/nvd/cve-2025-27820
+        exclude(group = "org.apache.httpcomponents.client5", module = "httpclient5")
+    }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")
     implementation("org.apache.parquet:parquet-avro")
@@ -246,6 +257,7 @@ dependencies {
         exclude(group = "org.eclipse.jetty", module = "jetty-servlet")
         exclude(group = "org.eclipse.jetty", module = "jetty-client")
         exclude(group = "org.eclipse.jetty", module = "jetty-security")
+        exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.spark:spark-launcher_2.12")
     compileOnly("org.apache.spark:spark-sql_2.12")
@@ -263,6 +275,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     implementation("org.mariadb.jdbc:mariadb-java-client")
     testImplementation("org.mockito:mockito-inline:4.11.0")
+    // Force ByteBuddy 1.14.9+ for Java 21 class file format support
+    testImplementation("net.bytebuddy:byte-buddy:1.14.9")
+    testImplementation("net.bytebuddy:byte-buddy-agent:1.14.9")
     testImplementation("org.openjdk.jmh:jmh-core:1.37")
     testImplementation("org.openjdk.jmh:jmh-generator-annprocess:1.37")
     implementation("org.owasp.encoder:encoder")
@@ -274,15 +289,24 @@ dependencies {
     implementation("org.slf4j:slf4j-api")
     implementation("org.threeten:threeten-extra:1.7.2")
     implementation("org.xerial.snappy:snappy-java")
-    implementation("software.amazon.awssdk:bundle")
+    implementation("software.amazon.awssdk:glue")
+    implementation("software.amazon.awssdk:dynamodb")
+    implementation("software.amazon.awssdk:kms")
+    implementation("software.amazon.awssdk:s3")
+    implementation("software.amazon.awssdk:s3-transfer-manager")
+    implementation("software.amazon.awssdk:sts")
+    implementation("software.amazon.awssdk:sso")
+    implementation("software.amazon.awssdk:ssooidc")
+    implementation("software.amazon.awssdk:url-connection-client")
     implementation("tools.profiler:async-profiler")
+    implementation("com.github.vertical-blank:sql-formatter:2.0.4")
+    implementation("at.yawk.lz4:lz4-java")
     // dependency sync end
 
     // extra dependencies pom.xml does not have
     implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
     implementation("org.apache.groovy:groovy:4.0.9")
     testImplementation("org.apache.spark:spark-sql_2.12")
-    implementation("software.amazon.awssdk:s3-transfer-manager")
     implementation("net.openhft:zero-allocation-hashing:0.16")
 }
 
@@ -339,12 +363,6 @@ tasks.register<Task>("generateThriftSources") {
     description = "Generates Java source files from Thrift definitions"
     group = "build"
 
-    // Create a special configuration for the thrift compiler rather than using runtime classpath
-    val thriftGenClasspath = configurations.create("thriftGenClasspath")
-    dependencies {
-        thriftGenClasspath("io.github.decster:thrift-java-maven-plugin:0.1.3")
-    }
-
     val protoDir = file("../../gensrc/thrift")
     val outputDir = layout.buildDirectory.get().dir("generated-sources/thrift").asFile
 
@@ -354,24 +372,40 @@ tasks.register<Task>("generateThriftSources") {
         exclude("parquet.thrift")
     }.files
 
-    // Declare inputs (proto files)
+    // Mirror the binary-discovery logic from gensrc/thrift/Makefile:
+    // prefer $STARROCKS_THIRDPARTY/installed/bin/thrift, fall back to "thrift" on PATH.
+    // Resolved at configuration time so Gradle can track it as a task input.
+    val thriftBin: String = run {
+        val tp = System.getenv("STARROCKS_THIRDPARTY")
+        if (tp != null) {
+            val candidate = file("$tp/installed/bin/thrift")
+            if (candidate.exists()) return@run candidate.absolutePath
+        }
+        "thrift"
+    }
+
+    // Declare inputs: proto files and the thrift compiler binary.
+    // Including the binary ensures the task is re-run when the toolchain is upgraded.
     inputs.files(protoFiles)
+    inputs.property("thriftBin", thriftBin)
 
     // Declare output directory
     outputs.dir(outputDir)
 
     doFirst {
         mkdir(outputDir)
-        // Process each proto file individually
-        project.javaexec {
-            classpath = thriftGenClasspath
-            mainClass.set("io.github.decster.ThriftCompiler")
-            // Build arguments list with the output directory and all thrift files
-            val allArgs = mutableListOf("-o", "$outputDir")
-            protoFiles.forEach { file ->
-                allArgs.add(file.absolutePath)
+
+        // Process each thrift file with the native compiler, matching Maven's maven-thrift-plugin args.
+        protoFiles.forEach { thriftFile ->
+            project.exec {
+                commandLine(
+                    thriftBin,
+                    "--gen", "java",
+                    "-out", outputDir.absolutePath,
+                    "-I", protoDir.absolutePath,
+                    thriftFile.absolutePath
+                )
             }
-            args = allArgs
         }
     }
 }
@@ -407,13 +441,6 @@ tasks.register<Task>("generateByScripts") {
             )
         }
     }
-}
-
-// Add source generation tasks to the build process
-tasks.compileJava {
-    dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
-    // Add explicit dependency on hive-udf shadowJar task
-    dependsOn(":plugin:hive-udf:shadowJar")
 }
 
 tasks.named<PrecompileTask>("jprotobuf_precompile") {
@@ -455,10 +482,37 @@ tasks.test {
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
 
     // Add JMockit Java agent to JVM arguments
+    val jmockitPath = configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath
     jvmArgs(
         "-Djdk.attach.allowAttachSelf",
         "-Duser.timezone=Asia/Shanghai",
-        "-javaagent:${configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath}"
+        "-javaagent:${jmockitPath}",
+        // JIT tuning to match Maven surefire config
+        "-XX:TieredStopAtLevel=1",
+        "-XX:CICompilerCount=1",
+        "-XX:-BackgroundCompilation",
+        "-XX:+UseSerialGC",
+        // Java 21 module access for JMockit/Mockito ByteBuddy
+        // (Maven surefire 3.2.5 auto-injects these on Java 17+)
+        "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens", "java.base/java.io=ALL-UNNAMED",
+        "--add-opens", "java.base/java.math=ALL-UNNAMED",
+        "--add-opens", "java.base/java.net=ALL-UNNAMED",
+        "--add-opens", "java.base/java.nio=ALL-UNNAMED",
+        "--add-opens", "java.base/java.text=ALL-UNNAMED",
+        "--add-opens", "java.base/java.time=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.stream=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.regex=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.security.ssl=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.security.x509=ALL-UNNAMED",
+        "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+        "--add-opens", "java.management/sun.management=ALL-UNNAMED",
     )
 
     // Use independent class loading (equivalent to useSystemClassLoader=false)
@@ -469,6 +523,46 @@ tasks.test {
     }
 }
 
+// Checkstyle configuration to match Maven behavior
+checkstyle {
+    toolVersion = project.ext["puppycrawl.version"].toString()
+    configFile = rootProject.file("checkstyle.xml")
+}
+
+// Configure Checkstyle tasks to match Maven behavior
+tasks.withType<Checkstyle>().configureEach {
+    // Don't check generated source files
+    setSource(source.filter {
+        !it.path.contains("/generated-sources/") &&
+                !it.path.contains("/sql/parser/gen/")
+    })
+
+    ignoreFailures = false  // Match Maven behavior: failsOnError=true
+    // Avoid circular dependency: Checkstyle should not depend on compiled classes
+    classpath = files()
+
+    // Increase memory for checkstyle to avoid OutOfMemoryError
+    maxHeapSize = "4096m"
+}
+
+// Aggregate task that checks both main and test sources (matches Maven behavior)
+tasks.register("checkstyle") {
+    dependsOn("checkstyleMain", "checkstyleTest")
+    description = "Run Checkstyle analysis for both main and test classes"
+    group = "verification"
+}
+
+// Bind checkstyle to run before compilation
+tasks.compileJava {
+    dependsOn("checkstyleMain")
+    dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
+    // Add explicit dependency on hive-udf shadowJar task
+    dependsOn(":plugin:hive-udf:shadowJar")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
+}
 
 // Configure JAR task
 tasks.jar {

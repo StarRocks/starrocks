@@ -99,3 +99,42 @@ Error: Value count does not match column count. Expect 3, but got 1. Row: 2023-0
 ロードコマンドまたはステートメントで指定された列セパレーターが、ソースデータファイルで実際に使用されている列セパレーターと異なります。前述の例では、CSV 形式のデータファイルはコンマ（`,`）で区切られた 3 つの列で構成されています。しかし、ロードコマンドまたはステートメントでは `\t` が列セパレーターとして指定されています。その結果、ソースデータファイルの 3 つの列が誤って 1 つの列に解析されます。
 
 ロードコマンドまたはステートメントでコンマ（`,`）を列セパレーターとして指定します。その後、ロードジョブを再送信してください。
+
+## 6. "current running txns on db XXX is 100, larger than limit 100" エラーが発生した場合はどうすればよいですか？
+
+FE 設定の `max_running_txn_num_per_db` の値を増やします。
+
+## 7. データインポート中に `be/storage/error_log` が存在しないという curl ERRORURL が表示されるのはなぜですか？
+
+BE エラーログはデフォルトで 48 時間保持され、その後クリーンアップされます。`load_error_log_reserve_hours` を使用して保持時間を調整できます。
+
+## 8. インポート中に "Tablet is in error state … prepare_segment_writer meet invalid rssid" エラーが発生した場合はどうすればよいですか？
+
+この問題は通常、バージョンの遅れが原因です。パーティションレベルでタブレットバージョンを比較し、公開が停滞しているかどうかを確認します。バージョンを比較するには、次の SQL を使用します。
+
+```SQL
+SELECT * FROM information_schema.be_tablets;
+SELECT * FROM information_schema.partitions_meta;
+```
+
+タブレットの一部のみが不一致の場合、遅れているレプリカを不良としてマークし、正常なレプリカからクローンを作成できるようにします。
+
+進行中の大規模なテーブル更新やスキーマ変更が原因の場合、エラーに基づいて影響を受けたパーティションを特定し、削除して再ロードすることを検討してください。
+
+問題が解決しない場合は、FE と問題のある BE を再起動してみてください。それでも効果がない場合は、すべての BEs を再起動してください。
+
+## 9. DELETE が "failed to execute delete, transaction id xxx, timeout(ms) 30000" で失敗するのはなぜですか？
+
+FE 設定の `load_straggler_wait_second` の値を 600 に増やします（デフォルト：300）。
+
+## 10. "StarRocks planner use long time 3000 ms …" エラーをどのように処理しますか？
+
+SQL が複雑すぎる可能性があります。セッション変数 `new_planner_optimize_timeout` の値を増やします。
+
+## 11. "Primary-key index exceeds the limit." エラーをどのように修正しますか？
+
+これは、主キーインデックスがメモリ制限を超えたためです。テーブルプロパティ `enable_persistent_index` を `true` に設定して永続性インデックスを有効にできます。
+
+## 12. "current running txns on db XXX is 100, larger than limit 100" をどのように解決しますか？
+
+FE 設定の `max_running_txn_num_per_db` の値を増やします。

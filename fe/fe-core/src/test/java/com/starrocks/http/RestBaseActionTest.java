@@ -172,5 +172,4 @@ public class RestBaseActionTest {
         Assertions.assertEquals(frontend.getHost(), result.get(0).first);
         Assertions.assertEquals(Config.http_port, result.get(0).second);
     }
-
 }

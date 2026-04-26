@@ -24,6 +24,7 @@ public class TrinoQueryTest extends TrinoTestBase {
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
         starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
+        starRocksAssert.getCtx().getSessionVariable().setEnableGlobalLateMaterialization(false);
     }
 
     @Test
@@ -367,10 +368,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "array_min(2: c1)");
 
         sql = "select array_position(array[1,2,3], 2) from test_array";
-        assertPlanContains(sql, "array_position([1,2,3], 2)");
+        assertPlanContains(sql, "<slot 4> : 2");
 
         sql = "select array_remove(array[1,2,3], 2) from test_array";
-        assertPlanContains(sql, "array_remove([1,2,3], 2)");
+        assertPlanContains(sql, "<slot 4> : [1,3]");
 
         sql = "select array_sort(c1) from test_array";
         assertPlanContains(sql, "array_sort(2: c1)");
@@ -755,6 +756,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testAggFunction() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(v1) from t0";
         assertPlanContains(sql, "output: count(1: v1)");
 
@@ -1228,13 +1230,13 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testCastRowDataType() throws Exception {
         String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
-        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<X bigint(20), Y double>)");
+        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<`X` bigint(20), `Y` double>)");
     }
 
     @Test
     public void testCastArrayDataType() throws Exception {
         String sql = "select cast(ARRAY[1] as array(int))";
-        assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+        assertPlanContains(sql, " <slot 2> : [1]");
     }
 
     @Test
@@ -1261,6 +1263,6 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testRegexpReplace() throws Exception {
         String sql = "select regexp_replace('123', '321')";
-        assertPlanContains(sql, "regexp_replace('123', '321', '')");
+        assertPlanContains(sql, "<slot 2> : '123'");
     }
 }

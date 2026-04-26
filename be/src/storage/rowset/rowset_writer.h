@@ -135,10 +135,13 @@ public:
     }
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
-    virtual Status add_rowset(RowsetSharedPtr rowset) { return Status::NotSupported("RowsetWriter::add_rowset"); }
+    virtual Status add_rowset(const RowsetSharedPtr& rowset) {
+        return Status::NotSupported("RowsetWriter::add_rowset");
+    }
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
-    virtual Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) {
+    virtual Status add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
+                                                       const SchemaMapping& schema_mapping) {
         return Status::NotSupported("RowsetWriter::add_rowset_for_linked_schema_change");
     }
 
@@ -182,6 +185,8 @@ private:
     Status _flush_index_files(const SegmentPB& segment_pb, butil::IOBuf& data);
 
 protected:
+    void _check_global_dict(SegmentWriter* segment_writer);
+
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
@@ -237,8 +242,9 @@ public:
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info) override;
 
     // add rowset by create hard link
-    Status add_rowset(RowsetSharedPtr rowset) override;
-    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override;
+    Status add_rowset(const RowsetSharedPtr& rowset) override;
+    Status add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
+                                               const SchemaMapping& schema_mapping) override;
 
     Status flush() override;
 

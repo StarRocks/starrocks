@@ -18,6 +18,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
+import java.util.List;
 import java.util.Map;
 
 public class StatsConstants {
@@ -96,6 +97,7 @@ public class StatsConstants {
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
     public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";
     public static final String HISTOGRAM_SAMPLE_RATIO = "histogram_sample_ratio";
+    public static final String HISTOGRAM_COLLECT_BUCKET_NDV_MODE = "histogram_collect_bucket_ndv_mode";
 
     // SQL plan manager table
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
@@ -121,22 +123,22 @@ public class StatsConstants {
     public static final String SAMPLE_ONCE_TIMES = "sample_once_times";
     public static final String SAMPLE_SCHEDULE_TIMES = "sample_schedule_times";
 
+    public static final List<String> STATISTICS_TABLES = List.of(
+            QUERY_HISTORY_TABLE_NAME,
+            SPM_BASELINE_TABLE_NAME,
+            FULL_STATISTICS_TABLE_NAME,
+            SAMPLE_STATISTICS_TABLE_NAME,
+            EXTERNAL_FULL_STATISTICS_TABLE_NAME,
+            MULTI_COLUMN_STATISTICS_TABLE_NAME,
+            HISTOGRAM_STATISTICS_TABLE_NAME,
+            EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
+    );
+
     public enum AnalyzeType {
         SAMPLE,
         FULL,
         // For compatibility with older versions， we can't drop HISTOGRAM from this enum.
         HISTOGRAM,
-    }
-
-    // used to record statistics type for multi-columns.
-    // For version compatibility, single-column statistics are not recorded StatisticsType
-    public enum StatisticsType {
-        // for single column statistics
-        COMMON,
-        // for single column histogram
-        HISTOGRAM,
-        // for multi-column combined ndv
-        MCDISTINCT
     }
 
     public enum ScheduleType {
@@ -150,6 +152,12 @@ public class StatsConstants {
         // only use for ScheduleType.ONCE
         FINISH,
         FAILED
+    }
+
+    public enum HistogramCollectBucketNdvMode {
+        NONE,
+        SAMPLE,
+        HLL
     }
 
     public static Map<String, String> buildInitStatsProp() {

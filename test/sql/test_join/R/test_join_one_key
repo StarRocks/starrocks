@@ -132,445 +132,445 @@ from __row_util;
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.k1), count(t1.c_bool_null)
-from t1 join w1 t2 using(c_bool_null);
+from t1 join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1279999	1279999	1279999
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.k1), count(t1.c_bool_null)
-from t1 full join w1 t2 using(c_bool_null);
+from t1 full join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 2377227	2377142	1279999
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.k1), count(t1.c_bool_null)
-from t1 left semi join w1 t2 using(c_bool_null);
+from t1 left semi join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 182857	182857	182857
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.k1), count(t1.c_tinyint_null)
-from t1 join w1 t2 using(c_tinyint_null);
+from t1 join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 26672	26672	26672
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.k1), count(t1.c_tinyint_null)
-from t1 full join w1 t2 using(c_tinyint_null);
+from t1 full join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 1280091	1280000	106666
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.k1), count(t1.c_tinyint_null)
-from t1 left semi join w1 t2 using(c_tinyint_null);
+from t1 left semi join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 26672	26672	26672
 -- !result
 with w1 as (select * from t1 where k1 < 10000)
 select count(1), count(t1.k1), count(t1.c_smallint_null)
-from t1 join w1 t2 using(c_smallint_null);
+from t1 join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 2464	2464	2464
 -- !result
 with w1 as (select * from t1 where k1 < 10000)
 select count(1), count(t1.k1), count(t1.c_smallint_null)
-from t1 full join w1 t2 using(c_smallint_null);
+from t1 full join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 1289230	1280000	98461
 -- !result
 with w1 as (select * from t1 where k1 < 10000)
 select count(1), count(t1.k1), count(t1.c_smallint_null)
-from t1 left semi join w1 t2 using(c_smallint_null);
+from t1 left semi join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 2464	2464	2464
 -- !result
 select count(1), count(t1.k1), count(t1.c_int)
-from t1 join t1 t2 using(c_int);
+from t1 join t1 t2 on t1.c_int = t2.c_int;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_int)
-from t1 full join t1 t2 using(c_int);
+from t1 full join t1 t2 on t1.c_int = t2.c_int;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_int)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_int_null)
-from t1 join t1 t2 using(c_int_null);
+from t1 join t1 t2 on t1.c_int_null = t2.c_int_null;
 -- result:
 91428	91428	91428
 -- !result
 select count(1), count(t1.k1), count(t1.c_int_null)
-from t1 full join t1 t2 using(c_int_null);
+from t1 full join t1 t2 on t1.c_int_null = t2.c_int_null;
 -- result:
 2468572	1280000	91428
 -- !result
 select count(1), count(t1.k1), count(t1.c_int_null)
-from t1 left semi join t1 t2 using(c_int_null);
+from t1 left semi join t1 t2 on t1.c_int_null = t2.c_int_null;
 -- result:
 91428	91428	91428
 -- !result
 select count(1), count(t1.k1), count(t1.c_bigint)
-from t1 join t1 t2 using(c_bigint);
+from t1 join t1 t2 on t1.c_bigint = t2.c_bigint;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_bigint)
-from t1 full join t1 t2 using(c_bigint);
+from t1 full join t1 t2 on t1.c_bigint = t2.c_bigint;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_bigint)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_bigint_null)
-from t1 join t1 t2 using(c_bigint_null);
+from t1 join t1 t2 on t1.c_bigint_null = t2.c_bigint_null;
 -- result:
 85333	85333	85333
 -- !result
 select count(1), count(t1.k1), count(t1.c_bigint_null)
-from t1 full join t1 t2 using(c_bigint_null);
+from t1 full join t1 t2 on t1.c_bigint_null = t2.c_bigint_null;
 -- result:
 2474667	1280000	85333
 -- !result
 select count(1), count(t1.k1), count(t1.c_bigint_null)
-from t1 left semi join t1 t2 using(c_bigint_null);
+from t1 left semi join t1 t2 on t1.c_bigint_null = t2.c_bigint_null;
 -- result:
 85333	85333	85333
 -- !result
 select count(1), count(t1.k1), count(t1.c_largeint)
-from t1 join t1 t2 using(c_largeint);
+from t1 join t1 t2 on t1.c_largeint = t2.c_largeint;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_largeint)
-from t1 full join t1 t2 using(c_largeint);
+from t1 full join t1 t2 on t1.c_largeint = t2.c_largeint;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_largeint)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_largeint_null)
-from t1 join t1 t2 using(c_largeint_null);
+from t1 join t1 t2 on t1.c_largeint_null = t2.c_largeint_null;
 -- result:
 80000	80000	80000
 -- !result
 select count(1), count(t1.k1), count(t1.c_largeint_null)
-from t1 full join t1 t2 using(c_largeint_null);
+from t1 full join t1 t2 on t1.c_largeint_null = t2.c_largeint_null;
 -- result:
 2480000	1280000	80000
 -- !result
 select count(1), count(t1.k1), count(t1.c_largeint_null)
-from t1 left semi join t1 t2 using(c_largeint_null);
+from t1 left semi join t1 t2 on t1.c_largeint_null = t2.c_largeint_null;
 -- result:
 80000	80000	80000
 -- !result
 select count(1), count(t1.k1), count(t1.c_float)
-from t1 join t1 t2 using(c_float);
+from t1 join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_float)
-from t1 full join t1 t2 using(c_float);
+from t1 full join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_float)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_float_null)
-from t1 join t1 t2 using(c_float_null);
+from t1 join t1 t2 on t1.c_float_null = t2.c_float_null;
 -- result:
 75294	75294	75294
 -- !result
 select count(1), count(t1.k1), count(t1.c_float_null)
-from t1 full join t1 t2 using(c_float_null);
+from t1 full join t1 t2 on t1.c_float_null = t2.c_float_null;
 -- result:
 2484706	1280000	75294
 -- !result
 select count(1), count(t1.k1), count(t1.c_float_null)
-from t1 left semi join t1 t2 using(c_float_null);
+from t1 left semi join t1 t2 on t1.c_float_null = t2.c_float_null;
 -- result:
 75294	75294	75294
 -- !result
 select count(1), count(t1.k1), count(t1.c_double)
-from t1 join t1 t2 using(c_double);
+from t1 join t1 t2 on t1.c_double = t2.c_double;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_double)
-from t1 full join t1 t2 using(c_double);
+from t1 full join t1 t2 on t1.c_double = t2.c_double;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_double)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_double_null)
-from t1 join t1 t2 using(c_double_null);
+from t1 join t1 t2 on t1.c_double_null = t2.c_double_null;
 -- result:
 71111	71111	71111
 -- !result
 select count(1), count(t1.k1), count(t1.c_double_null)
-from t1 full join t1 t2 using(c_double_null);
+from t1 full join t1 t2 on t1.c_double_null = t2.c_double_null;
 -- result:
 2488889	1280000	71111
 -- !result
 select count(1), count(t1.k1), count(t1.c_double_null)
-from t1 left semi join t1 t2 using(c_double_null);
+from t1 left semi join t1 t2 on t1.c_double_null = t2.c_double_null;
 -- result:
 71111	71111	71111
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimalv2)
-from t1 join t1 t2 using(c_decimalv2);
+from t1 join t1 t2 on t1.c_decimalv2 = t2.c_decimalv2;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimalv2)
-from t1 full join t1 t2 using(c_decimalv2);
+from t1 full join t1 t2 on t1.c_decimalv2 = t2.c_decimalv2;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimalv2)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimalv2_null)
-from t1 join t1 t2 using(c_decimalv2_null);
+from t1 join t1 t2 on t1.c_decimalv2_null = t2.c_decimalv2_null;
 -- result:
 55652	55652	55652
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimalv2_null)
-from t1 full join t1 t2 using(c_decimalv2_null);
+from t1 full join t1 t2 on t1.c_decimalv2_null = t2.c_decimalv2_null;
 -- result:
 2504348	1280000	55652
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimalv2_null)
-from t1 left semi join t1 t2 using(c_decimalv2_null);
+from t1 left semi join t1 t2 on t1.c_decimalv2_null = t2.c_decimalv2_null;
 -- result:
 55652	55652	55652
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal32)
-from t1 join t1 t2 using(c_decimal32);
+from t1 join t1 t2 on t1.c_decimal32 = t2.c_decimal32;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal32)
-from t1 full join t1 t2 using(c_decimal32);
+from t1 full join t1 t2 on t1.c_decimal32 = t2.c_decimal32;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal32)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal32_null)
-from t1 join t1 t2 using(c_decimal32_null);
+from t1 join t1 t2 on t1.c_decimal32_null = t2.c_decimal32_null;
 -- result:
 53333	53333	53333
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal32_null)
-from t1 full join t1 t2 using(c_decimal32_null);
+from t1 full join t1 t2 on t1.c_decimal32_null = t2.c_decimal32_null;
 -- result:
 2506667	1280000	53333
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal32_null)
-from t1 left semi join t1 t2 using(c_decimal32_null);
+from t1 left semi join t1 t2 on t1.c_decimal32_null = t2.c_decimal32_null;
 -- result:
 53333	53333	53333
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal64)
-from t1 join t1 t2 using(c_decimal64);
+from t1 join t1 t2 on t1.c_decimal64 = t2.c_decimal64;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal64)
-from t1 full join t1 t2 using(c_decimal64);
+from t1 full join t1 t2 on t1.c_decimal64 = t2.c_decimal64;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal64)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal64_null)
-from t1 join t1 t2 using(c_decimal64_null);
+from t1 join t1 t2 on t1.c_decimal64_null = t2.c_decimal64_null;
 -- result:
 51200	51200	51200
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal64_null)
-from t1 full join t1 t2 using(c_decimal64_null);
+from t1 full join t1 t2 on t1.c_decimal64_null = t2.c_decimal64_null;
 -- result:
 2508800	1280000	51200
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal64_null)
-from t1 left semi join t1 t2 using(c_decimal64_null);
+from t1 left semi join t1 t2 on t1.c_decimal64_null = t2.c_decimal64_null;
 -- result:
 51200	51200	51200
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal128)
-from t1 join t1 t2 using(c_decimal128);
+from t1 join t1 t2 on t1.c_decimal128 = t2.c_decimal128;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal128)
-from t1 full join t1 t2 using(c_decimal128);
+from t1 full join t1 t2 on t1.c_decimal128 = t2.c_decimal128;
 -- result:
 2560000	2560000	2560000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal128)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal128_null)
-from t1 join t1 t2 using(c_decimal128_null);
+from t1 join t1 t2 on t1.c_decimal128_null = t2.c_decimal128_null;
 -- result:
 49230	49230	49230
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal128_null)
-from t1 full join t1 t2 using(c_decimal128_null);
+from t1 full join t1 t2 on t1.c_decimal128_null = t2.c_decimal128_null;
 -- result:
 2510770	1280000	49230
 -- !result
 select count(1), count(t1.k1), count(t1.c_decimal128_null)
-from t1 left semi join t1 t2 using(c_decimal128_null);
+from t1 left semi join t1 t2 on t1.c_decimal128_null = t2.c_decimal128_null;
 -- result:
 49230	49230	49230
 -- !result
 select count(1), count(t1.k1), count(t1.c_date)
-from t1 join t1 t2 using(c_date);
+from t1 join t1 t2 on t1.c_date = t2.c_date;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_date)
-from t1 full join t1 t2 using(c_date);
+from t1 full join t1 t2 on t1.c_date = t2.c_date;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_date)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_date_null)
-from t1 join t1 t2 using(c_date_null);
+from t1 join t1 t2 on t1.c_date_null = t2.c_date_null;
 -- result:
 67368	67368	67368
 -- !result
 select count(1), count(t1.k1), count(t1.c_date_null)
-from t1 full join t1 t2 using(c_date_null);
+from t1 full join t1 t2 on t1.c_date_null = t2.c_date_null;
 -- result:
 2492632	1280000	67368
 -- !result
 select count(1), count(t1.k1), count(t1.c_date_null)
-from t1 left semi join t1 t2 using(c_date_null);
+from t1 left semi join t1 t2 on t1.c_date_null = t2.c_date_null;
 -- result:
 67368	67368	67368
 -- !result
 select count(1), count(t1.k1), count(t1.c_datetime)
-from t1 join t1 t2 using(c_datetime);
+from t1 join t1 t2 on t1.c_datetime = t2.c_datetime;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_datetime)
-from t1 full join t1 t2 using(c_datetime);
+from t1 full join t1 t2 on t1.c_datetime = t2.c_datetime;
 -- result:
 2559998	2559998	2559998
 -- !result
 select count(1), count(t1.k1), count(t1.c_datetime)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_datetime_null)
-from t1 join t1 t2 using(c_datetime_null);
+from t1 join t1 t2 on t1.c_datetime_null = t2.c_datetime_null;
 -- result:
 64000	64000	64000
 -- !result
 select count(1), count(t1.k1), count(t1.c_datetime_null)
-from t1 full join t1 t2 using(c_datetime_null);
+from t1 full join t1 t2 on t1.c_datetime_null = t2.c_datetime_null;
 -- result:
 2496000	1280000	64000
 -- !result
 select count(1), count(t1.k1), count(t1.c_datetime_null)
-from t1 left semi join t1 t2 using(c_datetime_null);
+from t1 left semi join t1 t2 on t1.c_datetime_null = t2.c_datetime_null;
 -- result:
 64000	64000	64000
 -- !result
 select count(1), count(t1.k1), count(t1.c_char)
-from t1 join t1 t2 using(c_char);
+from t1 join t1 t2 on t1.c_char = t2.c_char;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_char)
-from t1 full join t1 t2 using(c_char);
+from t1 full join t1 t2 on t1.c_char = t2.c_char;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_char)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_char_null)
-from t1 join t1 t2 using(c_char_null);
+from t1 join t1 t2 on t1.c_char_null = t2.c_char_null;
 -- result:
 60952	60952	60952
 -- !result
 select count(1), count(t1.k1), count(t1.c_char_null)
-from t1 full join t1 t2 using(c_char_null);
+from t1 full join t1 t2 on t1.c_char_null = t2.c_char_null;
 -- result:
 2499048	1280000	60952
 -- !result
 select count(1), count(t1.k1), count(t1.c_char_null)
-from t1 left semi join t1 t2 using(c_char_null);
+from t1 left semi join t1 t2 on t1.c_char_null = t2.c_char_null;
 -- result:
 60952	60952	60952
 -- !result
 select count(1), count(t1.k1), count(t1.c_varchar)
-from t1 join t1 t2 using(c_varchar);
+from t1 join t1 t2 on t1.c_varchar = t2.c_varchar;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_varchar)
-from t1 full join t1 t2 using(c_varchar);
+from t1 full join t1 t2 on t1.c_varchar = t2.c_varchar;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_varchar)
-from t1 left semi join t1 t2 using(c_float);
+from t1 left semi join t1 t2 on t1.c_float = t2.c_float;
 -- result:
 1280000	1280000	1280000
 -- !result
 select count(1), count(t1.k1), count(t1.c_varchar_null)
-from t1 join t1 t2 using(c_varchar_null);
+from t1 join t1 t2 on t1.c_varchar_null = t2.c_varchar_null;
 -- result:
 58181	58181	58181
 -- !result
 select count(1), count(t1.k1), count(t1.c_varchar_null)
-from t1 full join t1 t2 using(c_varchar_null);
+from t1 full join t1 t2 on t1.c_varchar_null = t2.c_varchar_null;
 -- result:
 2501819	1280000	58181
 -- !result
 select count(1), count(t1.k1), count(t1.c_varchar_null)
-from t1 left semi join t1 t2 using(c_varchar_null);
+from t1 left semi join t1 t2 on t1.c_varchar_null = t2.c_varchar_null;
 -- result:
 58181	58181	58181
 -- !result

@@ -43,7 +43,12 @@
 #include "connector/file_chunk_sink.h"
 #include "connector/file_connector.h"
 #include "connector/hive_chunk_sink.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
+#ifndef __APPLE__
 #include "connector/iceberg_chunk_sink.h"
+#endif
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
@@ -54,8 +59,7 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/olap_table_sink_operator.h"
-#include "exec/pipeline/result_sink_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
@@ -63,22 +67,28 @@
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
-#include "exec/pipeline/sink/table_function_table_sink_operator.h"
+#include "exec/pipeline/sink/olap_table_sink_operator.h"
+#include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
 #include "gen_cpp/InternalService_types.h"
 #include "pipeline/exchange/multi_cast_local_exchange.h"
 #include "pipeline/exchange/split_local_exchange.h"
+#include "pipeline/sink/olap_table_sink_operator.h"
+#include "pipeline/sink/result_sink_operator.h"
 #include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/dictionary_cache_sink.h"
 #include "runtime/export_sink.h"
 #include "runtime/hive_table_sink.h"
+#ifndef __APPLE__
 #include "runtime/iceberg_table_sink.h"
+#endif
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
+#include "runtime/noop_sink.h"
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state.h"
 #include "runtime/schema_table_sink.h"
@@ -196,13 +206,21 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<SchemaTableSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
-    case TDataSinkType::ICEBERG_TABLE_SINK: {
+#ifndef __APPLE__
+    case TDataSinkType::ICEBERG_TABLE_SINK:
+    case TDataSinkType::ICEBERG_DELETE_SINK: {
         if (!thrift_sink.__isset.iceberg_table_sink) {
             return Status::InternalError("Missing iceberg table sink");
         }
         *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
         break;
     }
+#else
+    case TDataSinkType::ICEBERG_TABLE_SINK:
+    case TDataSinkType::ICEBERG_DELETE_SINK: {
+        return Status::NotSupported("Iceberg table sink is disabled on macOS");
+    }
+#endif
     case TDataSinkType::HIVE_TABLE_SINK: {
         if (!thrift_sink.__isset.hive_table_sink) {
             return Status::InternalError("Missing hive table sink");
@@ -231,7 +249,10 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<DictionaryCacheSink>();
         break;
     }
-
+    case TDataSinkType::NOOP_SINK: {
+        *sink = std::make_unique<NoopSink>(state->obj_pool());
+        break;
+    }
     default:
         std::stringstream error_msg;
         auto i = _TDataSinkType_VALUES_TO_NAMES.find(thrift_sink.type);
@@ -240,7 +261,6 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         if (i != _TDataSinkType_VALUES_TO_NAMES.end()) {
             str = i->second;
         }
-
         error_msg << str << " not implemented.";
         return Status::InternalError(error_msg.str());
     }
@@ -276,13 +296,14 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
     using namespace pipeline;
     auto fragment_ctx = context->fragment_context();
     size_t dop = context->source_operator(prev_operators)->degree_of_parallelism();
+
     // TODO: port the following code to detail DataSink subclasses
-    if (typeid(*this) == typeid(starrocks::ResultSink)) {
-        auto* result_sink = down_cast<starrocks::ResultSink*>(this);
+    if (typeid(*this) == typeid(ResultSink)) {
+        auto* result_sink = down_cast<ResultSink*>(this);
         // Accumulate chunks before sending to result sink
         if (runtime_state->query_options().__isset.enable_result_sink_accumulate &&
             runtime_state->query_options().enable_result_sink_accumulate) {
-            ExecNode::may_add_chunk_accumulate_operator(prev_operators, context,
+            pipeline::may_add_chunk_accumulate_operator(prev_operators, context,
                                                         Operator::s_pseudo_plan_node_id_for_final_sink);
         }
         // Result sink doesn't have plan node id;
@@ -294,25 +315,25 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             op = std::make_shared<ResultSinkOperatorFactory>(
                     context->next_operator_id(), dop, result_sink->get_sink_type(), result_sink->isBinaryFormat(),
                     result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx,
-                    result_sink->get_row_desc());
+                    result_sink->get_row_desc(), result_sink->get_output_column_names());
         }
         // Add result sink operator to last pipeline
         prev_operators.emplace_back(op);
-        context->add_pipeline(std::move(prev_operators));
+        context->add_pipeline(prev_operators);
 
-    } else if (typeid(*this) == typeid(starrocks::BlackHoleTableSink)) {
+    } else if (typeid(*this) == typeid(BlackHoleTableSink)) {
         OpFactoryPtr op = std::make_shared<BlackHoleTableSinkOperatorFactory>(context->next_operator_id());
         prev_operators.emplace_back(op);
         context->add_pipeline(prev_operators);
-    } else if (typeid(*this) == typeid(starrocks::DataStreamSender)) {
-        auto* sender = down_cast<starrocks::DataStreamSender*>(this);
+    } else if (typeid(*this) == typeid(DataStreamSender)) {
+        auto* sender = down_cast<DataStreamSender*>(this);
         auto& t_stream_sink = request.output_sink().stream_sink;
 
         auto exchange_sink = _create_exchange_sink_operator(context, t_stream_sink, sender);
 
         prev_operators.emplace_back(exchange_sink);
-        context->add_pipeline(std::move(prev_operators));
-    } else if (typeid(*this) == typeid(starrocks::MultiCastDataStreamSink)) {
+        context->add_pipeline(prev_operators);
+    } else if (typeid(*this) == typeid(MultiCastDataStreamSink)) {
         // note(yan): steps are:
         // 1. create exchange[EX]
         // 2. create sink[A] at the end of current pipeline
@@ -324,7 +345,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         // and source[B] will pull chunk from exchanger
         // so basically you can think exchanger is a chunk repository.
         // Further workflow explanation is in mcast_local_exchange.h file.
-        auto* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(this);
+        auto* mcast_sink = down_cast<MultiCastDataStreamSink*>(this);
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
@@ -344,7 +365,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                 context->next_operator_id(), upstream_plan_node_id, mcast_local_exchanger);
         prev_operators.emplace_back(sink_op);
-        context->add_pipeline(std::move(prev_operators));
+        context->add_pipeline(prev_operators);
 
         // ==== create source/limit/sink pipelines ====
         for (size_t i = 0; i < sinks.size(); i++) {
@@ -371,10 +392,10 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             // sink op
             ops.emplace_back(_create_exchange_sink_operator(context, t_stream_sink, sender.get()));
 
-            context->add_pipeline(std::move(ops));
+            context->add_pipeline(ops);
         }
-    } else if (typeid(*this) == typeid(starrocks::SplitDataStreamSink)) {
-        auto* split_sink = down_cast<starrocks::SplitDataStreamSink*>(this);
+    } else if (typeid(*this) == typeid(SplitDataStreamSink)) {
+        auto* split_sink = down_cast<SplitDataStreamSink*>(this);
         const auto& sinks = split_sink->get_sinks();
         size_t num_consumers = sinks.size();
         auto& t_split_stream_sink = request.output_sink().split_stream_sink;
@@ -390,7 +411,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                 context->next_operator_id(), upstream_plan_node_id, split_local_exchanger);
         prev_operators.emplace_back(sink_op);
-        context->add_pipeline(std::move(prev_operators));
+        context->add_pipeline(prev_operators);
 
         // ==== create source/sink pipelines ====
         for (size_t i = 0; i < sinks.size(); i++) {
@@ -409,7 +430,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);
-            context->add_pipeline(std::move(ops));
+            context->add_pipeline(ops);
         }
     } else if (typeid(*this) == typeid(OlapTableSink) || typeid(*this) == typeid(MultiOlapTableSink)) {
         size_t desired_tablet_sink_dop = request.pipeline_sink_dop();
@@ -431,8 +452,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             tablet_sinks.emplace_back(std::move(sink));
         }
         OpFactoryPtr tablet_sink_op = std::make_shared<OlapTableSinkOperatorFactory>(
-                context->next_operator_id(), this, fragment_ctx, request.sender_id(), desired_tablet_sink_dop,
-                tablet_sinks);
+                context->next_operator_id(), this, fragment_ctx, request.sender_id(), tablet_sinks);
         // FE will pre-set the parallelism for all fragment instance which contains the tablet sink,
         // For stream load, routine load or broker load, the desired_tablet_sink_dop set
         // by FE is same as the dop.
@@ -446,29 +466,29 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                     desired_tablet_sink_dop);
             ops.emplace_back(std::move(tablet_sink_op));
-            context->add_pipeline(std::move(ops));
+            context->add_pipeline(ops);
         } else {
             prev_operators.emplace_back(std::move(tablet_sink_op));
-            context->add_pipeline(std::move(prev_operators));
+            context->add_pipeline(prev_operators);
         }
-    } else if (typeid(*this) == typeid(starrocks::ExportSink)) {
-        auto* export_sink = down_cast<starrocks::ExportSink*>(this);
+    } else if (typeid(*this) == typeid(ExportSink)) {
+        auto* export_sink = down_cast<ExportSink*>(this);
         auto output_expr = export_sink->get_output_expr();
         OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().export_sink, export_sink->get_output_expr(), dop,
                 fragment_ctx);
         prev_operators.emplace_back(op);
-        context->add_pipeline(std::move(prev_operators));
-    } else if (typeid(*this) == typeid(starrocks::MysqlTableSink)) {
-        auto* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(this);
+        context->add_pipeline(prev_operators);
+    } else if (typeid(*this) == typeid(MysqlTableSink)) {
+        auto* mysql_table_sink = down_cast<MysqlTableSink*>(this);
         auto output_expr = mysql_table_sink->get_output_expr();
         OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().mysql_table_sink,
                 mysql_table_sink->get_output_expr(), dop, fragment_ctx);
         prev_operators.emplace_back(op);
-        context->add_pipeline(std::move(prev_operators));
-    } else if (typeid(*this) == typeid(starrocks::MemoryScratchSink)) {
-        auto* memory_scratch_sink = down_cast<starrocks::MemoryScratchSink*>(this);
+        context->add_pipeline(prev_operators);
+    } else if (typeid(*this) == typeid(MemoryScratchSink)) {
+        auto* memory_scratch_sink = down_cast<MemoryScratchSink*>(this);
         auto output_expr = memory_scratch_sink->get_output_expr();
         auto row_desc = memory_scratch_sink->get_row_desc();
         DCHECK_EQ(dop, 1);
@@ -476,22 +496,29 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
                                                                              output_expr, fragment_ctx);
 
         prev_operators.emplace_back(op);
-        context->add_pipeline(std::move(prev_operators));
-    } else if (typeid(*this) == typeid(starrocks::IcebergTableSink)) {
-        auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(this);
+        context->add_pipeline(prev_operators);
+#ifndef __APPLE__
+    } else if (typeid(*this) == typeid(IcebergTableSink)) {
+        auto* iceberg_table_sink = down_cast<IcebergTableSink*>(this);
         RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
-    } else if (typeid(*this) == typeid(starrocks::HiveTableSink)) {
-        auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(this);
+#endif
+    } else if (typeid(*this) == typeid(HiveTableSink)) {
+        auto* hive_table_sink = down_cast<HiveTableSink*>(this);
         RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
-    } else if (typeid(*this) == typeid(starrocks::TableFunctionTableSink)) {
-        auto* table_function_table_sink = down_cast<starrocks::TableFunctionTableSink*>(this);
+    } else if (typeid(*this) == typeid(TableFunctionTableSink)) {
+        auto* table_function_table_sink = down_cast<TableFunctionTableSink*>(this);
         RETURN_IF_ERROR(table_function_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
-    } else if (typeid(*this) == typeid(starrocks::DictionaryCacheSink)) {
+    } else if (typeid(*this) == typeid(DictionaryCacheSink)) {
         OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().dictionary_cache_sink, fragment_ctx);
 
         prev_operators.emplace_back(op);
-        context->add_pipeline(std::move(prev_operators));
+        context->add_pipeline(prev_operators);
+    } else if (typeid(*this) == typeid(starrocks::NoopSink)) {
+        OpFactoryPtr op = std::make_shared<NoopSinkOperatorFactory>(context->next_operator_id(),
+                                                                    prev_operators.back()->plan_node_id());
+        prev_operators.emplace_back(op);
+        context->add_pipeline(prev_operators);
     } else {
         return Status::InternalError(fmt::format("Unknown data sink type: {}", typeid(*this).name()));
     }

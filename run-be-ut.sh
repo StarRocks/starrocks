@@ -20,12 +20,33 @@ set -eo pipefail
 
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
+MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
-. ${STARROCKS_HOME}/env.sh
+. "${STARROCKS_HOME}/build-support/build_helpers.sh"
 
-PARALLEL=$[$(nproc)/4+1]
+append_runtime_library_path() {
+    local dir="$1"
+
+    if [[ -z "${dir}" || ! -d "${dir}" ]]; then
+        return 0
+    fi
+
+    export LD_LIBRARY_PATH="${dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    if starrocks_is_darwin; then
+        export DYLD_LIBRARY_PATH="${dir}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+    fi
+}
+
+if starrocks_is_darwin; then
+    starrocks_setup_darwin_build_env
+    PARALLEL=$(starrocks_detect_parallelism)
+else
+    . ${STARROCKS_HOME}/env.sh
+    host_parallelism=$(starrocks_detect_parallelism)
+    PARALLEL=$[$host_parallelism/4+1]
+fi
 
 # Check args
 usage() {
@@ -37,10 +58,12 @@ Usage: $0 <options>
      --dry-run                      dry-run unit tests
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
+     --with-dynamic                 enable to build with dynamic libs
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
+     --build-target TARGET          only build the specified target (e.g. base_test)
      --enable-shared-data           enable to build with shared-data feature support
      --without-starcache            build without starcache library
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
@@ -77,22 +100,25 @@ append_negative_case() {
 }
 
 # -l run and -l gtest_filter only used for compatibility
-OPTS=$(getopt \
+GETOPT_BIN="$(starrocks_resolve_getopt_bin)" || exit 1
+
+OPTS=$(${GETOPT_BIN} \
   -n $0 \
   -o '' \
   -l 'test:' \
   -l 'dry-run' \
   -l 'clean' \
   -l 'with-gcov' \
+  -l 'with-dynamic' \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
+  -l 'build-target:' \
   -l 'without-starcache' \
   -l 'without-java-ext' \
-  -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
   -o 'j:' \
@@ -116,10 +142,20 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
-WITH_STARCACHE=ON
-WITH_BRPC_KEEPALIVE=OFF
+if starrocks_is_darwin; then
+    WITH_STARCACHE=OFF
+else
+    WITH_STARCACHE=ON
+fi
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
+BUILD_TARGET=
+if [[ -z ${WITH_DYNAMIC} ]]; then
+    WITH_DYNAMIC=OFF
+fi
+if [[ -z ${THIN_ARCHIVE} ]]; then
+    THIN_ARCHIVE=$(starrocks_default_ut_thin_archive)
+fi
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -131,10 +167,11 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+        --with-dynamic) WITH_DYNAMIC=ON; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
-        --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+        --build-target) BUILD_TARGET=$2; shift 2;;
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
@@ -168,17 +205,29 @@ if [[ -z ${USE_AVX512} ]]; then
     # Disable it by default
     USE_AVX512=OFF
 fi
+if [[ -z ${ENABLE_JIT} ]]; then
+    if starrocks_is_darwin; then
+        ENABLE_JIT=OFF
+    else
+        ENABLE_JIT=ON
+    fi
+fi
 echo "Build Backend UT"
 
-CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/ut_build_${CMAKE_BUILD_TYPE}
+if [ -z $CMAKE_BUILD_PREFIX ]; then
+    CMAKE_BUILD_PREFIX=${STARROCKS_HOME}/be
+fi
+
+CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}
 if [ ${CLEAN} -eq 1 ]; then
-    rm ${CMAKE_BUILD_DIR} -rf
-    rm ${STARROCKS_HOME}/be/output/ -rf
+    rm -rf ${CMAKE_BUILD_DIR}
+    rm -rf ${STARROCKS_HOME}/be/output/
 fi
 
 if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
+starrocks_reset_stale_darwin_cmake_cache "${CMAKE_BUILD_DIR}"
 
 source ${STARROCKS_HOME}/bin/common.sh
 
@@ -204,37 +253,68 @@ else
     echo "Skip Building Java Extensions"
 fi
 
+echo "Build script-generated code"
+cd ${STARROCKS_HOME}/gensrc
+if [ ${CLEAN} -eq 1 ]; then
+    make clean
+fi
+make script
+
+if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
+    CCACHE=ccache
+    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros,include_file_ctime"
+fi
+
 cd ${CMAKE_BUILD_DIR}
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
+            -DSTARROCKS_PRECONFIG_MODE=OFF \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
             -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
-            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
-            -DSTARROCKS_JIT_ENABLE=ON \
+            -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+            -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
+            -DTHIN_ARCHIVE=${THIN_ARCHIVE} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            ${STARROCKS_HOME}/be
 
-${BUILD_SYSTEM} -j${PARALLEL}
+if [[ -n "$BUILD_TARGET" ]]; then
+    ${BUILD_SYSTEM} -j${PARALLEL} ${BUILD_TARGET}
+else
+    ${BUILD_SYSTEM} -j${PARALLEL}
+fi
 
 cd ${STARROCKS_HOME}
-export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}/test
-TEST_BIN=starrocks_test
-if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
-    pushd ${STARROCKS_TEST_BINARY_DIR} >/dev/null 2>&1
-    TEST_BIN_SYMBOL=starrocks_test.debuginfo
-    echo -n "[INFO] Split $TEST_BIN debug symbol to $TEST_BIN_SYMBOL ..."
-    objcopy --only-keep-debug $TEST_BIN $TEST_BIN_SYMBOL
-    strip --strip-debug $TEST_BIN
-    objcopy --add-gnu-debuglink=$TEST_BIN_SYMBOL $TEST_BIN
-    # continue the echo output from the previous `echo -n`
-    echo " split done."
-    popd >/dev/null 2>&1
+export STARROCKS_TEST_BINARY_BASE_DIR=${CMAKE_BUILD_DIR}
+export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
+
+split_debug_symbol() {
+    local bin="$1"
+    local symbol="${bin}.debuginfo"
+    echo -n "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    objcopy --only-keep-debug "$bin" "$symbol"
+    strip --strip-debug "$bin"
+    objcopy --add-gnu-debuglink="$symbol" "$bin"
+}
+
+if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && ! starrocks_is_darwin ; then
+    if [ "x$WITH_DEBUG_SO_SYMBOL_SPLIT" = "xON" ] ; then
+        find "${STARROCKS_TEST_BINARY_BASE_DIR}" -type f -name "*.so*" ! -name "*.debuginfo" | while read -r so; do
+            split_debug_symbol "$so"
+        done
+    fi
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test
+    fi
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test
+    fi
 fi
 
 echo "*********************************"
@@ -245,7 +325,7 @@ export TERM=xterm
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
-for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
+for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | grep -E "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
     eval "export $i";
 done
 
@@ -253,40 +333,57 @@ mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
 
-export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/:$LD_LIBRARY_PATH
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+
+while IFS= read -r runtime_lib_dir; do
+    append_runtime_library_path "${runtime_lib_dir}"
+done < <(find "${CMAKE_BUILD_DIR}" -type f \( -name "*.so" -o -name "*.so.*" -o -name "*.dylib" -o -name "*.dylib.*" \) \
+    -exec dirname {} \; | sort -u)
 
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
 # this is only for starting be
 jvm_arch="amd64"
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+if [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]; then
     jvm_arch="aarch64"
 fi
 
-if [ "$JAVA_HOME" = "" ]; then
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+if starrocks_is_darwin; then
+    if [[ -z "${JAVA_HOME:-}" ]]; then
+        JAVA_HOME="$(starrocks_resolve_java_home "${STARROCKS_THIRDPARTY}/installed/open_jdk")"
+    fi
+    append_runtime_library_path "${JAVA_HOME}/lib/server"
+    append_runtime_library_path "${JAVA_HOME}/lib"
+elif [ "${JAVA_HOME:-}" = "" ]; then
+    append_runtime_library_path "$STARROCKS_HOME/lib/jvm/$jvm_arch/server"
+    append_runtime_library_path "$STARROCKS_HOME/lib/jvm/$jvm_arch"
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/lib/server"
+        append_runtime_library_path "$JAVA_HOME/lib"
     # JAVA_HOME is jdk
     elif [[ -d "$JAVA_HOME/jre"  ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/jre/lib/$jvm_arch/server"
+        append_runtime_library_path "$JAVA_HOME/jre/lib/$jvm_arch"
     # JAVA_HOME is jre
     else
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/lib/$jvm_arch/server"
+        append_runtime_library_path "$JAVA_HOME/lib/$jvm_arch"
     fi
 fi
 
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
-if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
+if ! starrocks_is_darwin && [[ -n "$STARROCKS_GCC_HOME" ]] ; then
     # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
-    export LD_LIBRARY_PATH=$STARROCKS_GCC_HOME/lib64:$LD_LIBRARY_PATH
+    append_runtime_library_path "$(dirname "$($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)")"
 fi
 
-THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
-if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
-    export HADOOP_CLASSPATH=${THIRDPARTY_HADOOP_HOME}/common/*:${THIRDPARTY_HADOOP_HOME}/common/lib/*:${THIRDPARTY_HADOOP_HOME}/hdfs/*:${THIRDPARTY_HADOOP_HOME}/hdfs/lib/*
+RUN_UT_HADOOP_COMMON_HOME=${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib
+if [[ -d ${RUN_UT_HADOOP_COMMON_HOME} ]] ; then
+    export HADOOP_CLASSPATH=${RUN_UT_HADOOP_COMMON_HOME}/*:${RUN_UT_HADOOP_COMMON_HOME}/lib/*:
     # get rid of StackOverflowError on the process reaper thread, which has a small stack size.
     # https://bugs.openjdk.org/browse/JDK-8153057
     export LIBHDFS_OPTS="$LIBHDFS_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
@@ -323,12 +420,7 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
-    | grep -v starrocks_test \
-    | grep -v starrocks_dw_test \
-    | grep -v bench_test \
-    | grep -v builtin_functions_fuzzy_test \
-    | grep -e "$TEST_MODULE" `
+test_files=$(starrocks_collect_test_binaries "${STARROCKS_TEST_BINARY_DIR}" "${TEST_MODULE}")
 
 echo "[INFO] gtest_filter: $TEST_NAME"
 

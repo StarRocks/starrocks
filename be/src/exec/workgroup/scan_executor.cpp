@@ -16,7 +16,8 @@
 
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_task_queue.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks::workgroup {
 
@@ -50,7 +51,10 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
 }
 
 void ScanExecutor::worker_thread() {
-    auto current_thread = Thread::current_thread();
+    // This executor is dedicated to query scan/IO tasks.
+    SET_MODULE_TYPE(ThreadModuleType::QUERY);
+    auto* current_thread = Thread::current_thread();
+    const int worker_id = _next_worker_id.fetch_add(1, std::memory_order_relaxed);
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
@@ -59,7 +63,7 @@ void ScanExecutor::worker_thread() {
         if (current_thread != nullptr) {
             current_thread->set_idle(true);
         }
-        auto maybe_task = _task_queue->take();
+        auto maybe_task = _task_queue->take(worker_id);
         _metrics->pending_tasks.increment(-1);
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
@@ -81,7 +85,7 @@ void ScanExecutor::worker_thread() {
         _task_queue->update_statistics(task, time_spent_ns);
         _metrics->running_tasks.increment(-1);
         _metrics->finished_tasks.increment(1);
-        _metrics->execution_time.increment(time_spent_ns);
+        _metrics->execution_time.increment(task.query_type(), time_spent_ns);
 
         // task
         if (!task.is_finished()) {

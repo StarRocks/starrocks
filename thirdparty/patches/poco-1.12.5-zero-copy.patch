@@ -75,31 +75,41 @@ diff --git a/Net/src/HTTPClientSession.cpp b/Net/src/HTTPClientSession.cpp
  #else
  		_pResponseStream = new HTTPFixedLengthInputStream(*this, response.getContentLength());
  #endif
-@@ -388,6 +396,24 @@ std::istream& HTTPClientSession::receiveResponse(HTTPResponse& response)
+@@ -388,8 +396,34 @@ std::istream& HTTPClientSession::receiveResponse(HTTPResponse& response)
  		_pResponseStream = new HTTPInputStream(*this);
  
  	return *_pResponseStream;
 +
-+}
-+
-+void HTTPClientSession::readDataToResponseIOStream(HTTPResponse& response) {
-+	auto ioStream = response.getResponseIOStream();
-+	auto length = response.getContentLength64();
-+	char* buffer = reinterpret_cast<char *>(response.getPreAllocatedBuffer());
-+	auto n = read(buffer, length);
-+	auto current = n;
-+	while (n > 0 && current < length) {
-+		n = read(buffer + current, length - current);
-+		current += n;
-+	}
-+	if (n <= 0) {
-+		throw IllegalStateException("Poco socket read operation failed");
-+	}
-+	response.setBodyFilled(true);
-+	return;
  }
  
++void HTTPClientSession::readDataToResponseIOStream(HTTPResponse& response) {
++    constexpr int MAX_READ_LENGTH = 67108864;  // 64MB
++    char* buffer = reinterpret_cast<char*>(response.getPreAllocatedBuffer());
++
++    ssize_t length = response.getContentLength64();
++    ssize_t current = 0;
++    ssize_t remain = length;
++    while (remain > 0) {
++        int next_read = MAX_READ_LENGTH;
++        if (remain < next_read) {
++            next_read = static_cast<int>(remain);
++        }
++        int n = read(buffer + current, next_read);
++        if (n <= 0) {
++            break;
++        }
++        current += n;
++        remain -= n;
++    }
++    if (remain > 0) {
++        throw IllegalStateException("Poco socket read operation failed");
++    }
++    response.setBodyFilled(true);
++    return;
++}
  
+ bool HTTPClientSession::peekResponse(HTTPResponse& response)
+ {
 diff --git a/Net/src/HTTPResponse.cpp b/Net/src/HTTPResponse.cpp
 --- a/Net/src/HTTPResponse.cpp
 +++ b/Net/src/HTTPResponse.cpp

@@ -79,6 +79,10 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(predicate, context);
     }
 
+    public R visitLargeInPredicate(LargeInPredicateOperator predicate, C context) {
+        return visitInPredicate(predicate, context);
+    }
+
     public R visitMultiInPredicate(MultiInPredicateOperator predicate, C context) {
         return visit(predicate, context);
     }

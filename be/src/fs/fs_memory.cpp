@@ -17,9 +17,9 @@
 #include <butil/files/file_path.h>
 #include <fmt/format.h>
 
+#include "base/container/raw_container.h"
 #include "fs/encrypt_file.h"
-#include "io/array_input_stream.h"
-#include "util/raw_container.h"
+#include "io/core/array_input_stream.h"
 
 namespace starrocks {
 
@@ -246,14 +246,18 @@ public:
     Status create_dir_if_missing(const butil::FilePath& dirname, bool* created) {
         auto inode = get_inode(dirname);
         if (inode != nullptr && inode->type == kDir) {
-            *created = false;
+            if (created != nullptr) {
+                *created = false;
+            }
             return Status::OK();
         } else if (inode != nullptr) {
             return Status::AlreadyExist(dirname.value());
         } else if (get_inode(dirname.DirName()) == nullptr) {
             return Status::NotFound("parent directory not exist");
         } else {
-            *created = true;
+            if (created != nullptr) {
+                *created = true;
+            }
             _namespace[dirname.value()] = std::make_shared<Inode>(kDir, "");
             return Status::OK();
         }

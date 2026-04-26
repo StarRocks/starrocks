@@ -14,11 +14,17 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
-#include "util/await.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -77,13 +83,14 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
-    _fragment_ctx->set_is_stream_pipeline(true);
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
-                                           _request.query_options, _request.query_globals, _exec_env));
+    _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+            _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+            _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     std::vector<TExpr> t_output_expr;
     RowDescriptor row_desc;
@@ -104,6 +111,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     auto driver = std::make_shared<PipelineDriver>(ops, _query_ctx, _fragment_ctx, pipeline.get(), 0);
 
     driver->prepare(_runtime_state);
+    driver->prepare_local_state(_runtime_state);
 
     // Now simulate GlobalDriverExecutor to cancel the driver due to source operator failure
     auto status = Status::NotFound("file not found");

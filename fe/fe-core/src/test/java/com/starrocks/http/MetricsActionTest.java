@@ -42,7 +42,7 @@ public class MetricsActionTest {
         }
         DefaultHttpRequest rawRequest =
                 new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri, headers);
-        return new BaseRequest(null, rawRequest, null);
+        return new BaseRequest(null, rawRequest);
     }
 
     @Test
@@ -202,6 +202,56 @@ public class MetricsActionTest {
             Assertions.assertTrue(params.isMinifyMVMetrics());
             Assertions.assertTrue(params.isCollectTableMetrics());
             Assertions.assertTrue(params.isMinifyTableMetrics());
+        }
+    }
+
+    @Test
+    public void testParseRequestParamsWithUserConnections() {
+        ActionController controller = new ActionController();
+        MockMetricsAction action = new MockMetricsAction(controller);
+
+        // Test with user connections parameter but no auth
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_user_connections=all", false);
+            new Expectations(request) {
+                {
+                    request.getAuthorizationHeader();
+                    minTimes = 1;
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assertions.assertNotNull(params);
+            Assertions.assertFalse(params.isCollectUserConnMetrics());
+        }
+
+        // Test with user connections parameter and auth
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_user_connections=all", true);
+            new Expectations(request) {
+                {
+                    request.getHostString();
+                    result = "127.0.0.1";
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assertions.assertNotNull(params);
+            Assertions.assertTrue(params.isCollectUserConnMetrics());
+        }
+
+        // Test combined parameters
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_table_metrics=all&with_user_connections=all", true);
+            new Expectations(request) {
+                {
+                    request.getHostString();
+                    result = "127.0.0.1";
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assertions.assertNotNull(params);
+            Assertions.assertTrue(params.isCollectTableMetrics());
+            Assertions.assertFalse(params.isMinifyTableMetrics());
+            Assertions.assertTrue(params.isCollectUserConnMetrics());
         }
     }
 }

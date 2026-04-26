@@ -18,7 +18,8 @@ package com.starrocks.scheduler;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.scheduler.mv.MVPCTMetaRepairer;
+import com.starrocks.common.Config;
+import com.starrocks.scheduler.mv.pct.MVPCTMetaRepairer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -132,8 +133,9 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
                 refreshMaterializedView("test", "iceberg_mv1");
                 Assertions.fail();
             } catch (Exception e) {
-                assertThat(e.getMessage()).contains(" Table t1 is recreated and needed to be repaired, " +
-                        "but it is not supported by MVPCTMetaRepairer");
+                assertThat(e.getMessage()).contains("base table 't1'");
+                assertThat(e.getMessage()).contains(
+                        "was recreated but its table type is not supported for automatic meta repair");
             }
             assertThat(mv.isActive()).isFalse();
             assertThat(mv.getInactiveReason().equals("base-table changed: t1")).isTrue();
@@ -155,6 +157,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
 
     @Test
     public void testPCTRepairerWithHive() throws Exception {
+        Config.enable_materialized_view_external_table_precise_refresh = true;
         // hive catalog
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
@@ -194,7 +197,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
             try {
                 refreshMaterializedView("test", "hive_mv1");
             } catch (Exception e) {
-                Assertions.fail();
+                Assertions.fail(e.getMessage());
             }
             assertThat(mv.isActive()).isTrue();
         }
@@ -211,5 +214,6 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         }
 
         ConnectorPlanTestBase.dropCatalog("hive0");
+        Config.enable_materialized_view_external_table_precise_refresh = false;
     }
 }

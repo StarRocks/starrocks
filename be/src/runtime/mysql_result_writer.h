@@ -63,7 +63,7 @@ private:
     StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
     const std::vector<ExprContext*>& _output_expr_ctxs;
-    MysqlRowBuffer* _row_buffer;
+    MysqlRowBuffer* _row_buffer{nullptr};
     bool _is_binary_format;
 
     const size_t _max_row_buffer_size = 1024 * 1024 * 1024;

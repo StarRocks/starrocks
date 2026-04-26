@@ -35,7 +35,6 @@ public class UnitIdentifier implements ParseNode {
         return description;
     }
 
-    @Override
     public String toSql() {
         return description;
     }

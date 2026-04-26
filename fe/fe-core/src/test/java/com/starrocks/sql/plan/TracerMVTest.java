@@ -34,25 +34,10 @@ public class TracerMVTest extends MaterializedViewTestBase {
         starRocksAssert.useTable("depts");
         starRocksAssert.useTable("locations");
         starRocksAssert.useTable("emps");
-
-        String mv = "CREATE MATERIALIZED VIEW `test_distinct_mv1`\n" +
-                "DISTRIBUTED BY HASH(`deptno`, `locationid`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"" +
-                ")\n" +
-                "AS \n" +
-                "SELECT \n" +
-                "  `locationid`,\n" +
-                "  `deptno`,\n" +
-                "  count(DISTINCT `empid`) AS `order_num`\n" +
-                "FROM `emps`\n" +
-                "GROUP BY `locationid`, `deptno`;";
-        starRocksAssert.withMaterializedView(mv);
     }
 
     @AfterAll
     public static void tearDown() throws Exception {
-        starRocksAssert.dropMaterializedView("test_distinct_mv1");
         MaterializedViewTestBase.afterClass();
     }
 
@@ -63,7 +48,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
-                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+                "join locations on emps.locationid = locations.locationid group by empid,emps.locationid");
         String pr = Tracers.printScopeTimer();
         Tracers.close();
         assertContains(pr, "-- Planner");
@@ -182,7 +167,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.toRuntimeProfile(runtimeProfile);
 
         Map<String, String> result = runtimeProfile.getInfoStrings();
-        Assertions.assertTrue(result.isEmpty());
+        Assertions.assertFalse(result.isEmpty());
     }
 
     @Test

@@ -35,6 +35,7 @@ public class TimeDriftConstraintTest {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         String hits = "" +

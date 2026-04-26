@@ -46,9 +46,17 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
+#include "base/metrics.h"
+#include "base/string/string_parser.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/url_coding.h"
+#include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
+#include "common/system/master_info.h"
+#include "common/util/debug_util.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -67,22 +75,16 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "simdjson.h"
 #include "util/byte_buffer.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
+#include "util/global_metrics_registry.h"
 #include "util/json_util.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
-#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
-#include "util/uid_util.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -134,12 +136,13 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
         : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_requests_total",
-                                                             &streaming_load_requests_total);
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_duration_ms", &streaming_load_duration_ms);
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_current_processing",
-                                                             &streaming_load_current_processing);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_requests_total",
+                                                                  &streaming_load_requests_total);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_duration_ms",
+                                                                  &streaming_load_duration_ms);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_current_processing",
+                                                                  &streaming_load_current_processing);
 }
 
 StreamLoadAction::~StreamLoadAction() = default;
@@ -200,7 +203,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         RETURN_IF_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx));
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
-            ctx->buffer->flip();
+            ctx->buffer->flip_to_read();
             RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
             ctx->buffer = nullptr;
         }
@@ -220,7 +223,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
-    ctx->buffer->flip();
+    ctx->buffer->flip_to_read();
     return _exec_env->batch_write_mgr()->append_data(ctx);
 }
 
@@ -320,7 +323,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
             ASSIGN_OR_RETURN(ctx->buffer,
-                             ByteBuffer::allocate_with_tracker(ctx->body_bytes + simdjson::SIMDJSON_PADDING));
+                             ByteBuffer::allocate_with_tracker(ctx->body_bytes, simdjson::SIMDJSON_PADDING));
         } else if (ctx->enable_batch_write) {
             // batch write does not support parsing data in stream mode
             ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(ctx->body_bytes));
@@ -419,7 +422,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
             } else {
                 // Otherwise, we could push buffer to the body_sink in streaming mode.
                 // buffer capacity is not enough, so we push the buffer to the pipe and allocate new one.
-                ctx->buffer->flip();
+                ctx->buffer->flip_to_read();
                 auto st = ctx->body_sink->append(std::move(ctx->buffer));
                 if (!st.ok()) {
                     LOG(WARNING) << "append body content failed. errmsg=" << st << " context=" << ctx->brief();
@@ -591,6 +594,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
     } else {
         request.__set_strip_outer_array(false);
+    }
+    if (!http_req->header(HTTP_ENVELOPE).empty()) {
+        auto envelope_str = http_req->header(HTTP_ENVELOPE);
+        if (boost::iequals(envelope_str, "debezium")) {
+            request.__set_envelope(TEnvelopeType::DEBEZIUM);
+        } else if (!boost::iequals(envelope_str, "none")) {
+            return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
+        }
     }
     if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
         if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "false")) {

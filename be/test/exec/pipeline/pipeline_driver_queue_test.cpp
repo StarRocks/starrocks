@@ -18,10 +18,12 @@
 
 #include <thread>
 
+#include "base/testutil/parallel_test.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
-#include "testutil/parallel_test.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
@@ -174,13 +176,17 @@ class WorkGroupDriverQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
         _wg1 = std::make_shared<workgroup::WorkGroup>("wg100", 100, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
-                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
         _wg2 = std::make_shared<workgroup::WorkGroup>("wg200", 200, workgroup::WorkGroup::DEFAULT_VERSION, 2, 0.5, 10,
-                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
         _wg3 = std::make_shared<workgroup::WorkGroup>("wg300", 300, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
-                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
         _wg4 = std::make_shared<workgroup::WorkGroup>("wg400", 400, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
-                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
         _wg1 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg1);
         _wg2 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg2);
         _wg3 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg3);

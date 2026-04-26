@@ -19,13 +19,16 @@
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
+#include "base/testutil/sync_point.h"
 #include "boost/lexical_cast.hpp"
+#include "common/config_agent_fwd.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
-#include "service/backend_options.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -41,7 +44,6 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 
@@ -218,10 +220,15 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
 }
 
 void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
-    const auto& create_tablet_req = agent_task_req->task_req;
+    TCreateTabletReq create_tablet_req = agent_task_req->task_req;
     TFinishTaskRequest finish_task_request;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
+
+    Status preprocess_status = preprocess_default_expr_for_tcolumns(create_tablet_req.tablet_schema.columns);
+    if (!preprocess_status.ok()) {
+        LOG(WARNING) << "Failed to preprocess default_expr in CREATE TABLE: " << preprocess_status.to_string();
+    }
 
     auto tablet_type = create_tablet_req.tablet_type;
     Status create_status;
@@ -241,7 +248,9 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
     }
     if (create_status.ok()) {
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+#ifndef __APPLE__
             create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
+#endif
         } else {
             create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
         }
@@ -284,6 +293,7 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
 }
 
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::SCHEMA_CHANGE);
     int64_t signatrue = agent_task_req->signature;
     std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
                                                      agent_task_req->task_req.base_tablet_id);
@@ -346,6 +356,7 @@ void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskR
 }
 
 void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::CLONE);
     StarRocksMetrics::instance()->clone_requests_total.increment(1);
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
@@ -569,6 +580,7 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
 }
 
 void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     const TCompactionReq& compaction_req = agent_task_req->task_req;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -617,6 +629,7 @@ void run_compaction_control_task(const std::shared_ptr<CompactionControlTaskRequ
 }
 
 void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::SCHEMA_CHANGE);
     const TUpdateSchemaReq& update_schema_req = agent_task_req->task_req;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -631,6 +644,12 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
     for (auto uid : tcolumn_param.sort_key_uid) {
         pcolumn_param.add_sort_key_uid(uid);
     }
+
+    Status preprocess_status = preprocess_default_expr_for_tcolumns(tcolumn_param.columns);
+    if (!preprocess_status.ok()) {
+        LOG(WARNING) << "Failed to preprocess default_expr in UPDATE_SCHEMA task: " << preprocess_status;
+    }
+
     Status st;
     for (auto& tcolumn : tcolumn_param.columns) {
         uint32_t col_unique_id = tcolumn.col_unique_id;
@@ -846,7 +865,7 @@ AgentStatus move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::st
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     if (tablet == nullptr) {
         LOG(INFO) << "Fail to get tablet_id=" << tablet_id << " schema hash=" << schema_hash;
-        error_msgs->push_back("failed to get tablet");
+        error_msgs->emplace_back("failed to get tablet");
         return STARROCKS_TASK_REQUEST_ERROR;
     }
 
@@ -1018,6 +1037,7 @@ void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMap
 
 void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskRequest>& agent_task_req,
                               ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::REPLICATION);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
@@ -1068,6 +1088,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
                                  ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::REPLICATION);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 

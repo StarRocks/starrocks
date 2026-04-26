@@ -18,6 +18,10 @@ insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par values(1, 
 
 insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par values(2, "4-NOT SPECI");
 
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par values(1, "4-NOT SPECI:123");
+
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par values(2, "4-NOT SPECI:123");
+
 drop table hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par force;
 
 drop database hive_catalog_${uuid0}.hive_db_${uuid0};

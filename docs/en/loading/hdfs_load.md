@@ -6,11 +6,11 @@ keywords: ['Broker Load']
 
 # Load data from HDFS
 
-import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.md'
+import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.mdx'
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
-import PipeAdvantages from '../_assets/commonMarkdown/pipeAdvantages.md'
+import PipeAdvantages from '../_assets/commonMarkdown/pipeAdvantages.mdx'
 
 StarRocks provides the following options for loading data from HDFS:
 
@@ -40,9 +40,9 @@ This method is available from v3.1 onwards and currently supports only the Parqu
 
 With `FILES()`, you can:
 
-- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
+- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md).
 - Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS).
-- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
+- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md).
 
 ### Typical examples
 

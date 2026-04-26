@@ -15,7 +15,9 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_distinct_operator.h"
 
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
+#include "exec/pipeline/query_context.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -37,7 +39,7 @@ Status SpillablePartitionWiseDistinctSinkOperator::set_finishing(RuntimeState* s
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _distinct_op->aggregator()->spill_channel()->set_finishing_if_not_reuseable();
+        _distinct_op->aggregator()->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
@@ -82,10 +84,12 @@ void SpillablePartitionWiseDistinctSinkOperator::close(RuntimeState* state) {
 
 Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_distinct_op->prepare(state));
+    RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
     DCHECK(!_distinct_op->aggregator()->is_none_group_by_exprs());
     _distinct_op->aggregator()->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
@@ -220,6 +224,14 @@ Status SpillablePartitionWiseDistinctSourceOperator::prepare(RuntimeState* state
     return Status::OK();
 }
 
+Status SpillablePartitionWiseDistinctSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_non_pw_distinct->prepare_local_state(state));
+    RETURN_IF_ERROR(_pw_distinct->prepare_local_state(state));
+
+    return Status::OK();
+}
+
 void SpillablePartitionWiseDistinctSourceOperator::close(RuntimeState* state) {
     _pw_distinct->close(state);
     _non_pw_distinct->close(state);
@@ -343,7 +355,7 @@ StatusOr<ChunkPtr> SpillablePartitionWiseDistinctSourceOperator::_pull_spilled_c
                     state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader)));
             if (maybe_chunk.ok() && maybe_chunk.value() && !maybe_chunk.value()->is_empty()) {
                 DCHECK(_pw_distinct->need_input() && !_pw_distinct->is_finished());
-                RETURN_IF_ERROR(_pw_distinct->push_chunk(state, std::move(maybe_chunk.value())));
+                RETURN_IF_ERROR(_pw_distinct->push_chunk(state, maybe_chunk.value()));
             } else if (maybe_chunk.status().is_end_of_file()) {
                 _curr_partition_eos = true;
                 RETURN_IF_ERROR(_pw_distinct->set_finishing(state));

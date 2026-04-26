@@ -212,8 +212,82 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 **DEFAULT "default_value"**：列的默认值。当您将数据导入 StarRocks 时，如果映射到该列的源字段为空，StarRocks 会自动在该列中填充默认值。您可以通过以下方式之一指定默认值：
 
 - **DEFAULT current_timestamp**：使用当前时间作为默认值。有关更多信息，请参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md)。
-- **DEFAULT `<default_value>`**：使用列数据类型的给定值作为默认值。例如，如果列的数据类型为 VARCHAR，您可以指定一个 VARCHAR 字符串，例如 beijing，作为默认值，如 `DEFAULT "beijing"` 所示。请注意，默认值不能是以下类型之一：ARRAY、BITMAP、JSON、HLL 和 BOOLEAN。
-- **DEFAULT (\<expr\>)**：使用给定函数返回的结果作为默认值。仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
+- **DEFAULT (\<expr\>)**：使用给定表达式或函数返回的结果作为默认值。支持以下表达式：
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md)：生成唯一标识符。
+  - ARRAY 字面量表达式（如 `[1, 2, 3]`）：用于 ARRAY 类型列。
+  - MAP 表达式（如 `map{key: value}`）：用于 MAP 类型列。
+  - row() 函数（如 `row(val1, val2)`）：用于 STRUCT 类型列。
+- **DEFAULT `<default_value>`**：使用列数据类型的给定值作为默认值。StarRocks 支持为不同类型指定默认值：
+  
+  **基础类型**：使用字符串字面量指定默认值。
+  
+  ```sql
+  -- 数值类型
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- 字符串类型
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- 日期时间类型
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- 布尔类型
+  is_active BOOLEAN DEFAULT 'true'  -- 支持 'true'/'false'/'1'/'0'
+  ```
+  
+  **JSON 类型**：使用 JSON 格式字符串指定默认值。
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY 类型**：仅支持空字符串作为默认值。
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP 和 HLL 类型**：仅支持空字符串作为默认值，仅用于 AGGREGATE KEY 表。
+  
+  ```sql
+  -- AGGREGATE KEY 表中
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **复杂类型（ARRAY/MAP/STRUCT）**：使用表达式语法指定默认值，仅支持 OLAP 表。
+  
+  :::note
+  复杂类型的默认值**仅在 `fast_schema_evolution = true` 时支持**。如果表的 `fast_schema_evolution` 属性显式设置为 `false`，为复杂类型添加默认值会报错。
+  :::
+  
+  ```sql
+  -- ARRAY 类型
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP 类型
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT 类型
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- 复杂嵌套：STRUCT 嵌套 STRUCT，包含 ARRAY 和 MAP
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **限制**：
+  
+  - TIME 和 VARIANT 类型暂不支持默认值。
+  - 复杂类型（ARRAY/MAP/STRUCT）的默认值仅支持 OLAP 表，且需要表开启 `fast_schema_evolution` 属性。
 
 **AUTO_INCREMENT**：指定一个 `AUTO_INCREMENT` 列。`AUTO_INCREMENT` 列的数据类型必须为 BIGINT。自增 ID 从 1 开始，步长为 1。有关 `AUTO_INCREMENT` 列的更多信息，请参见 [AUTO_INCREMENT](auto_increment.md)。自 v3.0 起，StarRocks 支持 `AUTO_INCREMENT` 列。
 
@@ -252,8 +326,18 @@ key_type(k1[,k2 ...])
   :::
 
 :::note
-当使用其他 key_type 创建表时，值列不需要指定聚合类型，AGGREGATE KEY 除外。
+当使用其他 key type 创建表时，值列不需要指定聚合类型，AGGREGATE KEY 除外。
 :::
+
+### 基于范围的分布
+
+从 v4.1 起，StarRocks 引入了**基于范围的分布语义**（默认关闭），通过 FE 配置项 `enable_range_distribution` 控制。启用后，数据会按照键列的取值范围进行有序划分，每个 Tablet 存储一个连续范围内的数据。
+
+基于范围的分布语义与默认语义在以下方面有所不同：
+- 如果显式指定了键类型（AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY），且未指定 DISTRIBUTED BY 子句，则数据默认按范围分布。
+- 如果未指定键类型、DISTRIBUTED BY 子句或 ORDER BY 子句，则会创建采用随机分桶策略的明细表。
+- 如果未指定键类型和 DISTRIBUTED BY 子句，但指定了 ORDER BY 子句，则将创建采用基于范围的分布策略的明细表。在此情况下，DUPLICATE KEY 等同于 ORDER BY 子句，反之亦然。
+- 如果同时指定了 DUPLICATE KEY 和 ORDER BY 子句，则仅 ORDER BY 子句生效，而 DUPLICATE KEY 将被忽略。
 
 ## COMMENT
 
@@ -412,6 +496,10 @@ StarRocks 支持哈希分桶和随机分桶。如果您不配置分桶，StarRoc
   - 分桶列的值不能更新。
   - 指定后，分桶列不能修改。
   - 自 StarRocks v2.5.7 起，创建表时无需设置桶的数量。StarRocks 会自动设置桶的数量。如果您想设置此参数，请参见 [设置桶的数量](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)。
+
+- 基于范围的分布
+
+  从 v4.1 版本开始，StarRocks 支持 **基于范围的分布语义**（默认禁用），该功能由 FE 配置项 `enable_range_distribution` 控制。详细内容，参考[基于范围的分布](#基于范围的分布)。
 
 ## Rollup 索引
 
@@ -713,14 +801,37 @@ PROPERTIES (
       您可以通过将 FE 动态配置 `lake_autovacuum_grace_period_minutes` 的值设置为较小的数值来缩短此间隔。但在修改 `file_bundling` 属性后，请务必将该配置恢复为原始值。
   :::
 
-### 快速模式架构演进
+### Fast Schema Evolution
 
-`fast_schema_evolution`：是否为表启用快速模式架构演进。有效值为 `TRUE` 或 `FALSE`（默认）。启用快速模式架构演进可以在添加或删除列时提高架构更改的速度并减少资源使用。目前，此属性只能在创建表时启用，不能在创建表后使用 [ALTER TABLE](ALTER_TABLE.md) 修改。
+- `fast_schema_evolution`：是否为表启用 Fast Schema Evolution。有效值为 `TRUE` 或 `FALSE`（默认）。启用 Fast Schema Evolution 可以在添加或删除列时提高 Schema Change 的速度并减少资源使用。目前，此属性只能在创建表时启用，不能在创建表后使用 ALTER TABLE 修改。
 
   :::note
-  - 自 v3.2.0 起，存算一体集群支持快速模式架构演进。
-  - 自 v3.3 起，存算分离集群支持快速模式架构演进，并默认启用。在存算分离集群中创建云原生表时，您无需指定此属性。FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
+  - 自 v3.2.0 起，存算一体集群支持 Fast Schema Evolution。
+  - 自 v3.3 起，存算分离集群支持 Fast Schema Evolution，并默认启用。在存算分离集群中创建云原生表时，您无需指定此属性。FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
   :::
+
+- `cloud_native_fast_schema_evolution_v2`：是否为**云原生表**启用 Fast Schema Evolution v2。自 v4.1 起支持。有效值为 `TRUE`（默认）或 `FALSE`。启用 Fast Schema Evolution v2 后，Schema Change 将转为同步过程。当 ALTER TABLE 语句成功返回时，新 Schema 立即生效。系统仅会修改 FE 元数据而非位于 S3 上的 Tablet 元数据，因此无论表中包含多少个分区或分片，始终能实现秒级延迟。而在传统行为模式下，Schema Change 作为异步作业运行，会随时间推移逐步更新 Tablet 元数据。
+
+  :::note
+  - Fast Schema Evolution v2 功能自 v4.1 版本起提供支持，且仅适用于存算分离集群中的**云原生表**。
+  - 默认行为：
+    - 在 v4.1 集群中创建的新表默认启用 Fast Schema Evolution v2。
+    - 升级至 v4.1 集群中的已有表默认禁用 Fast Schema Evolution v2。可通过 [ALTER TABLE](ALTER_TABLE.md) 将此属性显式设置为 `true` 来启用该功能。
+  - 降级要求：
+    - 若需将存算分离集群从 v4.1 降级至 v4.0.5 或更高版本，可直接遵循标准降级流程操作。
+    - 在将存算分离集群从 v4.1 降级至 v3.x 或低于 v4.0.5 的补丁版本前，必须通过 ALTER TABLE 手动将所有启用 Fast Schema Evolution v2 的表的 `cloud_native_fast_schema_evolution_v2` 参数设置为 `false`，并等待异步作业状态变为 FINISHED。可通过 SHOW ALTER 命令追踪作业状态。
+  :::
+
+您可以通过 [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md) 查看 Schema Change 作业。
+
+示例：
+
+```SQL
+-- 列出表中最近的列/Schema Change 作业
+SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
+```
+
+对于启用了 Fast Schema Evolution v2 的云原生表，Schema Change 作业通常会显示为 FINISHED，因为变更仅通过更新 FE 元数据来应用。
 
 ### 禁止 Base Compaction
 
@@ -802,7 +913,7 @@ PROPERTIES (
 
 - `flat_json.enable`（可选）：是否启用 Flat JSON 功能。启用此功能后，新导入的 JSON 数据将自动进行扁平化处理，从而提升 JSON 查询性能。
 - `flat_json.null.factor`（可选）：列中 NULL 值的比例阈值。如果某列的 NULL 值比例高于此阈值，则该列不会被 Flat JSON 提取。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
-- `flat_json.sparsity.factor`（可选）：具有相同名称的列的比例阈值。如果具有相同名称的列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.9`。
+- `flat_json.sparsity.factor`（可选）：具有相同名称的列的比例阈值。如果具有相同名称的列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.column.max`（可选）：Flat JSON 可提取的子字段最大数量。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
 ## 示例

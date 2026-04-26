@@ -17,9 +17,9 @@
 #include <aws/core/Aws.h>
 #include <aws/core/client/ClientConfiguration.h>
 
+#include "base/random/random.h"
 #include "fs/credential/cloud_configuration.h"
 #include "fs/fs.h"
-#include "util/random.h"
 
 namespace Aws::S3 {
 class S3Client;
@@ -29,6 +29,14 @@ namespace starrocks {
 
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options);
 void close_s3_clients();
+
+namespace fs {
+
+struct FileSystemProvider;
+
+FileSystemProvider new_s3_file_system_provider(int priority = 10);
+
+} // namespace fs
 
 class S3ClientFactory {
 public:

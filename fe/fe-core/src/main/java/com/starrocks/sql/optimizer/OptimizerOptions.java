@@ -14,11 +14,21 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
+import java.util.List;
+import java.util.Set;
 
 public class OptimizerOptions {
+    private static final Logger LOG = LogManager.getLogger(OptimizerOptions.class);
+    
     public enum OptimizerStrategy {
         RULE_BASED,
         COST_BASED,
@@ -72,5 +82,51 @@ public class OptimizerOptions {
 
     public static OptimizerOptions newShortCircuitOpt() {
         return new OptimizerOptions(OptimizerStrategy.SHORT_CIRCUIT);
+    }
+
+    public void applyDisableRuleFromSessionVariable(SessionVariable sessionVariable) {
+        if (sessionVariable == null) {
+            return;
+        }
+
+        String disabledRulesStr = sessionVariable.getCboDisabledRules();
+        if (Strings.isNullOrEmpty(disabledRulesStr)) {
+            return;
+        }
+
+        Set<RuleType> disabledRules = parseDisabledRules(disabledRulesStr);
+        for (RuleType ruleType : disabledRules) {
+            ruleSwitches.clear(ruleType.ordinal());
+        }
+    }
+
+    private static Set<RuleType> parseDisabledRules(String rulesStr) {
+        Set<RuleType> result = Sets.newHashSet();
+
+        if (Strings.isNullOrEmpty(rulesStr)) {
+            return result;
+        }
+
+        try {
+            List<String> ruleNames = Splitter.on(',')
+                    .trimResults()
+                    .omitEmptyStrings()
+                    .splitToList(rulesStr);
+
+            for (String ruleName : ruleNames) {
+                try {
+                    RuleType ruleType = RuleType.valueOf(ruleName);
+                    if (ruleType.name().startsWith("TF_") || ruleType.name().startsWith("GP_")) {
+                        result.add(ruleType);
+                    }
+                } catch (IllegalArgumentException e) {
+                    LOG.warn("Ignoring unknown rule name: {} (may be from different version)", ruleName);
+                }
+            }
+        } catch (Exception e) {
+            LOG.error("Unexpected error parsing disabled rules: '{}', returning empty set", rulesStr, e);
+        }
+
+        return result;
     }
 }

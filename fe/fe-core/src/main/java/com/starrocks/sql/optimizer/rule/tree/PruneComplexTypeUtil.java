@@ -16,15 +16,10 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.ArrayType;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
-import com.starrocks.catalog.ComplexTypeAccessPath;
-import com.starrocks.catalog.ComplexTypeAccessPathType;
 import com.starrocks.catalog.ComplexTypeAccessPaths;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
@@ -32,6 +27,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.ComplexTypeAccessPath;
+import com.starrocks.type.ComplexTypeAccessPathType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,6 +63,7 @@ public class PruneComplexTypeUtil {
         // The same ColumnRefOperator may have multiple access paths for complex type
         private final Map<ColumnRefOperator, ComplexTypeAccessGroup> accessGroups;
         private final Map<ColumnRefOperator, ColumnRefOperator> unnestColRefMap;
+        private final List<ColumnRefOperator> scanRefs;
         private boolean enablePruneComplexTypesInUnnest;
         private boolean enablePruneComplexTypes;
 
@@ -69,6 +71,7 @@ public class PruneComplexTypeUtil {
             this.accessGroups = new HashMap<>();
             this.enablePruneComplexTypes = true;
             this.unnestColRefMap = new HashMap<>();
+            this.scanRefs = Lists.newArrayList();
             this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
         }
 
@@ -100,6 +103,14 @@ public class PruneComplexTypeUtil {
             for (ComplexTypeAccessPaths complexTypeAccessPaths : accessGroup) {
                 addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, complexTypeAccessPaths));
             }
+        }
+
+        public void addScan(ColumnRefOperator columnRefOperator) {
+            scanRefs.add(columnRefOperator);
+        }
+
+        public List<ColumnRefOperator> getScanRefs() {
+            return scanRefs;
         }
 
         public void add(ColumnRefOperator outputColumnRefOperator, ScalarOperator scalarOperator) {
@@ -290,6 +301,9 @@ public class PruneComplexTypeUtil {
                 complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
             } else if (call.getFnName().equals(FunctionSet.MAP_VALUES)) {
                 complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_VALUE));
+            } else if (call.getFnName().equals(FunctionSet.MAP_ENTRIES)) {
+                // map_entries returns array<struct<key, value>>, so it needs both key and value
+                complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.ALL_SUBFIELDS));
             }
 
             for (ScalarOperator child : call.getChildren()) {
@@ -297,7 +311,7 @@ public class PruneComplexTypeUtil {
             }
 
             if (call.getFnName().equals(FunctionSet.MAP_KEYS) || call.getFnName().equals(FunctionSet.MAP_SIZE) ||
-                    call.getFnName().equals(FunctionSet.MAP_VALUES)) {
+                    call.getFnName().equals(FunctionSet.MAP_VALUES) || call.getFnName().equals(FunctionSet.MAP_ENTRIES)) {
                 complexTypeAccessPaths.pop();
             }
 

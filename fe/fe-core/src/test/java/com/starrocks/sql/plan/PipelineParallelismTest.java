@@ -39,7 +39,7 @@ public class PipelineParallelismTest extends PlanTestBase {
 
         new MockUp<BackendResourceStat>() {
             @Mock
-            public int getAvgNumHardwareCoresOfBe() {
+            public int getAvgNumCoresOfBe(long warehouseId) {
                 return numHardwareCores;
             }
         };

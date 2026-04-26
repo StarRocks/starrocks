@@ -114,12 +114,14 @@ Having passed the upgrade availability test, you can first upgrade the BE nodes 
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # If a custom function (UDF) was used in the old version, you need to copy the old version's UDF directory to the new lib directory.
+   cp -r lib.bak/udf lib/
    ```
 
 3. Start the BE node.
 
    ```Bash
-   sh bin/start_be.sh --daemon
+   ./bin/start_be.sh --daemon
    ```
 
 4. Check if the BE node is started successfully.
@@ -147,12 +149,14 @@ Having passed the upgrade availability test, you can first upgrade the BE nodes 
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # If a custom function (UDF) was used in the old version, you need to copy the old version's UDF directory to the new lib directory.
+   cp -r lib.bak/udf lib/
    ```
 
 3. Start the CN node.
 
    ```Bash
-   sh bin/start_cn.sh --daemon
+   ./bin/start_cn.sh --daemon
    ```
 
 4. Check if the CN node is started successfully.
@@ -189,7 +193,7 @@ After upgrading all BE and CN nodes, you can then upgrade the FE nodes. You must
 3. Start the FE node.
 
    ```Bash
-   sh bin/start_fe.sh --daemon
+   ./bin/start_fe.sh --daemon
    ```
 
 4. Check if the FE node is started successfully.

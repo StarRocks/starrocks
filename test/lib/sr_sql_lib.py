@@ -31,10 +31,13 @@ import logging
 import sys
 import threading
 import traceback
+import warnings
 
+import adbc_driver_manager
 import pymysql
 import trino
 import pyhive
+import adbc_driver_flightsql.dbapi as flight_sql
 
 import mysql.connector
 import os
@@ -62,8 +65,11 @@ from dbutils.pooled_db import PooledDB
 from lib import skip
 from lib import data_delete_lib
 from lib import data_insert_lib
+from lib.connection_base_lib import BaseConnectionLib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
+from lib.mysql_prepared_stmt_lib import MysqlPreparedStmtLib
+from lib.mysql_stmt_metadata_lib import MySQLStmtMetadataClient
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
@@ -140,6 +146,7 @@ T_R_TABLE = "t_r_table"
 
 SECRET_INFOS = {}
 TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
+TASK_RUN_FINAL_STATES = set(["SUCCESS", "MERGED", "SKIPPED", "FAILED"])
 
 
 class StarrocksSQLApiLib(object):
@@ -154,7 +161,11 @@ class StarrocksSQLApiLib(object):
         self.data_path = common_data_path
         self.db = list()
         self.resource = list()
-        self.mysql_lib = MysqlLib()
+        self.arrow_sql_lib = ArrowSqlLib()
+        self.starrocks_sql_lib = MysqlLib()
+        self.mysql_lib = self.starrocks_sql_lib
+        self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
+        self.mysql_stmt_metadata_client_class = MySQLStmtMetadataClient
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
         self.hive_lib = HiveLib()
@@ -169,7 +180,6 @@ class StarrocksSQLApiLib(object):
         self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
-        self.arrow_sql_lib = ArrowSqlLib()
         self.arrow_port = ""
 
         self.check_status = os.environ.get("check_status", "False") == "True"
@@ -537,6 +547,7 @@ class StarrocksSQLApiLib(object):
         self.host_password = _get_value(cluster_conf, "host_password")
         self.cluster_path = _get_value(cluster_conf, "cluster_path")
         self.arrow_port = _get_value(cluster_conf, "arrow_port")
+        self.arrow_port = self.arrow_port if self.arrow_port else 9408
 
         # client
         client_conf = _get_value(config_parser, "client")
@@ -571,31 +582,22 @@ class StarrocksSQLApiLib(object):
 
         StarrocksSQLApiLib._instance = True
 
-    def connect_starrocks_arrow(self):
-        args_dict = {
-            "host": self.mysql_host,
-            "arrow_port": self.arrow_port if self.arrow_port else 9408,
-            "user": self.mysql_user,
-            "password": self.mysql_password,
-        }
-        self.arrow_sql_lib.connect(args_dict)
-
     def connect_starrocks(self):
         mysql_dict = {
             "host": self.mysql_host,
             "port": self.mysql_port,
+            "arrow_port": self.arrow_port,
             "user": self.mysql_user,
             "password": self.mysql_password,
         }
         self.mysql_lib.connect(mysql_dict)
+        self.mysql_prepared_stmt_lib.connect(mysql_dict)
 
     def create_starrocks_conn_pool(self):
-        self.connection_pool = PooledDB(
-            creator=pymysql,
-            mincached=3,
-            blocking=True,
+        self.connection_pool = self.mysql_lib.create_pool(
             host=self.mysql_host,
-            port=int(self.mysql_port),
+            mysql_port=int(self.mysql_port),
+            arrow_port=int(self.arrow_port),
             user=self.mysql_user,
             password=self.mysql_password,
         )
@@ -618,6 +620,7 @@ class StarrocksSQLApiLib(object):
 
     def close_starrocks(self):
         self.mysql_lib.close()
+        self.mysql_prepared_stmt_lib.close()
 
     def close_trino(self):
         self.trino_lib.close()
@@ -627,9 +630,6 @@ class StarrocksSQLApiLib(object):
 
     def close_hive(self):
         self.hive_lib.close()
-
-    def close_starrocks_arrow(self):
-        self.arrow_sql_lib.close()
 
     def create_database(self, database_name, tolerate_exist=False):
         """
@@ -644,15 +644,80 @@ class StarrocksSQLApiLib(object):
     def use_database(self, db_name):
         return self.execute_sql("use %s" % db_name)
 
-    def create_database_and_table(self, database_name, table_name, table_sql_path=None, tolerate_exist=False):
+    def create_iceberg_catalog(self, catalog_name, catalog_type):
+        """
+        Create an iceberg external catalog for SQL tests, dispatching to a
+        builder per backend type. Each builder reads its own sr.conf vars
+        and does whatever pre-setup that type needs (e.g. mkdir the
+        hadoop-file warehouse root).
+
+        :param catalog_name: catalog name (already ${uuid0}-resolved)
+        :param catalog_type: one of {"hive", "hadoop"}
+        """
+        builders = {
+            "hive": self._create_iceberg_catalog_hive,
+            "hadoop": self._create_iceberg_catalog_hadoop,
+        }
+        builder = builders.get(catalog_type)
+        tools.assert_is_not_none(builder, "unknown iceberg catalog type: %s" % catalog_type)
+        return builder(catalog_name)
+
+    def _create_iceberg_catalog_hive(self, catalog_name):
+        """
+        Hive-metastore-backed iceberg catalog over OSS S3. Consumes:
+          ${iceberg_catalog_hive_metastore_uris}, ${oss_ak}, ${oss_sk},
+          ${oss_endpoint} — all shipped in [env] of the stock sr.conf.
+        """
+        sql = (
+            'create external catalog %s properties ('
+            '"type" = "iceberg", '
+            '"iceberg.catalog.type" = "hive", '
+            '"iceberg.catalog.hive.metastore.uris" = "%s", '
+            '"aws.s3.access_key" = "%s", '
+            '"aws.s3.secret_key" = "%s", '
+            '"aws.s3.endpoint" = "%s")'
+        ) % (catalog_name, self.iceberg_catalog_hive_metastore_uris,
+             self.oss_ak, self.oss_sk, self.oss_endpoint)
+        res = self.execute_sql(sql)
+        tools.assert_true(res["status"], "create hive iceberg catalog failed: %s" % res.get("msg"))
+
+    def _create_iceberg_catalog_hadoop(self, catalog_name):
+        """
+        Local-disk hadoop iceberg catalog. Consumes:
+          ${iceberg_local_warehouse_root} + ${uuid0}.
+        ${iceberg_local_warehouse_root} is NOT shipped in sr.conf; local devs
+        wanting to run against hadoop-on-file add it to their [replace]:
+          iceberg_local_warehouse_root = /tmp/starrocks-sql-test/iceberg
+        The warehouse sub-directory is mkdir'd before FE initializes the
+        catalog, since Iceberg HadoopCatalog's FE-side validation expects the
+        warehouse path to exist.
+        """
+        warehouse = "%s/sql_test/%s" % (self.iceberg_local_warehouse_root, self.uuid0)
+        os.makedirs(warehouse, exist_ok=True)
+        sql = (
+            'create external catalog %s properties ('
+            '"type" = "iceberg", '
+            '"iceberg.catalog.type" = "hadoop", '
+            '"iceberg.catalog.warehouse" = "file://%s")'
+        ) % (catalog_name, warehouse)
+        res = self.execute_sql(sql)
+        tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
+
+    def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
+                                  tolerate_exist=False):
         """
         create database, use database and create table
         Args:
+            catalog_name:     catalog
             database_name:    db
             table_name:       table
             table_sql_path:   sql dir
             tolerate_exist:   tolerate if not exists
         """
+        if catalog_name is not None:
+            set_catalog_res = self.execute_sql("set catalog %s" % catalog_name)
+            tools.assert_true(set_catalog_res["status"], "set catalog failed")
+
         # create database
         create_db_res = self.create_database(database_name, tolerate_exist=tolerate_exist)
         tools.assert_true(create_db_res["status"], "create database failed")
@@ -728,53 +793,35 @@ class StarrocksSQLApiLib(object):
         """execute query"""
         try:
             if conn is None:
-                conn = self.mysql_lib.connector
+                conn: BaseConnectionLib = self.mysql_lib
+            else:
+                conn: BaseConnectionLib = self.mysql_lib.wrapper(conn)
 
-            with conn.cursor() as cursor:
-                cursor.execute(sql)
-                result = cursor.fetchall()
-                if isinstance(result, tuple):
-                    index = 0
-                    for res in result:
-                        res = list(res)
-                        # type to str
-                        col_index = 0
-                        for col_data in res:
-                            if isinstance(col_data, bytes):
-                                try:
-                                    res[col_index] = col_data.decode()
-                                except UnicodeDecodeError as e:
-                                    log.info("decode sql result by utf-8 error, try str")
-                                    res[col_index] = str(col_data)
-                            col_index += 1
+            res = conn.execute(sql)
+            if not res.status:
+                return {"status": False, "msg": res.msg}
+            if ori:
+                return {"status": True, "result": res.result, "msg": res.msg, "desc": res.desc}
 
-                        result = list(result)
-                        result[index] = tuple(res)
-                        result = tuple(result)
-                        index += 1
-
-                res_log = []
-
-                if ori:
-                    return {"status": True, "result": result, "msg": cursor._result.message, "desc": cursor.description}
-
-                if isinstance(result, tuple) or isinstance(result, list):
-                    if len(result) > 0:
-                        if isinstance(result[0], tuple):
-                            res_log.extend(["\t".join([str(y) for y in x]) for x in result])
-                        else:
-                            res_log.extend(["\t".join(str(x)) for x in result])
-                elif isinstance(result, bytes):
-                    if res_log != b"":
-                        res_log.append(str(result).strip())
-                elif result is not None and str(result).strip() != "":
-                    log.info("execute sql not bytes or tuple")
+            result = res.result
+            res_log = []
+            if isinstance(result, tuple) or isinstance(result, list):
+                if len(result) > 0:
+                    if isinstance(result[0], tuple):
+                        res_log.extend(["\t".join([str(y) for y in x]) for x in result])
+                    else:
+                        res_log.extend(["\t".join(str(x)) for x in result])
+            elif isinstance(result, bytes):
+                if res_log != b"":
                     res_log.append(str(result).strip())
-                else:
-                    log.info("execute sql empty result")
-                    raise Exception("execute sql result type unknown")
+            elif result is not None and str(result).strip() != "":
+                log.info("execute sql not bytes or tuple")
+                res_log.append(str(result).strip())
+            else:
+                log.info("execute sql empty result")
+                raise Exception("execute sql result type unknown")
 
-                return {"status": True, "result": "\n".join(res_log), "msg": cursor._result.message}
+            return {"status": True, "result": "\n".join(res_log), "msg": res.msg}
 
         except _mysql.Error as e:
             return {"status": False, "msg": e.args}
@@ -808,17 +855,17 @@ class StarrocksSQLApiLib(object):
     )
     def conn_execute_sql(self, conn, sql):
         try:
-            cursor = conn.cursor()
-            if sql.endswith(";"):
-                sql = sql[:-1]
-            cursor.execute(sql)
-            result = cursor.fetchall()
+            with conn.cursor() as cursor:
+                if sql.endswith(";"):
+                    sql = sql[:-1]
+                cursor.execute(sql)
+                result = cursor.fetchall()
 
-            for i in range(len(result)):
-                row = [str(item) for item in result[i]]
-                result[i] = "\t".join(row)
+                for i in range(len(result)):
+                    row = [str(item) for item in result[i]]
+                    result[i] = "\t".join(row)
 
-            return {"status": True, "result": "\n".join(result), "msg": "OK"}
+                return {"status": True, "result": "\n".join(result), "msg": "OK"}
 
         except trino.exceptions.TrinoQueryError as e:
             return {"status": False, "msg": e.message}
@@ -827,11 +874,6 @@ class StarrocksSQLApiLib(object):
         except Exception as e:
             print("unknown error", e)
             raise
-
-    def arrow_execute_sql(self, sql):
-        """arrow execute query"""
-        self.connect_starrocks_arrow()
-        return self.conn_execute_sql(self.arrow_sql_lib.connector, sql)
 
     def trino_execute_sql(self, sql):
         """trino execute query"""
@@ -1236,24 +1278,6 @@ class StarrocksSQLApiLib(object):
                 self.record_function_res(sql, actual_res, res_container)
 
             actual_res_log = ""
-        elif statement.startswith(ARROW_FLAG):
-            statement = statement[len(ARROW_FLAG) :]
-
-            # analyse var set
-            var, statement = self.analyse_var(statement, thread_key=var_key)
-
-            self_print("[ARROW]: %s" % statement)
-            log.info("[%s] ARROW: %s" % (sql_id, statement))
-
-            actual_res = self.arrow_execute_sql(statement)
-
-            if record_mode:
-                self.treatment_record_res(statement, actual_res, res_container)
-
-            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
-
-            # pretreatment actual res
-            actual_res, actual_res_log = self.pretreatment_res(actual_res)
         else:
             # sql
             log.info("[%s] SQL: %s" % (sql_id, statement))
@@ -1371,17 +1395,17 @@ class StarrocksSQLApiLib(object):
                 log.info("[%s.check] only check with no Error" % sql_id)
                 tools.assert_equal(0, act[0], "shell %s error: %s" % (sql, act))
             elif not sql.startswith(FUNCTION_FLAG):
-                # Function, without error msg
-                log.info("[%s.check] only check with no Error" % sql_id)
+                # Explicit empty result block: verify no error and result is empty
+                log.info("[%s.check] check no Error and empty result" % sql_id)
                 tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
+                if not any(re.search(c, sql) for c in skip.skip_res_cmd):
+                    tools.assert_equal("", act, "sql result not match: expected empty but got (%s)" % str(act))
             else:
-                # SQL, with empty result
+                # function call with empty result
                 exp = []
             return
 
-        if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
-            condition in sql for condition in skip.skip_res_cmd
-        ):
+        if any(re.search(condition, sql) for condition in skip.skip_res_cmd):
             log.info("[%s.check] skip check" % sql_id)
             return
 
@@ -1442,7 +1466,7 @@ class StarrocksSQLApiLib(object):
         else:
             if exp.startswith(REGEX_FLAG):
                 log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
-                tools.assert_regexp_matches(
+                tools.assert_regex(
                     r"%s" % str(act),
                     exp[len(REGEX_FLAG) :],
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
@@ -1506,8 +1530,14 @@ class StarrocksSQLApiLib(object):
                     log.info("Both Error msg with url, skip detail check")
                     return
                 else:
-                    # ERROR msg, regex check
-                    tools.assert_equal(act, exp)
+                    re_match = re.match(r"E: \(\d+, ['\"](.*)['\"]\)", exp)
+                    if re_match:
+                        exp_part = re_match.group(1)
+                        tools.assert_in(exp_part, act)
+                        return
+                    else:
+                        # ERROR msg, regex check
+                        tools.assert_equal(act, exp)
 
             exp = exp.split("\n") if isinstance(exp, str) else exp
             act = act.split("\n") if isinstance(act, str) else act
@@ -1564,7 +1594,7 @@ class StarrocksSQLApiLib(object):
 
         # create record table
         try:
-            self.create_database_and_table(T_R_DB, T_R_TABLE, "sql_framework", True)
+            self.create_database_and_table("default_catalog", T_R_DB, T_R_TABLE, "sql_framework", True)
         except AssertionError:
             self_print(f"Failed to create DB/Table to save the results, please check the env!", ColorEnum.RED)
             sys.exit(1)
@@ -1791,6 +1821,70 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def get_running_transaction_count(self, db_name):
+        """
+        Get the number of running transactions in the specified database.
+        :param db_name: database name
+        :return: row count as string (for safe variable substitution in sql test framework)
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        row_count = len(result["result"]) if "result" in result and result["result"] is not None else 0
+        return str(row_count)
+
+    def get_single_running_transaction_label(self, db_name):
+        """
+        Get the label of the single running transaction in the specified database.
+        Assert there is exactly one running transaction.
+        :param db_name: database name
+        :return: label string
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        tools.assert_true("result" in result, f"Unexpected SQL result: {result}")
+        tools.assert_equal(1, len(result["result"]), f"Expected exactly 1 running transaction, got {len(result['result'])}")
+        row = result["result"][0]
+        tools.assert_true(len(row) > 1, f"Unexpected show proc row format: {row}")
+        return str(row[1])
+
+    def get_table_state(self, db_name, table_name):
+        """
+        Get table state by executing show proc '/dbs/{db_name}' and finding the row by table_name
+        Returns the state of the specified table, or None if table not found
+        """
+        sql = f"show proc '/dbs/{db_name}'"
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], f"Failed to execute show proc '/dbs/{db_name}'")
+        
+        # Find the row with matching table_name
+        # Column order: TableId, TableName, IndexNum, PartitionColumnName, PartitionNum, State, ...
+        # TableName is at index 1, State is at index 5
+        for row in res["result"]:
+            if len(row) > 1 and row[1] == table_name:
+                if len(row) > 5:
+                    return row[5]  # Return State
+                else:
+                    log.warning(f"Row for table {table_name} has insufficient columns")
+                    return None
+        
+        log.warning(f"Table {table_name} not found in database {db_name}")
+        return None
+
+    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
+        """
+        wait table state to normal
+        """
+        times = 0
+        while times < timeout_sec:
+            state = self.get_table_state(db_name, table_name)
+            if state == "NORMAL":
+                break
+            time.sleep(1)
+            times += 1
+        tools.assert_equal("NORMAL", state, "wait table state normal error, timeout %s" % timeout_sec)
+
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
         return self.execute_sql(show_sql, True)
@@ -1974,6 +2068,23 @@ class StarrocksSQLApiLib(object):
                 time.sleep(pending_time_ms / 1000)
                 retry_times += 1
         return res
+    
+    def wait_show_materialized_view_finish(self, mv_name, check_count=60):
+        """
+        wait show materialized view job finish and return status
+        """
+        last_refresh_state = ""
+        show_sql = f"SHOW MATERIALIZED VIEWS WHERE NAME='{mv_name}'"
+        count = 0
+        time.sleep(1)
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            last_refresh_state = res["result"][-1][12]
+            if last_refresh_state in TASK_RUN_FINAL_STATES:
+                break
+            time.sleep(1)
+            count += 1
+        tools.assert_true(last_refresh_state in TASK_RUN_FINAL_STATES, "wait show materialized view finish error: %s" % last_refresh_state)
 
     def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """
@@ -2120,6 +2231,53 @@ class StarrocksSQLApiLib(object):
         plan = str(res)
         tools.assert_true(plan.find(mv_name) > 0, "assert mv %s is not found in plan: %s" % (mv_name, plan))
 
+    def check_mv_to_refresh_contains(self, mv_name, *expects) -> bool:
+        """
+        assert mv_name to refresh contains expects
+        """
+        return self._check_mv_to_refresh_partition_membership(mv_name, expects, should_contain=True)
+
+    def check_mv_to_refresh_not_contains(self, mv_name, *expects) -> bool:
+        """
+        assert mv_name to refresh does not contain expects
+        """
+        return self._check_mv_to_refresh_partition_membership(mv_name, expects, should_contain=False)
+
+    def _check_mv_to_refresh_partition_membership(self, mv_name, expects, should_contain) -> bool:
+        sql = f"select inspect_mv_refresh_info('{mv_name}')"
+        res = self.retry_execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return False
+        tools.assert_true(res["status"])
+        json_payload = res["result"]
+        if isinstance(json_payload, (tuple, list)):
+            # inspect_mv_refresh_info typically returns one row and one column.
+            if len(json_payload) == 0:
+                return False
+            first_row = json_payload[0]
+            if isinstance(first_row, (tuple, list)):
+                if len(first_row) == 0:
+                    return False
+                json_payload = first_row[0]
+            else:
+                json_payload = first_row
+        tools.assert_true(isinstance(json_payload, (str, bytes, bytearray)),
+                          "assert mv %s inspect result should be json string, but got: %s" % (mv_name, type(json_payload)))
+        json_result = json.loads(json_payload)
+        mv_to_refresh_partitions = json_result.get("mvToRefreshPartitions")
+        expect_no_refresh = should_contain and (len(expects) == 0 or (len(expects) == 1 and expects[0] == ""))
+        if expect_no_refresh:
+            tools.assert_true(mv_to_refresh_partitions is None or len(mv_to_refresh_partitions) == 0, "assert mv %s mvToRefreshPartitions is not empty, but expect to no refresh: %s" % (mv_name, json_result))
+            return True
+        if should_contain:
+            tools.assert_true(all(partition in mv_to_refresh_partitions for partition in expects),
+                              "assert mv %s expected partitions not all found in mvToRefreshPartitions: %s" % (mv_name, json_result))
+        else:
+            tools.assert_true(all(partition not in expects for partition in mv_to_refresh_partitions),
+                              "assert mv %s mvToRefreshPartitions should not be in plan: %s" % (mv_name, json_result))
+        return True
+
     def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
@@ -2134,48 +2292,82 @@ class StarrocksSQLApiLib(object):
         for expect in expects:
             tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan))
 
-    def print_hit_materialized_view(self, query, *expects) -> bool:
+    def _with_materialized_view_rewrite(self, func, *args, **kwargs):
+        """
+        Helper to temporarily set enable_materialized_view_rewrite to true,
+        call func(*args, **kwargs), and restore the original value.
+        """
+        get_var_sql = "show variables like 'enable_materialized_view_rewrite';"
+        orig_res = self.execute_sql(get_var_sql, True)
+        orig_value = None
+        if orig_res and orig_res.get("result") and len(orig_res["result"]) > 0:
+            orig_value = orig_res["result"][0][1]
+        try:
+            self.execute_sql("set enable_materialized_view_rewrite = true;", True)
+            return func(*args, **kwargs)
+        finally:
+            if orig_value is not None:
+                self.execute_sql(f"set enable_materialized_view_rewrite = {orig_value};", True)
+
+    def print_hit_materialized_view(self, query, *expects) -> str:
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
-        sql = "explain %s" % (query)
-        res = self.retry_execute_sql(sql, True)
-        if not res["status"]:
-            print(res)
-            return False
-        plan = str(res["result"])
-        for expect in expects:
-            if plan.find(expect) > 0:
-                return True
-        return False
+        def check_mv():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+                return False
+            plan = str(res["result"])
+            if expects is not None or len(expects) > 0:
+                for expect in expects:
+                    if plan.find(expect) > 0:
+                        return True
+                return False
+            else:
+                mvs = []
+                for line in plan.split('\n'):
+                    if 'MaterializedView: true' in line:
+                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
+                        if mv_name:
+                            mvs.append(mv_name)
+                mvs.sort()
+                print("Hit materialized views:", ", ".join(mvs))
+                return mvs
+        return self._with_materialized_view_rewrite(check_mv)
 
     def print_hit_materialized_views(self, query) -> str:
         """
         print all mv_names hit in query
         """
         time.sleep(1)
-        sql = "explain %s" % (query)
-        res = self.retry_execute_sql(sql, True)
-        if not res["status"]:
-            print(res)
-            return ""
-        plan = res["result"]
-        if not plan:
-            return ""
-        mv_name = None
-        ans = []
-        for line in plan:
-            if len(line) != 1:
-                continue
-            content = line[0]
-            if content.find("MaterializedView: true") > 0:
-                if mv_name:
-                    ans.append(mv_name)
-                mv_name = None
-            if content.find("TABLE:") > 0:
-                mv_name = content.split("TABLE:")[1].strip()
-        return ",".join(ans)
+        def extract_mvs():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+                return ""
+            plan = res["result"]
+            if not plan:
+                return ""
+            mv_name = None
+            ans = []
+            for line in plan:
+                if len(line) != 1:
+                    continue
+                content = line[0]
+                if content.find("MaterializedView: true") > 0:
+                    if mv_name:
+                        ans.append(mv_name)
+                    mv_name = None
+                if content.find("TABLE:") > 0:
+                    mv_name = content.split("TABLE:")[1].strip()
+            # sort the mv_names to make the result deterministic
+            ans.sort()
+            return ",".join(ans)
+        return self._with_materialized_view_rewrite(extract_mvs)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
@@ -2227,7 +2419,7 @@ class StarrocksSQLApiLib(object):
         sleep_time = 0
         while True:
             res = self.execute_sql(
-                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
                 True,
             )
             if (not res["status"]) or len(res["result"]) <= 0:
@@ -2241,6 +2433,146 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.5)
             sleep_time += 0.5
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    @staticmethod
+    def _canonical_json(value):
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+    def _show_proc_rows(self, path):
+        res = self.execute_sql("SHOW PROC '%s'" % path, True)
+        tools.assert_true(res["status"], "show proc failed for %s: %s" % (path, res.get("msg")))
+        return res["result"]
+
+    def _show_schema_change_rows(self, db_name, table_name):
+        sql = (
+            "SHOW ALTER TABLE COLUMN FROM %s WHERE TableName = '%s' ORDER BY JobId DESC"
+            % (db_name, table_name.replace("'", "\\'"))
+        )
+        res = self.retry_execute_sql(sql, True)
+        tools.assert_true(res["status"], "show alter table column failed: %s" % res.get("msg"))
+        return res["result"]
+
+    def wait_table_schema_change_finish(self, db_name, table_name, expect_state="FINISHED", timeout_sec=300):
+        """
+        wait schema change job for the specified table finish and return status
+        """
+        elapsed = 0
+        status = ""
+        while elapsed < timeout_sec:
+            rows = self._show_schema_change_rows(db_name, table_name)
+            if rows:
+                status = rows[0][9]
+                if status in ("FINISHED", "CANCELLED", ""):
+                    break
+            time.sleep(1)
+            elapsed += 1
+        tools.assert_equal(expect_state, status, "wait table schema change finish error for %s.%s" % (db_name, table_name))
+        return status
+
+    def get_schema_change_job_count(self, db_name, table_name):
+        rows = self._show_schema_change_rows(db_name, table_name)
+        return len({str(row[0]) for row in rows})
+
+    def assert_schema_change_job_count(self, db_name, table_name, expected_count):
+        actual_count = self.get_schema_change_job_count(db_name, table_name)
+        tools.assert_equal(int(expected_count), actual_count, "unexpected schema change job count for %s.%s" % (db_name, table_name))
+
+    def get_latest_schema_change_job_info(self, db_name, table_name):
+        rows = self._show_schema_change_rows(db_name, table_name)
+        if not rows:
+            return self._canonical_json({})
+        row = rows[0]
+        info = {
+            "job_id": str(row[0]),
+            "table_name": str(row[1]),
+            "index_name": str(row[4]),
+            "index_id": str(row[5]),
+            "origin_index_id": str(row[6]),
+            "schema_version": str(row[7]),
+            "transaction_id": str(row[8]),
+            "state": str(row[9]),
+            "msg": str(row[10]),
+            "progress": str(row[11]),
+            "timeout": str(row[12]),
+        }
+        if len(row) > 13:
+            info["warehouse"] = str(row[13])
+        return self._canonical_json(info)
+
+    def assert_latest_schema_change_job_path(self, db_name, table_name, expected_path):
+        info = json.loads(self.get_latest_schema_change_job_info(db_name, table_name))
+        tools.assert_true(info, "no schema change job found for %s.%s" % (db_name, table_name))
+        tools.assert_equal("FINISHED", info["state"], "latest schema change job is not finished for %s.%s" % (db_name, table_name))
+        same_index = info["index_id"] == info["origin_index_id"]
+        if expected_path == "slow":
+            tools.assert_false(same_index, "expected slow path for %s.%s, but latest job kept same index id" % (db_name, table_name))
+        elif expected_path in ("fast", "fast_v1"):
+            tools.assert_true(same_index, "expected fast path for %s.%s, but latest job used shadow index" % (db_name, table_name))
+        else:
+            tools.assert_true(False, "unknown schema change path expectation: %s" % expected_path)
+
+    def get_index_identity_snapshot(self, db_name, table_name):
+        rows = self._show_proc_rows("/dbs/%s/%s/index_schema" % (db_name, table_name))
+        identities = [{"index_id": str(row[0]), "index_name": str(row[1])} for row in rows]
+        identities.sort(key=lambda item: (item["index_name"], item["index_id"]))
+        return self._canonical_json(identities)
+
+    def get_index_schema_snapshot(self, db_name, table_name):
+        index_rows = self._show_proc_rows("/dbs/%s/%s/index_schema" % (db_name, table_name))
+        snapshot = []
+        for index_row in index_rows:
+            index_id = str(index_row[0])
+            index_name = str(index_row[1])
+            schema_rows = self._show_proc_rows("/dbs/%s/%s/index_schema/%s" % (db_name, table_name, index_id))
+            columns = []
+            for row in schema_rows:
+                columns.append({
+                    "field": str(row[0]),
+                    "type": str(row[1]),
+                    "null": str(row[2]),
+                    "key": str(row[3]),
+                })
+            snapshot.append({
+                "index_id": index_id,
+                "index_name": index_name,
+                "columns": columns,
+            })
+        snapshot.sort(key=lambda item: (item["index_name"], item["index_id"]))
+        return self._canonical_json(snapshot)
+
+    def assert_sync_fast_path(self, db_name, table_name, expected_previous_job_count, expected_index_snapshot):
+        self.assert_schema_change_job_count(db_name, table_name, int(expected_previous_job_count) + 1)
+        self.assert_latest_schema_change_job_path(db_name, table_name, "fast")
+        actual_index_snapshot = self.get_index_identity_snapshot(db_name, table_name)
+        tools.assert_equal(
+            expected_index_snapshot,
+            actual_index_snapshot,
+            "unexpected index identity snapshot for sync fast path on %s.%s" % (db_name, table_name),
+        )
+
+    def assert_index_identity_snapshot(self, db_name, table_name, expected_index_snapshot):
+        actual_index_snapshot = self.get_index_identity_snapshot(db_name, table_name)
+        tools.assert_equal(
+            expected_index_snapshot,
+            actual_index_snapshot,
+            "unexpected index identity snapshot for %s.%s" % (db_name, table_name),
+        )
+
+    def assert_index_schema_columns(self, db_name, table_name, index_name, *expected_columns):
+        snapshot = json.loads(self.get_index_schema_snapshot(db_name, table_name))
+        for index in snapshot:
+            if index["index_name"] == index_name:
+                actual_columns = [
+                    "%s|%s|%s|%s" % (column["field"], column["type"], column["null"], column["key"])
+                    for column in index["columns"]
+                ]
+                tools.assert_equal(
+                    list(expected_columns),
+                    actual_columns,
+                    "unexpected schema for index %s on %s.%s" % (index_name, db_name, table_name),
+                )
+                return
+        tools.assert_true(False, "index %s not found on %s.%s" % (index_name, db_name, table_name))
 
     def wait_alter_table_not_pending(self, alter_type="COLUMN"):
         """
@@ -2259,6 +2591,29 @@ class StarrocksSQLApiLib(object):
             if status != "PENDING":
                 break
             time.sleep(0.5)
+
+    def wait_alter_table_waiting_txn(self, alter_type="COLUMN", timeout=120):
+        """
+        wait until the status of the latest alter table job becomes WAITING_TXN
+        """
+        status = ""
+        elapsed_time = 0
+        while elapsed_time < timeout:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                time.sleep(0.5)
+                elapsed_time += 0.5
+                continue
+
+            status = res["result"][0][9]
+            if status == "WAITING_TXN":
+                return status
+            time.sleep(0.5)
+            elapsed_time += 0.5
+        tools.assert_true(False, "wait alter table WAITING_TXN timeout after %d seconds, current status: %s" % (timeout, status))
 
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
@@ -2296,7 +2651,23 @@ class StarrocksSQLApiLib(object):
             if str(res["result"]).find("Decode") > 0:
                 return ""
             time.sleep(1)
-
+    
+    def wait_plan_contains(self, query, *expects):
+        """
+        wait plan contains 
+        """
+        timeout = 60
+        interval = 1
+        for _ in range(timeout):
+            res = self.execute_sql("explain " + query, True)
+            print (res)
+            plan_string = "\n".join(" ".join(map(str, item)) for item in res["result"])
+            if all(expect in plan_string for expect in expects):
+                return
+            time.sleep(interval)
+        
+        tools.assert_true(False, "acquire dictionary timeout for 60s")
+        
     def try_collect_dict_N_times(self, column_name, table_name, N):
         """
         try to collect dictionary for N times
@@ -2377,7 +2748,17 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             if not res["status"]:
                 tools.assert_true(False, "acquire task state error")
             state = res["result"][0][0]
-            if status != "RUNNING":
+            if state != "RUNNING" and state != "PENDING" and state != "SUBMITTED":
+                return ""
+            time.sleep(1)
+
+    def wait_util_no_queries(self):
+        while True:
+            sql = "show proc '/current_queries'"
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "run current_queries error")
+            if len(res["result"]) == 0:
                 return ""
             time.sleep(1)
 
@@ -2727,7 +3108,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
     def wait_compaction_finish(self, table_name: str, expected_num_segments: int):
         timeout = 300
         scan_table_sql = (
-            f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
+            f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false,enable_rewrite_simple_agg_to_meta_scan=false)*/ COUNT(1) FROM {table_name}"
         )
         fetch_segments_sql = r"""
             with profile as (
@@ -2949,6 +3330,35 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_query_contains_times(self, query, expect, expected_times: int):
+        """
+        Assert query result contains `expect` exactly `expected_times` times.
+
+        This is useful for validating trace outputs, e.g. making sure a specific optimizer phase
+        runs only once.
+        """
+        res = self.execute_sql(query, True)
+        haystack = str(res["result"])
+        actual_times = haystack.count(str(expect))
+        tools.assert_true(
+            actual_times == int(expected_times),
+            "assert expect {} appears {} times (expected {}), result: {}".format(
+                expect, actual_times, expected_times, res["result"]
+            ),
+        )
+
+    def assert_query_error_contains(self, query, *expects):
+        """
+        assert error message contains expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            haystack = str(res["msg"])
+            tools.assert_true(
+                haystack.find(expect) > 0,
+                "assert expect {} is not found in plan {}".format(expect, haystack),
+            )
+
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string
@@ -3041,6 +3451,76 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         finally:
             cursor.close()
             conn.close()
+
+    def assert_prepare_execute_varchar_metadata(self, db, query, expected_prepare_len, expected_execute_len=None,
+                                                session_vars=None):
+        client = self.mysql_stmt_metadata_client_class(
+            host=self.mysql_host,
+            port=int(self.mysql_port),
+            user=self.mysql_user,
+            password=self.mysql_password,
+            database=db,
+        )
+        client.connect()
+        try:
+            for assignment in session_vars or []:
+                client.query(f"SET {assignment}")
+            statement_id, num_params, prepare_columns = client.prepare(query)
+            execute_columns = client.execute_and_fetch_metadata(statement_id, num_params)
+            client.close_statement(statement_id)
+        finally:
+            client.close()
+        tools.assert_true(prepare_columns, "prepared statement returns no prepare metadata columns")
+        tools.assert_true(execute_columns, "prepared statement returns no execute metadata columns")
+
+        prepare_column = prepare_columns[0]
+        execute_column = execute_columns[0]
+        if expected_execute_len is None:
+            expected_execute_len = expected_prepare_len
+
+        summary = (
+            "prepare[%s raw=%s normalized=%s charset=%s; expected_prepare=%s] "
+            "execute[%s raw=%s normalized=%s charset=%s; expected_execute=%s]"
+            % (
+                prepare_column.type_name,
+                prepare_column.column_length,
+                prepare_column.normalized_length,
+                prepare_column.charset,
+                int(expected_prepare_len),
+                execute_column.type_name,
+                execute_column.column_length,
+                execute_column.normalized_length,
+                execute_column.charset,
+                int(expected_execute_len),
+            )
+        )
+        self_print("[PREPARE_EXECUTE_VARCHAR_METADATA] %s" % summary)
+        log.info("[PREPARE_EXECUTE_VARCHAR_METADATA] sql=%s %s" % (query, summary))
+
+        tools.assert_equal(
+            int(expected_prepare_len),
+            prepare_column.normalized_length,
+            "prepare metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+               execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
+        )
+        tools.assert_equal(
+            int(expected_execute_len),
+            execute_column.normalized_length,
+            "execute metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+               execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
+        )
+
+    def execute_prepared_sql(self, sql, params):
+        return self.mysql_prepared_stmt_lib.execute_prepared(sql, params)
+
+    def execute_with_prepared_connection(self, sql):
+        return self.mysql_prepared_stmt_lib.execute(sql)
 
     def assert_trace_times_contains(self, query, *expects):
         """
@@ -3155,7 +3635,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             act.append(processed_row)
 
         log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
-        tools.assert_regexp_matches(
+        tools.assert_regex(
             r"%s" % str(act),
             exp[len(REGEX_FLAG) :],
             "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
@@ -3247,3 +3727,247 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         result_str = column_separator.join(column_values)
         log.info(f"Final result: {result_str}")
         return result_str
+
+    def get_timestamp_ms(self):
+        """
+        Get current timestamp in milliseconds
+        """
+        import time
+        timestamp_ms = int(time.time() * 1000)
+        # print(f"Generated timestamp: {timestamp_ms}")
+        return timestamp_ms
+
+    def get_last_query_id(self):
+        """
+        Get the query_id of the last query
+        """
+        sql = "select last_query_id()"
+        result = self.execute_sql(sql, True)
+
+        if not result["status"]:
+            # print(f"Failed to get last query id: {result}")
+            return None
+
+        if "result" not in result or len(result["result"]) == 0:
+            # print("No query id found")
+            return None
+
+        query_id = result["result"][0][0]
+        # print(f"Last query id: {query_id}")
+        return query_id
+
+    def get_query_details(self):
+        url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time=0"
+        result = self.get_http_request(url)
+        query_details = json.loads(result)
+        return query_details
+
+    def _find_query_detail(self, filter_func):
+        query_details = self.get_query_details()
+
+        # Find matching query_id, prioritize records with FINISHED state
+        finished_detail = None
+        unfinished_detail = None
+
+        for detail in query_details:
+            if filter_func(detail):
+                state = detail.get("state", "")
+                if state == "FINISHED":
+                    finished_detail = detail
+                else:
+                    unfinished_detail = detail
+
+        # Prioritize records with FINISHED state.
+        if finished_detail:
+            return finished_detail
+        elif unfinished_detail:
+            return unfinished_detail
+        else:
+            return None
+
+    def _wait_for_query_detail(self, filter_func, raw_result=False):
+        timeout_sec = 5
+        for retry_count in range(timeout_sec):
+            query_detail = self._find_query_detail(filter_func)
+            if query_detail is None:
+                if retry_count + 1 < timeout_sec:  # Not the last retry
+                    time.sleep(1)
+                continue
+
+            if raw_result:
+                return query_detail
+
+            # To ensure that the output string is in a JSON-compatible format that can be processed by the
+            # function `parse_json()` in StarRocks, escaping is required.
+            def escaped_str(s):
+                return s.replace('\n', r'\n').replace('"', r'\"')
+
+            escaped_detail = {}
+            for key, value in query_detail.items():
+                key = escaped_str(key)
+                if type(value) is str:
+                    value = escaped_str(value)
+                escaped_detail[key] = value
+            escaped_detail_str = json.dumps(escaped_detail)
+            return escaped_detail_str
+
+        tools.assert_true(False, "Failed to get query detail after 3 retries")
+
+    def wait_for_query_detail(self, query_id, raw_result=False):
+        return self._wait_for_query_detail(lambda detail: detail.get("queryId") == query_id, raw_result)
+
+    def wait_for_prepared_stmt_detail(self, prepared_stmt_id):
+        def is_prepared_stmt_detail(detail):
+            return 'preparedStmtId' in detail and detail['preparedStmtId'] == prepared_stmt_id \
+                and 'command' in detail and detail['command'] == 'MySQL.COM_STMT_PREPARE'
+
+        return self._wait_for_query_detail(is_prepared_stmt_detail)
+
+    def assert_prepared_stmt_details(self):
+        query_details = self.get_query_details()
+        for detail in query_details:
+            if 'command' not in detail or detail['command'] != 'MySQL.COM_STMT_PREPARE':
+                continue
+            query_id = detail['queryId']
+
+            if 'profile' not in detail:
+                continue
+            profile_query_id_res = re.match(r'[\w\W]*Query ID: (.*)[\w\W]*', detail['profile'])
+            if not profile_query_id_res:
+                continue
+            profile_query_id = profile_query_id_res.group(1)
+
+            tools.assert_equals(query_id, profile_query_id)
+
+    def assert_query_detail_field(self, query_detail, field_name, expected_value=None):
+        """
+        Validate field values in query detail
+        """
+        if query_detail is None:
+            # print("Query detail is None")
+            return False
+
+        if field_name not in query_detail:
+            # print(f"Field {field_name} not found in query detail")
+            return False
+
+        actual_value = query_detail[field_name]
+        # print(f"Field {field_name}: {actual_value}")
+
+        if expected_value is not None:
+            if actual_value != expected_value:
+                # print(
+                #     f"Field {field_name} mismatch: expected {expected_value}, got {actual_value}")
+                return False
+
+        return True
+
+    def query_detail_check(self, sql=None, expected_scan_rows=None, expected_return_rows=None):
+        """
+        Comprehensive function to test query detail API using assertions to validate results
+        
+        Args:
+            sql: SQL statement to execute
+            expected_scan_rows: Expected scanRows value
+            expected_return_rows: Expected returnRows value  
+            
+        Returns:
+            dict: Dictionary containing test results
+        """
+        import time
+
+        # 1. Get timestamp
+
+        # 2. Execute SQL statement
+        # print(f"Executing SQL: {sql}")
+        result = self.execute_sql(sql, True)
+
+        if not result["status"]:
+            # print(f"Failed to execute SQL: {result}")
+            tools.assert_true(False, f"SQL execution failed: {result}")
+
+        # 3. Get query_id
+        query_id = self.get_last_query_id()
+        if query_id is None:
+            # print("Failed to get query_id")
+            tools.assert_true(False, "Failed to get query_id")
+
+        # 4. Wait a bit to ensure query detail is collected
+        time.sleep(1)
+
+        # 5. Get query detail, retry up to 3 times
+        query_detail = self.wait_for_query_detail(query_id, raw_result=True)
+
+        # 6. Validate each field and assert
+        # print("=== Query Detail API Test Results ===")
+        # print(f"Timestamp: {timestamp_ms}")
+        # print(f"Query ID: {query_id}")
+        # print(f"Query Detail: {query_detail}")
+
+        # Validate scanRows
+        if expected_scan_rows is not None:
+            actual_scan_rows = query_detail.get("scanRows")
+            tools.assert_equal(
+                expected_scan_rows, actual_scan_rows,
+                f"scanRows mismatch: expected {expected_scan_rows}, got {actual_scan_rows}"
+            )
+            # print(f"✓ scanRows validation passed: {actual_scan_rows}")
+        else:
+            # print(f"scanRows: {query_detail.get('scanRows')}")
+            pass
+
+        # Validate returnRows
+        if expected_return_rows is not None:
+            actual_return_rows = query_detail.get("returnRows")
+            tools.assert_equal(
+                expected_return_rows, actual_return_rows,
+                f"returnRows mismatch: expected {expected_return_rows}, got {actual_return_rows}"
+            )
+            # print(f"✓ returnRows validation passed: {actual_return_rows}")
+        else:
+            # print(f"returnRows: {query_detail.get('returnRows')}")
+            pass
+
+        # Validate cpuCostNs
+        actual_cpu_cost_ns = query_detail.get("cpuCostNs")
+        tools.assert_true(
+            actual_cpu_cost_ns > 0,
+            f"cpuCostNs is negative: {actual_cpu_cost_ns}"
+        )
+        # print(f"✓ cpuCostNs validation passed: {actual_cpu_cost_ns}")
+
+        # Validate scanBytes
+        actual_scan_bytes = query_detail.get("scanBytes")
+        tools.assert_true(
+            actual_scan_bytes >= 0,
+            f"scanBytes is negative: {actual_scan_bytes}"
+        )
+        # print(f"✓ scanBytes validation passed: {actual_scan_bytes}")
+
+        # Validate memCostBytes
+        actual_mem_cost_bytes = query_detail.get("memCostBytes")
+        tools.assert_true(
+            actual_mem_cost_bytes > 0,
+            f"memCostBytes is negative: {actual_mem_cost_bytes}"
+        )
+        # print(f"✓ memCostBytes validation passed: {actual_mem_cost_bytes}")
+
+        return {
+            "success": True
+        }
+
+    def set_first_tablet_id(self, table_name, partition_name=None):
+        """
+        Get the first tablet ID for a table (optionally from a specific partition)
+        and store it as self.tablet_id for use in subsequent SQL with ${tablet_id}
+        """
+        if partition_name:
+            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name}) LIMIT 1"
+        else:
+            sql = f"SHOW TABLETS FROM {table_name} LIMIT 1"
+        result = self.execute_sql(sql, True)
+        if result and result.get("result") and len(result["result"]) > 0:
+            self.tablet_id = str(result["result"][0][0])  # First column is TabletId
+            log.info(f"Set tablet_id = {self.tablet_id}")
+        else:
+            raise Exception(f"Failed to get tablet ID for table {table_name}")

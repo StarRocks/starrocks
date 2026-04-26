@@ -1,0 +1,859 @@
+-- name: test_distinct_aggregation_over_framed_window
+CREATE TABLE `t0` (
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+insert into t0 select i/19 as v1, i/11 as v2, i/5 as v3 from table(generate_series(1,100)) t(i);
+-- result:
+-- !result
+select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0))+murmur_hash3_32(ifnull(sum,0))+murmur_hash3_32(ifnull(avg,0))+murmur_hash3_32(ifnull(count,0))+murmur_hash3_32(ifnull(rank,0))+murmur_hash3_32(ifnull(d_rank,0))+murmur_hash3_32(ifnull(rn,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg,
+sum(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as sum,
+avg(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as avg,
+count(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as count,
+rank()over(partition by v1 order by v2) as rank,
+dense_rank()over(partition by v1 order by v2) as d_rank,
+row_number()over(partition by v1 order by v2) as rn
+from t0) as t;
+-- result:
+158406994077
+-- !result
+with cte as(
+select distinct v1,v2,v3,
+ count(distinct v3)over(partition by v1 order by v2) as dist_count,
+ sum(distinct v3)over(partition by v1 order by v2) as dist_sum,
+ avg(distinct v3)over(partition by v1 order by v2) as dist_avg
+from t0
+),
+cte1 as(
+select v1,v2,v3,
+ count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+ sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+ avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0 
+)
+select 
+   assert_true(count(1)=count(if(cte.dist_count = cte1.dist_count, 1, NULL))), 
+   assert_true(count(1)=count(if(cte.dist_sum = cte1.dist_sum, 1, NULL))), 
+   assert_true(count(1)=count(if(cte.dist_avg = cte1.dist_avg, 1, NULL)))
+from cte join cte1 on cte.v1 = cte1.v1 and cte.v2 = cte1.v2 and cte.v3 = cte1.v3;
+-- result:
+1	1	1
+-- !result
+/*q0*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+70808484609
+-- !result
+/*q1*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+125432124625
+-- !result
+/*q2*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+26307328584
+-- !result
+/*q3*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-1558760228
+-- !result
+/*q4*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q5*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+53064879788
+-- !result
+/*q6*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-46059916253
+-- !result
+/*q7*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+70808484609
+-- !result
+/*q8*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+125432124625
+-- !result
+/*q9*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+26307328584
+-- !result
+/*q10*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-1558760228
+-- !result
+/*q11*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q12*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+53064879788
+-- !result
+/*q13*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-46059916253
+-- !result
+/*q14*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+141542173594
+-- !result
+/*q15*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+65364570663
+-- !result
+/*q16*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+157108571531
+-- !result
+/*q17*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+69174928757
+-- !result
+/*q18*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q19*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+-7002674174
+-- !result
+/*q20*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+84741326694
+-- !result
+/*q21*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+141542173594
+-- !result
+/*q22*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+65364570663
+-- !result
+/*q23*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+157108571531
+-- !result
+/*q24*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+69174928757
+-- !result
+/*q25*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q26*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+-7002674174
+-- !result
+/*q27*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+84741326694
+-- !result
+/*q28*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+141542173594
+-- !result
+/*q29*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+65364570663
+-- !result
+/*q30*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+157108571531
+-- !result
+/*q31*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+69174928757
+-- !result
+/*q32*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q33*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+-7002674174
+-- !result
+/*q34*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+84741326694
+-- !result
+/*q35*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q36*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q37*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q38*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q39*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q40*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q41*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q42*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-454307243545
+-- !result
+/*q43*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+-297607543439
+-- !result
+/*q44*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-269440297745
+-- !result
+/*q45*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-333002922143
+-- !result
+/*q46*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+-112740597639
+-- !result
+/*q47*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+-176303222037
+-- !result
+/*q48*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-148135976343
+-- !result
+/*q49*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q50*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q51*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q52*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q53*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q54*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q55*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q56*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q57*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q58*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q59*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q60*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q61*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q62*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q63*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q64*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q65*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q66*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q67*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q68*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q69*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q70*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q71*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q72*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q73*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q74*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q75*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q76*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q77*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q78*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q79*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q80*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q81*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q82*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q83*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q84*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q85*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q86*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q87*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q88*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q89*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q90*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q91*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q92*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q93*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q94*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q95*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q96*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q97*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q98*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q99*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q100*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q101*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q102*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q103*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q104*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q105*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q106*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q107*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q108*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q109*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q110*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q111*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q112*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+11145379306
+-- !result
+/*q113*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+74681965146
+-- !result
+/*q114*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+17394382760
+-- !result
+/*q115*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-61221865531
+-- !result
+/*q116*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q117*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+-- result:
+2314720309
+-- !result
+/*q118*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+-- result:
+-54972862077
+-- !result
+/*q119*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(days_add('2025-01-01',v3) as date))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result
+/*q120*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct days_add('2025-01-01 00:00:00',v3))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+-- result:
+80930968600
+-- !result

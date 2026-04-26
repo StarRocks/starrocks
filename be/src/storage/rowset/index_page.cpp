@@ -36,8 +36,8 @@
 
 #include <string>
 
+#include "base/coding.h"
 #include "common/logging.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

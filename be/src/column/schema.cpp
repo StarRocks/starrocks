@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "exec/sorting/sorting.h"
+#include "common/sort_desc.h"
 
 namespace starrocks {
 
@@ -166,12 +166,12 @@ void Schema::append(const FieldPtr& field) {
     _num_keys += field->is_key();
     if (!_share_name_to_index) {
         if (_name_to_index == nullptr) {
-            _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
+            _name_to_index = std::make_shared<std::unordered_map<std::string_view, size_t>>();
         }
         _name_to_index->emplace(field->name(), _fields.size() - 1);
     } else {
         if (_name_to_index_append_buffer == nullptr) {
-            _name_to_index_append_buffer.reset(new std::unordered_map<std::string_view, size_t>());
+            _name_to_index_append_buffer = std::make_shared<std::unordered_map<std::string_view, size_t>>();
         }
         _name_to_index_append_buffer->emplace(field->name(), _fields.size() - 1);
     }
@@ -264,7 +264,7 @@ std::vector<ColumnId> Schema::field_column_ids(bool use_rowstore) const {
     return column_ids;
 }
 
-FieldPtr Schema::get_field_by_name(const std::string& name) const {
+FieldPtr Schema::get_field_by_name(std::string_view name) const {
     size_t idx = get_field_index_by_name(name);
     return idx == -1 ? nullptr : _fields[idx];
 }
@@ -278,13 +278,13 @@ void Schema::set_field_by_name(FieldPtr field, const std::string& name) {
 }
 
 void Schema::_build_index_map(const Fields& fields) {
-    _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
+    _name_to_index = std::make_shared<std::unordered_map<std::string_view, size_t>>();
     for (size_t i = 0; i < fields.size(); i++) {
         _name_to_index->emplace(fields[i]->name(), i);
     }
 }
 
-size_t Schema::get_field_index_by_name(const std::string& name) const {
+size_t Schema::get_field_index_by_name(std::string_view name) const {
     DCHECK(_name_to_index != nullptr);
     auto p = _name_to_index->find(name);
     if (p == _name_to_index->end()) {

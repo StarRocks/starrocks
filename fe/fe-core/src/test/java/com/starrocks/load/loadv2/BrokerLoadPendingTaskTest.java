@@ -78,7 +78,7 @@ public class BrokerLoadPendingTaskTest {
         };
         new MockUp<HdfsUtil>() {
             @Mock
-            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) {
+            public void parseFile(String path, Map<String, String> properties, List<TBrokerFileStatus> fileStatuses) {
                 fileStatuses.add(tBrokerFileStatus);
             }
         };

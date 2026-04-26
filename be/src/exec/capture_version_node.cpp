@@ -19,7 +19,7 @@
 
 namespace starrocks {
 
-pipeline::OpFactories CaptureVersionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> CaptureVersionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     return OpFactories{std::make_shared<pipeline::CaptureVersionOpFactory>(context->next_operator_id(), id())};
 }
 

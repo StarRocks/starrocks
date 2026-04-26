@@ -38,13 +38,17 @@
 #include <memory>
 #include <thread>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "runtime/exec_env.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
+#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/defer_op.h"
-#include "util/stopwatch.hpp"
-#include "util/uid_util.h"
+#include "runtime/stream_load/stream_load_executor.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -174,6 +178,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     return st;
 }
 
+#ifndef __APPLE__
 Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxyRequest& request,
                                                           std::vector<std::string>* partitions) {
     DCHECK(request.has_pulsar_info());
@@ -208,7 +213,9 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxy
     }
     return st;
 }
+#endif
 
+#ifndef __APPLE__
 Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklogProxyRequest& request,
                                                              std::vector<int64_t>* backlog_num) {
     DCHECK(request.has_pulsar_info());
@@ -260,6 +267,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
 
     return Status::OK();
 }
+#endif
 
 Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     std::unique_lock<std::mutex> l(_lock);
@@ -316,9 +324,11 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     case TLoadSourceType::KAFKA:
         ctx->kafka_info = std::make_unique<KafkaLoadInfo>(task.kafka_load_info);
         break;
+#ifndef __APPLE__
     case TLoadSourceType::PULSAR:
         ctx->pulsar_info = std::make_unique<PulsarLoadInfo>(task.pulsar_load_info);
         break;
+#endif
     default:
         LOG(WARNING) << "unknown load source type: " << task.type;
         delete ctx;
@@ -389,6 +399,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         }
         break;
     }
+#ifndef __APPLE__
     case TLoadSourceType::PULSAR: {
         pipe = std::make_shared<PulsarConsumerPipe>();
         Status st = std::static_pointer_cast<PulsarDataConsumerGroup>(consumer_grp)->assign_topic_partitions(ctx);
@@ -399,6 +410,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         }
         break;
     }
+#endif
     default: {
         std::stringstream ss;
         ss << "unknown routine load task type: " << ctx->load_type;
@@ -453,6 +465,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
 
     } break;
     case TLoadSourceType::PULSAR: {
+#ifndef __APPLE__
         for (auto& kv : ctx->pulsar_info->ack_offset) {
             Status st;
             // get consumer
@@ -484,6 +497,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             // return consumer
             _data_consumer_pool.return_consumer(consumer);
         }
+#endif
     } break;
     default:
         return;

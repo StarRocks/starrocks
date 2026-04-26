@@ -23,8 +23,9 @@ public:
     explicit NullableConverter(std::unique_ptr<Converter> base_converter)
             : _base_converter(std::move(base_converter)) {}
 
-    Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
-    Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+    Status write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+                        const Options& options) const override;
+    Status write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                const Options& options) const override;
     bool read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;

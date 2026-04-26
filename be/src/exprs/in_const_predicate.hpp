@@ -14,19 +14,19 @@
 
 #pragma once
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
-#include "simd/simd.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -189,7 +189,7 @@ public:
 
         // input data
         auto lhs_data = lhs->is_constant() ? ColumnHelper::as_raw_column<ConstColumn>(lhs)->data_column() : lhs;
-        auto data = ColumnHelper::cast_to_raw<Type>(lhs_data)->get_data().data();
+        const auto& data = ColumnHelper::cast_to_raw<Type>(lhs_data)->immutable_data();
 
         // output data
         auto result = RunTimeColumnType<TYPE_BOOLEAN>::create();
@@ -236,9 +236,9 @@ public:
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
         builder.resize_uninitialized(size);
 
-        uint8_t* null_data = builder.null_column()->get_data().data();
+        uint8_t* null_data = builder.null_column_raw_ptr()->get_data().data();
         memset(null_data, 0x0, size);
-        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column().get())->get_data().data();
+        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column_raw_ptr())->get_data().data();
 
         auto update_row = [&](int row) {
             if (viewer.is_null(row)) {
@@ -332,7 +332,7 @@ public:
     }
 
     ColumnPtr get_all_values() const {
-        ColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+        MutableColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
         if constexpr (isSliceLT<Type>) {
             for (auto v : _hash_set) {
                 // v -> SliceWithHash
@@ -434,8 +434,7 @@ public:
     VectorizedInConstPredicateGeneric(const TExprNode& node)
             : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
-    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other)
-            : Predicate(other), _is_not_in(other._is_not_in), _const_input(other._const_input) {}
+    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other) = default;
 
     ~VectorizedInConstPredicateGeneric() override = default;
 
@@ -480,7 +479,7 @@ public:
             }
             columns_ref[i] = value;
             if (value->is_constant()) {
-                value = down_cast<ConstColumn*>(value.get())->data_column();
+                value = down_cast<const ConstColumn*>(value.get())->data_column();
             }
             if (value->is_nullable()) {
                 auto nullable = down_cast<const NullableColumn*>(value.get());
@@ -498,17 +497,17 @@ public:
             dest_size = 1;
         }
         BooleanColumn::MutablePtr res = BooleanColumn::create(dest_size, _is_not_in);
-        NullColumnPtr res_null = NullColumn::create(dest_size, DATUM_NULL);
+        NullColumn::MutablePtr res_null = NullColumn::create(dest_size, DATUM_NULL);
         auto& res_data = res->get_data();
         auto& res_null_data = res_null->get_data();
         for (auto i = 0; i < dest_size; ++i) {
             auto id_0 = is_const[0] ? 0 : i;
-            if (input_null[0] == nullptr || !input_null[0]->get_data()[id_0]) {
+            if (input_null[0] == nullptr || !input_null[0]->immutable_data()[id_0]) {
                 bool has_null = false;
                 for (auto j = 1; j < child_size; ++j) {
                     auto id = is_const[j] ? 0 : i;
                     // input[j] is null
-                    if (input_null[j] != nullptr && input_null[j]->get_data()[id]) {
+                    if (input_null[j] != nullptr && input_null[j]->immutable_data()[id]) {
                         has_null = true;
                         continue;
                     }

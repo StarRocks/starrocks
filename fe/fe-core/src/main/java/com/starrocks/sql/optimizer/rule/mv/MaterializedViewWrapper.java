@@ -19,7 +19,7 @@ import com.starrocks.catalog.MvPlanContext;
 
 import java.util.Objects;
 
-public class MaterializedViewWrapper {
+public class MaterializedViewWrapper implements Comparable<MaterializedViewWrapper> {
     private final MaterializedView mv;
     private final int level;
     private final MvPlanContext mvPlanContext;
@@ -53,14 +53,11 @@ public class MaterializedViewWrapper {
     }
 
     public static MaterializedViewWrapper create(MaterializedView mv, int level, MvPlanContext mvPlanContext) {
-        return new MaterializedViewWrapper(mv, level, mvPlanContext);
-    }
+        return new MaterializedViewWrapper(mv, level, mvPlanContext); }
 
     @Override
     public int hashCode() {
-        int result = mv.hashCode();
-        result = 31 * result + level;
-        return result;
+        return Objects.hash(mv);
     }
 
     @Override
@@ -73,13 +70,17 @@ public class MaterializedViewWrapper {
         }
 
         MaterializedViewWrapper mvWrapper = (MaterializedViewWrapper) o;
-        if (level != mvWrapper.level) {
-            return false;
+        return Objects.equals(mv, mvWrapper.mv);
+    }
+
+    @Override
+    public int compareTo(MaterializedViewWrapper o) {
+        // First compare by level
+        int levelCompare = Integer.compare(level, o.level);
+        if (levelCompare != 0) {
+            return levelCompare;
         }
-        if (!mv.equals(mvWrapper.mv)) {
-            return false;
-        }
-        return Objects.equals(mvPlanContext, mvWrapper.mvPlanContext);
+        return Long.compare(mv.getId(), o.mv.getId());
     }
 
     @Override

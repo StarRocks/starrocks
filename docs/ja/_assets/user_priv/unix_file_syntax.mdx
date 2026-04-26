@@ -1,0 +1,19 @@
+
+- Unix group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "unix"
+)
+```
+
+- File group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "file",
+    "group_file_url" = ""
+)
+```

@@ -18,14 +18,14 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 
+#include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
@@ -33,11 +33,11 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "exprs/runtime_filter_bank.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
-#include "util/phmap/phmap.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 
@@ -47,13 +47,16 @@ using MultilaneOperatorRawPtr = MultilaneOperator*;
 using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
 } // namespace query_cache
 
+namespace spill {
+class OperatorMemoryResourceManager;
+} // namespace spill
+
 namespace pipeline {
 
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
 using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
-using ConstDriverPredicator = std::function<bool(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {
@@ -70,13 +73,11 @@ enum DriverState : uint32_t {
     // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
     // pending io task's completion.
     PENDING_FINISH = 9,
-    EPOCH_PENDING_FINISH = 10,
-    EPOCH_FINISH = 11,
     // In some cases, the output of SourceOperator::has_output may change frequently, it's better to wait
     // in the working thread other than moving the driver frequently between ready queue and pending queue, which
     // will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
     // We can enable this optimization by overriding SourceOperator::is_mutable to return true.
-    LOCAL_WAITING = 12
+    LOCAL_WAITING = 10
 };
 
 [[maybe_unused]] static inline std::string ds_to_string(DriverState ds) {
@@ -101,10 +102,6 @@ enum DriverState : uint32_t {
         return "INTERNAL_ERROR";
     case PENDING_FINISH:
         return "PENDING_FINISH";
-    case EPOCH_PENDING_FINISH:
-        return "EPOCH_PENDING_FINISH";
-    case EPOCH_FINISH:
-        return "EPOCH_FINISH";
     case LOCAL_WAITING:
         return "LOCAL_WAITING";
     }
@@ -187,12 +184,10 @@ enum OperatorStage {
     PREPARED = 1,
     PRECONDITION_NOT_READY = 2,
     PROCESSING = 3,
-    EPOCH_FINISHING = 4,
-    EPOCH_FINISHED = 5,
-    FINISHING = 6,
-    FINISHED = 7,
-    CANCELLED = 8,
-    CLOSED = 9,
+    FINISHING = 4,
+    FINISHED = 5,
+    CANCELLED = 6,
+    CLOSED = 7,
 };
 
 class PipelineDriver {
@@ -223,25 +218,9 @@ public:
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   Pipeline* pipeline, int32_t driver_id)
-            : _observer(this),
-              _operators(operators),
-              _query_ctx(query_ctx),
-              _fragment_ctx(fragment_ctx),
-              _pipeline(pipeline),
-              _source_node_id(operators[0]->get_plan_node_id()),
-              _driver_id(driver_id) {
-        _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
-        for (auto& op : _operators) {
-            _operator_stages[op->get_id()] = OperatorStage::INIT;
-        }
+                   Pipeline* pipeline, int32_t driver_id);
 
-        _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
-    }
-
-    PipelineDriver(const PipelineDriver& driver)
-            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
-                             driver._driver_id) {}
+    PipelineDriver(const PipelineDriver& driver);
 
     virtual ~PipelineDriver() noexcept;
     void check_operator_close_states(const std::string& func_name);
@@ -259,6 +238,8 @@ public:
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
+
+    Status prepare_local_state(RuntimeState* runtime_state);
 
     void increment_schedule_times();
 
@@ -361,17 +342,29 @@ public:
         return !_all_local_rf_ready;
     }
 
-    bool global_rf_block() {
+    bool global_rf_block(std::string* rf_waiting_set = nullptr) {
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout =
-                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
-                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
-                }); // or all the remote RFs are ready.
 
-        return !_all_global_rf_ready_or_timeout;
+        // timeout check
+        if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
+            return false;
+        }
+
+        bool all_ready = true;
+        // check if all the remote RFs are ready.
+        for (auto* rf_desc : _global_rf_descriptors) {
+            if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
+                continue;
+            }
+            if (rf_waiting_set != nullptr) {
+                rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
+            }
+            all_ready = false;
+        }
+        _all_global_rf_ready_or_timeout = _all_global_rf_ready_or_timeout || all_ready;
+        return !all_ready;
     }
 
     // return true if either dependencies_block or local_rf_block return true, which means that the current driver
@@ -403,8 +396,9 @@ public:
 
     std::string get_preconditions_block_reasons() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
+            std::string rf_waiting_set;
             return std::string(dependencies_block() ? "(dependencies," : "(") +
-                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(global_rf_block(&rf_waiting_set) ? "global runtime filter:" + rf_waiting_set : "") +
                    std::string(local_rf_block() ? "local runtime filter)" : ")");
         } else {
             return "";
@@ -416,18 +410,12 @@ public:
         if (sink_operator()->is_finished()) {
             return true;
         }
-        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
-            return true;
-        }
-
         // PRECONDITION_BLOCK
         if (_state == DriverState::PRECONDITION_BLOCK) {
             if (is_precondition_block()) {
                 return false;
             }
 
-            // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
-            //  This writing method is a bit tricky, and when there is a better way, replace it
             mark_precondition_ready();
 
             RETURN_IF_ERROR(check_short_circuit());
@@ -453,6 +441,42 @@ public:
         return true;
     }
 
+    // used in event scheduler
+    // check driver is ready for schedule
+    // similar to is_not_blocked but without check short_circuit.
+    bool check_is_ready() {
+        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+        if (sink_operator()->is_finished()) {
+            return true;
+        }
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            if (is_precondition_block()) {
+                return false;
+            }
+            mark_precondition_ready();
+            // In the event scheduler, we avoid calling check_short_circuit inside check_is_ready.
+            // Because check_short_circuit may trigger cascading recursive calls such as set_finished.
+            // It will increase scheduler complexity (like call set finished in unknown thread).
+            // Instead, we directly return true after the precondition block state changes.
+            // The check is performed in driver::process.
+            return true;
+        }
+
+        // OUTPUT_FULL
+        if (!sink_operator()->need_input()) {
+            set_driver_state(DriverState::OUTPUT_FULL);
+            return false;
+        }
+
+        // INPUT_EMPTY
+        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            set_driver_state(DriverState::INPUT_EMPTY);
+            return false;
+        }
+
+        return true;
+    }
+
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
     Status check_short_circuit();
 
@@ -461,6 +485,7 @@ public:
     void runtime_report_action();
 
     std::string to_readable_string() const;
+    std::string get_raw_string_name() const;
 
     workgroup::WorkGroup* workgroup();
     const workgroup::WorkGroup* workgroup() const;
@@ -497,29 +522,15 @@ public:
 
     // Whether the query can be expirable or not.
     virtual bool is_query_never_expired() { return false; }
-    // Whether the driver's state is already `EPOCH_FINISH`.
-    bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
-    // Whether the driver's state is already `EPOCH_PENDING_FINISH`.
-    bool is_epoch_finishing() { return _state == DriverState::EPOCH_PENDING_FINISH; }
-    // Whether the driver is at finishing state in one epoch. when the driver is in `EPOCH_PENDING_FINISH` state,
-    // use `is_still_epoch_finishing` method to check whether the driver has changed yet.
-    bool is_still_epoch_finishing() {
-        return source_operator()->is_epoch_finishing() || sink_operator()->is_epoch_finishing();
-    }
 
     PipelineObserver* observer() { return &_observer; }
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
+    bool local_prepare_is_done() const { return _local_prepare_is_done; }
+
 protected:
-    PipelineDriver()
-            : _observer(this),
-              _operators(),
-              _query_ctx(nullptr),
-              _fragment_ctx(nullptr),
-              _pipeline(nullptr),
-              _source_node_id(0),
-              _driver_id(0) {}
+    PipelineDriver();
 
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT_NS = 100'000'000L;
@@ -534,11 +545,15 @@ protected:
     Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
     Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
     Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
-    Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_closed(size_t operator_idx, OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
-    void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
-    void _try_to_release_buffer(RuntimeState* state, OperatorPtr& op);
+    Status _prepare_operator_mem_resource_manager(size_t operator_idx, RuntimeState* state);
+    spill::OperatorMemoryResourceManager* _operator_mem_resource_manager(size_t operator_idx);
+
+    void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, size_t operator_idx, OperatorPtr& op,
+                              const ChunkPtr& chunk);
+    void _try_to_release_buffer(RuntimeState* state, size_t operator_idx, OperatorPtr& op);
 
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
@@ -549,8 +564,13 @@ protected:
     // used in event scheduler
     void _update_global_rf_timer();
 
+    // Helper function to build readable string with option to use raw operator names
+    std::string _build_readable_string(bool use_raw_name) const;
+
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;
+    // Keep this before _operators so driver teardown destroys operators first, then their managers.
+    std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
@@ -598,8 +618,11 @@ protected:
 
     std::atomic<bool> _is_operator_cancelled{false};
 
-    std::unique_ptr<PipelineTimerTask> _global_rf_timer;
+    std::shared_ptr<PipelineTimerTask> _global_rf_timer;
 
+    std::atomic<bool> _local_prepare_is_done{false};
+
+protected:
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
@@ -632,6 +655,9 @@ protected:
     MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_driver_queue_size_counter = nullptr;
+
+private:
+    void prepare_profile();
 };
 
 } // namespace pipeline

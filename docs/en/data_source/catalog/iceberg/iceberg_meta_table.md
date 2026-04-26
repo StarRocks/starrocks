@@ -21,6 +21,31 @@ Currently, StarRocks supports the following Iceberg metadata tables:
 | `partitions`           | Shows details about the partitions in the table.             |
 | `files`                | Shows details about the data files and delete files in the current snapshot of the table. |
 | `refs`                 | Shows details about the Iceberg references, including branches and tags. |
+| `properties`           | Shows the table properties as key-value pairs.               |
+
+## Iceberg v3 Row Lineage Metadata Columns
+
+From v4.1 onwards, for Iceberg v3 tables (format-version = 3), StarRocks supports querying the following Row Lineage metadata columns:
+
+| Metadata Column                 | Description                                                                                    |
+| :------------------------------ | :--------------------------------------------------------------------------------------------- |
+| `_row_id`                       | Unique row identifier within the table (BIGINT). Format: `firstRowId + row_position`.          |
+| `_last_updated_sequence_number` | The commit sequence number when the row was last updated (BIGINT).                             |
+
+Usage:
+
+```SQL
+SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]table;
+```
+
+:::note
+
+- The `_row_id` column requires data files to have `firstRowId` metadata. If a data file is missing `firstRowId`, the query will fail with an error.
+- For newly inserted data, `_row_id` is computed as `firstRowId + row_position` and `_last_updated_sequence_number` is the file-level `dataSequenceNumber`.
+- After compaction (e.g., Iceberg OPTIMIZE / rewrite-data-files), if the compactor writes `_row_id` and `_last_updated_sequence_number` as physical columns in the data files (as required by the Iceberg v3 spec), StarRocks reads the per-row values from the physical columns, preserving row lineage across compaction.
+- These metadata columns are only available for Iceberg v3 tables (format-version = 3).
+
+:::
 
 ## `history` table
 
@@ -170,3 +195,26 @@ Output:
 | max_reference_age_in_ms | The maximum age of the reference before it could be expired. |
 | min_snapshots_to_keep   | For branch only, the minimum number of snapshots to keep in a branch. |
 | max_snapshot_age_in_ms  | For branch only, the max snapshot age allowed in a branch. Older snapshots in the branch will be expired. |
+
+## `properties` table
+
+Usage:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$properties;
+```
+
+Output:
+
+| Field | Description                      |
+| :---- | :------------------------------- |
+| key   | The name of the table property.  |
+| value | The value of the table property. |
+
+Example output:
+
+| key                            | value                              |
+| :----------------------------- | :--------------------------------- |
+| location                       | s3://bucket/warehouse/db/my_table  |
+| write.format.default           | parquet                            |
+| write.parquet.compression-codec| zstd                               |

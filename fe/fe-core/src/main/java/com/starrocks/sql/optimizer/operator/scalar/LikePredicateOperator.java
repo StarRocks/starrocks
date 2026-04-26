@@ -90,6 +90,15 @@ public class LikePredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        LikePredicateOperator that = (LikePredicateOperator) obj;
+        return likeType == that.likeType;
+    }
+
+    @Override
     public int hashCodeSelf() {
         return Objects.hash(super.hashCodeSelf(), likeType);
     }

@@ -19,32 +19,43 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -80,6 +91,40 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                     fn.functionName().equals(FunctionSet.EXCHANGE_BYTES) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_SPEED) ||
                     fn.functionName().equals(FunctionSet.ARRAY_SORTBY)) {
+                return call;
+            }
+
+            if (fn.functionName().equals(FunctionSet.ARRAY_SORT_LAMBDA)) {
+                LambdaFunctionOperator lambdaOp = (LambdaFunctionOperator) call.getChild(1);
+                ScalarOperator lambdaBodyOp = lambdaOp.getChild(0);
+
+                Map<Boolean, List<ColumnRefOperator>> argumentGroups = lambdaBodyOp.asStream()
+                        .filter(ScalarOperator::isColumnRef)
+                        .map(op -> (ColumnRefOperator) op)
+                        .collect(Collectors.partitioningBy(colRef -> colRef.getOpType().equals(
+                                OperatorType.LAMBDA_ARGUMENT)));
+
+                boolean isLegal = argumentGroups.get(true).stream().distinct().count() == 2 &&
+                        argumentGroups.get(false).isEmpty() && !Utils.hasNonDeterministicFunc(lambdaBodyOp);
+
+                if (!isLegal) {
+                    throw new SemanticException("Lambda function in sort_array should only depend on both two" +
+                            " arguments and contain no non-deterministic functions");
+                }
+
+                if (lambdaBodyOp.getType().isBoolean()) {
+                    return visit(call, context);
+                } else if (lambdaBodyOp.getType().isNumericType()) {
+                    ScalarOperator zeroValue =
+                            new CastOperator(lambdaBodyOp.getType(), ConstantOperator.createTinyInt((byte) 0));
+                    ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+                    zeroValue = rewriter.rewrite(zeroValue, List.of(new FoldConstantsRule()));
+                    lambdaBodyOp = new BinaryPredicateOperator(BinaryType.LT, lambdaBodyOp, zeroValue);
+                } else {
+                    throw new SemanticException(
+                            "Return type of lambda function in array_sort must be boolean|numeric types");
+                }
+                lambdaOp.setChild(0, lambdaBodyOp);
                 return call;
             }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
@@ -215,11 +260,16 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 (typeVariable.isBoolean() && typeConstant.isStringType()) ||
                 checkStringCastToNumber) {
 
+            // Folding the constant directly into the variable's type is an
+            // implicit coercion even though no CastOperator is produced, so
+            // the strict-mode guard must run here too.
+            checkImplicitCastAllowed(typeConstant, typeVariable);
+
             Optional<ScalarOperator> op = Utils.tryCastConstant(constant, variable.getType());
             if (op.isPresent()) {
                 predicate.getChildren().set(constantIndex, op.get());
                 return Optional.of(predicate);
-            } else if (variable.getType().isDateType() && Type.canCastTo(constant.getType(), variable.getType())) {
+            } else if (variable.getType().isDateType() && TypeManager.canCastTo(constant.getType(), variable.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(variable.getType(), predicate, constantIndex);
                 return Optional.of(predicate);
@@ -235,8 +285,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         for (int i = 0; i < predicate.getChildren().size(); i++) {
             ScalarOperator child = predicate.getChild(i);
 
-            if (!Type.BOOLEAN.matchesType(child.getType())) {
-                addCastChild(Type.BOOLEAN, predicate, i);
+            if (!BooleanType.BOOLEAN.matchesType(child.getType())) {
+                addCastChild(BooleanType.BOOLEAN, predicate, i);
             }
         }
 
@@ -246,6 +296,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
         return castForBetweenAndIn(predicate, false);
+    }
+
+    @Override
+    public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        return predicate;
     }
 
     @Override
@@ -261,11 +316,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         Type type2 = predicate.getChild(1).getType();
 
         if (!type1.isStringType()) {
-            addCastChild(Type.VARCHAR, predicate, 0);
+            addCastChild(VarcharType.VARCHAR, predicate, 0);
         }
 
         if (!type2.isStringType()) {
-            addCastChild(Type.VARCHAR, predicate, 1);
+            addCastChild(VarcharType.VARCHAR, predicate, 1);
         }
 
         return predicate;
@@ -274,16 +329,16 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, ScalarOperatorRewriteContext context) {
         if (operator.hasElse() && !operator.getType().matchesType(operator.getElseClause().getType())) {
-            operator.setElseClause(new CastOperator(operator.getType(), operator.getElseClause()));
+            operator.setElseClause(makeImplicitCast(operator.getType(), operator.getElseClause()));
         }
 
         for (int i = 0; i < operator.getWhenClauseSize(); i++) {
             if (!operator.getType().matchesType(operator.getThenClause(i).getType())) {
-                operator.setThenClause(i, new CastOperator(operator.getType(), operator.getThenClause(i)));
+                operator.setThenClause(i, makeImplicitCast(operator.getType(), operator.getThenClause(i)));
             }
         }
 
-        Type compatibleType = Type.BOOLEAN;
+        Type compatibleType = BooleanType.BOOLEAN;
         if (operator.hasCase()) {
             List<Type> whenTypes = Lists.newArrayList();
             whenTypes.add(operator.getCaseClause().getType());
@@ -294,13 +349,13 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
 
             if (!compatibleType.matchesType(operator.getCaseClause().getType())) {
-                operator.setCaseClause(new CastOperator(compatibleType, operator.getCaseClause()));
+                operator.setCaseClause(makeImplicitCast(compatibleType, operator.getCaseClause()));
             }
         }
 
         for (int i = 0; i < operator.getWhenClauseSize(); i++) {
             if (!compatibleType.matchesType(operator.getWhenClause(i).getType())) {
-                operator.setWhenClause(i, new CastOperator(compatibleType, operator.getWhenClause(i)));
+                operator.setWhenClause(i, makeImplicitCast(compatibleType, operator.getWhenClause(i)));
             }
         }
 
@@ -316,6 +371,12 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         List<Type> types = predicate.getChildren().stream().map(ScalarOperator::getType).collect(Collectors.toList());
         if (predicate.getChild(0).isVariable() && predicate.getChildren().stream().skip(1)
                 .allMatch(ScalarOperator::isConstantRef)) {
+            // Same strict-mode concern as optimizeConstantAndVariable: each
+            // constant will be folded into firstType without producing a
+            // CastOperator, so validate before we start the fold.
+            for (int i = 1; i < types.size(); i++) {
+                checkImplicitCastAllowed(types.get(i), firstType);
+            }
             List<ScalarOperator> newChild = Lists.newArrayList();
             newChild.add(predicate.getChild(0));
             for (int i = 1; i < types.size(); i++) {
@@ -342,6 +403,122 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     }
 
     private void addCastChild(Type returnType, ScalarOperator node, int index) {
-        node.getChildren().set(index, new CastOperator(returnType, node.getChild(index), true));
+        ScalarOperator child = node.getChild(index);
+        checkImplicitCastAllowed(child.getType(), returnType);
+        node.getChildren().set(index, new CastOperator(returnType, child, true));
     }
+
+    private CastOperator makeImplicitCast(Type returnType, ScalarOperator child) {
+        checkImplicitCastAllowed(child.getType(), returnType);
+        return new CastOperator(returnType, child, true);
+    }
+
+    // When MODE_FORBID_INVALID_IMPLICIT_CAST is set, reject implicit casts that
+    // Trino would not allow: cross-family casts (e.g. varchar<->int) and
+    // narrowing casts (e.g. bigint->int, varchar(10)->varchar(5)). Only
+    // widening coercions within the same type family pass.
+    private static void checkImplicitCastAllowed(Type from, Type to) {
+        if (ConnectContext.get() == null) {
+            return;
+        }
+        if (!SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_FORBID_INVALID_IMPLICIT_CAST)) {
+            return;
+        }
+        if (isImplicitCastSafe(from, to)) {
+            return;
+        }
+        throw new SemanticException(String.format(
+                "Implicit cast from %s to %s is not allowed under FORBID_INVALID_IMPLICIT_CAST sql_mode. "
+                        + "Use an explicit CAST.",
+                from, to));
+    }
+
+    private static boolean isImplicitCastSafe(Type from, Type to) {
+        if (from == null || to == null) {
+            return true;
+        }
+        if (from.isNull() || from.isInvalid() || to.isInvalid()) {
+            return true;
+        }
+        if (from.matchesType(to)) {
+            return true;
+        }
+        if (from.isNumericType() && to.isNumericType()) {
+            return isNumericWidening(from, to);
+        }
+        if (from.isStringType() && to.isStringType()) {
+            // VARCHAR/CHAR length is a declared maximum in StarRocks and is
+            // not treated as a strict type bound, so we allow any implicit
+            // cast within the string family regardless of length.
+            return true;
+        }
+        if (from.isDateType() && to.isDateType()) {
+            // DATE -> DATETIME is widening; DATETIME -> DATE is narrowing.
+            return from.isDate() && to.isDatetime();
+        }
+        // Complex types (array/map/struct) fall back to their element-level
+        // coercions, which re-enter this rule. Skip the family check here.
+        if (from.isComplexType() || to.isComplexType()) {
+            return true;
+        }
+        return false;
+    }
+
+    // Trino-like numeric widening rank:
+    //   TINYINT < SMALLINT < INT < BIGINT < LARGEINT < DECIMAL < FLOAT < DOUBLE
+    // A cast is widening iff fromRank <= toRank; DECIMAL -> DECIMAL additionally
+    // requires non-decreasing precision and scale.
+    private static boolean isNumericWidening(Type from, Type to) {
+        int fromRank = numericRank(from);
+        int toRank = numericRank(to);
+        if (fromRank < 0 || toRank < 0) {
+            return false;
+        }
+        if (fromRank > toRank) {
+            return false;
+        }
+        if (from.isDecimalOfAnyVersion() && to.isDecimalOfAnyVersion()) {
+            Integer fromPrecision = from.getPrecision();
+            Integer toPrecision = to.getPrecision();
+            int fromScale = from instanceof ScalarType ? ((ScalarType) from).getScalarScale() : 0;
+            int toScale = to instanceof ScalarType ? ((ScalarType) to).getScalarScale() : 0;
+            if (fromPrecision == null || toPrecision == null) {
+                return true;
+            }
+            int fromIntegralDigits = fromPrecision - fromScale;
+            int toIntegralDigits = toPrecision - toScale;
+            return toScale >= fromScale && toIntegralDigits >= fromIntegralDigits;
+        }
+        return true;
+    }
+
+    private static int numericRank(Type t) {
+        if (t.isTinyint()) {
+            return 1;
+        }
+        if (t.isSmallint()) {
+            return 2;
+        }
+        if (t.isInt()) {
+            return 3;
+        }
+        if (t.isBigint()) {
+            return 4;
+        }
+        if (t.isLargeIntType()) {
+            return 5;
+        }
+        if (t.isDecimalOfAnyVersion()) {
+            return 6;
+        }
+        if (t.isFloat()) {
+            return 7;
+        }
+        if (t.isDouble()) {
+            return 8;
+        }
+        return -1;
+    }
+
 }

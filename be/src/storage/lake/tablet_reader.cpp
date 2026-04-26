@@ -17,10 +17,17 @@
 #include <future>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -37,6 +44,7 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
 #include "util/json_flattener.h"
@@ -140,6 +148,12 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             rss.emplace_back(rowset);
         }
 
+        // Do not split if tablet has no rowsets (empty tablet)
+        if (_rowsets.empty()) {
+            _need_split = false;
+            return init_collector(read_params);
+        }
+
         // not split for data skew between tablet
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
             // set _need_split false to make iterator can get data this round if split do not happen,
@@ -164,14 +178,25 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         }
 
         // do prepare
-        split_morsel_queue->set_tablets(std::move(tablets));
-        split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
+        split_morsel_queue->set_tablets(tablets);
+        split_morsel_queue->set_tablet_rowsets(tablet_rowsets);
         split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
                                            read_params.end_key);
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
-            auto split = split_morsel_queue->try_get().value();
+            auto split_status_or = split_morsel_queue->try_get();
+            if (UNLIKELY(!split_status_or.ok())) {
+                LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
+                             << ", query_id: " << print_id(read_params.runtime_state->query_id())
+                             << ", tablet_id: " << tablet_shared_ptr->tablet_id();
+                // clear split tasks, and fallback to non-split mode
+                _split_tasks.clear();
+                _need_split = false;
+                return init_collector(read_params);
+            }
+
+            auto split = std::move(split_status_or.value());
             if (split != nullptr) {
                 auto ctx = std::make_unique<pipeline::LakeSplitContext>();
 
@@ -313,6 +338,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
+    rs_opts.runtime_filter_preds = params.runtime_filter_preds;
     PredicateTree pred_tree_for_zone_map;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
                                                                       rs_opts.pred_tree_for_zone_map));
@@ -330,6 +356,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.lake_io_opts = params.lake_io_opts;
+    rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
 
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
@@ -356,14 +386,32 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
     std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
+    // The parallel tasks capture local variables and |this| by reference.
+    // Must wait for all tasks to complete before returning, otherwise
+    // dangling references to |rs_opts| and |this| cause use-after-free.
+    DeferOp wait_futures([&futures]() {
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    });
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset]() { return enhance_error_prompt(rowset->read(schema(), rs_opts)); });
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                if (!injected_st.ok()) {
+                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                }
+#endif
+                return enhance_error_prompt(rowset->read(schema(), rs_opts));
+            });
 
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
@@ -646,6 +694,13 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                    MemPool* mempool) {
+    const TypeInfoAllocator* allocator = nullptr;
+    TypeInfoAllocator type_info_allocator;
+    if (mempool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mempool);
+        allocator = &type_info_allocator;
+    }
+
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
@@ -670,10 +725,10 @@ Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const Olap
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == TYPE_CHAR) {
-            RETURN_IF_ERROR(
-                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i),
+                                              allocator));
         } else {
-            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), allocator));
         }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));

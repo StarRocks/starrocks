@@ -36,12 +36,12 @@
 
 #include <fmt/format.h>
 
+#include "base/utility/defer_op.h"
 #include "runtime/exec_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -563,13 +563,16 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
             break;
         }
 
-        // clear index cache
         auto manager = StorageEngine::instance()->update_manager();
-        auto& index_cache = manager->index_cache();
-        auto index_entry = index_cache.get_or_create(_tablet_id);
-        index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-        index_entry->value().unload();
-        index_cache.release(index_entry);
+        // clear index cache
+        {
+            std::lock_guard lg(*tablet->updates()->get_index_lock());
+            auto& index_cache = manager->index_cache();
+            auto index_entry = index_cache.get_or_create(_tablet_id);
+            index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+            index_entry->value().unload();
+            index_cache.release(index_entry);
+        }
 
         // clear delvector and dcg cache
         manager->clear_cached_del_vec_by_tablet_id(tablet->tablet_id());
@@ -622,7 +625,7 @@ Status EngineStorageMigrationTask::_copy_index_and_data_files(const string& sche
             return Status::InternalError("Process is going to quit.");
         }
 
-        ASSIGN_OR_RETURN(auto copy_size, rs->copy_files_to(ref_tablet->data_dir()->get_meta(), schema_hash_path));
+        ASSIGN_OR_RETURN(auto copy_size, rs->copy_files_to(schema_hash_path));
         _copy_size += copy_size;
     }
     uint64_t total_time_ms = watch.elapsed_time() / 1000 / 1000;

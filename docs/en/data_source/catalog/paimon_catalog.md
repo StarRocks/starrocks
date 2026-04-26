@@ -24,6 +24,30 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
 
+## Paimon to StarRocks data types
+
+| Paimon Type           | StarRocks Type              |
+|-----------------------|-----------------------------|
+| `BINARY`              | `VARBINARY`                 |
+| `VARBINARY`           | `VARBINARY`                 |
+| `CHAR`                | `CHAR(length)`              |
+| `VARCHAR`             | `VARCHAR`                   |
+| `BOOLEAN`             | `BOOLEAN`                   |
+| `DECIMAL`             | `DECIMAL(precision, scale)` |
+| `TINYINT`             | `TINYINT`                   |
+| `SMALLINT`            | `SMALLINT`                  |
+| `INT`                 | `INT`                       |
+| `BIGINT`              | `BIGINT`                    |
+| `FLOAT`               | `FLOAT`                     |
+| `DOUBLE`              | `DOUBLE`                    |
+| `DATE`                | `DATE`                      |
+| `TIME`                | `TIME`                      |
+| `TIMESTAMP`           | `DATETIME`                  |
+| `LocalZonedTimestamp` | `DATETIME`                  |
+| `ARRAY`               | `ARRAY<element_type>`       |
+| `MAP`                 | `MAP<key_type, value_type>` |
+| `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+
 ## Integration preparations
 
 Before you create a Paimon catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Paimon cluster.
@@ -265,6 +289,22 @@ If you choose Data Lake Storage Gen2 as storage for your Paimon cluster, take on
   | azure.adls2.oauth2_client_id       | Yes      | The client (application) ID of the service principal.        |
   | azure.adls2.oauth2_client_secret   | Yes      | The value of the new client (application) secret created.    |
   | azure.adls2.oauth2_client_endpoint | Yes      | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -543,6 +583,21 @@ PROPERTIES
   );
   ```
 
+- If you choose the Workload Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - If you choose the VM-based authentication method, run a command like below:
@@ -671,7 +726,7 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
    USE <catalog_name>.<db_name>;
    ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

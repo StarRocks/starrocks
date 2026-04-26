@@ -28,10 +28,6 @@ COVAR_POP(expr1, expr2)
 
 ![covar_pop_formula](../../../_assets/covar_pop_formula.png)
 
-<!--$$
-\frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{n}
-$$ -->
-
 ## 使用说明
 
 计算总体协方差时，只有同一行的两列数据都不为 null 时，该行数据才会被统计到最终结果中，否则该行数据会被忽略。

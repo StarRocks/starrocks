@@ -32,6 +32,16 @@ public class DropBackendClauseTest {
         Assertions.assertTrue(dropStmt.getCNGroupName().isEmpty());
         Assertions.assertFalse(dropStmt.isForce());
     }
+    @Test
+    public void testDropBackendWithoutWarehouse() {
+        String sqlText = "ALTER SYSTEM DROP BACKEND 'backend01:9010' ";
+        AlterSystemStmt stmt =
+                (AlterSystemStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
+        DropBackendClause dropStmt = (DropBackendClause) stmt.getAlterClause();
+        Assertions.assertTrue(dropStmt.getWarehouse().isEmpty());
+        Assertions.assertTrue(dropStmt.getCNGroupName().isEmpty());
+        Assertions.assertFalse(dropStmt.isForce());
+    }
 
     @Test
     public void testDropBackendIntoWarehouseCnGroup() {

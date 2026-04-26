@@ -38,7 +38,9 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
   - Textfile 文件支持 NO_COMPRESSION 压缩格式。
 
-  您可以通过系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+  您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+
+  在写入 Hive 表时，如果该表的属性中包含了 `compression_codec`，StarRocks 优先使用该算法对写入数据进行压缩。否则，使用系统变量 `connector_sink_compression_codec` 中设置的压缩算法代替。
 
 ## 准备工作
 
@@ -190,6 +192,7 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 | aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+| hive.metastore.glue.catalogid | 否       | 要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。 |
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
@@ -369,6 +372,22 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
+
 ###### Azure Data Lake Storage Gen1
 
 如果选择 Data Lake Storage Gen1 作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
@@ -486,6 +505,7 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
 | enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| remote_file_cache_memory_ratio         | 否       | 远程文件缓存的最大内存使用率。默认值：`0.1`，即 10%。自 v3.5.6 起支持。 |
 
 ### 示例
 
@@ -737,6 +757,21 @@ PROPERTIES
   );
   ```
 
+- 如果基于 Workload Identity 进行认证和鉴权，可以按如下创建 Hive Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - 如果基于 VM 进行认证和鉴权，可以按如下创建 Hive Catalog：
@@ -868,7 +903,7 @@ DROP Catalog hive_catalog_glue;
 
 2. [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -1029,7 +1064,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Managed Table 所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Managed Table 的文件格式。当前支持 Parquet、ORC、Textfile 文件格式，其中 ORC 和 Textfile 文件格式自 3.3 版本起支持。取值范围：`parquet`、`orc`、`textfile`。默认值：`parquet`。 |
-| compression_codec | Managed Table 的压缩格式。该属性自 3.2.3 版本起弃用，此后写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
+| compression_codec | Managed Table 的压缩格式。                                   |
 
 ### 示例
 
@@ -1076,7 +1111,7 @@ PARTITION BY (par_col1[, par_col2...])
 :::note
 
 - 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
-- 您可以通过会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来指定写入 Hive 表时的压缩算法。
+- 您可以通过表属性 [`compression_codec`](#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
 
 :::
 
@@ -1161,6 +1196,56 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## 清空 Hive 表
+
+您可以使用 [TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) 语句快速删除 Hive 托管表中的所有数据。该操作支持：
+
+- 清空非分区表中的所有数据
+- 清空分区表中的所有分区
+- 清空分区表中的指定分区
+
+### 语法
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### 参数
+
+- `table_name`: 要清空数据的 Hive 表名称。清空表数据前，需要[切换至目标 Hive Catalog 和 Database](#切换-hive-catalog-和数据库)。
+- `partition_name = partition_value`: 分区列的名称和值，用于识别要清空的分区。
+
+### 示例
+
+以下示例的前提是已切换至目标 Hive Catalog 和 Database。
+
+1. 清空非分区表：
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. 清空分区表所有分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. 清空单分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. 清空多分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
    ```
 
 ## 删除 Hive 表

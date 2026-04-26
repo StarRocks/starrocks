@@ -39,7 +39,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -75,6 +75,7 @@ public class MVRewriteTest extends StarRocksTestBase {
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
+        Config.enable_virtual_columns = false;
         Config.alter_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -101,6 +102,7 @@ public class MVRewriteTest extends StarRocksTestBase {
                 "    \"database\" = \"test\",\n" +
                 "    \"table\" = \"ods_order\"\n" +
                 "    )");
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @BeforeEach
@@ -1436,8 +1438,8 @@ public class MVRewriteTest extends StarRocksTestBase {
 
         String createMVSQL = "CREATE MATERIALIZED VIEW partial_order_by_mv AS " +
                 "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6";
-        CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(createMVSQL, starRocksAssert.getCtx());
+        CreateSyncMVStmt createMaterializedViewStmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(createMVSQL, starRocksAssert.getCtx());
         createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assertions.assertTrue(k.isKey()));
 
         starRocksAssert.withMaterializedView(createMVSQL).query(query).explainContains("rollup: partial_order_by_mv");

@@ -36,21 +36,24 @@
 
 #include <memory>
 
-#include "common/closure_guard.h"
+#include "base/compression/block_compression.h"
+#include "base/container/lru_cache.h"
+#include "base/string/faststring.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/tracer.h"
+#include "common/util/thrift_util.h"
 #include "fmt/format.h"
+#include "runtime/closure_guard.h"
+#include "runtime/descriptors.h"
 #include "runtime/diagnose_daemon.h"
-#include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
-#include "util/compression/block_compression.h"
-#include "util/faststring.h"
-#include "util/lru_cache.h"
-#include "util/runtime_profile.h"
-#include "util/starrocks_metrics.h"
-#include "util/thrift_util.h"
+#include "runtime/starrocks_metrics.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -64,11 +67,14 @@
 
 namespace starrocks {
 
-LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id,
-                         int64_t txn_id, const std::string& txn_trace_parent, int64_t timeout_s,
+LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, DiagnoseDaemon* diagnose_daemon,
+                         BrpcStubCache* brpc_stub_cache, const UniqueId& load_id, int64_t txn_id,
+                         const std::string& txn_trace_parent, int64_t timeout_s,
                          std::unique_ptr<MemTracker> mem_tracker)
         : _load_mgr(mgr),
           _lake_tablet_mgr(lake_tablet_mgr),
+          _diagnose_daemon(diagnose_daemon),
+          _brpc_stub_cache(brpc_stub_cache),
           _load_id(load_id),
           _txn_id(txn_id),
           _timeout_s(timeout_s),
@@ -96,7 +102,7 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
 }
 
 LoadChannel::~LoadChannel() {
-    _span->SetAttribute("num_chunk", _num_chunk);
+    _span->SetAttribute("num_chunk", static_cast<uint64_t>(_num_chunk));
     _span->End();
 }
 
@@ -135,7 +141,7 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
         std::shared_ptr<TabletsChannel> channel;
         std::lock_guard l(_lock);
         if (_schema == nullptr) {
-            _schema.reset(new OlapTableSchemaParam());
+            _schema = std::make_shared<OlapTableSchemaParam>();
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {
@@ -144,12 +150,19 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
         auto it = _tablets_channels.find(key);
         if (it == _tablets_channels.end()) {
             if (is_lake_tablet) {
+#ifdef __APPLE__
+                channel = nullptr;
+                st = Status::NotSupported("lake tablet is not supported on MacOS");
+#else
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
+#endif
             } else {
-                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
+                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile, _brpc_stub_cache);
             }
-            if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
-                _tablets_channels.insert({key, std::move(channel)});
+            if (st.ok()) {
+                if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
+                    _tablets_channels.insert({key, std::move(channel)});
+                }
             }
             COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {
@@ -180,14 +193,17 @@ void LoadChannel::_add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, cons
                 fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
-    bool close_channel;
+    bool close_channel = false;
     channel->add_chunk(chunk, request, response, &close_channel);
-    if (close_channel &&
-        (_should_enable_profile() || (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
-        // If close_channel is true, the channel has been removed from _tablets_channels
-        // in TabletsChannel::add_chunk, so there will be no chance to get the channel to
-        // update the profile later. So update the profile here
-        channel->update_profile();
+    if (close_channel) {
+        _remove_tablets_channel(key);
+        if ((_should_enable_profile() ||
+             (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
+            // If close_channel is true, the channel is removed from _tablets_channels,
+            // there will be no chance to get the channel to update the profile later.
+            // So update the profile here.
+            channel->update_profile();
+        }
     }
 }
 
@@ -215,7 +231,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     MonotonicStopWatch watch;
     watch.start();
     faststring uncompressed_buffer;
-    std::unique_ptr<Chunk> chunk;
+    ChunkUniquePtr chunk;
     int eos_count = 0;
     int64_t timeout_ms = -1;
     for (int i = 0; i < req.requests_size(); i++) {
@@ -281,11 +297,20 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
     closure_guard.release();
 }
 
-void LoadChannel::cancel() {
+void LoadChannel::cancel(const std::string& reason) {
+    bool print_cancel_msg = false;
+    DeferOp defer([&]() {
+        if (print_cancel_msg) {
+            LOG(INFO) << "Cancel load channel, txn_id=" << _txn_id << ", load_id=" << print_id(_load_id)
+                      << ", reason=" << reason;
+        }
+    });
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
-        it.second->cancel();
+        it.second->cancel(reason);
     }
+    print_cancel_msg = !_cancelled.load(std::memory_order_acquire);
+    _cancelled.store(true, std::memory_order_release);
 }
 
 void LoadChannel::abort() {
@@ -305,14 +330,13 @@ void LoadChannel::abort(const TabletsChannelKey& key, const std::vector<int64_t>
     }
 }
 
-void LoadChannel::remove_tablets_channel(const TabletsChannelKey& key) {
+void LoadChannel::_remove_tablets_channel(const TabletsChannelKey& key) {
     std::unique_lock l(_lock);
     _tablets_channels.erase(key);
     if (_tablets_channels.empty()) {
         l.unlock();
         _closed.store(true);
         _load_mgr->remove_load_channel(_load_id);
-        // Do NOT touch |this| since here, it could have been deleted.
     }
 }
 
@@ -448,7 +472,7 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
         stack_trace_request.type = DiagnoseType::STACK_TRACE;
         stack_trace_request.context =
                 fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
-        Status st = ExecEnv::GetInstance()->diagnose_daemon()->diagnose(stack_trace_request);
+        Status st = _diagnose_daemon->diagnose(stack_trace_request);
         if (!st.ok()) {
             LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
                          << ", status: " << st;
@@ -462,7 +486,9 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
 void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
                                           PLoadReplicaStatusResult* response) {
     TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
-    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(get_tablets_channel(key).get());
+    auto tablets_channel = get_tablets_channel(key);
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(tablets_channel.get());
+    TEST_SYNC_POINT("LoadChannel::get_load_replica_status::after_raw_ptr");
     if (local_tablets_channel == nullptr) {
         for (int64_t tablet_id : request->tablet_ids()) {
             auto replica_status = response->add_replica_statuses();
@@ -499,13 +525,13 @@ Status LoadChannel::_update_and_serialize_profile(std::string* result, bool prin
     ThriftSerializer ser(false, 4096);
     Status st = ser.serialize(&thrift_profile, &len, &buf);
     if (!st.ok()) {
-        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
-                   << ", status: " << st;
+        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << print_id(_load_id)
+                   << ", txn_id: " << _txn_id << ", status: " << st;
         return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
     }
     COUNTER_UPDATE(_profile_serialized_size, len);
     result->append((char*)buf, len);
-    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    VLOG(2) << "report profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id << ", size: " << len;
     return Status::OK();
 }
 

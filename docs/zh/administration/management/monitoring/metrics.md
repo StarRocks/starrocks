@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # 通用监控指标
@@ -549,6 +550,45 @@ displayed_sidebar: docs
 - 类型：累计值
 - 描述：该资源组中报错的查询任务的数量
 
+### Catalog 类型查询指标
+
+这些指标提供按 Catalog 类型维度的查询可观测性。每个指标都包含 `catalog_type` 标签，
+取值范围：`default`、`hive`、`iceberg`、`jdbc`、`deltalake`、`hudi`、`paimon`、`odps`、`kudu`、`elasticsearch`。
+
+`default` 表示 StarRocks 内部表（OLAP/Cloud Native）。
+
+| 指标 | 类型 | 单位 | 描述 |
+|------|------|------|------|
+| `starrocks_fe_catalog_query_total` | Counter | 请求数 | 按 Catalog 类型统计的总查询数 |
+| `starrocks_fe_catalog_query_success` | Counter | 请求数 | 按 Catalog 类型统计的成功查询数 |
+| `starrocks_fe_catalog_query_err` | Counter | 请求数 | 按 Catalog 类型统计的失败查询数 |
+| `starrocks_fe_catalog_query_timeout` | Counter | 请求数 | 按 Catalog 类型统计的超时查询数 |
+| `starrocks_fe_catalog_query_analysis_err` | Counter | 请求数 | 按 Catalog 类型统计的分析错误查询数 |
+| `starrocks_fe_catalog_query_internal_err` | Counter | 请求数 | 按 Catalog 类型统计的内部错误查询数 |
+| `starrocks_fe_catalog_query_err_rate` | Gauge | QPS | 按 Catalog 类型统计的错误率 |
+| `starrocks_fe_catalog_query_timeout_rate` | Gauge | QPS | 按 Catalog 类型统计的超时率 |
+| `starrocks_fe_catalog_query_analysis_err_rate` | Gauge | QPS | 按 Catalog 类型统计的分析错误率 |
+| `starrocks_fe_catalog_query_internal_err_rate` | Gauge | QPS | 按 Catalog 类型统计的内部错误率 |
+| `starrocks_fe_catalog_query_latency_ms` | Histogram | ms | 按 Catalog 类型统计的查询延迟 |
+| `starrocks_fe_catalog_slow_query` | Counter | 请求数 | 按 Catalog 类型统计的慢查询数 |
+| `starrocks_be_catalog_query_scan_bytes` | Counter | 字节 | 按 Catalog 类型统计的扫描字节数 |
+| `starrocks_be_catalog_query_scan_rows` | Counter | 行 | 按 Catalog 类型统计的扫描行数 |
+| `starrocks_be_catalog_files_scan_num_bytes_read` | Counter | 字节 | 按 Catalog 类型统计的文件扫描读取字节数 |
+| `starrocks_be_catalog_files_scan_num_rows_return` | Counter | 行 | 按 Catalog 类型统计的文件扫描返回行数 |
+
+**Prometheus 查询示例：**
+
+```promql
+# Hive Catalog 的总查询数
+starrocks_fe_catalog_query_total{catalog_type="hive"}
+
+# 所有 Catalog 类型的错误率对比
+starrocks_fe_catalog_query_err_rate
+
+# 仅外部表的扫描字节数（排除 default）
+starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
+```
+
 ### starrocks_fe_meta_log_count
 
 - 单位：个
@@ -573,11 +613,35 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：该资源组内存配额比率的瞬时值
 
-### starrocks_be_resource_group_mem_allocated_bytes
+### starrocks_be_resource_group_mem_inuse_bytes
 
 - 单位：Byte
 - 类型：瞬时值
 - 描述：该资源组内存使用率瞬时值
+
+### starrocks_be_mem_pool_mem_limit_bytes
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：该内存池内存配额的瞬时值
+
+### starrocks_be_mem_pool_mem_usage_bytes
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：该内存池当前内存使用量的瞬时值
+
+### starrocks_be_mem_pool_mem_usage_ratio
+
+- 单位：-
+- 类型：瞬时值
+- 描述：该内存池内存使用量与内存配额比率的瞬时值
+
+### starrocks_be_mem_pool_workgroup_count
+
+- 单位：个
+- 类型：瞬时值
+- 描述：该内存池分配的资源组数量的瞬时值
 
 ### starrocks_be_pipe_prepare_pool_queue_len
 
@@ -651,6 +715,18 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：每个 BE 节点上最高的 Compaction Score。
 
+### starrocks_fe_slow_lock_held_time_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：检测到慢锁时追踪锁持有时间（毫秒）的直方图指标。当锁等待时间超过 `slow_lock_threshold_ms` 配置参数时更新此指标。它追踪检测到慢锁事件时所有锁持有者中的最大锁持有时间。每个指标包括分位数值（0.75、0.95、0.98、0.99、0.999）、`_sum` 和 `_count` 输出。注意：在高竞争情况下，此指标可能无法准确反映确切的锁持有时间，因为指标在等待时间超过阈值时更新，但持有时间可能会继续增加，直到持有者完成操作并释放锁。然而，即使发生死锁，此指标仍然可以更新。
+
+### starrocks_fe_slow_lock_wait_time_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：检测到慢锁时追踪锁等待时间（毫秒）的直方图指标。当锁等待时间超过 `slow_lock_threshold_ms` 配置参数时更新此指标。它准确追踪在锁竞争场景中线程等待获取锁的时间。每个指标包括分位数值（0.75、0.95、0.98、0.99、0.999）、`_sum` 和 `_count` 输出。此指标提供精确的等待时间测量。注意：当发生死锁时无法更新此指标，因此不能用于检测死锁情况。
+
 ### update_compaction_outputs_total
 
 - 单位：个
@@ -691,6 +767,31 @@ displayed_sidebar: docs
 
 - 单位：Byte
 - 描述：扫描的总字节数。
+
+### starrocks_be_files_scan_num_files_read
+
+- 单位：个
+- 描述：从外部存储（CSV, Parquet, ORC, JSON, Avro）读取的文件数量。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_bytes_read
+
+- 单位：Byte
+- 描述：从外部存储读取的总字节数。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_raw_rows_read
+
+- 单位：个
+- 描述：从外部存储读取的原始行总数（包括格式错误的行，过滤和谓词过滤之前）。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_valid_rows_read
+
+- 单位：个
+- 描述：读取的有效行数（排除格式错误的行）。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_rows_return
+
+- 单位：个
+- 描述：谓词过滤后返回的行数。标签：`file_format`, `scan_type`。
 
 ### disk_reads_completed
 
@@ -952,6 +1053,11 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：Segment Flush 线程池中排队的任务数量。
 
+### starrocks_be_segment_file_not_found_total
+
+- 单位：个
+- 描述：打开 Segment 时发现文件缺失（NOT_FOUND）的累计次数。若该值持续增长，可能表示数据丢失或存储不一致。
+
 ### jemalloc_metadata_bytes
 
 - 单位：Byte
@@ -1076,6 +1182,21 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：Storage Page Cache 中的命中总次数。
 
+### page_cache_insert_count
+
+- 单位：个
+- 描述：Storage Page Cache 中的插入操作总次数。
+
+### page_cache_insert_evict_count
+
+- 单位：个
+- 描述：由于容量限制，在插入操作期间被淘汰的缓存项总次数。
+
+### page_cache_release_evict_count
+
+- 单位：个
+- 描述：当缓存使用量超过容量时，在释放操作期间被淘汰的缓存项总次数。
+
 ### bytes_read_total（已弃用）
 
 ### update_rowset_commit_request_total
@@ -1126,6 +1247,26 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：当前运行的查询计划 Fragment 数量。
+
+### plan_advisor_guide_applied_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 在查询优化阶段成功应用的 guide 总数。每当某个 guide 成功改写一个计划节点时，该指标加 1。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+### plan_advisor_guide_generated_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 成功生成并写入当前 FE 本地缓存的 guide 总数。只有分析结果非空且作为新的缓存项写入时才会累加。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+### plan_advisor_optimization_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：Plan Advisor 累计节省的查询执行耗时（毫秒）。当一个使用了缓存 guide 的查询执行时间短于生成该 guide 的原始查询时，节省的时间会累加到该指标。
 
 ### page_cache_lookup_count
 
@@ -1388,6 +1529,18 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：主键索引 Compaction 线程池中排队的任务数量。
 
+### pk_index_sst_read_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件读取失败的总次数。当 SST multi-get（读取）操作失败时递增。
+
+### pk_index_sst_write_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件写入失败的总次数。当 SST 文件构建失败时递增。
+
 ### disks_total_capacity
 
 - 描述：磁盘的总容量。
@@ -1490,6 +1643,11 @@ displayed_sidebar: docs
 
 - 单位：Byte
 - 描述：Bitmap 索引使用的内存。
+
+### builtin_inverted_index_mem_bytes
+
+- 单位：Byte
+- 描述：内置倒排索引使用的内存。
 
 ### update_rowset_commit_apply_duration_us
 
@@ -1773,3 +1931,372 @@ displayed_sidebar: docs
 - 单位：毫秒
 - 类型：累积值
 - 描述：BE 中 Clone 任务拷贝的总耗时，包括 INTER_NODE 和 INTRA_NODE 两种类型。
+
+### 事务延迟指标
+
+#### starrocks_fe_publish_version_daemon_loop_total
+
+- 单位：个
+- 类型：累积值
+- 描述：该 FE 节点上 `publish-version-daemon` 循环执行的总次数。
+
+以下 `summary` 类型的指标提供了事务不同阶段的延迟分布。这些指标仅由 Leader FE 节点上报。
+
+每个指标都包含以下输出：
+
+- **Quantiles**：不同百分位边界的延迟值。这些通过 `quantile` 标签公开，其值可以是 `0.75`、`0.95`、`0.98`、`0.99` 和 `0.999`。
+- **`<metric_name>_sum`**：该阶段所有事务的总累积耗时。
+- **`<metric_name>_count`**：该阶段记录的事务总数。
+
+所有事务指标都共享以下标签：
+
+- `type`: 按导入作业的源类型对事务进行分类（例如 `all`、`stream_load`、`routine_load`）。这有助于监控整体事务性能以及特定导入类型的性能。可以通过 FE 参数 [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) 配置上报的组。
+- `is_leader`: 指示上报的 FE 节点是否为 Leader。只有 Leader FE (`is_leader="true"`) 会上报实际的指标值。Follower FE 的 `is_leader` 将为 `false` 并且不会上报任何数据。
+
+#### starrocks_fe_txn_total_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：跟踪事务完成的总延迟，从 `prepare` 时间到 `finish` 时间。这代表了事务的完整端到端持续时间。
+
+#### starrocks_fe_txn_write_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务在 `write` 阶段的延迟，从 `prepare` 时间到 `commit` 时间。此指标隔离了事务准备发布之前数据写入和准备阶段的性能。
+
+#### starrocks_fe_txn_publish_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务在 `publish` 阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute`、`can_finish` 和 `ack` 四个子阶段的总和。
+
+#### starrocks_fe_txn_publish_schedule_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务在提交后等待发布的时间，从 `commit` 时间到发布任务被执行的时间。此延迟反映了 Publish Pipeline 中的调度延迟或排队时间。
+
+#### starrocks_fe_txn_publish_execute_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务 Publish 任务的活动执行时间，从任务被执行到完成，代表了用于使事务的更改变为可见而实际花费的时间。
+
+#### starrocks_fe_txn_publish_can_finish_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：从 `publish` 任务完成到 `canTxnFinish()` 首次返回 true 的延迟，即从 `publish version finish` 到 `ready-to-finish` 的耗时。
+
+#### starrocks_fe_txn_publish_ack_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务最终确认的延迟，从 `ready-to-finish` 到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括事务进入可完成状态后的最终确认步骤。
+
+### Merge Commit 指标
+
+这些指标用于跟踪等型批量写入路径中的 merge commit 操作。
+
+#### merge_commit_request_total
+
+- 单位：个
+- 类型：累积值
+- 描述：BE 收到的 merge commit 请求总数。
+
+#### merge_commit_request_bytes
+
+- 单位：字节
+- 类型：累积值
+- 描述：所有 merge commit 请求接收的数据总量。
+
+#### merge_commit_success_total
+
+- 单位：个
+- 类型：累积值
+- 描述：成功完成的 merge commit 请求数。
+
+#### merge_commit_fail_total
+
+- 单位：个
+- 类型：累积值
+- 描述：失败的 merge commit 请求数。
+
+#### merge_commit_pending_total
+
+- 单位：个
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务数量。
+
+#### merge_commit_pending_bytes
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务持有的数据总量。
+
+#### merge_commit_send_rpc_total
+
+- 单位：个
+- 类型：累积值
+- 描述：用于启动 merge commit 的 RPC 请求数。
+
+#### merge_commit_register_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 注册的 stream load pipe 数量。
+
+#### merge_commit_unregister_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 取消注册的 stream load pipe 数量。
+
+延迟指标会输出百分位序列，例如 `merge_commit_request_latency_99` 和 `merge_commit_request_latency_90`，单位为微秒。端到端延迟遵循以下公式：
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **注意**：在 v3.4.11、v3.5.12 和 v4.0.4 之前，这些延迟指标的单位为纳秒。
+
+#### merge_commit_request
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 请求的端到端处理延迟。
+
+#### merge_commit_pending
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 任务在执行前等待的时间。
+
+#### merge_commit_wait_plan
+
+- 单位：微秒
+- 类型：Summary
+- 描述：RPC 请求与等待 stream load pipe 可用的合计耗时。
+
+#### merge_commit_append_pipe
+
+- 单位：微秒
+- 类型：Summary
+- 描述：向 stream load pipe 追加数据的耗时。
+
+#### merge_commit_wait_finish
+
+- 单位：微秒
+- 类型：Summary
+- 描述：等待 merge commit 导入完成的耗时。
+
+### Iceberg 查询 FE 指标
+
+#### iceberg_time_travel_query_total
+
+- 单位：个
+- 类型：累积值
+- 标签：分类序列包含 `time_travel_type`，取值为 `branch`、`tag`、`snapshot` 或 `timestamp`。
+- 描述：Iceberg time travel 查询总数。无标签序列对每条 time travel 查询只计一次；带标签序列按查询中使用到的 time travel 类型分别计数。`snapshot` 表示 `FOR VERSION AS OF <snapshot_id>`，`branch` 和 `tag` 表示 `FOR VERSION AS OF <reference_name>`，`timestamp` 表示 `FOR TIMESTAMP AS OF ...`。
+
+#### iceberg_metadata_table_query_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`metadata_table`（`refs`、`history`、`metadata_log_entries`、`snapshots`、`manifests`、`files`、`partitions` 或 `properties`）
+- 描述：访问 Iceberg metadata table 的 SQL 查询总数。每次查询都会按照实际访问的 metadata table 类型记录到对应的 `metadata_table` 标签下。
+
+### Iceberg 删除 FE 指标
+
+#### iceberg_delete_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `delete_type`（`position` 或 `metadata`）
+- 描述：目标表为 Iceberg 的 `DELETE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`delete_type` 区分两种删除方式：`position`（生成 position delete 文件）和 `metadata`（元数据级删除）。
+
+#### iceberg_delete_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`delete_type` 区分两种删除方式。
+
+#### iceberg_delete_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，表示被删除的数据文件大小；对于 `position` 删除，表示创建的 position delete 文件大小。
+
+#### iceberg_delete_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，表示被删除数据文件中的行数；对于 `position` 删除，表示创建的 position delete 记录数。
+
+#### iceberg_compaction_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction（`rewrite_data_files`）任务的总数。
+
+#### iceberg_compaction_duration_ms_total
+
+- 单位：Millisecond
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：运行　Iceberg Compaction　任务的总耗时。
+
+#### iceberg_compaction_input_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 读取的数据文件总数。
+
+#### iceberg_compaction_output_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 生成的数据文件总数。
+
+#### iceberg_compaction_removed_delete_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 任务移除的　Delete 文件总数。
+
+### Iceberg 写入 FE 指标
+
+#### iceberg_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：目标表为 Iceberg 的 `INSERT`、`INSERT OVERWRITE` 或 `CTAS` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分三种操作类型。
+
+#### iceberg_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分三种操作类型。
+
+#### iceberg_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总字节数。表示写入到 Iceberg 表的数据文件总大小。`write_type` 区分三种操作类型。
+
+#### iceberg_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总行数。表示写入到 Iceberg 表的行数。`write_type` 区分三种操作类型。
+
+#### iceberg_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。
+
+### Hive 写入 FE 指标
+
+#### hive_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert` 或 `overwrite`）
+- 描述：目标表为 Hive 的 `INSERT` 或 `INSERT OVERWRITE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分两种操作类型。
+
+#### hive_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分两种操作类型。
+
+#### hive_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的写入总字节数。表示写入到 Hive 表的数据文件总大小。`write_type` 区分两种操作类型。
+
+#### hive_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的写入总行数。表示写入到 Hive 表的行数。`write_type` 区分两种操作类型。
+
+#### hive_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）写入的数据文件总数。表示写入到 Hive 表的数据文件个数。`write_type` 区分两种操作类型。
+
+### DataCache 指标
+
+DataCache 指标提供了数据缓存的缓存容量、使用率和命中率的可见性。
+
+以下指标在 BE Prometheus 端点 (`/metrics`) 上暴露：
+
+#### datacache_mem_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的内存配额。
+
+#### datacache_mem_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前内存使用量。
+
+#### datacache_disk_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的磁盘配额。
+
+#### datacache_disk_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前磁盘使用量。
+
+#### datacache_meta_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 元数据的内存使用量。
+
+#### block_cache_hit_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计命中的字节数。目前仅统计外表的缓存命中情况。
+
+#### block_cache_miss_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计未命中的字节数。目前仅统计外表的缓存未命中情况。

@@ -603,3 +603,7 @@ select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_opti
 -- result:
 ["abc","bca"]
 -- !result
+with cte as (select st, IF(st = 'GS', null, lower(st)) r FROM s3, unnest(s3.a2) as T(st) order by a1) select * from cte order by st limit 1;
+-- result:
+AH	ah
+-- !result

@@ -19,10 +19,10 @@
 #include <string_view>
 #include <variant>
 
+#include "base/container/lru_cache.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
-class Cache;
 class CacheKey;
 class Rowset;
 
@@ -30,7 +30,7 @@ class MetadataCache {
 public:
     explicit MetadataCache(size_t capacity);
 
-    ~MetadataCache() {}
+    ~MetadataCache() = default;
 
     DISALLOW_COPY_AND_MOVE(MetadataCache);
 

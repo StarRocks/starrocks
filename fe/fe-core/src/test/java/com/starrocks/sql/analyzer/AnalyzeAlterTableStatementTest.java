@@ -19,14 +19,21 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CompactionClause;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -74,7 +81,9 @@ public class AnalyzeAlterTableStatementTest {
     public void testNoClause() {
         assertThrows(SemanticException.class, () -> {
             List<AlterClause> ops = Lists.newArrayList();
-            AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+            AlterTableStmt alterTableStmt = new AlterTableStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                            null, NodePosition.ZERO), ops);
             AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
         });
     }
@@ -92,7 +101,9 @@ public class AnalyzeAlterTableStatementTest {
             List<AlterClause> ops = Lists.newArrayList();
             NodePosition pos = new NodePosition(1, 23, 1, 48);
             ops.add(new CompactionClause(true, pos));
-            AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+            AlterTableStmt alterTableStmt = new AlterTableStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                            null, NodePosition.ZERO), ops);
             AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
         });
     }
@@ -126,6 +137,18 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test
+    public void testAlterTableSetTableQueryTimeoutAnalyze() {
+        // Cover AlterTableClauseAnalyzer's table_query_timeout branch (AlterTableClauseAnalyzer.java:465-472).
+        analyzeSuccess("alter table test.t0 set (\"table_query_timeout\" = \"120\")");
+        // -1 is accepted and means reset to default behavior.
+        analyzeSuccess("alter table test.t0 set (\"table_query_timeout\" = \"-1\")");
+
+        // Invalid value should be rejected by analyzer (it catches AnalysisException and reports SemanticException).
+        analyzeFail("alter table test.t0 set (\"table_query_timeout\" = \"0\")");
+        analyzeFail("alter table test.t0 set (\"table_query_timeout\" = \"abc\")");
+    }
+
+    @Test
     public void testDropIndex() {
         String sql = "DROP INDEX index1 ON test.t0";
         analyzeSuccess(sql);
@@ -139,6 +162,9 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\");");
         analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"10 days\");");
         analyzeFail("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"abcd\");", "Cannot parse text to Duration");
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"true\");");
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"false\");");
+        analyzeFail("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"abcd\");", "must be bool type(false/true)");
         analyzeFail("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\", \"dynamic_partition.enable\" = \"true\");",
                 "Can only set one table property at a time");
         analyzeFail("ALTER TABLE test.t0 SET (\"abc\" = \"2\");",
@@ -196,6 +222,49 @@ public class AnalyzeAlterTableStatementTest {
     public void testAlterWithTimeType() {
         analyzeFail("alter table t0 add column testcol TIME");
         analyzeFail("alter table t0 modify column v0 TIME");
+    }
+
+    @Test
+    public void testAlterAddVarbinaryWithoutLengthMaterializesDefaultLength() {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table t0 add column testcol varbinary");
+        Assertions.assertEquals(1, alterTableStmt.getAlterClauseList().size());
+        Assertions.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof AddColumnClause);
+
+        AddColumnClause clause = (AddColumnClause) alterTableStmt.getAlterClauseList().get(0);
+        ScalarType type = (ScalarType) clause.getColumnDef().getType();
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
+    }
+
+    @Test
+    public void testAddBitmapColumnWithoutDefault() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.pk_bitmap_base (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  k2 DATETIME NOT NULL,\n" +
+                "  v1 BIGINT\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\"\n" +
+                ");");
+
+        try {
+            AlterTableStmt alter = (AlterTableStmt) AnalyzeTestUtil.analyzeSuccess(
+                    "ALTER TABLE test.pk_bitmap_base ADD COLUMN (v_bitmap BITMAP NOT NULL, v_bitmap_nullable BITMAP)");
+            Assertions.assertEquals(1, alter.getAlterClauseList().size());
+            AlterClause clause = alter.getAlterClauseList().get(0);
+            Assertions.assertTrue(clause instanceof AddColumnsClause);
+            AddColumnsClause addColumnsClause = (AddColumnsClause) clause;
+            Assertions.assertEquals(2, addColumnsClause.getColumnDefs().size());
+
+            ColumnDef nonNullColumn = addColumnsClause.getColumnDefs().get(0);
+            Assertions.assertFalse(nonNullColumn.isAllowNull());
+            Assertions.assertNotNull(nonNullColumn.getDefaultValueDef());
+            Assertions.assertNotNull(addColumnsClause.getColumnDefs().get(1).getDefaultValueDef());
+        } finally {
+            AnalyzeTestUtil.getStarRocksAssert().dropTable("test.pk_bitmap_base");
+        }
     }
 
     @Test

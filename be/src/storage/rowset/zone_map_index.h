@@ -39,13 +39,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "util/once.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

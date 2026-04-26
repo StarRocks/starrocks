@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 
 namespace Aws::S3 {
 class S3Client;

@@ -1,0 +1,350 @@
+-- name: test_low_cardinality_array_agg
+CREATE TABLE `t` (
+  `id` int(11) NOT NULL COMMENT "",
+  `grp` int(11) NOT NULL COMMENT "",
+  `str1` varchar(65533) NOT NULL COMMENT "",
+  `str2` varchar(65533) NULL COMMENT "",
+  `val` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t VALUES
+    (1,  1, 'apple',  'X', 10),
+    (2,  1, 'banana', 'Y', 20),
+    (3,  1, 'apple',  'Z', 15),
+    (4,  1, 'cherry', 'X', 25),
+    (5,  2, 'banana', 'Y', 30),
+    (6,  2, 'cherry', 'Z', 35),
+    (7,  2, 'apple',  'X', 40),
+    (8,  2, 'date',   'Y', 45),
+    (9,  3, 'cherry', 'Z', 50),
+    (10, 3, 'cherry', 'X', 55),
+    (11, 3, 'date',   NULL, 60),
+    (12, 3, 'banana', 'Y', 65);
+-- result:
+-- !result
+[UC] analyze full table t;
+-- result:
+test_db_66e489ab3c1b4d32bb75d4cb9cb7d0ce.t	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('str1', 't')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('str2', 't')
+-- result:
+
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_sort(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT grp, array_sort(array_agg(distinct str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","date"]
+-- !result
+SELECT grp, array_agg(distinct str1 ORDER BY str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","date"]
+-- !result
+SELECT grp, array_agg(distinct str1 ORDER BY str1, str2) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_sort(array_agg(str1 ORDER BY str2)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_agg(str1 ORDER BY str2)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str1, str2) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str1, str2) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val, id) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val, id) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry","banana","apple"]
+2	["apple","banana","date","cherry"]
+3	["date","cherry","banana","cherry"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry","banana","apple"]
+2	["apple","banana","date","cherry"]
+3	["date","cherry","banana","cherry"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val, str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val, str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str2, val, str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry","banana","apple"]
+2	["apple","banana","date","cherry"]
+3	["date","cherry","banana","cherry"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str2, val, str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry","banana","apple"]
+2	["apple","banana","date","cherry"]
+3	["date","cherry","banana","cherry"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str1 DESC, val ASC) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["cherry","banana","apple","apple"]
+2	["date","cherry","banana","apple"]
+3	["date","cherry","cherry","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str1 DESC, val ASC) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["cherry","banana","apple","apple"]
+2	["date","cherry","banana","apple"]
+3	["date","cherry","cherry","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(val ORDER BY str1, val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	[10,15,20,25]
+2	[40,30,35,45]
+3	[65,50,55,60]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(val ORDER BY str1, val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	[10,15,20,25]
+2	[40,30,35,45]
+3	[65,50,55,60]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_sort(array_agg(val)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	[10,15,20,25]
+2	[30,35,40,45]
+3	[50,55,60,65]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_agg(val)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	[10,15,20,25]
+2	[30,35,40,45]
+3	[50,55,60,65]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	4
+2	4
+3	4
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	4
+2	4
+3	4
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, upper(array_sort(array_agg(str1))[1]) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	APPLE
+2	APPLE
+3	BANANA
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, upper(array_sort(array_agg(str1))[1]) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	APPLE
+2	APPLE
+3	BANANA
+-- !result
+SELECT grp, upper(array_sort(array_agg(distinct str1))[1]) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	APPLE
+2	APPLE
+3	BANANA
+-- !result
+SELECT grp, array_sort(array_distinct(array_agg(str1))) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","date"]
+-- !result
+SELECT grp, array_sort(array_distinct(array_agg(str1))), array_sort(array_distinct(array_agg(str2))) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]	["X","Y","Z"]
+2	["apple","banana","cherry","date"]	["X","Y","Z"]
+3	["banana","cherry","date"]	[null,"X","Y","Z"]
+-- !result
+SELECT grp, array_sort(array_agg(str1)) FROM t WHERE str2 = 'X' GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry"]
+2	["apple"]
+3	["cherry"]
+-- !result
+SELECT grp, array_sort(array_agg(str1)) FROM t WHERE str1 IN ('apple', 'banana') GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana"]
+2	["apple","banana"]
+3	["banana"]
+-- !result
+SELECT grp, array_sort(array_distinct(array_agg(str1))) as names FROM t GROUP BY grp HAVING array_length(array_agg(str1)) > 100 ORDER BY grp;
+-- result:
+-- !result
+SELECT grp, array_sort(array_agg(distinct str1)) FROM t WHERE str2 = 'X' GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry"]
+2	["apple"]
+3	["cherry"]
+-- !result
+SELECT grp, names FROM (
+    SELECT grp, array_sort(array_distinct(array_agg(str1))) as names FROM t GROUP BY grp
+) sub WHERE array_length(names) > 2 ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","date"]
+-- !result
+SELECT grp, first_val FROM (
+    SELECT grp, array_sort(array_agg(str1 ORDER BY str1))[1] as first_val FROM t GROUP BY grp
+) sub ORDER BY grp;
+-- result:
+1	apple
+2	apple
+3	banana
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_distinct(array_agg(str1))), array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]	4
+2	["apple","banana","cherry","date"]	4
+3	["banana","cherry","date"]	4
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2, cbo_enable_low_cardinality_optimize=false)*/ grp, array_sort(array_distinct(array_agg(str1))), array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]	4
+2	["apple","banana","cherry","date"]	4
+3	["banana","cherry","date"]	4
+-- !result
+SELECT grp, array_sort(array_agg(distinct str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/ grp, array_sort(array_agg(distinct str1)) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","banana","cherry"]
+2	["apple","banana","cherry","date"]
+3	["banana","cherry","date"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1, cbo_enable_low_cardinality_optimize=false)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2, cbo_enable_low_cardinality_optimize=false)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","apple","banana","cherry"]
+2	["banana","cherry","apple","date"]
+3	["cherry","cherry","date","banana"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry","banana","apple"]
+2	["apple","banana","date","cherry"]
+3	["date","cherry","banana","cherry"]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2, cbo_enable_low_cardinality_optimize=false)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["apple","cherry","banana","apple"]
+2	["apple","banana","date","cherry"]
+3	["date","cherry","banana","cherry"]
+-- !result
+drop table t;
+-- result:
+-- !result

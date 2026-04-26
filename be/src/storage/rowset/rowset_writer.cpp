@@ -41,13 +41,18 @@
 #include <ctime>
 #include <memory>
 
+#include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
-#include "io/io_error.h"
+#include "io/core/io_error.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
@@ -65,7 +70,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/type_utils.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 
@@ -130,7 +134,7 @@ Status RowsetWriter::init() {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_context.rowset_path_prefix));
 
     if (_context.is_pk_compaction) {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
@@ -256,8 +260,8 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
 
     auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
-    RETURN_IF_ERROR(
-            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
+    RETURN_IF_ERROR(RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta,
+                                                 &rowset, nullptr));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }
@@ -306,7 +310,10 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     // 3. update statistic
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_pb.data_size();
+        // segment_pb.data_size() is full segment file bytes (column data + embedded index pages).
+        // Subtract embedded index so _total_data_size holds only column data bytes;
+        // invariant: data_disk_size + index_disk_size == total_disk_size == segment file size.
+        _total_data_size += segment_pb.data_size() - segment_pb.index_size();
         _total_index_size += segment_pb.index_size();
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
@@ -689,9 +696,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
-        if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
-            return Status::InternalError("deletes column serialize failed");
-        }
+        RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
         if (config::sync_tablet_meta) {
             RETURN_IF_ERROR(wfile->sync());
@@ -754,10 +759,8 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
     }
 }
 
-Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
-    RETURN_IF_ERROR(rowset->link_files_to(tablet == nullptr ? nullptr : tablet->data_dir()->get_meta(),
-                                          _context.rowset_path_prefix, _context.rowset_id));
+Status HorizontalRowsetWriter::add_rowset(const RowsetSharedPtr& rowset) {
+    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
@@ -769,7 +772,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     auto& meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (meta_pb.segment_encryption_metas_size() == 0) {
         for (int i = 0; i < rowset->num_segments(); ++i) {
-            _segment_encryption_metas.emplace_back(string());
+            _segment_encryption_metas.emplace_back();
         }
     } else {
         DCHECK_EQ(meta_pb.segment_encryption_metas_size(), rowset->num_segments());
@@ -789,7 +792,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     return Status::OK();
 }
 
-Status HorizontalRowsetWriter::add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
+Status HorizontalRowsetWriter::add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
                                                                    const SchemaMapping& schema_mapping) {
     // TODO use schema_mapping to transfer zonemap
     return add_rowset(rowset);
@@ -1173,22 +1176,14 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     }
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += static_cast<int64_t>(segment_size);
+        // segment_size is full segment file bytes; subtract index_size so
+        // _total_data_size holds only column data bytes.
+        _total_data_size += static_cast<int64_t>(segment_size) - static_cast<int64_t>(index_size);
         _total_index_size += static_cast<int64_t>(index_size);
     }
 
     // check global_dict efficacy
-    const auto& seg_global_dict_columns_valid_info = (*segment_writer)->global_dict_columns_valid_info();
-    for (const auto& it : seg_global_dict_columns_valid_info) {
-        if (!it.second) {
-            _global_dict_columns_valid_info[it.first] = false;
-        } else {
-            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                iter == _global_dict_columns_valid_info.end()) {
-                _global_dict_columns_valid_info[it.first] = true;
-            }
-        }
-    }
+    _check_global_dict((*segment_writer).get());
 
     if (seg_info) {
         seg_info->set_data_size(segment_size);
@@ -1216,6 +1211,20 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
 
     (*segment_writer).reset();
     return Status::OK();
+}
+
+void RowsetWriter::_check_global_dict(SegmentWriter* segment_writer) {
+    const auto& seg_global_dict_columns_valid_info = segment_writer->global_dict_columns_valid_info();
+    for (const auto& it : seg_global_dict_columns_valid_info) {
+        if (!it.second) {
+            _global_dict_columns_valid_info[it.first] = false;
+        } else {
+            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
+                iter == _global_dict_columns_valid_info.end()) {
+                _global_dict_columns_valid_info[it.first] = true;
+            }
+        }
+    }
 }
 
 VerticalRowsetWriter::VerticalRowsetWriter(const RowsetWriterContext& context) : RowsetWriter(context) {}
@@ -1344,6 +1353,7 @@ Status VerticalRowsetWriter::flush_columns() {
 }
 
 Status VerticalRowsetWriter::final_flush() {
+    int64_t total_segment_file_bytes = 0;
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -1356,25 +1366,18 @@ Status VerticalRowsetWriter::final_flush() {
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);
         }
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += static_cast<int64_t>(segment_size);
-        }
+        total_segment_file_bytes += static_cast<int64_t>(segment_size);
 
         // check global_dict efficacy
-        const auto& seg_global_dict_columns_valid_info = segment_writer->global_dict_columns_valid_info();
-        for (const auto& it : seg_global_dict_columns_valid_info) {
-            if (!it.second) {
-                _global_dict_columns_valid_info[it.first] = false;
-            } else {
-                if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                    iter == _global_dict_columns_valid_info.end()) {
-                    _global_dict_columns_valid_info[it.first] = true;
-                }
-            }
-        }
+        _check_global_dict(segment_writer.get());
 
         segment_writer.reset();
+    }
+    {
+        // _total_index_size was accumulated in _flush_columns() via finalize_columns().
+        // Match horizontal RowsetWriter::flush: data_disk_size is column bytes only (segment file minus embedded index).
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += total_segment_file_bytes - _total_index_size;
     }
     return Status::OK();
 }

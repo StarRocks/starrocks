@@ -1,0 +1,50 @@
+-- name: test_spill_mcast_hang
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode='force';
+-- result:
+-- !result
+set spillable_operator_mask = 32;
+-- result:
+-- !result
+set cbo_cte_reuse = true;
+-- result:
+-- !result
+set cbo_cte_reuse_rate = 0;
+-- result:
+-- !result
+CREATE TABLE t_hang (
+    k1 INT,
+    v1 INT
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_hang select generate_series, generate_series from TABLE(generate_series(1, 1000000));
+-- result:
+-- !result
+with cte as (
+    select * from t_hang
+)
+select count(*) from (select * from cte limit 1) t1
+union all
+select count(*) from (select * from cte limit 1) t2;
+-- result:
+1
+1
+-- !result
+with cte as (
+    select * from t_hang limit 200000
+)
+select max(cnt) from (select k1, count(*) as cnt from cte group by k1 order by k1 limit 10) r1
+union all
+select max(cnt) from (select v1, count(*) as cnt from cte group by v1 order by v1 limit 10) r2;
+-- result:
+1
+1
+-- !result
+drop table t_hang;
+-- result:
+-- !result

@@ -38,25 +38,25 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <boost/algorithm/string/join.hpp>
 #include <string>
 
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/thread/thread.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
+#include "gutil/strings/join.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
 static const uint32_t MAX_SHARD_NUM = 1024;
 static const std::string SHARD_PREFIX = "__shard_";
 
-LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env), _idx(0), _next_shard(0) {}
+LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env) {}
 LoadPathMgr::~LoadPathMgr() {
     _stop.set_value(true);
     pthread_join(_cleaner_id, nullptr);
@@ -66,7 +66,7 @@ Status LoadPathMgr::init() {
     for (auto& path : _exec_env->store_paths()) {
         _path_vec.push_back(path.path + MINI_PREFIX);
     }
-    LOG(INFO) << "Load path configured to [" << boost::join(_path_vec, ",") << "]";
+    LOG(INFO) << "Load path configured to [" << JoinStrings(_path_vec, ",") << "]";
 
     // error log is saved in first root path
     _error_log_dir = _exec_env->store_paths()[0].path + ERROR_LOG_PREFIX;

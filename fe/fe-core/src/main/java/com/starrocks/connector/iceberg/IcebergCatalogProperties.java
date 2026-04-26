@@ -33,6 +33,7 @@ public class IcebergCatalogProperties {
     public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     public static final String ENABLE_ICEBERG_METADATA_CACHE = "enable_iceberg_metadata_cache";
+    public static final String ENABLE_ICEBERG_TABLE_CACHE = "enable_iceberg_table_cache";
     public static final String ICEBERG_META_CACHE_TTL = "iceberg_meta_cache_ttl_sec"; // implicit for user
     public static final String ICEBERG_TABLE_CACHE_REFRESH_INVERVAL_SEC = "iceberg_table_cache_refresh_interval_sec";
     public static final String ICEBERG_JOB_PLANNING_THREAD_NUM = "iceberg_job_planning_thread_num";
@@ -42,9 +43,9 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_MANIFEST_CACHE_MAX_NUM = "iceberg_manifest_cache_max_num";
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
+    public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
 
     // internal config
-    public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
     public static final String ICEBERG_LOCAL_PLANNING_MAX_SLOT_BYTES = "iceberg_local_planning_max_slot_bytes";
     public static final String ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE =
@@ -66,6 +67,7 @@ public class IcebergCatalogProperties {
     private boolean enableCacheDataFileIdentifierColumnStatistics;
     private double icebergDataFileCacheMemoryUsageRatio;
     private double icebergDeleteFileCacheMemoryUsageRatio;
+    private double icebergTableCacheMemoryUsageRatio;
     private long icebergTableCacheRefreshIntervalSec;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
@@ -104,8 +106,10 @@ public class IcebergCatalogProperties {
                     properties, ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergDeleteFileCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
                     properties, ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
+        this.icebergTableCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
+                    properties, ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
-                properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, false);
+                properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
                 2 * 1024 * 1024);
         this.enableCacheDataFileIdentifierColumnStatistics = PropertyUtil.propertyAsBoolean(properties,
@@ -137,6 +141,10 @@ public class IcebergCatalogProperties {
         return enableIcebergMetadataCache;
     }
 
+    public boolean enableIcebergTableCache() {
+        return icebergTableCacheMemoryUsageRatio > 0;
+    }
+
     public long getIcebergMetaCacheTtlSec() {
         return icebergMetaCacheTtlSec;
     }
@@ -144,7 +152,6 @@ public class IcebergCatalogProperties {
     public long getIcebergTableCacheRefreshIntervalSec() {
         return icebergTableCacheRefreshIntervalSec;
     }
-
 
     public int getIcebergJobPlanningThreadNum() {
         return icebergJobPlanningThreadNum;
@@ -166,12 +173,20 @@ public class IcebergCatalogProperties {
         return enableIcebergMetadataCache;
     }
 
+    public boolean isEnableIcebergTableCache() {
+        return icebergTableCacheMemoryUsageRatio > 0;
+    }
+
     public double getIcebergDataFileCacheMemoryUsageRatio() {
         return icebergDataFileCacheMemoryUsageRatio;
     }
 
     public double getIcebergDeleteFileCacheMemoryUsageRatio() {
         return icebergDeleteFileCacheMemoryUsageRatio;
+    }
+
+    public double getIcebergTableCacheMemoryUsageRatio() {
+        return icebergTableCacheMemoryUsageRatio;
     }
 
     public long getRefreshIcebergManifestMinLength() {

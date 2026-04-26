@@ -16,8 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "column/schema.h"
-#include "common/config.h"
 #include "fs/fs.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"
@@ -26,9 +28,6 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
@@ -121,8 +120,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -161,8 +160,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -205,8 +204,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -265,8 +264,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -275,6 +274,14 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     writer->close();
     // publish again should be successful, persistent index will be reloaded.
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+}
+
+TEST_F(LocalPkIndexManagerTest, test_stop_is_idempotent) {
+    LocalPkIndexManager mgr;
+    ASSERT_OK(mgr.init());
+    mgr.stop();
+    // stop() should be safe to call multiple times for derived class as well.
+    mgr.stop();
 }
 
 TEST_F(LocalPkIndexManagerTest, test_evict) {
@@ -308,8 +315,8 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -350,8 +357,8 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -392,8 +399,8 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -441,8 +448,8 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     txn_id = next_id();
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -483,8 +490,8 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction_with_unload) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());

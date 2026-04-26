@@ -14,15 +14,16 @@
 
 package com.starrocks.connector.iceberg.cost;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
@@ -70,6 +71,11 @@ public class IcebergStatisticProvider {
     public IcebergStatisticProvider() {
     }
 
+    @VisibleForTesting
+    void putIcebergFileStats(PredicateSearchKey key, IcebergFileStats fileStats) {
+        icebergFileStatistics.put(key, fileStats);
+    }
+
     public Statistics getCardinalityStats(
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap, List<FileScanTask> fileScanTasks) {
         Statistics.Builder statisticsBuilder = Statistics.builder();
@@ -94,11 +100,11 @@ public class IcebergStatisticProvider {
     public Statistics getTableStatistics(IcebergTable icebergTable,
                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                          OptimizerContext session,
-                                         ScalarOperator predicate,
-                                         TvrVersionRange version) {
+                                         GetRemoteFilesParams params) {
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
         String uuid = icebergTable.getUUID();
+        TvrVersionRange version = params.getTableVersionRange();
         if (version.end().isPresent()) {
             Set<Integer> primitiveColumnsFieldIds = nativeTable.schema().columns().stream()
                     .filter(column -> column.type().isPrimitiveType())
@@ -121,7 +127,7 @@ public class IcebergStatisticProvider {
             }
 
             PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
-                    icebergTable.getCatalogTableName(), version, predicate);
+                    icebergTable.getCatalogTableName(), params);
             IcebergFileStats icebergFileStats;
             if (!icebergFileStatistics.containsKey(key)) {
                 icebergFileStats = new IcebergFileStats(1);
@@ -214,7 +220,7 @@ public class IcebergStatisticProvider {
             updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
                     dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
             icebergFileStats.updateNullCount(dataFile.nullValueCounts());
-            updateColumnSizes(icebergFileStats, dataFile.columnSizes());
+            updateColumnSizes(icebergFileStats, dataFile.columnSizes(), dataFile.recordCount());
         }
     }
 
@@ -285,7 +291,18 @@ public class IcebergStatisticProvider {
             builder.setNullsFraction(0);
         }
 
-        builder.setAverageRowSize(1);
+        Map<Integer, Long> columnSizes = icebergStats.getColumnSizes();
+        long columnSizeRecordCount = icebergStats.getColumnSizeRecordCount(fieldId);
+        if (columnSizes != null && columnSizes.containsKey(fieldId) && columnSizeRecordCount > 0) {
+            // columnSizes from Iceberg is compressed (physical) size, so use typeSize as lower bound
+            // Use per-field columnSizeRecordCount to get accurate average when
+            // some files lack column size metrics for specific fields
+            double physicalSize = (double) columnSizes.get(fieldId) / columnSizeRecordCount;
+            double logicalSize = column.getType().getTypeSize();
+            builder.setAverageRowSize(Math.max(physicalSize, logicalSize));
+        } else {
+            builder.setAverageRowSize(column.getType().getTypeSize());
+        }
 
         Long ndv = colIdToNdv.get(fieldId);
         if (ndv != null) {
@@ -299,18 +316,24 @@ public class IcebergStatisticProvider {
         return builder.build();
     }
 
-    public void updateColumnSizes(IcebergFileStats icebergFileStats, Map<Integer, Long> addedColumnSizes) {
+    public void updateColumnSizes(IcebergFileStats icebergFileStats, Map<Integer, Long> addedColumnSizes,
+                                  long recordCount) {
         Map<Integer, Long> columnSizes = icebergFileStats.getColumnSizes();
         if (!icebergFileStats.hasValidColumnMetrics() || columnSizes == null || addedColumnSizes == null) {
             return;
         }
+        Set<Integer> updatedFieldIds = new HashSet<>();
         for (Types.NestedField column : icebergFileStats.getNonPartitionPrimitiveColumns()) {
             int id = column.fieldId();
 
             Long addedSize = addedColumnSizes.get(id);
             if (addedSize != null) {
                 columnSizes.put(id, addedSize + columnSizes.getOrDefault(id, 0L));
+                updatedFieldIds.add(id);
             }
+        }
+        if (!updatedFieldIds.isEmpty()) {
+            icebergFileStats.incrementColumnSizeRecordCounts(updatedFieldIds, recordCount);
         }
     }
 

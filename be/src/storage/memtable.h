@@ -17,12 +17,13 @@
 #include <atomic>
 #include <ostream>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoding_types.h"
 
 namespace starrocks {
 
@@ -84,6 +85,8 @@ public:
 
     ~MemTable();
 
+    Status prepare(PrimaryKeyEncodingType pk_encoding_type);
+
     int64_t tablet_id() const { return _tablet_id; }
 
     // the total memory used (contain tmp chunk and aggregator chunk)
@@ -97,7 +100,8 @@ public:
     // return true suggests caller should flush this memory table
     StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    Status flush(SegmentPB* seg_info = nullptr, bool eos = false, int64_t* flush_data_size = nullptr);
+    Status flush(SegmentPB* seg_info = nullptr, bool eos = false, int64_t* flush_data_size = nullptr,
+                 int64_t slot_idx = -1);
 
     Status finalize();
 
@@ -121,7 +125,6 @@ private:
     Status _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes);
@@ -152,7 +155,8 @@ private:
 
     std::string _merge_condition;
 
-    int64_t _max_buffer_size = config::write_buffer_size;
+    // Keep this fallback value in sync with config::write_buffer_size default.
+    int64_t _max_buffer_size = 104857600;
     // initial value is max size
     size_t _max_buffer_row = std::numeric_limits<size_t>::max();
     size_t _total_rows = 0;
@@ -168,6 +172,7 @@ private:
     size_t _aggregator_bytes_usage = 0;
 
     MemtableStats _stats;
+    PrimaryKeyEncodingType _pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

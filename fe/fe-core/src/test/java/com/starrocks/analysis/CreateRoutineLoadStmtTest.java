@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
@@ -52,14 +53,15 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -198,7 +200,10 @@ public class CreateRoutineLoadStmtTest {
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
             ImportWhereStmt whereStmt = createRoutineLoadStmt.getRoutineLoadDesc().getWherePredicate();
-            Assertions.assertEquals(false, whereStmt.isContainSubquery());
+
+            ArrayList<Expr> matched = new ArrayList<>();
+            whereStmt.getExpr().collect(Subquery.class, matched);
+            Assertions.assertEquals(0, matched.size());
         }
         
 
@@ -395,9 +400,6 @@ public class CreateRoutineLoadStmtTest {
         String topicName = "topic1";
         String serverAddress = "http://127.0.0.1:8080";
         String kafkaPartitionString = "1,2,3";
-        List<String> partitionNameString = Lists.newArrayList();
-        partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
         // duplicate load property
@@ -436,7 +438,7 @@ public class CreateRoutineLoadStmtTest {
         String timeZone = "8:00";
         List<String> partitionNameString = Lists.newArrayList();
         partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
+        PartitionRef partitionNames = new PartitionRef(partitionNameString, false, NodePosition.ZERO);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
         // duplicate load property
@@ -532,6 +534,52 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testAnalyzeEnvelopeConfig() throws Exception {
+        String brokerProps = "\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:9092\",\"kafka_topic\" = \"topic_0\"";
+
+        String validSql = "CREATE ROUTINE LOAD db0.routine_load_envelope ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"debezium\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt validStmt = (CreateRoutineLoadStmt) SqlParser.parse(validSql, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(validStmt, connectContext);
+        Assertions.assertEquals(CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM, validStmt.getEnvelope());
+
+        String invalidEnvelopeSql = "CREATE ROUTINE LOAD db0.routine_load_envelope_invalid ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"custom\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt invalidEnvelopeStmt = (CreateRoutineLoadStmt) SqlParser.parse(invalidEnvelopeSql, 32).get(0);
+        SemanticException invalidEnvelopeException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(invalidEnvelopeStmt, connectContext));
+        Assertions.assertTrue(invalidEnvelopeException.getMessage().contains("Unknown envelope type: custom"));
+
+        String nonJsonSql = "CREATE ROUTINE LOAD db0.routine_load_envelope_csv ON t1 "
+                + "PROPERTIES(\"format\" = \"csv\", \"envelope\" = \"debezium\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt nonJsonStmt = (CreateRoutineLoadStmt) SqlParser.parse(nonJsonSql, 32).get(0);
+        SemanticException nonJsonException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(nonJsonStmt, connectContext));
+        Assertions.assertTrue(nonJsonException.getMessage().contains("envelope can only be specified when format is json"));
+
+        String jsonRootSql = "CREATE ROUTINE LOAD db0.routine_load_envelope_root ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"debezium\", \"json_root\" = \"$.records\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt jsonRootStmt = (CreateRoutineLoadStmt) SqlParser.parse(jsonRootSql, 32).get(0);
+        SemanticException jsonRootException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(jsonRootStmt, connectContext));
+        Assertions.assertTrue(jsonRootException.getMessage().contains("json_root cannot be specified when envelope is set"));
+
+        String stripOuterArraySql = "CREATE ROUTINE LOAD db0.routine_load_envelope_array ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"debezium\", \"strip_outer_array\" = \"true\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt stripOuterArrayStmt =
+                (CreateRoutineLoadStmt) SqlParser.parse(stripOuterArraySql, 32).get(0);
+        SemanticException stripOuterArrayException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(stripOuterArrayStmt, connectContext));
+        Assertions.assertTrue(stripOuterArrayException.getMessage()
+                .contains("strip_outer_array cannot be specified when envelope is set"));
+    }
+
+    @Test
     public void testKafkaOffset() {
         String jobName = "job1";
         String dbName = "db1";
@@ -541,7 +589,7 @@ public class CreateRoutineLoadStmtTest {
         // load property
         List<String> partitionNameString = Lists.newArrayList();
         partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
+        PartitionRef partitionNames = new PartitionRef(partitionNameString, false, NodePosition.ZERO);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
         List<ParseNode> loadPropertyList = new ArrayList<>();
         loadPropertyList.add(columnSeparator);

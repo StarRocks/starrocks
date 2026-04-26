@@ -14,8 +14,9 @@
 
 #include "formats/disk_range.hpp"
 
-#include <common/config.h>
 #include <gtest/gtest.h>
+
+#include "common/config_scan_io_fwd.h"
 
 namespace starrocks {
 

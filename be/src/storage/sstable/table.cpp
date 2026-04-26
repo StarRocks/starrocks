@@ -6,6 +6,9 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/coding.h"
+#include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
@@ -17,9 +20,6 @@
 #include "storage/sstable/format.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/two_level_iterator.h"
-#include "util/coding.h"
-#include "util/lru_cache.h"
-#include "util/trace.h"
 
 namespace starrocks::sstable {
 
@@ -86,6 +86,40 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     }
 
     return s;
+}
+
+Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+    // create index block iterator
+    std::unique_ptr<Iterator> iiter =
+            std::unique_ptr<Iterator>(rep_->index_block->NewIterator(rep_->options.comparator));
+    iiter->SeekToFirst();
+    // skip interval_step keys per sample
+    DCHECK(rep_->options.block_size > 0);
+    size_t interval_step = sample_interval_bytes / rep_->options.block_size + 1;
+    size_t index = 1; // First key is already included, so start with 1 to skip it.
+    // If the key is last key in index block, it's a short successor key.
+    // E.g.
+    //      index block may contains ["key_0001", "key_0005", "l"]
+    //      "l" is short successor key of "key_0009"
+    bool contain_short_successor_key = false;
+    while (iiter->Valid()) {
+        if (index % interval_step == 0) {
+            keys->emplace_back(iiter->key().to_string());
+            contain_short_successor_key = true;
+        } else {
+            contain_short_successor_key = false;
+        }
+        index++;
+        iiter->Next();
+    }
+    if (contain_short_successor_key) {
+        // remove last key to make sure it's less than or equal to end_key.
+        // That is because when build index block, last key of index block
+        // had been set to short successor key via `FindShortSuccessor`
+        keys->pop_back();
+    }
+    auto st = iiter->status();
+    return st;
 }
 
 void Table::ReadMeta(const Footer& footer) {

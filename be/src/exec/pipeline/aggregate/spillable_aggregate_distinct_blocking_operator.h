@@ -16,20 +16,20 @@
 
 #include <utility>
 
+#include "base/concurrency/race_detect.h"
 #include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/source_operator.h"
 #include "storage/chunk_helper.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 class SpillableAggregateDistinctBlockingSinkOperator : public AggregateDistinctBlockingSinkOperator {
 public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
-            : AggregateDistinctBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateDistinctBlockingSinkOperator(std::move(aggregator), std::forward<Args>(args)...,
                                                     "spillable_aggregate_distinct_blocking_sink") {}
     ~SpillableAggregateDistinctBlockingSinkOperator() override = default;
 
@@ -38,6 +38,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
     void close(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
@@ -106,7 +107,7 @@ public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSourceOperator(AggregatorPtr aggregator,
                                                      SortedStreamingAggregatorPtr stream_aggregator, Args&&... args)
-            : AggregateDistinctBlockingSourceOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateDistinctBlockingSourceOperator(std::move(aggregator), std::forward<Args>(args)...,
                                                       "spillable_aggregate_distinct_blocking_source"),
               _stream_aggregator(std::move(stream_aggregator)) {}
 

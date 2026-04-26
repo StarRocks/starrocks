@@ -18,13 +18,13 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 
+#include "base/brpc/reusable_closure.h"
+#include "base/concurrency/bthread_shared_mutex.h"
+#include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
+#include "common/system/backend_options.h"
 #include "runtime/tablets_channel.h"
-#include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
-#include "util/bthreads/bthread_shared_mutex.h"
-#include "util/countdown_latch.h"
-#include "util/reusable_closure.h"
 
 namespace brpc {
 class Controller;
@@ -33,11 +33,12 @@ class Controller;
 namespace starrocks {
 
 class MemTracker;
+class BrpcStubCache;
 
 class LocalTabletsChannel : public TabletsChannel {
 public:
     LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker,
-                        RuntimeProfile* parent_profile);
+                        RuntimeProfile* parent_profile, BrpcStubCache* brpc_stub_cache);
     ~LocalTabletsChannel() override;
 
     LocalTabletsChannel(const LocalTabletsChannel&) = delete;
@@ -57,9 +58,9 @@ public:
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
 
-    void cancel() override;
+    void cancel(const std::string& reason) override;
 
     void abort() override;
 
@@ -68,9 +69,9 @@ public:
     void update_profile() override;
 
     void get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
-                                 PLoadReplicaStatusResult* response);
+                                 PLoadReplicaStatusResult* response) const;
 
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    inline MemTracker* mem_tracker() const { return _mem_tracker; }
 
     const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& TEST_delta_writers() const {
         return _delta_writers;
@@ -173,11 +174,15 @@ private:
         std::shared_ptr<WriteContext> _context;
     };
 
+    DeltaWriterOptions _build_delta_writer_options(const PTabletWriterOpenRequest& params,
+                                                   const PTabletWithPartition& tablet, int32_t schema_hash,
+                                                   const std::vector<SlotDescriptor*>* index_slots);
+
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
-    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(Chunk* chunk,
+    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(const Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
-                                                                  PTabletWriterAddBatchResult* response);
+                                                                  PTabletWriterAddBatchResult* response) const;
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
@@ -188,12 +193,35 @@ private:
                                 const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
 
     void _flush_stale_memtables();
+    Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
-    void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
-    void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
-    void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    static void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    static void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    static void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+
+    inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
+        return _delta_writers_impl.mutable_delta_writers();
+    }
+
+private:
+    // A nested class to encapsulate the access to _delta_writers.
+    class DeltaWritersImpl {
+    private:
+        // tablet_id -> std::unique_ptr<AsyncDeltaWriter>
+        std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+
+    public:
+        inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
+            return &_delta_writers;
+        }
+
+        inline const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& delta_writers() {
+            return _delta_writers;
+        }
+    };
 
     LoadChannel* _load_channel;
+    BrpcStubCache* _brpc_stub_cache;
 
     TabletsChannelKey _key;
 
@@ -209,7 +237,7 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
 
     std::vector<Sender> _senders;
-    size_t _max_sliding_window_size = config::max_load_dop * 3;
+    size_t _max_sliding_window_size = 0;
 
     mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
@@ -217,8 +245,11 @@ private:
     // rw mutex to protect the following two maps
     mutable bthreads::BThreadSharedMutex _rw_mtx;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
-    // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+    // place holder of the real DeltaWriters definition
+    DeltaWritersImpl _delta_writers_impl;
+    // read-only access to the delta writer map
+    const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& _delta_writers =
+            _delta_writers_impl.delta_writers();
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
@@ -271,7 +302,7 @@ private:
 class SecondaryReplicasWaiter {
 public:
     SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms, int64_t eos_time_ms,
-                            std::vector<AsyncDeltaWriter*> delta_writers);
+                            std::vector<AsyncDeltaWriter*> delta_writers, BrpcStubCache* brpc_stub_cache);
     ~SecondaryReplicasWaiter();
     Status wait();
 
@@ -292,9 +323,11 @@ private:
     int64_t _replica_status_fail_num{0};
     ReusableClosure<PLoadReplicaStatusResult>* _replica_status_closure{nullptr};
     bool _diagnose_triggered{false};
+    BrpcStubCache* _brpc_stub_cache;
 };
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                               MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+                                                               MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                                               BrpcStubCache* brpc_stub_cache);
 
 } // namespace starrocks

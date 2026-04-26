@@ -67,16 +67,18 @@ public:
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
-    Status close(RuntimeState* state, Status exec_status) override;
+    Status close(RuntimeState* state, const Status& exec_status) override;
 
     RuntimeProfile* profile() override { return _profile; }
 
     std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
 
 private:
-    ObjectPool* _pool;
+    [[maybe_unused]] ObjectPool* _pool;
     const std::vector<TExpr>& _t_output_expr;
+#ifndef __APPLE__
     int _chunk_size;
+#endif
 
     std::vector<ExprContext*> _output_expr_ctxs;
 

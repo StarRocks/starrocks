@@ -17,10 +17,12 @@
 #include <chrono>
 #include <thread>
 
-#include "compaction_manager.h"
+#include "common/config_compaction_fwd.h"
+#include "common/thread/thread.h"
+#include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
+#include "util/global_metrics_registry.h"
 
 using namespace std::chrono_literals;
 
@@ -42,6 +44,24 @@ void CompactionManager::stop() {
     if (_update_candidate_pool) {
         _update_candidate_pool->shutdown();
     }
+}
+
+bool CompactionManager::check_if_exceed_max_task_num() {
+    bool exceed = false;
+    if (config::max_compaction_concurrency == 0) {
+        LOG_ONCE(WARNING) << "register compaction task failed for compaction is disabled";
+        exceed = true;
+    }
+    std::lock_guard lg(_tasks_mutex);
+    size_t running_tasks_num = 0;
+    for (const auto& it : _running_tasks) {
+        running_tasks_num += it.second.size();
+    }
+    if (running_tasks_num >= _max_task_num) {
+        VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
+        exceed = true;
+    }
+    return exceed;
 }
 
 void CompactionManager::schedule() {
@@ -68,6 +88,7 @@ void CompactionManager::schedule() {
 }
 
 void CompactionManager::_schedule() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     LOG(INFO) << "start compaction scheduler";
     while (!_stop.load(std::memory_order_consume)) {
         ++_round;
@@ -96,9 +117,10 @@ void CompactionManager::submit_compaction_task(const CompactionCandidate& compac
             << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
             << ", candidates_size:" << candidates_size();
     auto manager = this;
-    auto tablet = std::move(compaction_candidate.tablet);
+    auto tablet = compaction_candidate.tablet;
     auto type = compaction_candidate.type;
     auto st = _compaction_pool->submit_func([tablet, task_id, manager, type] {
+        SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
         auto compaction_task = tablet->create_compaction_task();
         if (compaction_task != nullptr) {
             CompactionCandidate candidate;
@@ -341,6 +363,7 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
 }
 
 void CompactionManager::_dispatch_worker() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     while (!_stop.load(std::memory_order_consume)) {
         {
             std::lock_guard lock(_dispatch_mutex);

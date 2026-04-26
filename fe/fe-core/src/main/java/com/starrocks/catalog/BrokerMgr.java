@@ -190,30 +190,32 @@ public class BrokerMgr implements GsonPostProcessable {
                 }
                 addedBrokerAddress.add(new FsBroker(pair.first, pair.second));
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logAddBroker(new ModifyBrokerInfo(name, addedBrokerAddress));
-            for (FsBroker address : addedBrokerAddress) {
-                brokerAddrsMap.put(address.ip, address);
-            }
-            brokersMap.put(name, brokerAddrsMap);
-            brokerListMap.put(name, Lists.newArrayList(brokerAddrsMap.values()));
+            GlobalStateMgr.getCurrentState().getEditLog().logAddBroker(
+                new ModifyBrokerInfo(name, addedBrokerAddress), wal -> applyAddBrokers((ModifyBrokerInfo) wal));
         } finally {
             lock.unlock();
         }
     }
 
-    public void replayAddBrokers(String name, List<FsBroker> addresses) {
+    private void applyAddBrokers(ModifyBrokerInfo info) {
+        String name = info.getName();
+        ArrayListMultimap<String, FsBroker> brokerAddrsMap = brokersMap.get(name);
+        if (brokerAddrsMap == null) {
+            brokerAddrsMap = ArrayListMultimap.create();
+            brokersMap.put(name, brokerAddrsMap);
+        }
+        
+        for (FsBroker address : info.getAddresses()) {
+            brokerAddrsMap.put(address.ip, address);
+        }
+
+        brokerListMap.put(name, Lists.newArrayList(brokerAddrsMap.values()));
+    }
+
+    public void replayAddBrokers(ModifyBrokerInfo info) {
         lock.lock();
         try {
-            ArrayListMultimap<String, FsBroker> brokerAddrsMap = brokersMap.get(name);
-            if (brokerAddrsMap == null) {
-                brokerAddrsMap = ArrayListMultimap.create();
-                brokersMap.put(name, brokerAddrsMap);
-            }
-            for (FsBroker address : addresses) {
-                brokerAddrsMap.put(address.ip, address);
-            }
-
-            brokerListMap.put(name, Lists.newArrayList(brokerAddrsMap.values()));
+            applyAddBrokers(info);
         } finally {
             lock.unlock();
         }
@@ -243,26 +245,26 @@ public class BrokerMgr implements GsonPostProcessable {
                             ") has not in brokers.");
                 }
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logDropBroker(new ModifyBrokerInfo(name, dropedAddressList));
-            for (FsBroker address : dropedAddressList) {
-                brokerAddrsMap.remove(address.ip, address);
-            }
-
-            brokerListMap.put(name, Lists.newArrayList(brokerAddrsMap.values()));
+            GlobalStateMgr.getCurrentState().getEditLog().logDropBroker(
+                new ModifyBrokerInfo(name, dropedAddressList), wal -> applyDropBrokers((ModifyBrokerInfo) wal));
         } finally {
             lock.unlock();
         }
     }
 
-    public void replayDropBrokers(String name, List<FsBroker> addresses) {
+    private void applyDropBrokers(ModifyBrokerInfo info) {
+        String name = info.getName();
+        ArrayListMultimap<String, FsBroker> brokerAddrsMap = brokersMap.get(name);
+        for (FsBroker address : info.getAddresses()) {
+            brokerAddrsMap.remove(address.ip, address);
+        }
+        brokerListMap.put(name, Lists.newArrayList(brokerAddrsMap.values()));
+    }
+
+    public void replayDropBrokers(ModifyBrokerInfo info) {
         lock.lock();
         try {
-            ArrayListMultimap<String, FsBroker> brokerAddrsMap = brokersMap.get(name);
-            for (FsBroker addr : addresses) {
-                brokerAddrsMap.remove(addr.ip, addr);
-            }
-
-            brokerListMap.put(name, Lists.newArrayList(brokerAddrsMap.values()));
+            applyDropBrokers(info);
         } finally {
             lock.unlock();
         }
@@ -274,19 +276,21 @@ public class BrokerMgr implements GsonPostProcessable {
             if (!brokersMap.containsKey(name)) {
                 throw new DdlException("Unknown broker name(" + name + ")");
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logDropAllBroker(name);
-            brokersMap.remove(name);
-            brokerListMap.remove(name);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropAllBroker(name, wal -> applyDropAllBroker(name));
         } finally {
             lock.unlock();
         }
     }
 
+    private void applyDropAllBroker(String name) {
+        brokersMap.remove(name);
+        brokerListMap.remove(name);
+    }
+
     public void replayDropAllBroker(String name) {
         lock.lock();
         try {
-            brokersMap.remove(name);
-            brokerListMap.remove(name);
+            applyDropAllBroker(name);
         } finally {
             lock.unlock();
         }

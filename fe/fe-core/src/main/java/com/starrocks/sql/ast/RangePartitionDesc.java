@@ -16,8 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
@@ -27,6 +27,7 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<String> partitionColNames;
     private final List<SingleRangePartitionDesc> singleRangePartitionDescs;
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
+    private List<String> partitionNames = Lists.newArrayList();
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
     // For automatically created partitioned tables, the partition column type and expression type may be inconsistent.
@@ -65,7 +66,13 @@ public class RangePartitionDesc extends PartitionDesc {
         return partitionColNames;
     }
 
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
 
+    public void setPartitionNames(List<String> partitionNames) {
+        this.partitionNames = partitionNames;
+    }
 
     public void setAutoPartitionTable(boolean autoPartitionTable) {
         this.isAutoPartitionTable = autoPartitionTable;

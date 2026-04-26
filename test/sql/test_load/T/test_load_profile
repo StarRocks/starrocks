@@ -1,4 +1,4 @@
--- name: test_table_profile
+-- name: test_table_profile @native
 create database db_${uuid0};
 use db_${uuid0};
 

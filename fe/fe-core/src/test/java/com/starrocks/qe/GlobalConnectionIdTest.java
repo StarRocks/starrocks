@@ -19,6 +19,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
@@ -40,9 +41,7 @@ public class GlobalConnectionIdTest {
 
         ConnectScheduler scheduler = new ConnectScheduler(10);
         int threshold = 1 << 24;
-        for (int i = 1; i < threshold; i++) {
-            scheduler.getNextConnectionId();
-        }
+        scheduler.setNextConnectionId(threshold);
 
         Assertions.assertEquals(0, scheduler.getNextConnectionId());
 
@@ -59,7 +58,8 @@ public class GlobalConnectionIdTest {
     public void testFrontendId() throws DdlException {
         new MockUp<EditLog>() {
             @Mock
-            public void logJsonObject(short op, Object obj) {
+            public void logJsonObject(short op, Object obj, WALApplier walApplier) {
+                walApplier.apply(obj);
             }
         };
 

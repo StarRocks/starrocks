@@ -39,28 +39,31 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.Type;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.leader.TabletCollector;
+import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
@@ -103,17 +106,40 @@ public class ColocateTableBalancerTest {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        balancer.setStop();
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
+        new MockUp<ColocateTableBalancer>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                System.out.println("Mocked ColocateTableBalancer.runAfterCatalogReady() called");
+            }
+        };
+        new MockUp<SystemHandler>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                System.out.println("Mocked SystemHandler.runAfterCatalogReady() called");
+            }
+        };
+        new MockUp<RoutineLoadTaskScheduler>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                // the interval is 0, so skip log printing to prevent too many logs
+            }
+        };
+        new MockUp<TabletChecker>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                System.out.println("Mocked TabletChecker.runAfterCatalogReady() called");
+            }
+        };
+
         UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(ctx);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
         GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
         GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
         TabletCollector collector = (TabletCollector) Deencapsulation.getField(GlobalStateMgr.getCurrentState(),
                 "tabletCollector");
         collector.setStop();
-        ColocateTableBalancer.getInstance().setStop();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(ctx);
     }
 
     @BeforeEach
@@ -170,8 +196,7 @@ public class ColocateTableBalancerTest {
 
         // test if group is unstable when all its tablets are in TabletScheduler
         long tableId = table.getId();
-        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
-        colocateTableBalancer.runAfterCatalogReady();
+        Deencapsulation.invoke(balancer, "matchGroups");
         GroupId groupId = globalStateMgr.getColocateTableIndex().getGroup(tableId);
         Assertions.assertTrue(globalStateMgr.getColocateTableIndex().isGroupUnstable(groupId));
 
@@ -179,7 +204,7 @@ public class ColocateTableBalancerTest {
         Partition partition = table.getPartition("tbl");
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
         Assertions.assertFalse(physicalPartition.isTabletBalanced());
-        MaterializedIndex index = physicalPartition.getBaseIndex();
+        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
         BalanceStat balanceStat = index.getBalanceStat();
         Assertions.assertFalse(balanceStat.isBalanced());
         Assertions.assertEquals(BalanceType.COLOCATION_GROUP, balanceStat.getBalanceType());
@@ -202,12 +227,11 @@ public class ColocateTableBalancerTest {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
         OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tbl3");
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
-        LocalTablet tablet = (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0);
+        LocalTablet tablet =
+                (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
-        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
         long oldVal = Config.tablet_sched_repair_delay_factor_second;
         try {
             Config.tablet_sched_repair_delay_factor_second = -1;
@@ -215,8 +239,8 @@ public class ColocateTableBalancerTest {
             // single replica, we need to open this test switch to test the behavior of bad replica balance
             ColocateTableBalancer.ignoreSingleReplicaCheck = true;
             // call twice to trigger the real balance action
-            colocateTableBalancer.runAfterCatalogReady();
-            colocateTableBalancer.runAfterCatalogReady();
+            Deencapsulation.invoke(balancer, "matchGroups");
+            Deencapsulation.invoke(balancer, "matchGroups");
             TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
             List<List<String>> result = tabletScheduler.getPendingTabletsInfo(100);
             System.out.println(result);
@@ -384,8 +408,9 @@ public class ColocateTableBalancerTest {
 
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
-        distributionCols.add(new Column("k1", Type.INT));
-        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 3);
+        distributionCols.add(new Column("k1", IntegerType.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5,
+                (short) 3, DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
 
@@ -501,8 +526,9 @@ public class ColocateTableBalancerTest {
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         for (GroupId groupId : groupIds) {
             List<Column> distributionCols = Lists.newArrayList();
-            distributionCols.add(new Column("k1", Type.INT));
-            ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 3, (short) 1);
+            distributionCols.add(new Column("k1", IntegerType.INT));
+            ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 3,
+                    (short) 1, DistributionInfo.DistributionInfoType.HASH);
             group2Schema.put(groupId, groupSchema);
         }
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -545,9 +571,10 @@ public class ColocateTableBalancerTest {
     private void setGroup2Schema(GroupId groupId, ColocateTableIndex colocateTableIndex,
                                  int bucketNum, short replicationNum) {
         List<Column> distributionCols = Lists.newArrayList();
-        distributionCols.add(new Column("k1", Type.INT));
+        distributionCols.add(new Column("k1", IntegerType.INT));
         ColocateGroupSchema groupSchema =
-                    new ColocateGroupSchema(groupId, distributionCols, bucketNum, replicationNum);
+                    new ColocateGroupSchema(groupId, distributionCols, bucketNum, replicationNum,
+                            DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
@@ -761,8 +788,9 @@ public class ColocateTableBalancerTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
-        distributionCols.add(new Column("k1", Type.INT));
-        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 1);
+        distributionCols.add(new Column("k1", IntegerType.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5,
+                (short) 1, DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
 
@@ -1017,8 +1045,9 @@ public class ColocateTableBalancerTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
-        distributionCols.add(new Column("k1", Type.INT));
-        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 3);
+        distributionCols.add(new Column("k1", IntegerType.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5,
+                (short) 3, DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
 

@@ -35,6 +35,8 @@
 #include "http_service.h"
 
 #include "cache/datacache.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_path_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
@@ -52,6 +54,8 @@
 #include "http/action/metrics_action.h"
 #include "http/action/pipeline_blocking_drivers_action.h"
 #include "http/action/pprof_actions.h"
+#include "http/action/proc_profile_action.h"
+#include "http/action/proc_profile_file_action.h"
 #include "http/action/query_cache_action.h"
 #include "http/action/reload_tablet_action.h"
 #include "http/action/restore_tablet_action.h"
@@ -66,8 +70,10 @@
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -179,7 +185,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/cmdline", cmdline_action);
     _http_handlers.emplace_back(cmdline_action);
 
-    auto* symbol_action = new SymbolAction(_env->bfd_parser());
+    auto* symbol_action = new SymbolAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
@@ -191,7 +197,7 @@ Status HttpServiceBE::start() {
 
     // register metrics
     {
-        auto action = new MetricsAction(StarRocksMetrics::instance()->metrics());
+        auto action = new MetricsAction(GlobalMetricsRegistry::instance()->metrics());
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 
@@ -273,9 +279,11 @@ Status HttpServiceBE::start() {
     _http_handlers.emplace_back(jit_cache_action);
 #endif
 
-    auto* datacache_action = new DataCacheAction(_cache_env->local_disk_cache());
+#ifndef __APPLE__
+    auto* datacache_action = new DataCacheAction(_cache_env->local_disk_cache(), _cache_env->local_mem_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
     _http_handlers.emplace_back(datacache_action);
+#endif
 
     auto* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",
@@ -285,6 +293,16 @@ Status HttpServiceBE::start() {
     auto* greplog_action = new GrepLogAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/greplog", greplog_action);
     _http_handlers.emplace_back(greplog_action);
+
+    // Register proc profile list action (for JSON API)
+    auto* proc_profile_action = new ProcProfileAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/proc_profile/{action}", proc_profile_action);
+    _http_handlers.emplace_back(proc_profile_action);
+
+    // Register proc profile file action (for serving individual files)
+    auto* proc_profile_file_action = new ProcProfileFileAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/proc_profile/file", proc_profile_file_action);
+    _http_handlers.emplace_back(proc_profile_file_action);
 
 #ifdef USE_STAROS
     auto* lake_dump_metadata_action = new lake::DumpTabletMetadataAction(_env);

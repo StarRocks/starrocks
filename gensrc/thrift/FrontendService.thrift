@@ -532,8 +532,10 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
-    15: optional string job_id
-    16: optional i64 process_time
+    15: optional string warehouse
+
+    16: optional string job_id
+    17: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -546,6 +548,15 @@ struct TGetLoadsParams {
     3: optional i64 txn_id
     4: optional string label
     5: optional string load_type
+    6: optional string table_name
+    7: optional string user
+    8: optional string state
+    9: optional string load_start_time_from
+    10: optional string load_start_time_to
+    11: optional string load_finish_time_from
+    12: optional string load_finish_time_to
+    13: optional string create_time_from
+    14: optional string create_time_to
 }
 
 struct TTrackingLoadInfo {
@@ -787,6 +798,8 @@ struct TAuditStatistics {
     8: optional i64 spill_bytes
     10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
+    11: optional i64 read_local_cnt
+    12: optional i64 read_remote_cnt
 }
 
 struct TReportAuditStatisticsParams {
@@ -838,7 +851,22 @@ struct TMasterOpRequest {
     37: optional i64 txn_id;
     38: optional bool isInternalStmt;
 
+    39: optional bool is_arrow_flight_sql;
+
+    40: optional list<string> user_groups;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+}
+
+struct TNotifyForwardDeploymentFinishedRequest {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId arrow_flight_sql_result_fragment_id;
+    3: optional i64 arrow_flight_sql_result_backend_id;
+    4: optional binary arrow_flight_sql_result_schema;
+}
+
+struct TNotifyForwardDeploymentFinishedRespone {
+    1: optional Status.TStatus status
 }
 
 struct TColumnDefinition {
@@ -870,6 +898,10 @@ struct TMasterOpResult {
     7: optional TAuditStatistics audit_statistics;
     8: optional string errorMsg;
     9: optional i64 txn_id;
+    // SQL digest computed by Leader after analyze
+    10:optional string sql_digest;
+    // StarMgr max journal ID for shared-data mode follower sync
+    11:optional i64 maxStarMgrJournalId;
 }
 
 struct TIsMethodSupportedRequest {
@@ -970,6 +1002,8 @@ struct TStreamLoadPutRequest {
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
     56: optional string payload_compression_type
+    // CDC envelope format
+    57: optional PlanNodes.TEnvelopeType envelope
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1021,6 +1055,8 @@ struct TRLTaskTxnCommitAttachment {
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
+    // If true, the error is non-retryable and routine load job should be paused
+    13: optional bool nonRetryable
 }
 
 struct TMiniLoadTxnCommitAttachment {
@@ -1424,6 +1460,8 @@ struct TCreatePartitionRequest {
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
     5: optional bool is_temp
+    // timeout in seconds for partition creation request
+    6: optional i32 timeout_s
 }
 
 struct TCreatePartitionResult {
@@ -1507,7 +1545,7 @@ struct TPartitionMetaInfo {
     14: optional string storage_medium
     15: optional i64 cooldown_time
     16: optional i64 last_consistency_check_time
-    17: optional bool is_in_memory
+    17: optional bool is_in_memory // Deprecated
     18: optional bool is_temp
     19: optional string data_size
     20: optional i64 row_count
@@ -1522,7 +1560,7 @@ struct TPartitionMetaInfo {
     29: optional i64 storage_size
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
-    32: optional i64 path_id
+    32: optional i64 path_id // deprecated
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1927,6 +1965,7 @@ struct TPartitionReplicationInfo {
     2: optional i64 src_version
     3: optional map<i64, TIndexReplicationInfo> index_replication_infos
     4: optional i64 src_version_epoch
+    5: optional i64 src_partition_id
 }
 
 struct TTableReplicationRequest {
@@ -1939,6 +1978,11 @@ struct TTableReplicationRequest {
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
     9: optional string job_id
+    10: optional Types.TRunMode src_cluster_run_mode
+    11: optional string src_storage_volume_name
+    12: optional string src_service_id
+    13: optional i64 src_database_id
+    14: optional i64 src_table_id
 }
 
 struct TTableReplicationResponse {
@@ -2169,7 +2213,7 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
-struct TDynamicTabletJobsItem {
+struct TTabletReshardJobsItem {
     1: optional i64 job_id;
     2: optional string db_name;
     3: optional string table_name;
@@ -2185,12 +2229,69 @@ struct TDynamicTabletJobsItem {
     13: optional string error_message;
 }
 
-struct TDynamicTabletJobsRequest {
+struct TTabletReshardJobsRequest {
 }
 
-struct TDynamicTabletJobsResponse {
+struct TTabletReshardJobsResponse {
     1: optional Status.TStatus status;
-    2: optional list<TDynamicTabletJobsItem> items;
+    2: optional list<TTabletReshardJobsItem> items;
+}
+
+struct TFeThreadInfo {
+    1: optional string fe_address;
+    2: optional i64 thread_id;
+    3: optional string thread_name;
+    4: optional string thread_state;
+    5: optional bool is_daemon;
+    6: optional i32 priority;
+    7: optional i64 cpu_time_ms;
+    8: optional i64 user_time_ms;
+}
+
+struct TGetFeThreadsRequest {
+    1: optional TAuthInfo auth_info;
+}
+
+struct TGetFeThreadsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TFeThreadInfo> threads;
+}
+
+struct TRefreshConnectionsRequest {
+    1: optional bool force;
+}
+
+struct TRefreshConnectionsResponse {
+    1: optional Status.TStatus status;
+}
+
+enum TTableSchemaRequestSource {
+    SCAN = 0,
+    LOAD = 1
+}
+
+struct TGetTableSchemaRequest {
+    1: optional Descriptors.TTableSchemaKey schema_key;
+    2: optional TTableSchemaRequestSource source;
+    3: optional i64 tablet_id;
+    // Valid if request_source is SCAN
+    4: optional Types.TUniqueId query_id;
+    // Valid if request_source is LOAD
+    5: optional i64 txn_id;
+}
+
+struct TGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional AgentService.TTabletSchema schema;
+}
+
+struct TBatchGetTableSchemaRequest {
+    1: optional list<TGetTableSchemaRequest> requests;
+}
+
+struct TBatchGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTableSchemaResponse> responses;
 }
 
 service FrontendService {
@@ -2231,6 +2332,7 @@ service FrontendService {
 
     //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
     TMasterOpResult forward(TMasterOpRequest params)
+    TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(TNotifyForwardDeploymentFinishedRequest request)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
@@ -2277,6 +2379,8 @@ service FrontendService {
     TAllocateAutoIncrementIdResult allocAutoIncrementId (1:TAllocateAutoIncrementIdParam params)
 
     TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
+
+    TGetFeThreadsResponse getFeThreads(1: TGetFeThreadsRequest request)
 
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
@@ -2336,6 +2440,9 @@ service FrontendService {
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
-    TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
-}
+    TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
 
+    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
+
+    TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
+}

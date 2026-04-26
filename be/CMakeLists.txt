@@ -15,21 +15,55 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.11.1)
+cmake_minimum_required(VERSION 3.16)
+
+set(STARROCKS_PRECONFIG_MODE "AUTO" CACHE STRING "Preconfigure bootstrap mode: AUTO, ON, or OFF")
+set_property(CACHE STARROCKS_PRECONFIG_MODE PROPERTY STRINGS AUTO ON OFF)
+set(STARROCKS_PRECONFIG_MODE_NORMALIZED "${STARROCKS_PRECONFIG_MODE}")
+string(TOUPPER "${STARROCKS_PRECONFIG_MODE_NORMALIZED}" STARROCKS_PRECONFIG_MODE_NORMALIZED)
+
+set(STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE OFF)
+if ((DEFINED CMAKE_C_COMPILER AND NOT "${CMAKE_C_COMPILER}" STREQUAL "") OR
+    (DEFINED CMAKE_CXX_COMPILER AND NOT "${CMAKE_CXX_COMPILER}" STREQUAL ""))
+    set(STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE ON)
+endif()
+
+set(STARROCKS_USE_PRECONFIG OFF)
+if (STARROCKS_PRECONFIG_MODE_NORMALIZED STREQUAL "ON")
+    set(STARROCKS_USE_PRECONFIG ON)
+elseif (STARROCKS_PRECONFIG_MODE_NORMALIZED STREQUAL "AUTO")
+    if (NOT DEFINED ENV{STARROCKS_HOME} OR "$ENV{STARROCKS_HOME}" STREQUAL "" OR
+        NOT DEFINED ENV{STARROCKS_THIRDPARTY} OR "$ENV{STARROCKS_THIRDPARTY}" STREQUAL "" OR
+        ((NOT STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE) AND
+         (((NOT DEFINED ENV{CC} OR "$ENV{CC}" STREQUAL "") OR
+          (NOT DEFINED ENV{CXX} OR "$ENV{CXX}" STREQUAL "")) AND
+         (NOT DEFINED ENV{STARROCKS_GCC_HOME} OR "$ENV{STARROCKS_GCC_HOME}" STREQUAL "") AND
+         (NOT DEFINED ENV{STARROCKS_LLVM_HOME} OR "$ENV{STARROCKS_LLVM_HOME}" STREQUAL ""))))
+        set(STARROCKS_USE_PRECONFIG ON)
+    endif()
+elseif (NOT STARROCKS_PRECONFIG_MODE_NORMALIZED STREQUAL "OFF")
+    message(FATAL_ERROR
+            "Invalid STARROCKS_PRECONFIG_MODE='${STARROCKS_PRECONFIG_MODE}'. Expected AUTO, ON, or OFF.")
+endif()
+
+if (STARROCKS_USE_PRECONFIG)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/BootstrapEnv.cmake")
+endif()
 
 # set CMAKE_C_COMPILER, this must set before project command
-if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
+if (STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE)
+elseif (DEFINED ENV{CC} AND NOT "$ENV{CC}" STREQUAL "" AND DEFINED ENV{CXX} AND NOT "$ENV{CXX}" STREQUAL "")
     set(CMAKE_C_COMPILER "$ENV{CC}")
     set(CMAKE_CXX_COMPILER "$ENV{CXX}")
-elseif (DEFINED ENV{STARROCKS_GCC_HOME})
+elseif (DEFINED ENV{STARROCKS_GCC_HOME} AND NOT "$ENV{STARROCKS_GCC_HOME}" STREQUAL "")
     # prefer GCC
     set(CMAKE_C_COMPILER "$ENV{STARROCKS_GCC_HOME}/bin/gcc")
     set(CMAKE_CXX_COMPILER "$ENV{STARROCKS_GCC_HOME}/bin/g++")
-elseif (DEFINED ENV{STARROCKS_LLVM_HOME})
+elseif (DEFINED ENV{STARROCKS_LLVM_HOME} AND NOT "$ENV{STARROCKS_LLVM_HOME}" STREQUAL "")
     set(CMAKE_C_COMPILER "$ENV{STARROCKS_LLVM_HOME}/bin/clang")
     set(CMAKE_CXX_COMPILER "$ENV{STARROCKS_LLVM_HOME}/bin/clang++")
 else()
-    message(FATAL_ERROR "STARROCKS_GCC_HOME environment variable is not set")
+    message(FATAL_ERROR "Neither STARROCKS_GCC_HOME nor STARROCKS_LLVM_HOME environment variable is set")
 endif()
 
 # disable pkgconfig searching libraries, all libraries are static imported
@@ -40,6 +74,8 @@ macro( pkg_check_modules )
 endmacro()
 
 project(starrocks CXX C)
+
+include(CheckSymbolExists)
 
 # set CMAKE_BUILD_TYPE
 if (NOT CMAKE_BUILD_TYPE)
@@ -55,6 +91,9 @@ execute_process(COMMAND bash "-c" "uname -m"
                 OUTPUT_VARIABLE
                 CMAKE_BUILD_TARGET_ARCH
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (APPLE AND CMAKE_BUILD_TARGET_ARCH STREQUAL "arm64")
+    set(CMAKE_BUILD_TARGET_ARCH "aarch64")
+endif()
 message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
@@ -66,23 +105,90 @@ set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(SRC_DIR "${BASE_DIR}/src")
 set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
+set(BE_PROTO_THRIFT_GENSRC_DIR "${CMAKE_BINARY_DIR}/gensrc")
+set(BE_PROTO_THRIFT_GEN_CPP_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/gen_cpp")
+set(BE_PROTO_THRIFT_CODEGEN_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/codegen")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
-if (APPLE)
-    set(MAKE_TEST "ON")
-else()
-    option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
+# Keep the active Thrift package version in the compile command so cached
+# objects built against an older Thrift header ABI cannot be reused after
+# a runtime upgrade.
+set(STARROCKS_THRIFT_CONFIG_H "${THIRDPARTY_DIR}/include/thrift/config.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_THRIFT_CONFIG_H}")
+if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
+    file(STRINGS "${STARROCKS_THRIFT_CONFIG_H}" STARROCKS_THRIFT_VERSION_LINE
+         REGEX "^#define PACKAGE_VERSION \"[^\"]+\"$")
+    if (STARROCKS_THRIFT_VERSION_LINE)
+        string(REGEX REPLACE "^#define PACKAGE_VERSION \"([^\"]+)\"$" "\\1"
+               STARROCKS_THRIFT_PACKAGE_VERSION "${STARROCKS_THRIFT_VERSION_LINE}")
+        add_compile_definitions(STARROCKS_THRIFT_PACKAGE_VERSION="${STARROCKS_THRIFT_PACKAGE_VERSION}")
+        message(STATUS "Thrift package version is ${STARROCKS_THRIFT_PACKAGE_VERSION}")
+    endif()
 endif()
+
+if (APPLE)
+    find_library(STARROCKS_LIBEVENT_LIBRARY NAMES libevent.dylib event PATHS ${THIRDPARTY_DIR}/lib
+                 ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
+    find_library(STARROCKS_LIBEVENT_CORE_LIBRARY NAMES libevent_core.dylib event_core PATHS ${THIRDPARTY_DIR}/lib
+                 ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
+    find_library(STARROCKS_LIBEVENT_EXTRA_LIBRARY NAMES libevent_extra.dylib event_extra PATHS ${THIRDPARTY_DIR}/lib
+                 ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
+
+    set(_STARROCKS_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES}")
+    set(_STARROCKS_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
+    set(_STARROCKS_REQUIRED_QUIET "${CMAKE_REQUIRED_QUIET}")
+    list(APPEND CMAKE_REQUIRED_INCLUDES "${THIRDPARTY_DIR}/include" "${THIRDPARTY_DIR}/include/event")
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ${STARROCKS_LIBEVENT_EXTRA_LIBRARY} ${STARROCKS_LIBEVENT_CORE_LIBRARY}
+         ${STARROCKS_LIBEVENT_LIBRARY})
+    set(CMAKE_REQUIRED_QUIET TRUE)
+
+    check_symbol_exists(evhttp_request_get_user_data "event2/http.h" STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA)
+    check_symbol_exists(evhttp_request_set_user_data "event2/http.h" STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA)
+    check_symbol_exists(evhttp_set_newreqcb "event2/http.h" STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
+    check_symbol_exists(evhttp_request_set_on_free_cb "event2/http.h"
+                        STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB)
+
+    set(CMAKE_REQUIRED_INCLUDES "${_STARROCKS_REQUIRED_INCLUDES}")
+    set(CMAKE_REQUIRED_LIBRARIES "${_STARROCKS_REQUIRED_LIBRARIES}")
+    set(CMAKE_REQUIRED_QUIET "${_STARROCKS_REQUIRED_QUIET}")
+    unset(_STARROCKS_REQUIRED_INCLUDES)
+    unset(_STARROCKS_REQUIRED_LIBRARIES)
+    unset(_STARROCKS_REQUIRED_QUIET)
+    unset(STARROCKS_LIBEVENT_LIBRARY CACHE)
+    unset(STARROCKS_LIBEVENT_CORE_LIBRARY CACHE)
+    unset(STARROCKS_LIBEVENT_EXTRA_LIBRARY CACHE)
+
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_SET_NEWREQCB=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB=1)
+    endif()
+endif()
+
+option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
 message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
-option(WITH_STARCACHE "Build binary with starcache library" ON)
+option(THIN_ARCHIVE "Build binary with thin archive" OFF)
+
+set(WITH_STARCACHE_DEFAULT ON)
+if (APPLE)
+    set(WITH_STARCACHE_DEFAULT OFF)
+endif()
+option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEFAULT})
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
@@ -101,502 +207,49 @@ option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
-# Only support tenann on x86
-if (${WITH_TENANN} STREQUAL "ON" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+if (${WITH_TENANN} STREQUAL "ON")
     add_definitions(-DWITH_TENANN)
-else()
-    set(WITH_TENANN "OFF")
 endif()
 
+# The StarRocks module enables dynamic linking. This is a developer option.
+# If only certain modules are modified without altering the ABI,
+# subsequent linking stages may be skipped.
+option(ENABLE_MULTI_DYNAMIC_LIBS "Enable dynamic linking of individual StarRocks modules (developer option)" OFF)
+
 message(STATUS "WITH TENANN is: ${WITH_TENANN}")
+if (APPLE AND WITH_STARCACHE)
+    message(STATUS "Disable starcache on macOS")
+    set(WITH_STARCACHE OFF CACHE BOOL "Build binary with starcache library" FORCE)
+endif()
 
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
         message(FATAL_ERROR "Need GCC version at least 4.8.2")
     endif()
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 elseif (NOT APPLE)
     message(FATAL_ERROR "Compiler should be GNU")
 endif()
 
 set(CMAKE_SKIP_RPATH TRUE)
-set(Boost_USE_STATIC_LIBS ON)
-set(Boost_USE_STATIC_RUNTIME ON)
 
-# Compile generated source if necessary
-message(STATUS "build gensrc if necessary")
-execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
-                RESULT_VARIABLE MAKE_GENSRC_RESULT)
-if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
-    message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
-endif()
+set(ALL_BE_LIBS "" CACHE INTERNAL "All BE libraries")
 
-#
-set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
-configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
-add_library(build_version OBJECT ${BUILD_VERSION_CC})
-target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
+FUNCTION(FINALIZE_BE_LIBS)
+    LIST(SORT ALL_BE_LIBS)
+    MESSAGE(STATUS "ALL BE LIBS (SORTED): ${ALL_BE_LIBS}") 
+ENDFUNCTION()
 
-# Add common cmake prefix path and link library path
-list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
-list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
-link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
+include(cmake_modules/ThirdParty.cmake)
 
-# Set Boost
-set(Boost_DEBUG FALSE)
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_NO_BOOST_CMAKE ON)
-set(BOOST_ROOT ${THIRDPARTY_DIR})
-# boost suppress warning is supported on cmake 3.20
-# https://cmake.org/cmake/help/latest/module/FindBoost.html
-set(Boost_NO_WARN_NEW_VERSIONS ON)
-
-if (NOT APPLE)
-    find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context iostreams)
-else()
-    find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context iostreams)
-endif()
-include_directories(${Boost_INCLUDE_DIRS})
-message(STATUS ${Boost_LIBRARIES})
-
-set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
-set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
-
-# Set all libraries
-
-add_library(clucene-core STATIC IMPORTED)
-set_target_properties(clucene-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-core-static.a)
-
-add_library(clucene-shared STATIC IMPORTED)
-set_target_properties(clucene-shared PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-shared-static.a)
-
-add_library(clucene-contribs-lib STATIC IMPORTED)
-set_target_properties(clucene-contribs-lib PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-contribs-lib.a)
-
-add_library(gflags STATIC IMPORTED GLOBAL)
-set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
-
-add_library(glog STATIC IMPORTED GLOBAL)
-set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
-
-add_library(re2 STATIC IMPORTED GLOBAL)
-set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libre2.a)
-
-add_library(pprof STATIC IMPORTED)
-set_target_properties(pprof PROPERTIES IMPORTED_LOCATION
-    ${GPERFTOOLS_HOME}/lib/libprofiler.a)
-
-add_library(tcmalloc STATIC IMPORTED)
-set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
-    ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
-
-add_library(protobuf STATIC IMPORTED GLOBAL)
-set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
-
-add_library(protoc STATIC IMPORTED)
-set_target_properties(protoc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotoc.a)
-
-add_library(gtest STATIC IMPORTED)
-set_target_properties(gtest PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgtest.a)
-
-add_library(gmock STATIC IMPORTED)
-set_target_properties(gmock PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgmock.a)
-
-add_library(snappy STATIC IMPORTED GLOBAL)
-set_target_properties(snappy PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsnappy.a)
-
-set(CURL_INCLUDE_DIR "${THIRDPARTY_DIR}/include" CACHE PATH "curl include path")
-set(CURL_LIBRARY "${THIRDPARTY_DIR}/lib/libcurl.a" CACHE FILEPATH "curl static library")
-add_library(curl STATIC IMPORTED GLOBAL)
-set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${CURL_LIBRARY})
-
-add_library(lz4 STATIC IMPORTED)
-set_target_properties(lz4 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblz4.a)
-
-add_library(thrift STATIC IMPORTED)
-set_target_properties(thrift PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthrift.a)
-
-add_library(thriftnb STATIC IMPORTED)
-set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthriftnb.a)
-
-add_library(mysql STATIC IMPORTED)
-set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
-
-add_library(hdfs STATIC IMPORTED GLOBAL)
-set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
-
-add_library(fiu STATIC IMPORTED)
-set_target_properties(fiu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libfiu.a)
-
-add_library(icuuc STATIC IMPORTED)
-set_target_properties(icuuc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicuuc.a)
-
-add_library(icui18n STATIC IMPORTED)
-set_target_properties(icui18n PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicui18n.a)
-
-add_library(icudata STATIC IMPORTED)
-set_target_properties(icudata PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicudata.a)
-
-
-# Allow FindOpenSSL() to find correct static libraries
-set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
-message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
-add_library(crypto STATIC IMPORTED GLOBAL)
-set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
-
-add_library(AWS::crypto ALIAS crypto)
-set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
-set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
-foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
-    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
-    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
-endforeach()
-find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
-include_directories(${AWSSDK_INCLUDE_DIRS})
-
-set(Poco_ROOT_DIR ${THIRDPARTY_DIR})
-find_package(Poco REQUIRED COMPONENTS Net NetSSL)
-include_directories(${Poco_INCLUDE_DIRS})
-
-add_library(libevent STATIC IMPORTED)
-set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
-
-add_library(openssl STATIC IMPORTED)
-set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libssl.a)
-
-add_library(leveldb STATIC IMPORTED GLOBAL)
-set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
-
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
-    add_library(jemalloc SHARED IMPORTED)
-    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-shared/libjemalloc.so)
-else()
-    add_library(jemalloc STATIC IMPORTED)
-    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-static/libjemalloc.a)
-endif()
-
-add_library(brotlicommon STATIC IMPORTED)
-set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
-
-add_library(brotlidec STATIC IMPORTED)
-set_target_properties(brotlidec PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlidec.a)
-
-add_library(brotlienc STATIC IMPORTED)
-set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlienc.a)
-
-add_library(zstd STATIC IMPORTED)
-set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
-
-add_library(streamvbyte STATIC IMPORTED)
-set_target_properties(streamvbyte PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libstreamvbyte_static.a)
-
-add_library(arrow STATIC IMPORTED)
-set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
-
-add_library(parquet STATIC IMPORTED)
-set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libparquet.a)
-
-add_library(brpc STATIC IMPORTED GLOBAL)
-set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
-
-add_library(rocksdb STATIC IMPORTED GLOBAL)
-set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
-
-add_library(krb5support STATIC IMPORTED)
-set_target_properties(krb5support PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libkrb5support.a)
-
-add_library(krb5 STATIC IMPORTED)
-set_target_properties(krb5 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libkrb5.a)
-
-add_library(com_err STATIC IMPORTED)
-set_target_properties(com_err PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcom_err.a)
-
-add_library(k5crypto STATIC IMPORTED)
-set_target_properties(k5crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libk5crypto.a)
-
-add_library(gssapi_krb5 STATIC IMPORTED)
-set_target_properties(gssapi_krb5 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgssapi_krb5.a)
-
-add_library(sasl STATIC IMPORTED GLOBAL)
-set_target_properties(sasl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsasl2.a)
-
-add_library(librdkafka_cpp STATIC IMPORTED)
-set_target_properties(librdkafka_cpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librdkafka++.a)
-
-add_library(librdkafka STATIC IMPORTED)
-set_target_properties(librdkafka PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librdkafka.a)
-
-add_library(libpulsar STATIC IMPORTED)
-set_target_properties(libpulsar PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libpulsar.a)
-
-add_library(libs2 STATIC IMPORTED)
-set_target_properties(libs2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libs2.a)
-
-add_library(bitshuffle STATIC IMPORTED)
-set_target_properties(bitshuffle PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbitshuffle.a)
-
-add_library(roaring STATIC IMPORTED)
-set_target_properties(roaring PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libroaring.a)
-
-add_library(cctz STATIC IMPORTED)
-set_target_properties(cctz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcctz.a)
-
-add_library(benchmark STATIC IMPORTED)
-set_target_properties(benchmark PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark.a)
-
-add_library(benchmark_main STATIC IMPORTED)
-set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark_main.a)
-
-add_library(fmt STATIC IMPORTED)
-set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
-
-add_library(ryu STATIC IMPORTED)
-set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
-
-add_library(libz STATIC IMPORTED GLOBAL)
-set_target_properties(libz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a)
-
-add_library(libbz2 STATIC IMPORTED)
-set_target_properties(libbz2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbz2.a)
-
-# Disable minidump on aarch64, hence breakpad is not needed.
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    add_library(breakpad STATIC IMPORTED)
-    set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
-endif()
-
-add_library(hyperscan STATIC IMPORTED)
-set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
-
-add_library(simdjson STATIC IMPORTED)
-set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdjson.a)
-
-add_library(simdutf STATIC IMPORTED)
-set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdutf.a)
-
-add_library(velocypack STATIC IMPORTED)
-set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
-
-find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
-
-add_library(http_client_curl STATIC IMPORTED GLOBAL)
-set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libhttp_client_curl.a)
-
-add_library(opentelemetry_common STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_common.a)
-
-add_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_trace.a)
-
-add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_resources.a)
-
-add_library(jansson STATIC IMPORTED GLOBAL)
-set_target_properties(jansson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjansson.a)
-
-add_library(avro STATIC IMPORTED GLOBAL)
-set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavro.a)
-
-add_library(avrocpp STATIC IMPORTED GLOBAL)
-set_target_properties(avrocpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavrocpp_s.a)
-
-add_library(serdes STATIC IMPORTED GLOBAL)
-set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libserdes.a)
-
-add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
-
-add_library(libxml2 STATIC IMPORTED GLOBAL)
-set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libxml2.a)
-
-add_library(azure-core STATIC IMPORTED GLOBAL)
-set_target_properties(azure-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-core.a)
-
-add_library(azure-identity STATIC IMPORTED GLOBAL)
-set_target_properties(azure-identity PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-identity.a)
-
-add_library(azure-storage-common STATIC IMPORTED GLOBAL)
-set_target_properties(azure-storage-common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-common.a)
-
-add_library(azure-storage-blobs STATIC IMPORTED GLOBAL)
-set_target_properties(azure-storage-blobs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-blobs.a)
-
-add_library(azure-storage-files-datalake STATIC IMPORTED GLOBAL)
-set_target_properties(azure-storage-files-datalake PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-files-datalake.a)
-
-set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
-find_package(absl CONFIG REQUIRED)
-set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
-find_package(gRPC CONFIG REQUIRED)
-message(STATUS "Using gRPC ${gRPC_VERSION}")
-get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
-add_library(protobuf::libprotobuf ALIAS protobuf)
-add_library(ZLIB::ZLIB ALIAS libz)
-
-# Disable libdeflate on aarch64
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    add_library(libdeflate STATIC IMPORTED GLOBAL)
-    set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
-endif()
-
-if (${WITH_TENANN} STREQUAL "ON")
-    add_library(tenann STATIC IMPORTED GLOBAL)
-    if(${USE_AVX2})
-        set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle-avx2.a)
-    else()
-        set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle.a)
-    endif()
-endif()
-
-if (${WITH_STARCACHE} STREQUAL "ON")
-    add_library(starcache STATIC IMPORTED GLOBAL)
-    set(STARCACHE_DIR "${THIRDPARTY_DIR}/starcache")
-    set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${STARCACHE_DIR}/lib/libstarcache.a)
-    include_directories(SYSTEM ${STARCACHE_DIR}/include)
-    message(STATUS "link the starcache in directory: ${STARCACHE_DIR}")
-endif()
-if ("${WITH_BRPC_KEEPALIVE}" STREQUAL "ON")
-  set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BRPC_KEEPALIVE")
-endif()
-
-if ("${USE_STAROS}" STREQUAL "ON")
-    if (DEFINED ENV{STARLET_INSTALL_DIR})
-        set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
-    else()
-        set(STARLET_INSTALL_DIR "${THIRDPARTY_DIR}/starlet")
-    endif()
-    if (NOT EXISTS ${STARLET_INSTALL_DIR})
-        message(FATAL_ERROR "Starlet thirdparty directory ${STARLET_INSTALL_DIR} not exist!")
-    else()
-        message(STATUS "Searching starlet related libraries from ${STARLET_INSTALL_DIR} ...")
-    endif()
-
-    # Tell cmake that PROTOBUF library is already found
-    set(PROTOBUF_FOUND TRUE)
-    # starrocks project has its imported libprotobuf.a and libre2.a
-    # add following ALIAS so grpc can find the correct dependent libraries
-    add_library(re2::re2 ALIAS re2)
-    add_library(glog::glog ALIAS glog)
-    add_library(gflags::gflags_static ALIAS gflags)
-    add_library(hdfs::hdfs ALIAS hdfs)
-    add_library(brpc::brpc ALIAS brpc)
-    add_library(leveldb::leveldb ALIAS leveldb)
-    add_library(CURL::libcurl ALIAS curl)
-    add_library(rocksdb::rocksdb ALIAS rocksdb)
-    add_library(starcache::starcache ALIAS starcache)
-    add_library(Snappy::snappy ALIAS snappy)
-    add_library(libxml2::libxml2 ALIAS libxml2)
-    add_library(Azure::azure-core ALIAS azure-core)
-    add_library(Azure::azure-identity ALIAS azure-identity)
-    add_library(Azure::azure-storage-common ALIAS azure-storage-common)
-    add_library(Azure::azure-storage-blobs ALIAS azure-storage-blobs)
-    add_library(Azure::azure-storage-files-datalake ALIAS azure-storage-files-datalake)
-
-    set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
-    find_package (prometheus-cpp CONFIG REQUIRED)
-    get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
-    message(STATUS "Using prometheus-cpp")
-    message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-    include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
-
-    # gcp cloud storage related dependencies
-    set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
-    set(ZLIB_LIBRARY "${THIRDPARTY_DIR}/lib/libz.a")
-    set(Crc32c_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/Crc32c" CACHE PATH "Crc32c search path")
-    find_package (Crc32c CONFIG REQUIRED)
-    set(nlohmann_json_DIR "${STARLET_INSTALL_DIR}/third_party/share/cmake/nlohmann_json" CACHE PATH "nlohmann json search path")
-    find_package (nlohmann_json CONFIG REQUIRED)
-    set(google_cloud_cpp_common_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_common" CACHE PATH "google cloud cpp common search path")
-    find_package (google_cloud_cpp_common CONFIG REQUIRED)
-    set(google_cloud_cpp_rest_internal_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_rest_internal" CACHE PATH "google cloud cpp rest internal search path")
-    find_package (google_cloud_cpp_rest_internal CONFIG REQUIRED)
-    set(google_cloud_cpp_storage_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_storage" CACHE PATH "google cloud cpp storage search path")
-    find_package (google_cloud_cpp_storage CONFIG REQUIRED)
-
-    set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
-    find_package(starlet CONFIG REQUIRED)
-    message(STATUS "Using starlet ${starlet_VERSION}")
-    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
-    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
-
-    set_target_properties(starlet::starlet_fslib_all PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(starlet_fslib_all ALIAS starlet::starlet_fslib_all)
-    set_target_properties(starlet::starlet PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(starlet ALIAS starlet::starlet)
-
-    set(STARROCKS_DEPENDENCIES
-       ${STARROCKS_DEPENDENCIES}
-       starlet
-       starlet_fslib_all
-       starcache
-       ${AZURE_SDK_LIB}
-       )
-endif()
+include(cmake_modules/PreBuildModule.cmake)
 
 # LLVM
-set (LLVM_LIBRARIES
-    LLVMRuntimeDyld
-    LLVMBitstreamReader
-    LLVMOption
-    LLVMAsmPrinter
-    LLVMProfileData
-    LLVMAsmParser
-    LLVMOrcTargetProcess
-    LLVMExecutionEngine
-    LLVMBinaryFormat
-    LLVMDebugInfoDWARF
-    LLVMObjCARCOpts
-    LLVMPasses
-    LLVMCodeGen
-    LLVMFrontendOpenMP
-    LLVMMCDisassembler
-    LLVMJITLink
-    LLVMCFGuard
-    LLVMInstrumentation
-    LLVMInstCombine
-    LLVMipo
-    LLVMVectorize
-    LLVMIRReader
-    LLVMCore
-    LLVMTarget
-    LLVMMC
-    LLVMAnalysis
-    LLVMGlobalISel
-    LLVMScalarOpts
-    LLVMLinker
-    LLVMCoroutines
-    LLVMTargetParser
-    LLVMDemangle
-    LLVMRemarks
-    LLVMDebugInfoCodeView
-    LLVMAggressiveInstCombine
-    LLVMIRPrinter
-    LLVMOrcShared
-    LLVMOrcJIT
-    LLVMTextAPI
-    LLVMBitWriter
-    LLVMBitReader
-    LLVMObject
-    LLVMTransformUtils
-    LLVMSelectionDAG
-    LLVMMCParser
-    LLVMSupport
-)
+include(cmake_modules/FindLLVM.cmake)
 
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info LLVMX86AsmParser LLVMX86Disassembler)
-elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    list(APPEND LLVM_LIBRARIES LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info LLVMAArch64Utils LLVMAArch64AsmParser LLVMAArch64Disassembler)
-endif()
-
-foreach(lib IN ITEMS ${LLVM_LIBRARIES})
-    add_library(${lib} STATIC IMPORTED GLOBAL)
-    set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
-endforeach()
-
+# install runtime libraries if needed
+include(cmake_modules/InstallSysRuntime.cmake)
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
@@ -605,7 +258,6 @@ if (CLANG_TIDY_PATH)
     # enable clang-tidy check for all source code files
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
-
 
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
@@ -618,7 +270,9 @@ check_function_exists(sched_getcpu HAVE_SCHED_GETCPU)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} $ENV{STARROCKS_CXX_COMMON_FLAGS}")
 
 # -no-pie: Disable Position Independent Executables (PIE) as certain libraries cannot be linked against PIE executables.
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+if (NOT APPLE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+endif()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_FLAGS}")
 
 # compiler flags that are common across debug/release builds
@@ -636,6 +290,10 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread -Wno-register")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
+if (APPLE)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS")
+endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
 if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} ${FILE_PREFIX_MAP_FLAG}")
@@ -643,13 +301,14 @@ endif()
 # disable link delete(void*, long)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if (NOT ${MAKE_TEST} STREQUAL "ON")
         # there are too many warnings reported by clang in be/test and it will take some time to fix.
         # temporarily disable Werror in the unit test so that clang can compile.
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror")
     endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unknown-warning-option")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
@@ -669,7 +328,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "18.0.0")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=nrvo")
     endif ()
+    # Add -rtlib=compiler-rt for ARM architecture to fix LLVM bug: https://bugs.llvm.org/show_bug.cgi?id=16404
+    if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -rtlib=compiler-rt")
+    endif()
 else ()
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
         # ignore error from apache-orc
@@ -689,10 +353,10 @@ if (${WITH_STARCACHE} STREQUAL "ON")
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if (DEFINED ENV{STARROCKS_GCC_HOME})
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} --gcc-toolchain=$ENV{STARROCKS_GCC_HOME}")
-    else()
+    elseif (NOT APPLE)
         message(WARNING "STARROCKS_GCC_HOME evnironment variable is not set, ")
     endif()
 endif()
@@ -720,6 +384,11 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
+endif()
+
+if (APPLE AND STARROCKS_JIT_ENABLE)
+    message(STATUS "Disable JIT on macOS")
+    set(STARROCKS_JIT_ENABLE OFF CACHE BOOL "Enable LLVM JIT support" FORCE)
 endif()
 
 if (STARROCKS_JIT_ENABLE)
@@ -764,7 +433,6 @@ endif()
 
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
-# Debug information is stored as dwarf2 to be as compatible as possible
 #   -Werror: compile warnings should be errors when using the toolchain compiler.
 # Only enable for debug builds because this is what we test in pre-commit tests.
 set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-5 -DDEBUG")
@@ -819,13 +487,21 @@ message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
 add_definitions(-DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H)
 
 # Set include dirs
+if (APPLE)
+    include_directories(
+        BEFORE
+        ${SRC_DIR}/macos_compat
+    )
+endif()
 include_directories(
     BEFORE
     ${SRC_DIR}/formats/orc/apache-orc/c++/include/
 )
 include_directories(
+    BEFORE
     ${SRC_DIR}/
     ${TEST_DIR}/
+    ${BE_PROTO_THRIFT_GENSRC_DIR}/
     ${GENSRC_DIR}/
     SYSTEM ${THIRDPARTY_DIR}/include
     SYSTEM ${GPERFTOOLS_HOME}/include
@@ -835,28 +511,39 @@ include_directories(
     SYSTEM ${THIRDPARTY_DIR}/llvm/include/
 )
 
-
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     include_directories(${THIRDPARTY_DIR}/include/breakpad/)
 endif()
 
-set(WL_START_GROUP "-Wl,--start-group")
-set(WL_END_GROUP "-Wl,--end-group")
-set(WL_LINK_STATIC "-Wl,-Bstatic")
-set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
+if (APPLE)
+    set(WL_START_GROUP "")
+    set(WL_END_GROUP "")
+    set(WL_LINK_STATIC "")
+    set(WL_LINK_DYNAMIC "")
+    # Darwin has no GNU whole-archive/group flags. Force-load the static
+    # registrar libraries on executable targets via STARROCKS_FORCE_LOAD_LIBS().
+    set(WL_WHOLE_ARCHIVE_PREFIX "")
+    set(WL_WHOLE_ARCHIVE_SUFFIX "")
+else()
+    set(WL_START_GROUP "-Wl,--start-group")
+    set(WL_END_GROUP "-Wl,--end-group")
+    set(WL_LINK_STATIC "-Wl,-Bstatic")
+    set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
+    set(WL_WHOLE_ARCHIVE_PREFIX "-Wl,--whole-archive")
+    set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
+endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
-    Common
     Column
     Connector
     Exec
-    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
+    ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    Gutil
+    HttpClient
     IO
     Serde
     Storage
@@ -868,26 +555,30 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    StarRocksGen
     Webserver
     TestUtil
     Tools
     Geo
-    Simd
     Cache
+    orc
     ${WL_END_GROUP}
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    RuntimeCore
+    $<TARGET_FILE:HttpCore>
+    $<TARGET_FILE:ChunkCore>
+    $<TARGET_FILE:ColumnCore>
+    $<TARGET_FILE:TypesCore>
+    $<TARGET_FILE:FSCore>
+    $<TARGET_FILE:IOCore>
+    $<TARGET_FILE:Common>
+    $<TARGET_FILE:Base>
+    $<TARGET_FILE:Gutil>
+    $<TARGET_FILE:StarRocksGen>
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
 )
-
-set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
-add_library(jvm SHARED IMPORTED)
-FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/lib/*/libjvm.so)
-set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
-include_directories(${JAVA_HOME}/include)
-include_directories(${JAVA_HOME}/include/linux)
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     ${AWSSDK_LINK_LIBRARIES}
@@ -944,10 +635,10 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
+    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
-    orc
     cctz
     fmt
     ryu
@@ -986,6 +677,15 @@ set(STARROCKS_DEPENDENCIES
     ${WL_END_GROUP}
 )
 
+if (APPLE)
+    list(REMOVE_ITEM STARROCKS_DEPENDENCIES
+        opentelemetry_trace
+        http_client_curl
+        opentelemetry_resources
+        opentelemetry_common
+        opentelemetry_exporter_jaeger_trace)
+endif()
+
 if (NOT BUILD_FORMAT_LIB)
     set(STARROCKS_DEPENDENCIES
             ${STARROCKS_DEPENDENCIES}
@@ -1018,49 +718,144 @@ if (${WITH_TENANN} STREQUAL "ON")
     )
 endif()
 
+# enable global pch compiling
+option(WITH_PCH "Enable precompiled headers for BE targets" ON)
+if (WITH_PCH)
+    add_library(StarRocksPCH INTERFACE)
+    target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+    endif()
+endif()
+
+if (APPLE)
+    if (CMAKE_CXX_COMPILER_AR)
+        set(CMAKE_AR "${CMAKE_CXX_COMPILER_AR}" CACHE FILEPATH "Archiver" FORCE)
+    endif()
+    if (CMAKE_CXX_COMPILER_RANLIB)
+        set(CMAKE_RANLIB "${CMAKE_CXX_COMPILER_RANLIB}" CACHE FILEPATH "Ranlib" FORCE)
+    endif()
+endif()
+
+if (THIN_ARCHIVE)
+    set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
+    set(CMAKE_C_ARCHIVE_APPEND   "<CMAKE_AR> qsT  <TARGET> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_APPEND "<CMAKE_AR> qsT  <TARGET> <OBJECTS>")
+
+    set(CMAKE_C_ARCHIVE_FINISH   "true")
+    set(CMAKE_CXX_ARCHIVE_FINISH "true")
+endif()
+
+
 # Add all external dependencies. They should come after the starrocks libs.
 
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${STARROCKS_DEPENDENCIES}
-    hdfs
-    jvm
-)
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES} hdfs jvm)
+
 set(BUILD_FOR_SANITIZE "OFF")
+set(DEP_SANITIZE_LIBS "")
 
 # Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if (APPLE)
+        # Darwin only supports the dynamic ASan runtime selected by -fsanitize=address.
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+        set(DEP_SANITIZE_LIBS -static-libsan)
     else()
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+        set(DEP_SANITIZE_LIBS -static-libasan)
     endif()
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
+    set(DEP_SANITIZE_LIBS -static-liblsan)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
+    set(DEP_SANITIZE_LIBS -static-libubsan)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
+    set(DEP_SANITIZE_LIBS -static-libtsan)
     set(BUILD_FOR_SANITIZE "ON")
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
-    # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
+if (APPLE)
+    set(WRAP_LINKER_FLAGS "")
+else()
+    set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+endif()
+
+FUNCTION(ADD_BE_LIB LIB_NAME)
+    IF(ENABLE_MULTI_DYNAMIC_LIBS)
+        # support build and install component 
+        # ${CMAKE_CMD} -DCOMPONENT=$LIB_NAME -P cmake_install.cmake
+        ADD_LIBRARY(${LIB_NAME} SHARED ${ARGN})
+        target_link_libraries(${LIB_NAME} PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
+        install(TARGETS ${LIB_NAME}
+            LIBRARY DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
+            ARCHIVE DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
+        )
+    ELSE()
+        ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
+        if (WITH_PCH)
+            target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
+        endif()
+    ENDIF()
+    set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
+ENDFUNCTION()
+
+function(STARROCKS_FORCE_LOAD_LIBS TARGET_NAME)
+    if (APPLE)
+        foreach(FORCE_LOAD_TARGET IN LISTS ARGN)
+            target_link_options(${TARGET_NAME} PRIVATE "LINKER:-force_load,$<TARGET_FILE:${FORCE_LOAD_TARGET}>")
+        endforeach()
+    endif()
+endfunction()
+
+
+set(STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC})
+if (NOT APPLE)
+    set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -lgomp)
+endif()
+
+if (NOT APPLE AND NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
+    # In other words, turn to dynamic link when ENABLE_MULTI_DYNAMIC_LIBS or MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libstdc++ -static-libgcc)
+    set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
+endif()
+
+if (APPLE)
+    set(STARROCKS_SYSTEM_LINK_LIBS
+        -lresolv
+        -lm
+        -pthread
+        "-framework Foundation"
+        "-framework CoreText"
+        "-framework ApplicationServices"
+        "-framework SystemConfiguration"
+    )
+    find_library(MIMALLOC_LIB
+        NAMES mimalloc
+        HINTS ${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64 /opt/homebrew/lib /usr/local/lib
+    )
+    if (MIMALLOC_LIB AND NOT "${BUILD_FOR_SANITIZE}" STREQUAL "ON")
+        list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
+    endif()
+else()
+    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -liberty -lc -lm -ldl -rdynamic -pthread)
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${WL_LINK_STATIC} -lbfd
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on
@@ -1082,12 +877,13 @@ set(BUILD_SHARED_LIBS OFF)
 set (STARROCKS_LINKER "$ENV{STARROCKS_LINKER}")
 include(cmake_modules/FindGlibcVersion.cmake)
 
-if (GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
-    if (NOT DEFINED ${STARROCKS_LINKER} OR ${STARROCKS_LINKER} STREQUAL "")
+if (NOT APPLE AND GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
+    if ("${STARROCKS_LINKER}" STREQUAL "" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
         set(STARROCKS_LINKER "gold")
+        message(STATUS "forcibly switch linker to: ${STARROCKS_LINKER}")
     endif()
 endif()
-message("using linker: ${STARROCKS_LINKER}")
+message(STATUS "using linker: ${STARROCKS_LINKER}")
 
 if (NOT STARROCKS_LINKER STREQUAL "")
     add_link_options("-fuse-ld=${STARROCKS_LINKER}")
@@ -1099,12 +895,13 @@ if (${MAKE_TEST} STREQUAL "ON")
     add_definitions(-DFIU_ENABLE)
 else()
     if (BUILD_FORMAT_LIB)
+        set(THIN_ARCHIVE OFF)
         # output *.a, *.so, *.dylib to output/format-lib-tmp
         set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
         set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
     else()
         # output *.a, *.so, *.dylib to output/tmp
-        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tmp/${CMAKE_BUILD_TYPE})
         set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
     endif ()
     # output *.exe to output/lib
@@ -1121,6 +918,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} gtest_main)
+    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} Exprs ExprCore)
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
@@ -1141,9 +939,9 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
+    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} Exprs ExprCore)
 
-    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
-    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
+    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_OUTPUT_DIR_NAME}")
     endif()
@@ -1151,6 +949,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
+add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
@@ -1167,7 +966,6 @@ add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/simd)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
@@ -1206,6 +1004,7 @@ install(FILES
     ${BASE_DIR}/../bin/stop_cn.sh
     ${BASE_DIR}/../bin/show_be_version.sh
     ${BASE_DIR}/../bin/meta_tool.sh
+    ${BASE_DIR}/../bin/collect_be_profile.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
     GROUP_READ GROUP_WRITE GROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE
@@ -1219,15 +1018,12 @@ install(FILES
     ${BASE_DIR}/../conf/log4j2.properties
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
-    DESTINATION ${OUTPUT_DIR}/conf)
-
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
-install(FILES
     ${BASE_DIR}/../conf/asan_suppressions.conf
+    ${BASE_DIR}/../conf/type_checker_config.xml
     DESTINATION ${OUTPUT_DIR}/conf)
-endif()
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/
     DESTINATION ${OUTPUT_DIR}/www)
 
+FINALIZE_BE_LIBS()

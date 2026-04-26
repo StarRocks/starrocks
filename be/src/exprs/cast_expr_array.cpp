@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
+#include "column/variant_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
@@ -25,7 +27,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/memory/memory_resource.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks {
@@ -140,12 +141,12 @@ Status CastStringToArray::open(RuntimeState* state, ExprContext* context, Functi
 // Cast string to array<ANY>
 StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     if (_constant_res != nullptr && _constant_res->is_constant()) {
-        auto* input = down_cast<ConstColumn*>(_constant_res.get());
+        const auto* input = down_cast<const ConstColumn*>(_constant_res.get());
         size_t rows = input_chunk == nullptr ? 1 : input_chunk->num_rows();
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(rows);
         } else {
-            return ConstColumn::create(input->data_column()->clone(), rows);
+            return ConstColumn::create(std::move(*(input->data_column())).clone(), rows);
         }
     }
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
@@ -176,7 +177,8 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         // return null if not valid array
         if (!is_valid_array(str, stack)) {
             if (_throw_exception_if_err) {
-                return Status::InternalError(fmt::format("invalid array input: {}", str));
+                return Status::InternalError(
+                        fmt::format("invalid array input: {}", std::string_view(str.get_data(), str.get_size())));
             } else {
                 has_null = true;
                 null_column->append(1);
@@ -213,16 +215,16 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     if (element_type != TYPE_VARCHAR && element_type != TYPE_CHAR) {
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
-        chunk->append_column(elements, slot_id);
+        chunk->append_column(std::move(elements), slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
-        elements = ColumnHelper::cast_to_nullable_column(cast_res);
+        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
     }
 
     // 3. Assemble elements into array column
-    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(elements, std::move(offsets));
 
     if (column->is_nullable() || has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(res, std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
@@ -293,21 +295,100 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
     if (element_type != TYPE_JSON) {
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
-        chunk->append_column(elements, slot_id);
+        chunk->append_column(std::move(elements), slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
-        elements = ColumnHelper::cast_to_nullable_column(cast_res);
+        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
     }
 
     // 3. Assemble elements into array column
-    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(elements, std::move(offsets));
     if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(res, std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
         res = ConstColumn::create(std::move(res), column->size());
     }
+    return res;
+}
+
+StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
+    if (column->only_null()) {
+        return ColumnHelper::create_const_null_column(column->size());
+    }
+
+    DCHECK(_cast_elements_expr != nullptr);
+    const LogicalType element_type = _cast_elements_expr->type().type;
+    const ColumnViewer<TYPE_VARIANT> src(column);
+    const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
+    UInt32Column::MutablePtr offsets = UInt32Column::create();
+    NullColumn::MutablePtr null_column = NullColumn::create();
+
+    // 1. Cast a variant(type=ARRAY) to ARRAY<VARIANT>
+    // If the variant is not array type, set null
+    uint32_t offset = 0;
+    ColumnBuilder<TYPE_VARIANT> variant_column_builder(src.size());
+    for (size_t i = 0; i < src.size(); i++) {
+        offsets->append(offset);
+        if (src.is_null(i)) {
+            null_column->append(1);
+            continue;
+        }
+
+        const size_t variant_row = column->is_constant() ? 0 : i;
+        VariantRowRef row_ref;
+        VariantRowValue variant_buffer;
+        if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
+            const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+            if (variant == nullptr) {
+                null_column->append(1);
+                continue;
+            }
+            row_ref = variant->as_ref();
+        }
+        if (row_ref.is_null()) {
+            null_column->append(1);
+            continue;
+        }
+
+        const VariantValue& value = row_ref.get_value();
+        const VariantMetadata& metadata = row_ref.get_metadata();
+        if (value.type() != VariantType::ARRAY) {
+            null_column->append(1);
+            continue;
+        }
+
+        ASSIGN_OR_RETURN(const auto array_info, value.get_array_info());
+        for (uint32_t j = 0; j < array_info.num_elements; ++j) {
+            ASSIGN_OR_RETURN(VariantValue element_variant, value.get_element_at_index(metadata, j));
+            variant_column_builder.append(VariantRowValue::from_variant(metadata, element_variant));
+        }
+        offset += array_info.num_elements;
+        null_column->append(0);
+    }
+    offsets->append(offset);
+
+    // 2. Cast variant to specified type
+    ColumnPtr elements = variant_column_builder.build_nullable_column();
+    if (element_type != TYPE_VARIANT) {
+        const auto chunk = std::make_shared<Chunk>();
+        const SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
+        chunk->append_column(elements, slot_id);
+        ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
+        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
+    }
+
+    // 3. Assemble elements into array column
+    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
+    // Cast from variant may generate null rows for non-array/null variant values even when source
+    // column itself is non-nullable, so keep the per-row null bitmap.
+    res = NullableColumn::create(std::move(res), std::move(null_column));
+    if (column->is_constant()) {
+        res = ConstColumn::create(std::move(res), column->size());
+    }
+
     return res;
 }
 

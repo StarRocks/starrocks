@@ -15,12 +15,17 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <mutex>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/spill/common.h"
 #include "exec/spill/executor.h"
@@ -29,11 +34,13 @@
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
+DECLARE_FAIL_POINT(spill_restore_sleep);
+
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.append_data_timer);
@@ -50,7 +57,7 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& gua
         if (!_opts.splittable && _opts.init_partition_nums > 0) {
             // For splittable spiller, we need to set the schema before spilling.
             // This is because the partitioned spiller needs to know the schema of the chunk.
-            std::shared_ptr<Chunk> new_chunk = chunk->clone_empty(0);
+            ChunkPtr new_chunk = chunk->clone_empty(0);
             new_chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
             _chunk_builder.chunk_schema()->set_schema(new_chunk);
         } else {
@@ -180,7 +187,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         auto defer = CancelableDefer([&]() {
             {
                 std::lock_guard _(_mutex);
-                _mem_table_pool.emplace(std::move(mem_table));
+                _mem_table_pool.emplace(mem_table);
             }
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
         });
@@ -203,7 +210,9 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     };
 
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
+    auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
+    io_task.set_query_type(query_type);
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks.load());
@@ -236,6 +245,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+            SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
             auto yield_defer = yield_ctx.defer_finished();
             RETURN_IF(!guard.scoped_begin(), (void)0);
             DEFER_GUARD_END(guard);
@@ -254,8 +264,12 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 yield_ctx.time_spent_ns = 0;
                 yield_ctx.need_yield = false;
 
+                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
+
                 YieldableRestoreTask task(_stream);
                 res = task.do_read(yield_ctx, serd_ctx);
+
+                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
 
                 if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
@@ -273,7 +287,9 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
             TaskExecutor::force_submit(std::move(task));
         };
+        auto query_type = spill_query_type(state);
         auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(restore_task), std::move(yield_func));
+        io_task.set_query_type(query_type);
         RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
         COUNTER_SET(_spiller->metrics().peak_restore_io_task_count, _running_restore_tasks.load());
@@ -292,7 +308,7 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
     {
         SCOPED_TIMER(_spiller->metrics().shuffle_timer);
         std::vector<uint32_t> shuffle_result;
-        shuffle(shuffle_result, down_cast<SpillHashColumn*>(hash_column.get()));
+        shuffle(shuffle_result, down_cast<SpillHashColumn*>(hash_column->as_mutable_raw_ptr()));
         process_partition_data(chunk, shuffle_result,
                                [&chunk](SpilledPartition* partition, const std::vector<uint32_t>& selection,
                                         int32_t from, int32_t size) {
@@ -370,7 +386,9 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         return Status::OK();
     };
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
+    auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
+    io_task.set_query_type(query_type);
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks.load());

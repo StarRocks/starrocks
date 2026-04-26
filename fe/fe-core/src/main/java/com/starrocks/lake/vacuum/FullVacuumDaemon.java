@@ -28,6 +28,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.VacuumFullRequest;
 import com.starrocks.proto.VacuumFullResponse;
@@ -46,7 +47,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -69,11 +69,14 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
     public FullVacuumDaemon() {
         // Check every minute if we should run a full vacuum
-        super("FullVacuumDaemon", 1000 * 60);
+        super("full-vacuum-daemon", 1000 * 60);
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        if (!Config.lake_enable_fullvacuum) {
+            return;
+        }
         if (FeConstants.runningUnitTest) {
             return;
         }
@@ -149,7 +152,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
             }
             visibleVersion = partition.getVisibleVersion();
@@ -206,6 +209,9 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         }
         long minCheckVersion = 0;
         long maxCheckVersion = visibleVersion; // always should be inited by current visibleVersion
+        if (partition.getMinRetainVersion() > 0) {
+            maxCheckVersion = Math.min(maxCheckVersion, partition.getMinRetainVersion());
+        }
         vacuumFullRequest.setMinCheckVersion(minCheckVersion);
         vacuumFullRequest.setMaxCheckVersion(maxCheckVersion);
         vacuumFullRequest.setRetainVersions(retainVersions);
@@ -264,8 +270,6 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
     @VisibleForTesting
     public static long computeMinActiveTxnId(Database db, Table table) {
-        long a = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
-        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
-        return Math.min(a, b.orElse(Long.MAX_VALUE));
+        return LakeTableHelper.computeMinActiveTxnId(db.getId(), table.getId());
     }
 }

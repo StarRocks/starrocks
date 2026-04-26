@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
@@ -27,6 +26,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.thrift.TAccessPathType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VariantType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 
@@ -49,7 +52,7 @@ public class SubfieldAccessPathNormalizer {
 
     private static class AccessPath {
         private final ScalarOperator root;
-        private Type valueType = Type.INVALID;
+        private Type valueType = InvalidType.INVALID;
         private final List<String> paths = Lists.newArrayList();
         private final List<TAccessPathType> pathTypes = Lists.newArrayList();
 
@@ -81,13 +84,12 @@ public class SubfieldAccessPathNormalizer {
         }
     }
 
-
     public ColumnAccessPath normalizePath(ColumnRefOperator root, String columnName) {
         List<AccessPath> paths = allAccessPaths.stream().filter(path -> path.root().equals(root))
                 .sorted((o1, o2) -> Integer.compare(o2.paths.size(), o1.paths.size()))
                 .collect(Collectors.toList());
 
-        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, Type.INVALID);
+        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, InvalidType.INVALID);
         for (AccessPath accessPath : paths) {
             ColumnAccessPath parentPath = rootPath;
             for (int i = 0; i < accessPath.paths.size(); i++) {
@@ -106,7 +108,7 @@ public class SubfieldAccessPathNormalizer {
                         childPath.setType(isOffsetOrKey ? TAccessPathType.KEY : TAccessPathType.ALL);
                     }
                     childPath.setValueType(
-                            deriverCompatibleJsonType(childPath.getValueType(), accessPath.getValueType()));
+                            deriveCompatibleValueType(root, childPath.getValueType(), accessPath.getValueType()));
                     parentPath = childPath;
                 } else {
                     ColumnAccessPath childPath = new ColumnAccessPath(accessPath.pathTypes.get(i),
@@ -126,21 +128,27 @@ public class SubfieldAccessPathNormalizer {
      * select get_json_int(j1, "$.a"), get_json_string(j1, "$.a") from js
      * j1->"$.a" read as int/string at the sametime, so need use the compatible type to read from storage
      */
-    private Type deriverCompatibleJsonType(Type first, Type second) {
+    private Type deriveCompatibleValueType(ColumnRefOperator root, Type first, Type second) {
         // only json type used, other semi-type are explicit types, so we set INVALID
-        if (first == Type.INVALID || second == Type.INVALID) {
-            return Type.INVALID;
+        if (first == InvalidType.INVALID || second == InvalidType.INVALID) {
+            return InvalidType.INVALID;
         }
 
         if (first.getPrimitiveType() == second.getPrimitiveType()) {
             return first;
         }
 
-        // the compatible type of two types use JSON,
-        // the be can't promise cast(cast(xx as IntermediateType) as TargetType) is same as cast(xx as TargetType)
+        // For variant root columns, keep the merged path as variant so the explain/thrift
+        // still reflects the original source semantics when multiple typed accesses conflict.
+        if (root.getType().isVariantType()) {
+            return root.getType();
+        }
+
+        // The compatible type of two json-derived scalar reads uses JSON,
+        // the BE can't promise cast(cast(xx as IntermediateType) as TargetType) is same as cast(xx as TargetType)
         // e.g: cast(cast("1.1" as double) as int) is different with cast("1.1" as int)
         // so we use JSON as the compatible type
-        return Type.JSON;
+        return JsonType.JSON;
     }
 
     public boolean hasPath(ColumnRefOperator root) {
@@ -163,7 +171,8 @@ public class SubfieldAccessPathNormalizer {
         @Override
         public Optional<AccessPath> visitVariableReference(ColumnRefOperator variable,
                                                            List<Optional<AccessPath>> childrenAccessPaths) {
-            if (variable.getType().isComplexType() || variable.getType().isJsonType()) {
+            if (variable.getType().isComplexType() || variable.getType().isJsonType()
+                    || variable.getType().isVariantType()) {
                 return Optional.of(new AccessPath(variable));
             }
             return Optional.empty();
@@ -216,10 +225,22 @@ public class SubfieldAccessPathNormalizer {
                     if (isOverflown || FunctionSet.JSON_LENGTH.equals(call.getFnName())
                             || FunctionSet.GET_JSON_BOOL.equals(call.getFnName())
                             || FunctionSet.JSON_EXISTS.equals(call.getFnName())) {
-                        p.setValueType(Type.JSON);
+                        p.setValueType(JsonType.JSON);
                     } else {
                         p.setValueType(call.getType());
                     }
+                    return p;
+                });
+            } else if (PruneSubfieldRule.SUPPORT_VARIANT_FUNCTIONS.contains(call.getFnName())
+                    && call.getArguments().size() > 1 && call.getArguments().get(1).isConstantRef()) {
+                String path = ((ConstantOperator) call.getArguments().get(1)).getVarchar();
+                return childrenAccessPaths.get(0).map(p -> {
+                    List<String> flatPaths = Lists.newArrayList();
+                    boolean isOverflown = formatJsonPath(path, flatPaths); // reuse same JSONPath format: $.a.b.c
+                    p.appendFieldNames(flatPaths);
+                    // If the path is truncated to an intermediate node, keep the leaf as variant
+                    // instead of a typed scalar to avoid incorrect typed subfield reads.
+                    p.setValueType(isOverflown ? VariantType.VARIANT : call.getType());
                     return p;
                 });
             }

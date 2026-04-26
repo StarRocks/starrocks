@@ -19,14 +19,14 @@
 
 #include <cstdint>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/logging.h"
 #include "function_helper.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -124,10 +124,9 @@ public:
  */
 template <typename OP>
 struct StringUnaryFunction {
-public:
     template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
-        auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data();
+        const auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->immutable_data();
 
         auto result = RunTimeColumnType<TYPE_VARCHAR>::create(std::forward<Args>(args)...);
 
@@ -201,7 +200,7 @@ public:
                     return result;
                 }
 
-                auto nullable_data = down_cast<NullableColumn*>(result.get());
+                auto nullable_data = down_cast<const NullableColumn*>(result.get());
                 if (result->has_null()) {
                     // case 2: the result rows are partially nulls, must merge null columns
                     // both inside the input column and inside the results.

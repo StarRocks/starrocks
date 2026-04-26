@@ -16,8 +16,12 @@
 
 #include <memory>
 
+#include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
@@ -25,15 +29,15 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
+#include "storage/non_retryable_load_errors.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -52,6 +56,7 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
             ncolumn--;
         }
         vector<ColumnId> column_idxes;
+        column_idxes.reserve(ncolumn);
         for (ColumnId i = 0; i < ncolumn; i++) {
             column_idxes.push_back(i);
         }
@@ -69,13 +74,20 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
     }
 }
 
-void MemTable::_init_aggregator_if_needed() {
+Status MemTable::prepare(PrimaryKeyEncodingType pk_encoding_type) {
     if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
         // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(_vectorized_schema, 0, INT_MAX, 0);
+        ASSIGN_OR_RETURN(_aggregator, ChunkAggregator::create(_vectorized_schema, 0, INT_MAX, 0));
     }
+    if (_keys_type == KeysType::PRIMARY_KEYS) {
+        if (pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE) {
+            return Status::InternalError("invalid primary key encoding type");
+        }
+        _pk_encoding_type = pk_encoding_type;
+    }
+    return Status::OK();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
@@ -87,12 +99,12 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _sink(sink),
           _aggregator(nullptr),
           _merge_condition(std::move(merge_condition)),
+          _max_buffer_size(config::write_buffer_size),
           _mem_tracker(mem_tracker) {
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
-    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
@@ -103,12 +115,12 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _keys_type(schema->keys_type()),
           _sink(sink),
           _aggregator(nullptr),
+          _max_buffer_size(config::write_buffer_size),
           _mem_tracker(mem_tracker) {
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
-    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
@@ -120,9 +132,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, 
           _sink(sink),
           _aggregator(nullptr),
           _max_buffer_size(max_buffer_size),
-          _mem_tracker(mem_tracker) {
-    _init_aggregator_if_needed();
-}
+          _mem_tracker(mem_tracker) {}
 
 MemTable::~MemTable() = default;
 
@@ -203,17 +213,17 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
         // instead of the column name.
         for (int i = 0; i < _slot_descs->size(); ++i) {
             const ColumnPtr& src = chunk.get_column_by_slot_id((*_slot_descs)[i]->id());
-            ColumnPtr& dest = _chunk->get_column_by_index(i);
+            auto* dest = _chunk->get_column_raw_ptr_by_index(i);
             dest->append_selective(*src, indexes, from, size);
         }
         if (is_column_with_row) {
-            ColumnPtr& dest = _chunk->get_column_by_name(Schema::FULL_ROW_COLUMN);
+            auto dest = _chunk->get_column_raw_ptr_by_name(Schema::FULL_ROW_COLUMN);
             dest->append(*full_row_col.get());
         }
     } else {
         for (int i = 0; i < _vectorized_schema->num_fields(); i++) {
             const ColumnPtr& src = chunk.get_column_by_index(i);
-            ColumnPtr& dest = _chunk->get_column_by_index(i);
+            auto* dest = _chunk->get_column_raw_ptr_by_index(i);
             dest->append_selective(*src, indexes, from, size);
             if (is_column_with_row && i == _vectorized_schema->num_fields() - 1) {
                 dest->append(*full_row_col.get());
@@ -230,7 +240,11 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     // if memtable is full, push it to the flush executor,
     // and create a new memtable for incoming data
     bool suggest_flush = false;
-    if (is_full()) {
+    // When parallel memtable finalize is enabled, skip the early merge optimization here.
+    // The merge will be done during finalize() in the flush thread instead.
+    // This avoids redundant merge operations and allows the write thread to return
+    // earlier, improving overall throughput by parallelizing write and finalize operations.
+    if (is_full() && !config::enable_parallel_memtable_finalize) {
         size_t orig_bytes = write_buffer_size();
         RETURN_IF_ERROR(_merge());
         size_t new_bytes = write_buffer_size();
@@ -286,11 +300,12 @@ Status MemTable::finalize() {
             _result_chunk = _aggregator->aggregate_result();
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
-                                                       _result_chunk->num_rows(), config::primary_key_limit_size)) {
+                                                       _result_chunk->num_rows(), config::primary_key_limit_size,
+                                                       _pk_encoding_type)) {
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
                 _aggregator_bytes_usage = 0;
-                return Status::Cancelled("primary key size exceed the limit.");
+                return Status::Cancelled(kPrimaryKeySizeExceedError);
             }
             if (_has_op_slot) {
                 // TODO(cbl): mem_tracker
@@ -321,13 +336,22 @@ Status MemTable::finalize() {
             RETURN_IF_ERROR(_sort(true));
         }
     }
+    // Release the input chunk after finalize to free memory earlier.
+    // The finalized data is now in _result_chunk which will be used for flush.
+    // This is especially important when parallel finalize is enabled, as it allows
+    // the memory to be reclaimed before the flush I/O completes.
+    _chunk.reset();
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
+    StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
     StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
-Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) {
+// Flush the memtable data through the configured sink
+// @param slot_idx: slot index from flush token, passed through to the sink to maintain
+//                  flush order when parallel flush is enabled
+Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, int64_t slot_idx) {
     FAIL_POINT_TRIGGER_EXECUTE(load_memtable_flush, MEMTABLE_FLUSH_FP_ACTION(_sink->txn_id(), _sink->tablet_id()));
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
@@ -340,10 +364,12 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) 
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
+        // Pass slot_idx to sink for ordering in parallel flush scenarios
         if (_deletes) {
-            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size,
+                                                            slot_idx));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         }
     }
     auto io_stat = scope.current_scoped_tls_io();
@@ -458,7 +484,9 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);
     size_t nrows = src->num_rows();
-    auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(op_column->accept(&visitor));
+    const auto* ops = visitor.result();
     size_t ndel = 0;
     for (size_t i = 0; i < nrows; i++) {
         ndel += (ops[i] == TOpType::DELETE);
@@ -484,7 +512,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
     if (!(*deletes)) {
-        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes);
+        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes, _pk_encoding_type);
         if (!st.ok()) {
             LOG(ERROR) << "create column for primary key encoder failed, schema:" << *_vectorized_schema
                        << ", status:" << st.to_string();
@@ -497,7 +525,8 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
         (*deletes)->reset_column();
     }
     auto& delidx = indexes[TOpType::DELETE];
-    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get());
+    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get(),
+                                        _pk_encoding_type);
     return Status::OK();
 }
 

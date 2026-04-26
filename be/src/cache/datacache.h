@@ -14,14 +14,17 @@
 
 #pragma once
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/local_cache_engine.h"
+#include <vector>
+
+#include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/local_disk_cache_engine.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
 #include "common/status.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 
 class Status;
-class StorePath;
 class RemoteCacheEngine;
 class DiskCacheOptions;
 class GlobalEnv;
@@ -39,16 +42,13 @@ public:
 
     void try_release_resource_before_core_dump();
 
-    void set_local_mem_cache(std::shared_ptr<LocalCacheEngine> local_mem_cache) {
-        _local_mem_cache = std::move(local_mem_cache);
-    }
-    void set_local_disk_cache(std::shared_ptr<LocalCacheEngine> local_disk_cache) {
+    void set_local_disk_cache(std::shared_ptr<LocalDiskCacheEngine> local_disk_cache) {
         _local_disk_cache = std::move(local_disk_cache);
     }
     void set_page_cache(std::shared_ptr<StoragePageCache> page_cache) { _page_cache = std::move(page_cache); }
 
-    LocalCacheEngine* local_mem_cache() { return _local_mem_cache.get(); }
-    LocalCacheEngine* local_disk_cache() { return _local_disk_cache.get(); }
+    LocalMemCacheEngine* local_mem_cache() { return _local_mem_cache.get(); }
+    LocalDiskCacheEngine* local_disk_cache() { return _local_disk_cache.get(); }
     BlockCache* block_cache() const { return _block_cache.get(); }
     void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
@@ -63,11 +63,11 @@ public:
 
 private:
     StatusOr<MemCacheOptions> _init_mem_cache_options();
-    StatusOr<DiskCacheOptions> _init_disk_cache_options();
     RemoteCacheOptions _init_remote_cache_options();
     BlockCacheOptions _init_block_cache_options();
 
 #if defined(WITH_STARCACHE)
+    StatusOr<DiskCacheOptions> _init_disk_cache_options();
     Status _init_starcache_engine(DiskCacheOptions* cache_options);
     Status _init_peer_cache(const RemoteCacheOptions& cache_options);
 #endif
@@ -78,10 +78,8 @@ private:
     std::vector<StorePath> _store_paths;
 
     // cache engine
-    std::string _local_mem_cache_engine;
-    std::string _local_disk_cache_engine;
-    std::shared_ptr<LocalCacheEngine> _local_mem_cache;
-    std::shared_ptr<LocalCacheEngine> _local_disk_cache;
+    std::shared_ptr<LocalMemCacheEngine> _local_mem_cache;
+    std::shared_ptr<LocalDiskCacheEngine> _local_disk_cache;
     std::shared_ptr<RemoteCacheEngine> _remote_cache;
 
     std::shared_ptr<BlockCache> _block_cache;

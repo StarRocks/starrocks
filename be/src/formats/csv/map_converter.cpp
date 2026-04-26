@@ -19,7 +19,7 @@
 
 namespace starrocks::csv {
 
-Status MapConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status MapConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                   const Options& options) const {
     auto* map = down_cast<const MapColumn*>(&column);
     auto& offsets = map->offsets();
@@ -43,7 +43,7 @@ Status MapConverter::write_string(OutputStream* os, const Column& column, size_t
     return os->write('}');
 }
 
-Status MapConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status MapConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                          const Options& options) const {
     return write_string(os, column, row_num, options);
 }
@@ -109,9 +109,9 @@ bool MapConverter::read_string(Column* column, const Slice& s, const Options& op
         return false;
     }
     auto* map = down_cast<MapColumn*>(column);
-    auto* offsets = map->offsets_column().get();
-    auto* keys = map->keys_column().get();
-    auto* values = map->values_column().get();
+    auto* offsets = map->offsets_column_raw_ptr();
+    auto* keys = map->keys_column_raw_ptr();
+    auto* values = map->values_column_raw_ptr();
     std::vector<Slice> key_fields, value_fields;
     if (!s.empty() && !split_map_key_value(s, key_fields, value_fields)) {
         return false;

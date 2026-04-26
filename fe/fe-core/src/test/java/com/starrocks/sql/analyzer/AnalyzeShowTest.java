@@ -20,11 +20,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
-import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
@@ -47,11 +47,11 @@ public class AnalyzeShowTest {
     @Test
     public void testShowVariables() throws AnalysisException {
         analyzeSuccess("show variables");
-        EnhancedShowStmt statement = (EnhancedShowStmt) analyzeSuccess("show variables where variables_name = 't1'");
+        ShowStmt statement = (ShowStmt) analyzeSuccess("show variables where variables_name = 't1'");
         Assertions.assertEquals("SELECT information_schema.SESSION_VARIABLES.VARIABLE_NAME AS Variable_name, " +
                         "information_schema.SESSION_VARIABLES.VARIABLE_VALUE AS Value " +
                         "FROM information_schema.SESSION_VARIABLES WHERE variables_name = 't1'",
-                AstToStringBuilder.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(ShowStmtToSelectStmtConverter.toSelectStmt(statement)));
 
         ShowVariablesStmt stmt = (ShowVariablesStmt) analyzeSuccess("show global variables like 'abc'");
         Assertions.assertEquals("abc", stmt.getPattern());
@@ -81,16 +81,16 @@ public class AnalyzeShowTest {
                         "information_schema.tables.CREATE_OPTIONS AS Create_options, " +
                         "information_schema.tables.TABLE_COMMENT AS Comment " +
                         "FROM information_schema.tables WHERE information_schema.tables.TABLE_NAME = 't1'",
-                AstToStringBuilder.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(ShowStmtToSelectStmtConverter.toSelectStmt(statement)));
     }
 
     @Test
     public void testShowDatabases() throws AnalysisException {
         analyzeSuccess("show databases;");
-        EnhancedShowStmt statement = (EnhancedShowStmt) analyzeSuccess("show databases where `database` = 't1';");
+        ShowStmt statement = (ShowStmt) analyzeSuccess("show databases where `database` = 't1';");
         Assertions.assertEquals("SELECT information_schema.schemata.SCHEMA_NAME AS Database " +
                         "FROM information_schema.schemata WHERE information_schema.schemata.SCHEMA_NAME = 't1'",
-                AstToStringBuilder.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(ShowStmtToSelectStmtConverter.toSelectStmt(statement)));
     }
 
     @Test
@@ -101,7 +101,7 @@ public class AnalyzeShowTest {
                 "SELECT information_schema.tables.TABLE_NAME AS Tables_in_test " +
                         "FROM information_schema.tables " +
                         "WHERE (information_schema.tables.TABLE_SCHEMA = 'test') AND (table_name = 't1')",
-                AstToStringBuilder.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(ShowStmtToSelectStmtConverter.toSelectStmt(statement)));
 
         statement = (ShowTableStmt) analyzeSuccess("show tables from `test`");
         Assertions.assertEquals("test", statement.getDb());
@@ -120,7 +120,7 @@ public class AnalyzeShowTest {
                         "FROM information_schema.COLUMNS WHERE (information_schema.COLUMNS.COLUMN_NAME = 'v1') " +
                         "AND ((information_schema.COLUMNS.TABLE_NAME = 't1') " +
                         "AND (information_schema.COLUMNS.TABLE_SCHEMA = 'test'))",
-                AstToStringBuilder.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(ShowStmtToSelectStmtConverter.toSelectStmt(statement)));
     }
 
     @Test

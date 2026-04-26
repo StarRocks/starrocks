@@ -16,23 +16,23 @@
 
 #include <bvar/bvar.h>
 
+#include "base/concurrency/countdown_latch.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
+#include "common/thread/threadpool.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/countdown_latch.h"
-#include "util/defer_op.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -112,7 +112,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.partition_id = publish_version_req.partition_version_infos[i].partition_id;
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
-                task.rowset = std::move(itr.second.first);
+                task.rowset = itr.second.first;
                 task.is_shadow = itr.second.second;
                 // rowset can be nullptr if it just prepared but not committed
                 if (task.rowset != nullptr) {
@@ -123,8 +123,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
             }
         }
     }
-    span->SetAttribute("num_partition", num_partition);
-    span->SetAttribute("num_tablet", num_active_tablet);
+    span->SetAttribute("num_partition", static_cast<uint64_t>(num_partition));
+    span->SetAttribute("num_tablet", static_cast<uint64_t>(num_active_tablet));
 
     std::mutex affected_dirs_lock;
     CountDownLatch latch(static_cast<int>(tablet_tasks.size()));
@@ -285,6 +285,9 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);
                     pair.__set_version(max_continuous_version);
+                    if (is_replication_txn) {
+                        pair.__set_min_readable_version(tablet->min_readable_version());
+                    }
                 }
 
                 if (enable_sync_publish && tablet_tasks.empty() && max_continuous_version < partition_version.version) {

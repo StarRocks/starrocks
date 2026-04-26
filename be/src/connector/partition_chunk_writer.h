@@ -14,21 +14,31 @@
 
 #pragma once
 
-#include <fmt/format.h>
+#include <utility>
 
-#include <map>
-
-#include "column/chunk.h"
-#include "common/status.h"
+#include "base/uid_util.h"
+#include "column/vectorized_fwd.h"
+#include "common/thread/threadpool.h"
+#include "connector/connector_sink_profile.h"
 #include "connector/utils.h"
+#include "exec/sorting/sorting.h"
 #include "formats/file_writer.h"
-#include "fs/fs.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "fs/fs_fwd.h"
 #include "storage/load_chunk_spiller.h"
-#include "util/threadpool.h"
+
+namespace starrocks {
+
+class TupleDescriptor;
+
+namespace pipeline {
+class FragmentContext;
+} // namespace pipeline
+
+} // namespace starrocks
 
 namespace starrocks::connector {
+
+class ConnectorSinkSpillExecutor;
 
 using CommitResult = formats::FileWriter::CommitResult;
 using CommitFunc = std::function<void(const CommitResult& result)>;
@@ -48,11 +58,14 @@ struct PartitionChunkWriterContext {
     bool is_default_partition = false;
 };
 
-struct BufferPartitionChunkWriterContext : public PartitionChunkWriterContext {};
+struct BufferPartitionChunkWriterContext : PartitionChunkWriterContext {};
 
-struct SpillPartitionChunkWriterContext : public PartitionChunkWriterContext {
+struct SpillPartitionChunkWriterContext : PartitionChunkWriterContext {
+    std::shared_ptr<FileSystem> fs;
     pipeline::FragmentContext* fragment_context = nullptr;
+    ConnectorSinkSpillExecutor* spill_executor = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators;
     std::shared_ptr<SortOrdering> sort_ordering;
 };
 
@@ -65,9 +78,11 @@ public:
 
     virtual Status init() = 0;
 
-    virtual Status write(Chunk* chunk) = 0;
+    virtual Status write(const ChunkPtr& chunk) = 0;
 
     virtual Status flush() = 0;
+
+    virtual Status wait_flush() = 0;
 
     virtual Status finish() = 0;
 
@@ -91,12 +106,13 @@ public:
 
     void set_error_handler(const ErrorHandleFunc& error_handler) { _error_handler = error_handler; }
 
+    void set_sink_profile(ConnectorSinkProfile* sink_profile) { _sink_profile = sink_profile; }
+
 protected:
     Status create_file_writer_if_needed();
 
-    void commit_file();
+    Status commit_file();
 
-protected:
     std::string _partition;
     std::vector<int8_t> _partition_field_null_list;
     std::shared_ptr<formats::FileWriterFactory> _file_writer_factory;
@@ -105,14 +121,19 @@ protected:
     bool _is_default_partition = false;
     AsyncFlushStreamPoller* _io_poller = nullptr;
 
-    std::shared_ptr<formats::FileWriter> _file_writer;
+    // The destruction of _file_writer triggers a flush of _out_stream.
+    // Therefore, we must ensure _file_writer is destroyed first, followed by _out_stream.
+    // Failing to do so will result in a use-after-free error for _out_stream.
+    // TODO: Refactor the file writer and output stream to make them more robust and user-friendly.
     std::shared_ptr<io::AsyncFlushOutputStream> _out_stream;
+    std::shared_ptr<formats::FileWriter> _file_writer;
     CommitFunc _commit_callback;
     std::string _commit_extra_data;
     ErrorHandleFunc _error_handler = nullptr;
+    ConnectorSinkProfile* _sink_profile = nullptr;
 };
 
-class BufferPartitionChunkWriter : public PartitionChunkWriter {
+class BufferPartitionChunkWriter final : public PartitionChunkWriter {
 public:
     BufferPartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                                const std::shared_ptr<BufferPartitionChunkWriterContext>& ctx)
@@ -120,9 +141,11 @@ public:
 
     Status init() override;
 
-    Status write(Chunk* chunk) override;
+    Status write(const ChunkPtr& chunk) override;
 
     Status flush() override;
+
+    Status wait_flush() override;
 
     Status finish() override;
 
@@ -133,18 +156,20 @@ public:
     int64_t get_flushable_bytes() override { return _file_writer ? _file_writer->get_written_bytes() : 0; }
 };
 
-class SpillPartitionChunkWriter : public PartitionChunkWriter {
+class SpillPartitionChunkWriter final : public PartitionChunkWriter {
 public:
     SpillPartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                               const std::shared_ptr<SpillPartitionChunkWriterContext>& ctx);
 
-    ~SpillPartitionChunkWriter();
+    ~SpillPartitionChunkWriter() override;
 
     Status init() override;
 
-    Status write(Chunk* chunk) override;
+    Status write(const ChunkPtr& chunk) override;
 
     Status flush() override;
+
+    Status wait_flush() override;
 
     Status finish() override;
 
@@ -158,7 +183,12 @@ public:
                _file_writer->get_written_bytes();
     }
 
-    int64_t get_flushable_bytes() override { return _chunk_bytes_usage; }
+    int64_t get_flushable_bytes() override {
+        if (!_spill_mode) {
+            return _file_writer ? _file_writer->get_written_bytes() : 0;
+        }
+        return _chunk_bytes_usage;
+    }
 
     Status merge_blocks();
 
@@ -173,7 +203,7 @@ private:
 
     Status _write_chunk(Chunk* chunk);
 
-    void _merge_chunks();
+    Status _merge_chunks();
 
     SchemaPtr _make_schema();
 
@@ -184,13 +214,16 @@ private:
     void _handle_err(const Status& st);
 
 private:
+    std::shared_ptr<FileSystem> _fs = nullptr;
     pipeline::FragmentContext* _fragment_context = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     std::shared_ptr<SortOrdering> _sort_ordering;
     std::unique_ptr<ThreadPoolToken> _chunk_spill_token;
     std::unique_ptr<ThreadPoolToken> _block_merge_token;
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
     std::shared_ptr<LoadChunkSpiller> _load_chunk_spiller;
+    TUniqueId _writer_id;
 
     std::list<ChunkPtr> _chunks;
     int64_t _chunk_bytes_usage = 0;
@@ -198,6 +231,8 @@ private:
     ChunkPtr _result_chunk;
     ChunkPtr _base_chunk;
     SchemaPtr _schema;
+    std::unordered_map<int, int> _col_index_map; // result chunk index -> chunk index
+    bool _spill_mode = false;
 
     static const int64_t kWaitMilliseconds;
 };
@@ -214,11 +249,11 @@ public:
                                            std::vector<int8_t> partition_field_null_list) const = 0;
 };
 
-class BufferPartitionChunkWriterFactory : public PartitionChunkWriterFactory {
+class BufferPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
-    ~BufferPartitionChunkWriterFactory() = default;
+    ~BufferPartitionChunkWriterFactory() override = default;
 
     Status init() override { return _ctx->file_writer_factory->init(); }
 
@@ -232,11 +267,11 @@ private:
     std::shared_ptr<BufferPartitionChunkWriterContext> _ctx;
 };
 
-class SpillPartitionChunkWriterFactory : public PartitionChunkWriterFactory {
+class SpillPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
-    ~SpillPartitionChunkWriterFactory() = default;
+    ~SpillPartitionChunkWriterFactory() override = default;
 
     Status init() override { return _ctx->file_writer_factory->init(); }
 

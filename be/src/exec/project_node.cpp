@@ -27,12 +27,15 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/status.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -66,7 +69,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -77,7 +80,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }
@@ -89,8 +92,8 @@ Status ProjectNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
 
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_common_sub_expr_ctxs, state));
 
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
@@ -107,8 +110,8 @@ Status ProjectNode::open(RuntimeState* state) {
     DictOptimizeParser::set_output_slot_id(&_common_sub_expr_ctxs, _common_sub_slot_ids);
     DictOptimizeParser::set_output_slot_id(&_expr_ctxs, _slot_ids);
 
-    RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -191,8 +194,8 @@ void ProjectNode::close(RuntimeState* state) {
         return;
     }
 
-    Expr::close(_expr_ctxs, state);
-    Expr::close(_common_sub_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
+    ExprExecutor::close(_common_sub_expr_ctxs, state);
 
     ExecNode::close(state);
 }
@@ -286,9 +289,9 @@ void ProjectNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilt
     }
 }
 
-pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ProjectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto operators, _children[0]->decompose_to_pipeline(context));
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
 
@@ -296,7 +299,7 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
             context->next_operator_id(), id(), std::move(_slot_ids), std::move(_expr_ctxs),
             std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs)));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

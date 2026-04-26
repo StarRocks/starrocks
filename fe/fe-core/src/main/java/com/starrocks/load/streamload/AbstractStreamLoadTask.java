@@ -8,6 +8,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.http.rest.TransactionResult;
@@ -27,7 +28,7 @@ import java.util.List;
  * Abstract base class for stream load tasks
  */
 public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse {
+        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse, LoadsSystemTable.Job {
 
     public abstract void beginTxnFromFrontend(TransactionResult resp);
     public abstract void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp);
@@ -42,7 +43,25 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract boolean checkNeedPrepareTxn();
     public abstract boolean isDurableLoadState();
     public abstract void cancelAfterRestart();
+
+    /**
+     * Returns stream load information in Thrift format for querying information_schema.stream_loads.
+     * 
+     * <p>The returned {@link TStreamLoadInfo} objects contain all fields that match the columns defined in
+     * {@link com.starrocks.catalog.system.information.StreamLoadsSystemTable}.
+     * 
+     * @return List of TStreamLoadInfo objects containing stream load task information
+     */
     public abstract List<TStreamLoadInfo> toStreamLoadThrift();
+
+    /**
+     * Returns load information in Thrift format for querying information_schema.loads.
+     * 
+     * <p>The returned {@link TLoadInfo} objects contain all fields that match the columns defined in
+     * {@link com.starrocks.catalog.system.information.LoadsSystemTable}.
+     * 
+     * @return List of TLoadInfo objects containing load task information
+     */
     public abstract List<TLoadInfo> toThrift();
     public abstract void init();
 
@@ -51,6 +70,7 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract String getLabel();
     public abstract String getDBName();
     public abstract long getDBId();
+    public abstract String getUser();
     public abstract long getTxnId();
     public abstract String getTableName();
     public abstract String getStateName();
@@ -58,7 +78,47 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract long createTimeMs();
     public abstract long endTimeMs();
     public abstract long getFinishTimestampMs();
+
+    @Override
+    public long getDbId() {
+        return getDBId();
+    }
+
+    @Override
+    public boolean matchTableName(String tableName) {
+        return tableName.equals(getTableName());
+    }
+
+    @Override
+    public Long getCreateTimeMs() {
+        return createTimeMs();
+    }
+
+    @Override
+    public Long getLoadFinishTimeMs() {
+        return getFinishTimestampMs();
+    }
+
+    /**
+     * Returns detailed information about the stream load task for SHOW STREAM LOAD statement.
+     * 
+     * <p>Each inner List&lt;String&gt; represents one row. The field definitions and order
+     * can be found in {@link com.starrocks.sql.ast.ShowStreamLoadStmt#TITLE_NAMES}.
+     * 
+     * @return List of rows, where each row is a List&lt;String&gt; containing the fields
+     *         defined in ShowStreamLoadStmt.TITLE_NAMES
+     */
     public abstract List<List<String>> getShowInfo();
+
+    /**
+     * Returns brief information about the stream load task for SHOW PROC "/stream_loads".
+     * 
+     * <p>Each inner List&lt;String&gt; represents one row. The field definitions and order
+     * can be found in {@link com.starrocks.common.proc.StreamLoadsProcDir#TITLE_NAMES}.
+     * 
+     * @return List of rows, where each row is a List&lt;String&gt; containing the fields
+     *         defined in StreamLoadsProcDir.TITLE_NAMES
+     */
     public abstract List<List<String>> getShowBriefInfo();
     public abstract String getStringByType();
 }

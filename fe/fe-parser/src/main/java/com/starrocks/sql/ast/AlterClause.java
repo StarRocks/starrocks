@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
@@ -20,13 +19,18 @@ import com.starrocks.sql.parser.NodePosition;
 // Alter clause.
 public abstract class AlterClause implements ParseNode {
 
-
     protected final NodePosition pos;
 
     protected AlterClause(NodePosition pos) {
         this.pos = pos;
     }
 
+    /**
+     * @return SQL syntax corresponding to this node.
+     */
+    public String toSql() {
+        throw new RuntimeException("New AST not implement toSql function");
+    }
 
     @Override
     public NodePosition getPos() {

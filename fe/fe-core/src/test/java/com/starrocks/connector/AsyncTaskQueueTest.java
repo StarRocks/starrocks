@@ -126,4 +126,116 @@ public class AsyncTaskQueueTest {
             testGenerateString();
         }
     }
+
+    @Test
+    public void testInterruptedExceptionHandling() throws InterruptedException {
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        
+        class SlowTask implements AsyncTaskQueue.Task<String> {
+            @Override
+            public List<String> run() throws InterruptedException {
+                Thread.sleep(1000);
+                return List.of("result");
+            }
+        }
+
+        AsyncTaskQueue<String> asyncTaskQueue = new AsyncTaskQueue<>(executorService);
+        asyncTaskQueue.setMaxRunningTaskCount(1);
+        asyncTaskQueue.start(List.of(new SlowTask()));
+
+        Thread consumerThread = new Thread(() -> {
+            try {
+                asyncTaskQueue.getOutputs(1);
+            } catch (Exception e) {
+                Assertions.fail("Should not throw exception when interrupted");
+            }
+            Assertions.assertTrue(Thread.currentThread().isInterrupted(),
+                    "Thread interrupt status should be restored");
+        });
+
+        consumerThread.start();
+        Thread.sleep(100);
+        consumerThread.interrupt();
+        consumerThread.join(2000);
+
+        executorService.shutdown();
+    }
+
+    @Test
+    public void testTriggerTaskExceptionHandling() throws InterruptedException {
+        class SimpleTask implements AsyncTaskQueue.Task<String> {
+            private final boolean shouldFail;
+            
+            SimpleTask(boolean shouldFail) {
+                this.shouldFail = shouldFail;
+            }
+            
+            @Override
+            public List<String> run() {
+                if (shouldFail) {
+                    throw new RuntimeException("Task execution failed");
+                }
+                return List.of("result");
+            }
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        AsyncTaskQueue<String> asyncTaskQueue = new AsyncTaskQueue<>(executor);
+
+        List<SimpleTask> tasks = new ArrayList<>();
+        tasks.add(new SimpleTask(true));
+        tasks.add(new SimpleTask(false));
+        tasks.add(new SimpleTask(false));
+        asyncTaskQueue.start(tasks);
+
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            asyncTaskQueue.getOutputs(3);
+        }, "Should throw exception when task fails");
+
+        Assertions.assertNotNull(exception.getCause(), "Should have cause exception");
+        Assertions.assertTrue(exception.getCause().getMessage().contains("Task execution failed"),
+                            "Should propagate original task exception as cause");
+        executor.shutdown();
+    }
+
+    @Test
+    public void testTriggerTaskFinallyBlockWithEmptyQueue() throws Exception {
+        Executor faultyExecutor = command -> {
+            throw new RuntimeException("Executor rejected task");
+        };
+        
+        class SimpleTask implements AsyncTaskQueue.Task<String> {
+            @Override
+            public List<String> run() {
+                return List.of("result");
+            }
+        }
+
+        AsyncTaskQueue<String> asyncTaskQueue = new AsyncTaskQueue<>(faultyExecutor);
+        
+        asyncTaskQueue.start(List.of(new SimpleTask()));
+        
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            asyncTaskQueue.getOutputs(1);
+        }, "Should throw exception when executor fails");
+        
+        Assertions.assertNotNull(exception.getCause(), "Should have cause exception");
+        Assertions.assertTrue(exception.getCause().getMessage().contains("Executor rejected task"),
+                            "Should propagate executor exception as cause");
+        
+        java.lang.reflect.Field taskQueueSizeField = AsyncTaskQueue.class.getDeclaredField("taskQueueSize");
+        taskQueueSizeField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicInteger taskQueueSize =
+                (java.util.concurrent.atomic.AtomicInteger) taskQueueSizeField.get(asyncTaskQueue);
+        Assertions.assertEquals(0, taskQueueSize.get(), 
+                              "taskQueueSize should be 0 after exception (decremented in finally block)");
+        
+        java.lang.reflect.Field taskExceptionField = AsyncTaskQueue.class.getDeclaredField("taskException");
+        taskExceptionField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicReference<Exception> taskException =
+                (java.util.concurrent.atomic.AtomicReference<Exception>) taskExceptionField.get(asyncTaskQueue);
+        Assertions.assertNotNull(taskException.get(), "taskException should be set when task fails");
+        Assertions.assertTrue(taskException.get().getCause().getMessage().contains("Executor rejected task"),
+                            "taskException should contain the original executor exception");
+    }
 }

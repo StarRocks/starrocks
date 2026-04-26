@@ -23,12 +23,13 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/concurrency/race_detect.h"
+#include "base/utility/defer_op.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "gen_cpp/InternalService_types.h"
 #include "util/blocking_priority_queue.hpp"
-#include "util/defer_op.h"
-#include "util/race_detect.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::workgroup {
 
@@ -107,6 +108,9 @@ public:
 
     const YieldContext& get_work_context() const { return work_context; }
 
+    void set_query_type(TQueryType::type type) { _query_type = type; }
+    TQueryType::type query_type() const { return _query_type; }
+
 public:
     WorkGroupPtr workgroup;
     YieldContext work_context;
@@ -115,6 +119,9 @@ public:
     int priority = 0;
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;
+
+private:
+    TQueryType::type _query_type = TQueryType::EXTERNAL;
 };
 
 /// There are two types of ScanTaskQueue:
@@ -130,6 +137,7 @@ public:
     virtual void close() = 0;
 
     virtual StatusOr<ScanTask> take() = 0;
+    virtual StatusOr<ScanTask> take(int worker_id) { return take(); }
     virtual bool try_offer(ScanTask task) = 0;
     virtual void force_put(ScanTask task) = 0;
 
@@ -148,6 +156,7 @@ public:
     void close() override { _queue.shutdown(); }
 
     StatusOr<ScanTask> take() override;
+    bool try_take(ScanTask* task);
     bool try_offer(ScanTask task) override;
     void force_put(ScanTask task) override;
 

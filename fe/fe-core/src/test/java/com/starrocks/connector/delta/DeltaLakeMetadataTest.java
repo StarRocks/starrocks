@@ -18,18 +18,20 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.ColumnVector;
@@ -183,7 +185,7 @@ public class DeltaLakeMetadataTest {
             }
         };
         List<String> partitionNames =
-                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadatRequestContext.DEFAULT);
+                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadataRequestContext.DEFAULT);
         Assertions.assertEquals(3, partitionNames.size());
         Assertions.assertEquals("ts=1999", partitionNames.get(0));
         Assertions.assertEquals("ts=2000", partitionNames.get(1));
@@ -220,5 +222,43 @@ public class DeltaLakeMetadataTest {
         Assertions.assertEquals("table1", deltaTable.getName());
         Assertions.assertEquals(Table.TableType.DELTALAKE, deltaTable.getType());
         Assertions.assertEquals("path/to/table", deltaTable.getTableLocation());
+    }
+
+    @Test
+    public void testGetTableWithSemanticRootCause(@Mocked DeltaMetastoreOperations deltaOps) throws Exception {
+        new Expectations() {
+            {
+                deltaOps.getTable("db_sem", "tbl_sem");
+                result = new RuntimeException(new SemanticException("semantic detail message"));
+            }
+        };
+
+        DeltaLakeMetadata metadata = new DeltaLakeMetadata(
+                new HdfsEnvironment(Maps.newHashMap()), "delta0", deltaOps, null,
+                new ConnectorProperties(ConnectorType.DELTALAKE));
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getTable(null, "db_sem", "tbl_sem"));
+        Assertions.assertTrue(ex.getMessage().contains("semantic detail message"));
+    }
+
+    @Test
+    public void testGetTableWithOtherRootCause(@Mocked DeltaMetastoreOperations deltaOps) throws Exception {
+        new Expectations() {
+            {
+                deltaOps.getTable("db_io", "tbl_io");
+                result = new RuntimeException(new java.io.IOException("io failure"));
+            }
+        };
+
+        DeltaLakeMetadata metadata = new DeltaLakeMetadata(
+                new HdfsEnvironment(Maps.newHashMap()), "delta0", deltaOps, null,
+                new ConnectorProperties(ConnectorType.DELTALAKE));
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getTable(null, "db_io", "tbl_io"));
+        String expectedPrefix = "Failed to get deltalake table delta0.db_io.tbl_io";
+        Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
+        Assertions.assertTrue(ex.getMessage().contains("io failure"));
     }
 }

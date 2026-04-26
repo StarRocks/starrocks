@@ -1,4 +1,4 @@
--- name: test_vector_index_insert @sequential
+-- name: test_vector_index_insert @sequential @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 -- result:
 -- !result

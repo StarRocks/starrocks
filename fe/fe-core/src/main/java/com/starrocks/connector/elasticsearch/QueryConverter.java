@@ -18,11 +18,13 @@ package com.starrocks.connector.elasticsearch;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
@@ -33,7 +35,6 @@ import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.thrift.TExprOpcode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -124,8 +125,8 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
             column = getColumnName(exprWithoutCast(node.getChild(1)));
             value = valueFor(node.getChild(0));
         }
-        TExprOpcode opCode = node.getOpcode();
-        switch (opCode) {
+        BinaryType opType = node.getOp();
+        switch (opType) {
             case EQ:
                 return QueryBuilders.termQuery(column, value);
             case NE:
@@ -139,7 +140,7 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
             case LT:
                 return QueryBuilders.rangeQuery(column).lt(value);
             default:
-                throw new StarRocksConnectorException("can not support " + opCode + " in BinaryPredicate");
+                throw new StarRocksConnectorException("can not support " + opType + " in BinaryPredicate");
         }
     }
 
@@ -190,7 +191,7 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
 
     @Override
     public QueryBuilders.QueryBuilder visitFunctionCall(FunctionCallExpr node, Void context) {
-        if ("esquery".equals(node.getFnName().getFunction())) {
+        if ("esquery".equals(node.getFunctionName())) {
             String stringValue = ((StringLiteral) node.getChild(1)).getStringValue();
             return new QueryBuilders.RawQueryBuilder(stringValue);
         } else {
@@ -222,7 +223,7 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
     }
 
     private static Object valueFor(Expr expr) {
-        if (!expr.isLiteral()) {
+        if (!ExprUtils.isLiteral(expr)) {
             throw new StarRocksConnectorException("can not get literal value from " + expr);
         }
         if (expr instanceof BoolLiteral) {

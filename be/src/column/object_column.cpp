@@ -14,15 +14,15 @@
 
 #include "column/object_column.h"
 
+#include "base/phmap/phmap.h"
+#include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/variant_value.h"
-#include "util/json.h"
-#include "util/mysql_row_buffer.h"
-#include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -43,6 +43,16 @@ size_t ObjectColumn<T>::byte_size(size_t idx) const {
 }
 
 template <typename T>
+void ObjectColumn<T>::resize(size_t n) {
+    _pool.resize(n);
+}
+
+template <typename T>
+void ObjectColumn<T>::reserve(size_t n) {
+    _pool.reserve(n);
+}
+
+template <typename T>
 void ObjectColumn<T>::assign(size_t n, size_t idx) {
     if (idx != 0) {
         _pool[0] = std::move(_pool[idx]);
@@ -53,26 +63,21 @@ void ObjectColumn<T>::assign(size_t n, size_t idx) {
     for (size_t i = 1; i < n; ++i) {
         append(&_pool[0]);
     }
-
-    _cache_ok = false;
 }
 
 template <typename T>
 void ObjectColumn<T>::append(const T* object) {
     _pool.emplace_back(*object);
-    _cache_ok = false;
 }
 
 template <typename T>
 void ObjectColumn<T>::append(T&& object) {
     _pool.emplace_back(std::move(object));
-    _cache_ok = false;
 }
 
 template <typename T>
 void ObjectColumn<T>::append(const T& object) {
     _pool.emplace_back(object);
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -83,7 +88,6 @@ void ObjectColumn<T>::remove_first_n_values(size_t count) {
     }
 
     _pool.resize(remain_size);
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -116,10 +120,10 @@ bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
     _pool.reserve(_pool.size() + size);
     for (size_t i = 0; i < size; i++) {
         const auto& s = data[i];
-        if constexpr (std::is_same_v<T, VariantValue>) {
+        if constexpr (std::is_same_v<T, VariantRowValue>) {
             auto variant_result = T::create(s);
             if (!variant_result.ok()) {
-                LOG(WARNING) << "Failed to create VariantValue from Slice: " << variant_result.status().to_string();
+                LOG(WARNING) << "Failed to create VariantRowValue from Slice: " << variant_result.status().to_string();
                 return false;
             }
             _pool.emplace_back(std::move(*variant_result));
@@ -128,7 +132,6 @@ bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
         }
     }
 
-    _cache_ok = false;
     return true;
 }
 
@@ -140,14 +143,11 @@ void ObjectColumn<T>::append_value_multiple_times(const void* value, size_t coun
     for (size_t i = 0; i < count; ++i) {
         _pool.emplace_back(*reinterpret_cast<T*>(slice->data));
     }
-
-    _cache_ok = false;
-};
+}
 
 template <typename T>
 void ObjectColumn<T>::append_default() {
     _pool.emplace_back(T());
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -164,7 +164,6 @@ void ObjectColumn<T>::fill_default(const Filter& filter) {
             _pool[i] = {};
         }
     }
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -175,7 +174,6 @@ void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
         DCHECK_LT(indexes[i], _pool.size());
         _pool[indexes[i]] = *obj_col.get_object(i);
     }
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -214,15 +212,17 @@ const uint8_t* ObjectColumn<T>::deserialize_and_append(const uint8_t* pos) {
 
 template <typename T>
 bool ObjectColumn<T>::deserialize_and_append(const Slice& src) {
+    bool res = false;
     if constexpr (std::is_same_v<T, BitmapValue>) {
-        return _pool.emplace_back().valid_and_deserialize(src.data, src.size);
+        res = _pool.emplace_back().valid_and_deserialize(src.data, src.size);
     } else if constexpr (std::is_same_v<T, HyperLogLog>) {
-        return _pool.emplace_back().deserialize(src);
+        res = _pool.emplace_back().deserialize(src);
     } else if constexpr (std::is_same_v<T, PercentileValue>) {
         _pool.emplace_back(src);
-        return true;
+        res = true;
     }
-    return false;
+
+    return res;
 }
 
 template <typename T>
@@ -263,22 +263,6 @@ int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::Colu
 }
 
 template <typename T>
-void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    std::string s;
-    for (uint32_t i = from; i < to; ++i) {
-        s.resize(_pool[i].serialize_size());
-        //TODO: May be overflow here if the object is large then 2G.
-        size_t size = _pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
-        hash[i] = HashUtil::fnv_hash(s.data(), static_cast<int32_t>(size), hash[i]);
-    }
-}
-
-template <typename T>
-void ObjectColumn<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "object column shouldn't call crc32_hash ";
-}
-
-template <typename T>
 int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "object column shouldn't call xor_checksum";
     return 0;
@@ -290,10 +274,9 @@ void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_
 }
 
 template <typename T>
-void ObjectColumn<T>::_build_slices() const {
-    // TODO(kks): improve this
-    _buffer.clear();
-    _slices.clear();
+void ObjectColumn<T>::build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const {
+    buffer.clear();
+    slices.clear();
 
     // FIXME(kks): bitmap itself compress is more effective than LZ4 compress?
     // Do we really need compress bitmap here?
@@ -307,12 +290,12 @@ void ObjectColumn<T>::_build_slices() const {
     }
 
     size_t size = byte_size();
-    _buffer.resize(size);
-    _slices.reserve(_pool.size());
+    buffer.resize(size);
+    slices.reserve(_pool.size());
     size_t old_size = 0;
     for (size_t i = 0; i < _pool.size(); ++i) {
-        size_t slice_size = _pool[i].serialize(_buffer.data() + old_size);
-        _slices.emplace_back(_buffer.data() + old_size, slice_size);
+        size_t slice_size = _pool[i].serialize(buffer.data() + old_size);
+        slices.emplace_back(buffer.data() + old_size, slice_size);
         old_size += slice_size;
     }
 }
@@ -340,7 +323,7 @@ std::string ObjectColumn<BitmapValue>::debug_item(size_t idx) const {
 }
 
 template <typename T>
-StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
     RETURN_IF_ERROR(capacity_limit_reached());
     return nullptr;
 }
@@ -349,6 +332,6 @@ template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;
 template class ObjectColumn<JsonValue>;
-template class ObjectColumn<VariantValue>;
+template class ObjectColumn<VariantRowValue>;
 
 } // namespace starrocks

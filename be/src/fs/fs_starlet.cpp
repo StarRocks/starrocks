@@ -27,22 +27,27 @@
 #include <sys/stat.h>
 #include <worker.h>
 
-#include "common/config.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/container/lru_cache.h"
+#include "base/string/string_parser.hpp"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/encrypt_file.h"
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+#include "fs/fs_registry.h"
+#endif
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
+#include "io/core/output_stream.h"
+#include "io/core/seekable_input_stream.h"
+#include "io/core/throttled_output_stream.h"
+#include "io/core/throttled_seekable_input_stream.h"
 #include "io/io_profiler.h"
-#include "io/output_stream.h"
-#include "io/seekable_input_stream.h"
-#include "io/throttled_output_stream.h"
-#include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
-#include "util/defer_op.h"
-#include "util/stopwatch.hpp"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -294,7 +299,10 @@ private:
 
 class StarletFileSystem : public FileSystem {
 public:
-    StarletFileSystem() { staros::starlet::fslib::register_builtin_filesystems(); }
+    StarletFileSystem(std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = nullptr)
+            : _shard_fs(std::move(shard_fs)) {
+        staros::starlet::fslib::register_builtin_filesystems();
+    }
     ~StarletFileSystem() override = default;
 
     StarletFileSystem(const StarletFileSystem&) = delete;
@@ -327,7 +335,7 @@ public:
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
-        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+        auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -353,7 +361,7 @@ public:
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
-        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+        auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -425,10 +433,7 @@ public:
             return to_status(fs_st.status());
         }
         auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat e) {
-            DirEntry entry{.name = e.name,
-                           .mtime = std::move(e.mtime),
-                           .size = std::move(e.size),
-                           .is_dir = std::move(e.is_dir)};
+            DirEntry entry{.name = e.name, .mtime = e.mtime, .size = e.size, .is_dir = e.is_dir};
             return cb(entry);
         });
         return to_status(st);
@@ -523,7 +528,7 @@ public:
     }
 
     StatusOr<SpaceInfo> space(const std::string& path) override {
-        const Status status = is_directory(path).status();
+        Status status = is_directory(path).status();
         if (!status.ok()) {
             return status;
         }
@@ -581,13 +586,27 @@ public:
         return Status::NotSupported("StarletFileSystem::link_file");
     }
 
-    Status drop_local_cache(const std::string& path) override {
+    Status drop_local_cache(const std::string& path, int64_t offset, int64_t size) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        return to_status((*fs_st)->drop_cache(pair.first));
+        return to_status((*fs_st)->drop_cache(pair.first, offset, size));
+    }
+
+    StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset,
+                                                        int64_t size) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto cache_stats_or = (*fs_st)->get_cache_stats(pair.first, offset, size);
+        if (!cache_stats_or.ok()) {
+            return to_status(cache_stats_or.status());
+        }
+        return std::make_pair((*cache_stats_or).cached_bytes, (*cache_stats_or).total_bytes);
     }
 
     Status delete_files(std::span<const std::string> paths) override {
@@ -613,16 +632,140 @@ public:
 
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
+        if (_shard_fs != nullptr) {
+            return _shard_fs;
+        }
         return g_worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
     staros::starlet::fslib::Configuration _conf;
+    std::shared_ptr<staros::starlet::fslib::FileSystem> _shard_fs;
 };
 
 std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
 }
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_starlet_registry;
+
+bool match_starlet_shared(std::string_view uri) {
+    return is_starlet_uri(uri);
+}
+
+bool match_starlet_unique(std::string_view uri, const FSOptions&) {
+    return is_starlet_uri(uri);
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_starlet_shared(std::string_view) {
+    if (tls_fs_starlet_registry == nullptr) {
+        tls_fs_starlet_registry.reset(new_fs_starlet().release());
+    }
+    return tls_fs_starlet_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_starlet_unique(std::string_view, const FSOptions&) {
+    return new_fs_starlet();
+}
+
+} // namespace
+
+FileSystemProvider new_starlet_file_system_provider(int priority) {
+    return {
+            .id = "starlet",
+            .priority = priority,
+            .match_shared = match_starlet_shared,
+            .create_shared = create_starlet_shared,
+            .match_unique = match_starlet_unique,
+            .create_unique = create_starlet_unique,
+    };
+}
+
+} // namespace fs
+#endif // defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+
+// Deleter for LRU cache entries
+static void shard_fs_cache_deleter(const CacheKey& /*key*/, void* value) {
+    delete static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(value);
+}
+
+// Internal helper to get or create shard filesystem cache
+static Cache* get_shard_fs_cache() {
+    constexpr size_t kDefaultCacheCapacity = 1024 * 10;
+    static std::unique_ptr<Cache> g_shard_fs_cache(new_lru_cache(kDefaultCacheCapacity));
+    return g_shard_fs_cache.get();
+}
+
+std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) {
+    // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
+    // where each shard fs correspond to one storage volume on source cluster.
+    Cache* cache = get_shard_fs_cache();
+
+    // Build cache key from shard_id, appending "_1" suffix for raw path mode
+    // to differentiate from normal mode entries within the same cache instance.
+    std::string key_str = use_raw_path ? fmt::format("{}_1", shard_id) : std::to_string(shard_id);
+    CacheKey cache_key(key_str);
+
+    // Try cache lookup
+    Cache::Handle* handle = cache->lookup(cache_key);
+    if (handle != nullptr) {
+        auto* cached_ptr = static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(cache->value(handle));
+        std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = *cached_ptr;
+        cache->release(handle);
+        return std::make_shared<StarletFileSystem>(shard_fs);
+    }
+
+    // Cache miss - create new shard filesystem
+    staros::starlet::fslib::Configuration conf;
+    if (use_raw_path) {
+        // S3 raw path mode: use the input path as-is without normalize_path processing
+        // This is required for S3 storage type to support partitioned prefix feature
+        //
+        // The configuration is passed to StarOSWorker::build_conf_from_shard_info() which
+        // forwards it to ShardInfo::fslib_conf_from_this() as initial configuration.
+        // When cache is enabled, fslib_conf_from_this() will automatically add "cachefs."
+        // prefix to all configuration keys.
+        conf[staros::starlet::fslib::kS3UseRawPathWithScheme] = "true";
+    }
+    // For non-S3 storage types (use_raw_path=false), use default configuration
+    // Starlet will use normalize_path to combine sys.root with the relative path
+#ifdef BE_TEST
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
+    TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
+    if (absl::IsUnimplemented(fs_st.status())) {
+        fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+    }
+#else
+    auto fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+#endif
+    if (!fs_st.ok()) {
+        LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path
+                     << ", error: " << fs_st.status();
+        return nullptr;
+    }
+
+    std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = fs_st.value();
+
+    // Insert into cache
+    auto* cache_value = new std::shared_ptr<staros::starlet::fslib::FileSystem>(shard_fs);
+    handle = cache->insert(cache_key, cache_value, 1, shard_fs_cache_deleter);
+    if (handle != nullptr) {
+        cache->release(handle);
+    } else {
+        delete cache_value;
+    }
+
+    LOG(INFO) << "Created new shard filesystem, shard_id: " << shard_id
+              << ", cache_inserts: " << cache->get_insert_count() << ", use_raw_path: " << use_raw_path
+              << ", cache_memory: " << cache->get_memory_usage() << " bytes";
+
+    return std::make_shared<StarletFileSystem>(shard_fs);
+}
+
 } // namespace starrocks
 
 #endif // USE_STAROS

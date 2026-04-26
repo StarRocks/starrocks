@@ -41,13 +41,17 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.TreeNode;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -185,6 +189,19 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private List<Integer> collectExecStatsIds;
 
+    // If all scan nodes in the entire plan are OLAP scan nodes and at most one tablet is used,
+    // then all fragments will have at most one instance (running on a single BE).
+    // In this case, there is no need to put the ResultSink in a dedicated gather fragment.
+    //
+    // CN mode(prefer_compute_node is true or share-data mode) needs special handling here, because its strategy for selecting
+    // BE/CN nodes for remote fragments (whose left-deep node is not a scan node) is different from non-CN mode:
+    // - CN mode: selects all CN nodes as instances, which will be more than 1 here,
+    //   causing the fragment that contains the ResultSink to also have more than 1 instance.
+    // - None-CN mode: selects the BE node(s) where the child fragment is running.
+    //
+    // Therefore, if isSingleTabletGatherOutputFragment is true, CN mode should use the same selection strategy as none-CN mode.
+    private boolean isSingleTabletGatherOutputFragment = false;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -256,11 +273,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     private void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            ConnectContext connectContext = ConnectContext.get();
+            SessionVariable sv = connectContext.getSessionVariable();
+            if (sv.isEnablePipelineEngine()) {
                 this.parallelExecNum = 1;
-                this.pipelineDop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                this.pipelineDop = sv.getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
             } else {
-                this.parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+                this.parallelExecNum = sv.getParallelExecInstanceNum();
                 this.pipelineDop = 1;
             }
         }
@@ -415,13 +434,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void setOutputExprs(List<Expr> outputExprs) {
-        this.outputExprs = Expr.cloneList(outputExprs, null);
+        this.outputExprs = ExprUtils.cloneList(outputExprs, null);
     }
 
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
-    public void createDataSink(TResultSinkType resultSinkType) {
+    public void createDataSink(TResultSinkType resultSinkType, ExecPlan execPlan) {
         if (sink != null) {
             return;
         }
@@ -440,8 +459,17 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             // add ResultSink
             // we're streaming to an result sink
-            sink = new ResultSink(planRoot.getId(), resultSinkType);
+
+            if (resultSinkType == TResultSinkType.ARROW_FLIGHT_PROTOCAL) {
+                sink = new ResultSink(planRoot.getId(), resultSinkType, execPlan.getColNames());
+            } else {
+                sink = new ResultSink(planRoot.getId(), resultSinkType);
+            }
         }
+    }
+
+    public void createDataSink(TResultSinkType resultSinkType) {
+        createDataSink(resultSinkType, null);
     }
 
     public int getParallelExecNum() {
@@ -462,7 +490,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.setPlan(planRoot.treeToThrift());
         }
         if (outputExprs != null) {
-            result.setOutput_exprs(Expr.treesToThrift(outputExprs));
+            result.setOutput_exprs(ExprToThrift.treesToThrift(outputExprs));
         }
         if (sink != null) {
             result.setOutput_sink(sink.toThrift());
@@ -475,7 +503,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             Preconditions.checkState(!queryGlobalDicts.isEmpty(), "Global dict expression error!");
             Map<Integer, TExpr> exprs = Maps.newHashMap();
-            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, v.treeToThrift()));
+            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, ExprToThrift.treeToThrift(v)));
             result.setQuery_global_dict_exprs(exprs);
         }
         if (!loadGlobalDicts.isEmpty()) {
@@ -565,7 +593,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
 
         }
@@ -603,7 +631,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            str.append(outputExprs.stream().map(Expr::toSql)
+            str.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append("\n");
@@ -614,7 +642,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             str.append("  Global Dict Exprs:\n");
             queryGlobalDictExprs.entrySet().stream()
-                    .map(p -> "    " + p.getKey() + ": " + p.getValue().toMySql() + "\n").forEach(str::append);
+                    .map(p -> "    " + p.getKey() + ": " + ExprToSql.toMySql(p.getValue()) + "\n").forEach(str::append);
             str.append("\n");
         }
         if (planRoot != null) {
@@ -629,7 +657,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append(outputBuilder.toString());
@@ -744,13 +772,16 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!(root instanceof ExchangeNode)) {
             root.getChildren().forEach(child -> collectNodesImpl(child, nodes));
         }
-        
+
         if (root instanceof HashJoinNode) {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             if (hashJoinNode.isSkewBroadJoin()) {
                 HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
-                // TODO(fixme): ensure broadcast jion 's rf size is equal to shuffle join's rf size, if not clear the specific
+                // TODO(fixme): ensure broadcast join 's rf size is equal to shuffle join's rf size, if not clear the specific
                 //  broadcast's rf.
+                if (shuffleJoinNode == null || shuffleJoinNode.getBuildRuntimeFilters() == null) {
+                   return;
+                }
                 if (shuffleJoinNode.getBuildRuntimeFilters().size() != hashJoinNode.getBuildRuntimeFilters().size()) {
                     shuffleJoinNode.clearBuildRuntimeFilters();
                     hashJoinNode.clearBuildRuntimeFilters();
@@ -758,7 +789,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 }
                 for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
                     int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
-                    // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
+                    // skew join's broadcast join rf need to remember the filter id of corresponding shuffle join
                     description.setSkew_shuffle_filter_id(filterId);
                 }
             }
@@ -1026,7 +1057,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private void removeDictMappingProbeRuntimeFilters(PlanNode root) {
         root.getProbeRuntimeFilters().removeIf(filter -> {
             Expr probExpr = filter.getNodeIdToProbeExpr().get(root.getId().asInt());
-            return probExpr.containsDictMappingExpr();
+            return ExprUtils.containsDictMappingExpr(probExpr);
         });
 
         for (PlanNode child : root.getChildren()) {
@@ -1036,4 +1067,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public boolean isSingleTabletGatherOutputFragment() {
+        return isSingleTabletGatherOutputFragment;
+    }
+
+    public void setSingleTabletGatherOutputFragment(boolean singleTabletGatherOutputFragment) {
+        isSingleTabletGatherOutputFragment = singleTabletGatherOutputFragment;
+    }
 }

@@ -16,15 +16,17 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/monotime.h"
+#include "common/config_merge_commit_fwd.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
 #include "gen_cpp/FrontendService.h"
 #include "http/http_common.h"
+#include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "testutil/assert.h"
-#include "testutil/sync_point.h"
-#include "util/bthreads/executor.h"
-#include "util/monotime.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -89,7 +91,7 @@ public:
         ctx->load_parameters = batch_write_id.load_params;
         auto buf = ByteBuffer::allocate_with_tracker(64).value();
         buf->put_bytes(data.c_str(), data.size());
-        buf->flip();
+        buf->flip_to_read();
         ctx->buffer = buf;
         _to_release_contexts.emplace(ctx);
         return ctx;

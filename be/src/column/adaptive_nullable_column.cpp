@@ -14,11 +14,11 @@
 
 #include "column/adaptive_nullable_column.h"
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
+#include "column/mysql_row_buffer.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
-#include "simd/simd.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 
@@ -262,9 +262,9 @@ uint32_t AdaptiveNullableColumn::serialize_default(uint8_t* pos) const {
 }
 
 size_t AdaptiveNullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                           size_t start, size_t count) const {
+                                                           uint32_t max_row_size, size_t start, size_t count) const {
     materialized_nullable();
-    return NullableColumn::serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
+    return NullableColumn::serialize_batch_at_interval(dst, byte_offset, byte_interval, max_row_size, start, count);
 }
 
 void AdaptiveNullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,

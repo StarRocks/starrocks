@@ -16,7 +16,6 @@ package com.starrocks.datacache;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.ShowResultSet;
@@ -24,6 +23,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.VarcharType;
 
 import java.util.HashMap;
 import java.util.List;
@@ -32,19 +32,19 @@ import java.util.concurrent.TimeUnit;
 
 public class DataCacheSelectMetrics {
     private static final ShowResultSetMetaData SIMPLE_META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("AVG_READ_CACHE_SIZE", ScalarType.createVarcharType()))
-            .addColumn(new Column("AVG_WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
-            .addColumn(new Column("AVG_WRITE_CACHE_TIME", ScalarType.createVarcharType()))
-            .addColumn(new Column("TOTAL_CACHE_USAGE", ScalarType.createVarcharType()))
+            .addColumn(new Column("AVG_READ_CACHE_SIZE", VarcharType.VARCHAR))
+            .addColumn(new Column("AVG_WRITE_CACHE_SIZE", VarcharType.VARCHAR))
+            .addColumn(new Column("AVG_WRITE_CACHE_TIME", VarcharType.VARCHAR))
+            .addColumn(new Column("TOTAL_CACHE_USAGE", VarcharType.VARCHAR))
             .build();
 
     private static final ShowResultSetMetaData VERBOSE_META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("IP", ScalarType.createVarcharType()))
-            .addColumn(new Column("READ_CACHE_SIZE", ScalarType.createVarcharType()))
-            .addColumn(new Column("AVG_READ_CACHE_TIME", ScalarType.createVarcharType()))
-            .addColumn(new Column("WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
-            .addColumn(new Column("AVG_WRITE_CACHE_TIME", ScalarType.createVarcharType()))
-            .addColumn(new Column("TOTAL_CACHE_USAGE", ScalarType.createVarcharType()))
+            .addColumn(new Column("IP", VarcharType.VARCHAR))
+            .addColumn(new Column("READ_CACHE_SIZE", VarcharType.VARCHAR))
+            .addColumn(new Column("AVG_READ_CACHE_TIME", VarcharType.VARCHAR))
+            .addColumn(new Column("WRITE_CACHE_SIZE", VarcharType.VARCHAR))
+            .addColumn(new Column("AVG_WRITE_CACHE_TIME", VarcharType.VARCHAR))
+            .addColumn(new Column("TOTAL_CACHE_USAGE", VarcharType.VARCHAR))
             .build();
 
     private final Map<Long, LoadDataCacheMetrics> beMetrics = new HashMap<>();

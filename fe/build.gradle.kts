@@ -43,7 +43,7 @@ subprojects {
         set("arrow.version", "18.0.0")
         set("async-profiler.version", "4.0")
         set("avro.version", "1.12.0")
-        set("aws-v2-sdk.version", "2.29.52")
+        set("aws-v2-sdk.version", "2.42.1")
         set("azure.version", "1.2.34")
         set("byteman.version", "4.0.24")
         set("commons-beanutils.version", "1.11.0")
@@ -53,28 +53,31 @@ subprojects {
         set("fastutil.version", "8.5.15")
         set("gcs.connector.version", "hadoop3-2.2.26")
         set("grpc.version", "1.63.0")
-        set("hadoop.version", "3.4.1")
+        set("hadoop.version", "3.4.3")
         set("hbase.version", "2.6.2")
-        set("hikaricp.version", "3.4.5")
+        set("hikaricp.version", "7.0.2")
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
-        set("iceberg.version", "1.9.0")
-        set("io.netty.version", "4.1.125.Final")
-        set("jackson.version", "2.15.2")
+        set("iceberg.version", "1.10.0")
+        set("io.netty.version", "4.1.132.Final")
+        set("jackson.version", "2.21.1")
+        set("jackson-annotations.version", "2.21")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
-        set("kafka-clients.version", "3.4.0")
+        set("junit.version", "5.8.2")
+        set("kafka-clients.version", "3.9.1")
         set("kudu.version", "1.17.1")
         set("log4j.version", "2.19.0")
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
-        set("paimon.version", "1.0.1")
+        set("paimon.version", "1.3.1")
         set("parquet.version", "1.15.2")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
-        set("spark.version", "3.5.5")
-        set("staros.version", "3.5-rc3")
+        set("spark.version", "3.5.7")
+        set("staros.version", "4.0.0")
         set("tomcat.version", "8.5.70")
+        set("lz4-java.version", "1.10.1")
         // var sync end
     }
 
@@ -82,6 +85,9 @@ subprojects {
         implementation(platform("com.azure:azure-sdk-bom:${project.ext["azure.version"]}"))
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
+        implementation(platform("io.netty:netty-bom:${project.ext["io.netty.version"]}"))
+        // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
+        testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
 
         constraints {
             // dependency sync start
@@ -94,7 +100,7 @@ subprojects {
             implementation("com.baidu:jprotobuf-rpc-core:4.2.1")
             implementation("com.clickhouse:clickhouse-jdbc:0.4.6")
             implementation("com.esotericsoftware:kryo-shaded:4.0.2")
-            implementation("com.fasterxml.jackson.core:jackson-annotations:${project.ext["jackson.version"]}")
+            implementation("com.fasterxml.jackson.core:jackson-annotations:${project.ext["jackson-annotations.version"]}")
             implementation("com.fasterxml.jackson.core:jackson-core:${project.ext["jackson.version"]}")
             implementation("com.fasterxml.jackson.core:jackson-databind:${project.ext["jackson.version"]}")
             implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${project.ext["jackson.version"]}")
@@ -137,7 +143,7 @@ subprojects {
             implementation("commons-validator:commons-validator:1.7")
             implementation("de.jflex:jflex:1.4.3")
             implementation("dnsjava:dnsjava:${project.ext["dnsjava.version"]}")
-            implementation("io.airlift:aircompressor:0.27")
+            implementation("io.airlift:aircompressor:2.0.3")
             implementation("io.airlift:concurrent:202")
             implementation("io.airlift:security:202")
             implementation("io.delta:delta-kernel-api:${project.ext["delta-kernel.version"]}")
@@ -203,12 +209,12 @@ subprojects {
             implementation("org.apache.parquet:parquet-column:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-common:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-hadoop:${project.ext["parquet.version"]}")
-            implementation("org.apache.ranger:ranger-plugins-common:2.5.0")
+            implementation("org.apache.ranger:ranger-plugins-common:2.8.0")
             implementation("org.apache.spark:spark-catalyst_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-core_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-launcher_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-sql_2.12:${project.ext["spark.version"]}")
-            implementation("org.apache.thrift:libthrift:0.20.0")
+            implementation("org.apache.thrift:libthrift:0.22.0")
             implementation("org.apache.velocity:velocity-engine-core:2.4.1")
             implementation("org.eclipse.jetty:jetty-client:${project.ext["jetty.version"]}")
             implementation("org.eclipse.jetty:jetty-io:${project.ext["jetty.version"]}")
@@ -222,7 +228,7 @@ subprojects {
             implementation("org.jboss.xnio:xnio-nio:3.8.16.Final")
             implementation("org.jdom:jdom2:2.0.6.1")
             implementation("org.json:json:20231013")
-            implementation("org.junit.jupiter:junit-jupiter:5.8.2")
+            implementation("org.junit.jupiter:junit-jupiter:${project.ext["junit.version"]}")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
             implementation("org.postgresql:postgresql:42.4.4")
@@ -230,9 +236,34 @@ subprojects {
             implementation("org.scala-lang:scala-library:2.12.10")
             implementation("org.slf4j:slf4j-api:1.7.30")
             implementation("org.xerial.snappy:snappy-java:1.1.10.5")
-            implementation("software.amazon.awssdk:bundle:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:dynamodb:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:glue:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:kms:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:s3:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:s3-transfer-manager:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:sso:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:ssooidc:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:sts:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:url-connection-client:${project.ext["aws-v2-sdk.version"]}")
             implementation("tools.profiler:async-profiler:${project.ext["async-profiler.version"]}")
+            implementation("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
             // dependency sync end
+        }
+    }
+
+    // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
+    configurations.all {
+        resolutionStrategy.capabilitiesResolution {
+            withCapability("org.lz4:lz4-java") {
+                select("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
+                because("Use at.yawk.lz4:lz4-java instead of vulnerable org.lz4:lz4-java")
+            }
+        }
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("org.lz4:lz4-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-java with at.yawk.lz4:lz4-java")
+            substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
         }
     }
 

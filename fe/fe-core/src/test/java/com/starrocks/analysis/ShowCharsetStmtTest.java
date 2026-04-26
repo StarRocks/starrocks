@@ -18,6 +18,7 @@ package com.starrocks.analysis;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.ShowCharsetStmt;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -54,7 +55,7 @@ public class ShowCharsetStmtTest  {
             ShowCharsetStmt stmt = (ShowCharsetStmt) SqlParser.parse("SHOW CHARSET WHERE Maxlen>1", 32).get(0);
             Analyzer.analyze(stmt, ctx);
             Assertions.assertNull(stmt.getPattern());
-            Assertions.assertEquals("Maxlen > 1", stmt.getWhere().toSql());
+            Assertions.assertEquals("Maxlen > 1", ExprToSql.toSql(stmt.getWhere()));
         }
 
         {

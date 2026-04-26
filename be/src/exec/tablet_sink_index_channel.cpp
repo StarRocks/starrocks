@@ -16,27 +16,32 @@
 
 #include <utility>
 
+#include "base/compression/compression_utils.h"
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/brpc_helper.h"
+#include "common/config_compression_fwd.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
+#include "common/util/thrift_util.h"
 #include "common/utils.h"
-#include "config.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/compression_utils.h"
-#include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -44,7 +49,11 @@ DEFINE_FAIL_POINT(node_channel_set_brpc_timeout);
 
 class OlapTableSink; // forward declaration
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause)
-        : _parent(parent), _node_id(node_id), _is_incremental(is_incremental), _where_clause(where_clause) {
+        : _parent(parent),
+          _node_id(node_id),
+          _enable_colocate_mv_index(config::enable_load_colocate_mv),
+          _is_incremental(is_incremental),
+          _where_clause(where_clause) {
     // restrict the chunk memory usage of send queue & brpc write buffer
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
     _ts_profile = _parent->ts_profile();
@@ -90,7 +99,8 @@ Status NodeChannel::init(RuntimeState* state) {
         return _err_st;
     }
 
-    _stub = state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
+    auto* query_execution_services = state->query_execution_services();
+    _stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_node_info->host, _node_info->brpc_port);
     if (_stub == nullptr) {
         _cancelled = true;
         auto msg = fmt::format("Connect {}:{} failed.", _node_info->host, _node_info->brpc_port);
@@ -219,8 +229,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
-    const auto& global_dict = _runtime_state->get_load_global_dict_map();
-    const auto& dict_version = _runtime_state->load_dict_versions();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict = fragment_dict_state->load_global_dicts();
+    const auto& dict_version = fragment_dict_state->load_dict_versions();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
@@ -239,7 +251,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // This ref is for RPC's reference
     open_closure->ref();
     open_closure->cntl.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
-    SET_IGNORE_OVERCROWDED(open_closure->cntl, load);
+    set_ignore_overcrowded_for_load(open_closure->cntl);
 
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
@@ -329,7 +341,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
 
         return _err_st;
     }
@@ -342,7 +354,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
 
         return _err_st;
     }
@@ -405,12 +417,14 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     // try compress the ChunkPB data
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_ts_profile->compress_timer);
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
-                                                      &_compression_scratch));
+                                                      &_compression_scratch, compression_options));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -421,7 +435,7 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, compression_options));
             _compression_scratch.resize(compressed_slice.size);
         }
 
@@ -659,13 +673,13 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     AddMultiChunkReq add_chunk = std::move(_request_queue.front());
     _request_queue.pop_front();
 
-    auto chunk = std::move(add_chunk.first);
+    const auto& chunk = add_chunk.first;
 
     // reset mem tracker since we don't want to send the brpc request under query_mem_tracker
     // and the memory usage of the request is recorded by the olap_sink's mem tracker
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
 
-    auto request = add_chunk.second;
+    auto& request = add_chunk.second;
 
     _mem_tracker->release(chunk->memory_usage());
 
@@ -710,7 +724,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(_add_batch_closures[_current_request_index]->cntl, load);
+    set_ignore_overcrowded_for_load(_add_batch_closures[_current_request_index]->cntl);
 
     _add_batch_closures[_current_request_index]->request_size = request.ByteSizeLong();
 
@@ -781,6 +795,17 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     VLOG(2) << "NodeChannel[" << _load_info << "] send chunk request [rows: " << chunk->num_rows() << " eos: " << eos
             << "] to [" << _node_info->host << ":" << _node_info->brpc_port << "]";
 
+    // Force-release protobuf memory under the current (process) tracker context.
+    // _serialize_chunk() allocated protobuf memory inside SCOPED(nullptr), which falls back
+    // to process_mem_tracker via CurrentThread::mem_tracker(). But `add_chunk` is destroyed
+    // after the SCOPED ends (under instance_mem_tracker / query_pool hierarchy).
+    // Swap transfers ownership to a temporary destroyed here (under process_mem_tracker),
+    // preventing the protobuf deallocation from being incorrectly charged to query_pool.
+    // Note: clear_chunk() alone is insufficient — protobuf retains internal buffers until
+    // the Message object is destroyed.
+    PTabletWriterAddChunksRequest().Swap(&request);
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::_send_request::after_swap", &request);
+
     return Status::OK();
 }
 
@@ -809,7 +834,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
         _try_diagnose(error_text);
         return _err_st;
     }
@@ -830,7 +855,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             } else {
                 fail_info.__set_backendId(_node_id);
             }
-            _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+            _runtime_state->append_tablet_fail_infos(fail_info);
         }
 
         return _err_st;
@@ -1105,12 +1130,13 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     request.set_sender_id(_parent->_sender_id);
     request.set_txn_id(_parent->_txn_id);
     request.set_sink_id(_parent->_sink_id);
+    request.set_reason(err_st.to_string());
 
     auto closure = new RefCountClosure<PTabletWriterCancelResult>();
 
     closure->ref();
     closure->cntl.set_timeout_ms(_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(closure->cntl, load);
+    set_ignore_overcrowded_for_load(closure->cntl);
     FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_cancel,
                                TABLET_WRITER_CANCEL_FP_ACTION(_node_info->host, closure, closure->cntl, request));
     _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
@@ -1134,7 +1160,7 @@ void NodeChannel::_try_diagnose(const std::string& error_text) {
     }
     _diagnose_closure = new RefCountClosure<PLoadDiagnoseResult>();
     _diagnose_closure->ref();
-    SET_IGNORE_OVERCROWDED(_diagnose_closure->cntl, load);
+    set_ignore_overcrowded_for_load(_diagnose_closure->cntl);
     _diagnose_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
     PLoadDiagnoseRequest request;
     request.set_allocated_id(&_parent->_load_id);
@@ -1241,45 +1267,52 @@ IndexChannel::~IndexChannel() {
 }
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
-    for (const auto& tablet : tablets) {
-        auto* location = _parent->_location->find_tablet(tablet.tablet_id());
-        if (location == nullptr) {
-            auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
-            return Status::NotFound(msg);
-        }
-        auto node_ids_size = location->node_ids.size();
-        for (size_t i = 0; i < node_ids_size; ++i) {
-            auto& node_id = location->node_ids[i];
-            NodeChannel* channel = nullptr;
-            auto it = _node_channels.find(node_id);
-            if (it == std::end(_node_channels)) {
-                auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id, is_incremental, _where_clause);
-                channel = channel_ptr.get();
-                _node_channels.emplace(node_id, std::move(channel_ptr));
-                if (is_incremental) {
-                    _has_incremental_node_channel = true;
+    {
+        std::unique_lock<std::shared_mutex> lock(_node_channels_mutex);
+        for (const auto& tablet : tablets) {
+            auto* location = _parent->_location->find_tablet(tablet.tablet_id());
+            if (location == nullptr) {
+                auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
+                return Status::NotFound(msg);
+            }
+            auto node_ids_size = location->node_ids.size();
+            for (size_t i = 0; i < node_ids_size; ++i) {
+                auto& node_id = location->node_ids[i];
+                NodeChannel* channel = nullptr;
+                auto it = _node_channels.find(node_id);
+                if (it == std::end(_node_channels)) {
+                    auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id, is_incremental, _where_clause);
+                    channel = channel_ptr.get();
+                    _node_channels.emplace(node_id, std::move(channel_ptr));
+                    if (is_incremental) {
+                        _has_incremental_node_channel = true;
+                    }
+                } else {
+                    channel = it->second.get();
                 }
-            } else {
-                channel = it->second.get();
-            }
-            channel->add_tablet(_index_id, tablet);
-            if (_parent->_enable_replicated_storage && i == 0) {
-                channel->set_has_primary_replica(true);
+                channel->add_tablet(_index_id, tablet);
+                if (_parent->_enable_replicated_storage && i == 0) {
+                    channel->set_has_primary_replica(true);
+                }
             }
         }
-    }
-    for (auto& it : _node_channels) {
-        RETURN_IF_ERROR(it.second->init(state));
+        for (auto& it : _node_channels) {
+            RETURN_IF_ERROR(it.second->init(state));
+        }
     }
     if (_where_clause != nullptr) {
         RETURN_IF_ERROR(_where_clause->prepare(_parent->_state));
         RETURN_IF_ERROR(_where_clause->open(_parent->_state));
     }
-    _write_quorum_type = _parent->_write_quorum_type;
+    {
+        std::unique_lock<std::shared_mutex> lock(_failure_state_mutex);
+        _write_quorum_type = _parent->_write_quorum_type;
+    }
     return Status::OK();
 }
 
 void IndexChannel::mark_as_failed(const NodeChannel* ch) {
+    std::unique_lock<std::shared_mutex> lock(_failure_state_mutex);
     // primary replica use for replicated storage
     // if primary replica failed, we should mark this index as failed
     if (ch->has_primary_replica()) {
@@ -1289,6 +1322,7 @@ void IndexChannel::mark_as_failed(const NodeChannel* ch) {
 }
 
 bool IndexChannel::has_intolerable_failure() {
+    std::shared_lock<std::shared_mutex> lock(_failure_state_mutex);
     if (_has_intolerable_failure) {
         return _has_intolerable_failure;
     }

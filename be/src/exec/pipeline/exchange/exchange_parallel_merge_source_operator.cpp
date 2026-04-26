@@ -14,10 +14,13 @@
 
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 
+#include "common/config_exec_flow_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -71,7 +74,7 @@ StatusOr<ChunkPtr> ExchangeParallelMergeSourceOperator::pull_chunk(RuntimeState*
 
 std::string ExchangeParallelMergeSourceOperator::get_name() const {
     std::string finished = is_finished() ? "X" : "O";
-    return fmt::format("{}_{}_{}({}) {{ has_output:{}}}", _name, _plan_node_id, (void*)this, finished, has_output());
+    return fmt::format("{}_{}_{}({})", _name, _plan_node_id, static_cast<const void*>(this), finished);
 }
 
 Status ExchangeParallelMergeSourceOperatorFactory::prepare(RuntimeState* state) {
@@ -93,8 +96,9 @@ void ExchangeParallelMergeSourceOperatorFactory::close(RuntimeState* state) {
 
 DataStreamRecvr* ExchangeParallelMergeSourceOperatorFactory::get_stream_recvr(RuntimeState* state) {
     if (_stream_recvr == nullptr) {
-        auto query_statistic_recv = state->query_recv();
-        _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
+        auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
+        auto* query_execution_services = state->query_execution_services();
+        _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
                 state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
                 config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, _degree_of_parallelism, true);
     }

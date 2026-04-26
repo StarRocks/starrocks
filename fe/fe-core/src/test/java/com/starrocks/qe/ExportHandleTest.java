@@ -24,7 +24,6 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.utframe.StarRocksAssert;
@@ -37,6 +36,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class ExportHandleTest {
     private static ConnectContext connectContext;
@@ -89,7 +89,7 @@ public class ExportHandleTest {
         };
         new MockUp<HdfsUtil>() {
             @Mock
-            public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws
+            public void getTProperties(String path, Map<String, String> properties, THdfsProperties tProperties) throws
                     StarRocksException {
             }
         };

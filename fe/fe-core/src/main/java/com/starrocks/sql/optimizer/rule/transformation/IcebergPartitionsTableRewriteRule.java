@@ -17,11 +17,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -33,6 +32,9 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -76,8 +78,8 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
                     groupingKeys.add(columnRefOperator);
                     break;
                 case "spec_id":
-                    fun = Expr.getBuiltinFunction("any_value", argTypes, Function.CompareMode.IS_IDENTICAL);
-                    agg = new CallOperator("any_value", Type.INT, Lists.newArrayList(columnRefOperator), fun);
+                    fun = ExprUtils.getBuiltinFunction("any_value", argTypes, Function.CompareMode.IS_IDENTICAL);
+                    agg = new CallOperator("any_value", IntegerType.INT, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 case "record_count":
                 case "total_data_file_size_in_bytes":
@@ -86,12 +88,12 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
                 case "file_count":
                 case "position_delete_file_count":
                 case "equality_delete_file_count":
-                    fun = Expr.getBuiltinFunction("sum", argTypes, Function.CompareMode.IS_IDENTICAL);
-                    agg = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(columnRefOperator), fun);
+                    fun = ExprUtils.getBuiltinFunction("sum", argTypes, Function.CompareMode.IS_IDENTICAL);
+                    agg = new CallOperator("sum", IntegerType.BIGINT, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 case "last_updated_at":
-                    fun = Expr.getBuiltinFunction("max", argTypes, Function.CompareMode.IS_IDENTICAL);
-                    agg = new CallOperator("max", Type.DATETIME, Lists.newArrayList(columnRefOperator), fun);
+                    fun = ExprUtils.getBuiltinFunction("max", argTypes, Function.CompareMode.IS_IDENTICAL);
+                    agg = new CallOperator("max", DateType.DATETIME, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 default:
                     throw new StarRocksConnectorException("Unknown column name %s when rewriting " +

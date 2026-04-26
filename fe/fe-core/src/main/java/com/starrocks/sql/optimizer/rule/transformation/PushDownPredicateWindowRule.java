@@ -53,6 +53,10 @@ public class PushDownPredicateWindowRule extends TransformationRule {
         List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator filter = iter.next();
+            // if filter cannot be pushed down, skip it
+            if (!Utils.canPushDownPredicate(filter)) {
+                continue;
+            }
             if (partitionColumns.containsAll(filter.getUsedColumns())) {
                 iter.remove();
                 pushDownPredicates.add(filter);

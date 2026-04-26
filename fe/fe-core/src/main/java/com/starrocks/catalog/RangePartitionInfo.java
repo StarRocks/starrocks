@@ -50,8 +50,10 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -137,14 +139,14 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, DataCacheInfo dataCacheInfo) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                             short replicationNum, DataCacheInfo dataCacheInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, dataCacheInfo);
         setRangeInternal(partitionId, isTemp, range);
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory) {
-        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, isInMemory, null);
+                             short replicationNum) {
+        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, null);
     }
 
     public Range<PartitionKey> checkAndCreateRange(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc, boolean isTemp)
@@ -153,7 +155,7 @@ public class RangePartitionInfo extends PartitionInfo {
         PartitionKeyDesc partitionKeyDesc = desc.getPartitionKeyDesc();
         // check range
         try {
-            newRange = createAndCheckNewRange(schema, partitionKeyDesc, isTemp);
+            newRange = createAndCheckNewRange(schema, partitionKeyDesc, getSortedRangeMap(isTemp));
         } catch (AnalysisException e) {
             throw new DdlException("Invalid range value format: " + e.getMessage());
         }
@@ -163,15 +165,14 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     // create a new range and check it.
-    private Range<PartitionKey> createAndCheckNewRange(Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc, boolean isTemp)
+    private Range<PartitionKey> createAndCheckNewRange(Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc,
+                                                       List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges)
             throws AnalysisException, DdlException {
         Range<PartitionKey> newRange = null;
-        // generate and sort the existing ranges
-        List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = getSortedRangeMap(isTemp);
 
         List<Column> partitionColumns = getPartitionColumns(schema);
         // create upper values for new range
-        PartitionKey newRangeUpper = null;
+        PartitionKey newRangeUpper;
         if (partKeyDesc.isMax()) {
             newRangeUpper = PartitionKey.createInfinityPartitionKey(partitionColumns, true);
         } else {
@@ -222,6 +223,10 @@ public class RangePartitionInfo extends PartitionInfo {
         }
         newRange = Range.closedOpen(lowKey, newRangeUpper);
 
+        if (lastRange != null) {
+            RangeUtils.checkRangeIntersect(newRange, lastRange);
+        }
+        
         if (currentRange != null) {
             // check if range intersected
             RangeUtils.checkRangeIntersect(newRange, currentRange);
@@ -239,7 +244,7 @@ public class RangePartitionInfo extends PartitionInfo {
             // Range.closedOpen may throw this if (lower > upper)
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
-        super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(), desc.isInMemory(),
+        super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(),
                 desc.getDataCacheInfo());
         return range;
     }
@@ -258,48 +263,50 @@ public class RangePartitionInfo extends PartitionInfo {
         } catch (AnalysisException e) {
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
-        super.addPartition(partitionId, new DataProperty(TStorageMedium.HDD), Short.valueOf(replicateNum), false,
+        super.addPartition(partitionId, new DataProperty(TStorageMedium.HDD), Short.valueOf(replicateNum),
                 new DataCacheInfo(true, false));
     }
 
-    public void handleNewRangePartitionDescs(Map<ColumnId, Column> schema,
+    public Map<Long, Range<PartitionKey>> checkNewRangePartitionDescs(Map<ColumnId, Column> schema,
                                              List<Pair<Partition, PartitionDesc>> partitionList,
-                                             Set<String> existPartitionNameSet,
                                              boolean isTemp) throws DdlException {
-        try {
-            for (Pair<Partition, PartitionDesc> entry : partitionList) {
-                Partition partition = entry.first;
-                if (!existPartitionNameSet.contains(partition.getName())) {
-                    long partitionId = partition.getId();
-                    SingleRangePartitionDesc desc = (SingleRangePartitionDesc) entry.second;
-                    Range<PartitionKey> range;
-                    try {
-                        range = checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, isTemp);
-                        setRangeInternal(partitionId, isTemp, range);
-                    } catch (IllegalArgumentException e) {
-                        // Range.closedOpen may throw this if (lower > upper)
-                        throw new DdlException("Invalid key range: " + e.getMessage());
-                    }
-                    super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(),
-                            desc.isInMemory(), desc.getDataCacheInfo());
-                }
+        Map<Long, Range<PartitionKey>> newRanges = Maps.newHashMap();
+        Map<Long, Range<PartitionKey>> tmpRanges = Maps.newHashMap();
+        tmpRanges.putAll(isTemp ? idToTempRange : idToRange);
+        for (Pair<Partition, PartitionDesc> entry : partitionList) {
+            Partition partition = entry.first;
+            long partitionId = partition.getId();
+            try {
+                Range<PartitionKey> range =
+                        checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, tmpRanges);
+                newRanges.put(partitionId, range);
+                tmpRanges.put(partitionId, range);
+            } catch (IllegalArgumentException e) {
+                // Range.closedOpen may throw this if (lower > upper)
+                throw new DdlException("Invalid key range: " + e.getMessage());
             }
-        } catch (Exception e) {
-            // cleanup
-            partitionList.forEach(entry -> {
-                long partitionId = entry.first.getId();
-                removeRangeInternal(partitionId, isTemp);
-                super.dropPartition(partitionId);
-            });
-            throw e;
+        }
+        return newRanges;
+    }
+
+    private Range<PartitionKey> checkAndCreateRange(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc,
+                                                    Map<Long, Range<PartitionKey>> ranges)
+            throws DdlException {
+        PartitionKeyDesc partitionKeyDesc = desc.getPartitionKeyDesc();
+        try {
+            List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = Lists.newArrayList(ranges.entrySet());
+            sortedRanges.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
+            return createAndCheckNewRange(schema, partitionKeyDesc, sortedRanges);
+        } catch (AnalysisException e) {
+            throw new DdlException("Invalid range value format: " + e.getMessage());
         }
     }
 
+
     public void unprotectHandleNewSinglePartitionDesc(long partitionId, boolean isTemp, Range<PartitionKey> range,
-                                                      DataProperty dataProperty, short replicationNum,
-                                                      boolean isInMemory) {
+                                                      DataProperty dataProperty, short replicationNum) {
         setRangeInternal(partitionId, isTemp, range);
-        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory);
+        super.addPartition(partitionId, dataProperty, replicationNum);
     }
 
     /**
@@ -310,8 +317,7 @@ public class RangePartitionInfo extends PartitionInfo {
         Partition partition = info.getPartition();
         long partitionId = partition.getId();
         setRangeInternal(partitionId, info.isTempPartition(), info.getRange());
-        super.addPartition(partitionId, info.getDataProperty(), info.getReplicationNum(), info.isInMemory(),
-                info.getDataCacheInfo());
+        super.addPartition(partitionId, info.getDataProperty(), info.getReplicationNum(), info.getDataCacheInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {
@@ -324,6 +330,18 @@ public class RangePartitionInfo extends PartitionInfo {
         } else {
             return idToRange;
         }
+    }
+
+    // return ranges without empty ranges, like shadow partition range
+    public Map<Long, Range<PartitionKey>> getNonEmptyRanges(boolean isTemp) {
+        Set<Map.Entry<Long, Range<PartitionKey>>> entrySet = null;
+        if (isTemp) {
+            entrySet = idToTempRange.entrySet();
+        } else {
+            entrySet = idToRange.entrySet();
+        }
+        return entrySet.stream().filter(x -> !x.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public Range<PartitionKey> getRange(long partitionId) {
@@ -345,7 +363,7 @@ public class RangePartitionInfo extends PartitionInfo {
     public static void checkExpressionRangeColumnType(Column column, Expr expr) throws AnalysisException {
         PrimitiveType type = column.getPrimitiveType();
         if (!type.isFixedPointType() && !type.isDateType()) {
-            throw new AnalysisException("Expr[" + expr.toSql() + "] type[" + type
+            throw new AnalysisException("Expr[" + ExprToSql.toSql(expr) + "] type[" + type
                     + "] cannot be a range partition key.");
         }
     }
@@ -429,6 +447,36 @@ public class RangePartitionInfo extends PartitionInfo {
             }
         }
         return null;
+    }
+
+    public long getEnclosingPartitionId(Map<ColumnId, Column> schema,
+                                        SingleRangePartitionDesc desc,
+                                        boolean isTemp) throws DdlException {
+        PartitionKeyDesc partKeyDesc = desc.getPartitionKeyDesc();
+        if (!partKeyDesc.hasLowerValues()) {
+            return -1;
+        }
+        try {
+            List<Column> partitionColumns = getPartitionColumns(schema);
+            PartitionKey lowKey = PartitionKey.createPartitionKey(partKeyDesc.getLowerValues(), partitionColumns);
+            PartitionKey upperKey;
+            if (partKeyDesc.isMax()) {
+                upperKey = PartitionKey.createInfinityPartitionKey(partitionColumns, true);
+            } else {
+                upperKey = PartitionKey.createPartitionKey(partKeyDesc.getUpperValues(), partitionColumns);
+            }
+            Range<PartitionKey> newRange = Range.closedOpen(lowKey, upperKey);
+
+            Map<Long, Range<PartitionKey>> tmpMap = isTemp ? idToTempRange : idToRange;
+            for (Map.Entry<Long, Range<PartitionKey>> entry : tmpMap.entrySet()) {
+                if (entry.getValue().encloses(newRange)) {
+                    return entry.getKey();
+                }
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException("Invalid range value format: " + e.getMessage());
+        }
+        return -1;
     }
 
     private void setRangeInternal(long partitionId, boolean isTemp, Range<PartitionKey> range) {

@@ -43,7 +43,9 @@ CREATE TABLE test_agg_state_percentile_approx_weighted(
   c14 percentile_approx_weighted(double, bigint, double)
 )
 AGGREGATE KEY(c1)
-DISTRIBUTED BY HASH(c1) BUCKETS 3;
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
 
 INSERT INTO test_agg_state_percentile_approx_weighted
 SELECT 
@@ -120,3 +122,76 @@ SELECT percentile_approx_weighted_merge(c2),
   percentile_approx_weighted_merge(c13),
   percentile_approx_weighted_merge(c14)
 FROM test_agg_state_percentile_approx_weighted;
+
+-- Test array percentile parameters
+CREATE TABLE t_array (
+    k int,
+    v double,
+    w bigint
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t_array values
+    (1, 10.0, 1),
+    (2, 20.0, 2),
+    (3, 30.0, 3),
+    (4, 40.0, 4),
+    (5, 50.0, 5),
+    (6, 60.0, 6),
+    (7, 70.0, 7),
+    (8, 80.0, 8),
+    (9, 90.0, 9),
+    (10, 100.0, 10);
+
+-- Test percentile_approx_weighted with array percentile parameter
+CREATE TABLE test_agg_state_percentile_approx_weighted_array(
+  c1 VARCHAR(10),
+  c2 percentile_approx_weighted(double, bigint, array<double>),
+  c3 percentile_approx_weighted(double, bigint, array<double>),
+  c4 percentile_approx_weighted(double, bigint, array<double>)
+)
+AGGREGATE KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+
+INSERT INTO test_agg_state_percentile_approx_weighted_array
+SELECT 
+  'test',
+  percentile_approx_weighted_state(v, w, array<double>[0.25, 0.5, 0.75]),
+  percentile_approx_weighted_state(v, w, [0.0, 0.5, 1.0]),
+  percentile_approx_weighted_state(v, w, [0.1, 0.25, 0.5, 0.75, 0.9], 2048)
+FROM t_array;
+
+-- Query array percentile results
+SELECT c1,
+  percentile_approx_weighted_merge(c2),
+  percentile_approx_weighted_merge(c3),
+  percentile_approx_weighted_merge(c4)
+FROM test_agg_state_percentile_approx_weighted_array
+GROUP BY c1;
+
+INSERT INTO t_array values
+    (11, 110.0, 11),
+    (12, 120.0, 12),
+    (13, 130.0, 13),
+    (14, 140.0, 14),
+    (15, 150.0, 15);
+
+INSERT INTO test_agg_state_percentile_approx_weighted_array
+SELECT 
+  'test2',
+  percentile_approx_weighted_state(v, w, [0.25, 0.5, 0.75]),
+  percentile_approx_weighted_state(v, w, array<double>[0.0, 0.5, 1.0]),
+  percentile_approx_weighted_state(v, w, [0.1, 0.25, 0.5, 0.75, 0.9], 2048)
+FROM t_array;
+
+SELECT c1,
+  percentile_approx_weighted_merge(c2),
+  percentile_approx_weighted_merge(c3),
+  percentile_approx_weighted_merge(c4)
+FROM test_agg_state_percentile_approx_weighted_array
+GROUP BY c1 ORDER BY c1;

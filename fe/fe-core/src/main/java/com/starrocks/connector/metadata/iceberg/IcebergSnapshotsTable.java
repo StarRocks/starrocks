@@ -15,9 +15,6 @@
 package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -26,10 +23,14 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.IntegerType.BIGINT;
 
 public class IcebergSnapshotsTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_snapshots_table";
@@ -45,13 +46,12 @@ public class IcebergSnapshotsTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("committed_at", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("parent_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("operation", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("manifest_list", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("summary", new MapType(
-                                ScalarType.createType(PrimitiveType.VARCHAR), ScalarType.createType(PrimitiveType.VARCHAR)))
+                        .column("committed_at", DATETIME)
+                        .column("snapshot_id", BIGINT)
+                        .column("parent_id", BIGINT)
+                        .column("operation", VarcharType.VARCHAR)
+                        .column("manifest_list", VarcharType.VARCHAR)
+                        .column("summary", new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR))
                         .build(),
                 originDb,
                 originTable,

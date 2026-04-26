@@ -22,6 +22,7 @@ import com.google.gson.JsonObject;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Counter;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
@@ -82,7 +83,7 @@ public class ExplainAnalyzer {
 
     private static final Set<String> EXCLUDE_DETAIL_METRIC_NAMES = Sets.newHashSet(
             RuntimeProfile.ROOT_COUNTER, RuntimeProfile.TOTAL_TIME_COUNTER,
-            "NetworkTime", "ScanTime");
+            ProfileKeyDictionary.NETWORK_TIME, ProfileKeyDictionary.SCAN_TIME);
     private static final Set<String> INCLUDE_DETAIL_METRIC_NAMES = Sets.newHashSet(
             "IOTaskWaitTime", "IOTaskExecTime"
     );
@@ -322,7 +323,7 @@ public class ExplainAnalyzer {
                         null, "UniqueMetrics", "PartType");
                 if (TPartitionType.UNPARTITIONED.name().equalsIgnoreCase(partType) &&
                         nodeInfo.fragmentProfile != null) {
-                    Counter instanceNum = nodeInfo.fragmentProfile.getCounter("InstanceNum");
+                    Counter instanceNum = nodeInfo.fragmentProfile.getCounter(ProfileKeyDictionary.INSTANCE_NUM);
                     if (instanceNum != null && instanceNum.getValue() > 0) {
                         nodeInfo.outputRowNums.setValue(nodeInfo.outputRowNums.getValue() / instanceNum.getValue());
                     }
@@ -331,7 +332,7 @@ public class ExplainAnalyzer {
         });
 
         // Setup mv hits
-        String mvContent = summaryProfile.getInfoString("HitMaterializedViews");
+        String mvContent = summaryProfile.getInfoString(ProfileKeyDictionary.HIT_MATERIALIZED_VIEWS);
         if (StringUtils.isNotBlank(mvContent)) {
             HashSet<String> mvs = Sets.newHashSet(mvContent.split(","));
             allNodeInfos.values().forEach(nodeInfo -> {
@@ -345,10 +346,11 @@ public class ExplainAnalyzer {
             });
         }
 
-        cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
-        cumulativeScanTime = executionProfile.getCounter("QueryCumulativeScanTime");
-        cumulativeNetworkTime = executionProfile.getCounter("QueryCumulativeNetworkTime");
-        scheduleTime = executionProfile.getCounter("QueryPeakScheduleTime");
+        cumulativeOperatorTime =
+                executionProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_OPERATOR_TIME).getValue();
+        cumulativeScanTime = executionProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_SCAN_TIME);
+        cumulativeNetworkTime = executionProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_NETWORK_TIME);
+        scheduleTime = executionProfile.getCounter(ProfileKeyDictionary.QUERY_PEAK_SCHEDULE_TIME);
     }
 
     private void checkIdentical() {
@@ -388,7 +390,7 @@ public class ExplainAnalyzer {
                     "Profile is not identical!!!", getAnsiColor(ANSI_RESET));
         }
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
-        appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
+        appendSummaryLine("Version: ", summaryProfile.getInfoString(ProfileKeyDictionary.STARROCKS_VERSION));
         appendSummaryLine("State: ", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
         if (isRuntimeProfile) {
             appendSummaryLine("Legend: ", NodeState.INIT.symbol, " for blocked; ", NodeState.RUNNING.symbol,
@@ -400,11 +402,11 @@ public class ExplainAnalyzer {
                 summaryProfile.getInfoString(ProfileManager.TOTAL_TIME) :
                 summaryProfile.getCounter(ProfileManager.TOTAL_TIME));
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        Counter executionWallTime = executionProfile.getCounter("QueryExecutionWallTime");
+        Counter executionWallTime = executionProfile.getCounter(ProfileKeyDictionary.QUERY_EXECUTION_WALL_TIME);
         if (executionWallTime == null) {
             executionWallTime = getMaximumPipelineDriverTime();
         }
-        Counter resultDeliverTime = executionProfile.getCounter("ResultDeliverTime");
+        Counter resultDeliverTime = executionProfile.getCounter(ProfileKeyDictionary.RESULT_DELIVER_TIME);
         if (resultDeliverTime == null) {
             resultDeliverTime = new Counter(TUnit.TIME_NS, null, 0);
         }
@@ -426,12 +428,15 @@ public class ExplainAnalyzer {
                             summaryProfile.getInfoString(ProfileManager.PROFILE_COLLECT_TIME) :
                             summaryProfile.getCounter(ProfileManager.PROFILE_COLLECT_TIME));
         }
-        appendSummaryLine("FrontendProfileMergeTime: ", executionProfile.getCounter("FrontendProfileMergeTime"));
+        appendSummaryLine("FrontendProfileMergeTime: ",
+                executionProfile.getCounter(ProfileKeyDictionary.FRONTEND_PROFILE_MERGE_TIME));
         popIndent(); // metric indent
 
         // 3. Memory Usage
-        appendSummaryLine("QueryPeakMemoryUsage: ", executionProfile.getCounter("QueryPeakMemoryUsage"),
-                ", QueryAllocatedMemoryUsage: ", executionProfile.getCounter("QueryAllocatedMemoryUsage"));
+        appendSummaryLine("QueryPeakMemoryUsage: ",
+                executionProfile.getCounter(ProfileKeyDictionary.QUERY_PEAK_MEMORY_USAGE_PER_NODE),
+                ", QueryAllocatedMemoryUsage: ",
+                executionProfile.getCounter(ProfileKeyDictionary.QUERY_ALLOCATED_MEMORY_USAGE));
 
         // 4. Top Cpu Nodes
         appendCpuTopNodes();
@@ -451,9 +456,12 @@ public class ExplainAnalyzer {
         }
 
         // 7. Non default Variables
-        String sessionVariables = summaryProfile.getInfoString("NonDefaultSessionVariables");
+        String sessionVariables = summaryProfile.getInfoString(ProfileKeyDictionary.NON_DEFAULT_SESSION_VARIABLES);
         Map<String, SessionVariable.NonDefaultValue> variables = Maps.newTreeMap();
-        variables.putAll(SessionVariable.NonDefaultValue.parseFrom(sessionVariables));
+        var map = SessionVariable.NonDefaultValue.parseFrom(sessionVariables);
+        if (map != null) {
+            variables.putAll(map);
+        }
         if (MapUtils.isNotEmpty(variables)) {
             appendSummaryLine("NonDefaultVariables:");
             pushIndent(GraphElement.LEAF_METRIC_INDENT);
@@ -531,7 +539,7 @@ public class ExplainAnalyzer {
     private void appendFragment(ProfilingExecPlan.ProfilingFragment fragment, RuntimeProfile fragmentProfile) {
         appendDetailLine(fragmentProfile.getName());
         pushIndent(GraphElement.NON_LEAF_METRIC_INDENT);
-        appendDetailLine("BackendNum: ", fragmentProfile.getCounter("BackendNum"));
+        appendDetailLine("BackendNum: ", fragmentProfile.getCounter(ProfileKeyDictionary.BACKEND_NUM));
         appendDetailLine("InstancePeakMemoryUsage: ",
                 fragmentProfile.getCounter("InstancePeakMemoryUsage"),
                 ", InstanceAllocatedMemoryUsage: ", fragmentProfile.getCounter("InstanceAllocatedMemoryUsage"));
@@ -765,9 +773,9 @@ public class ExplainAnalyzer {
     private void appendOperatorUniqueInfo(NodeInfo nodeInfo) {
         if (nodeInfo.element.instanceOf(JoinNode.class)) {
             Counter buildTime = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, "_JOIN_BUILD (", true,
-                    "CommonMetrics", "OperatorTotalTime");
+                    "CommonMetrics", ProfileKeyDictionary.OPERATOR_TOTAL_TIME);
             Counter probeTime = searchMetric(nodeInfo, SearchMode.NATIVE_ONLY, "_JOIN_PROBE (", true,
-                    "CommonMetrics", "OperatorTotalTime");
+                    "CommonMetrics", ProfileKeyDictionary.OPERATOR_TOTAL_TIME);
             appendDetailLine("BuildTime: ", buildTime);
             appendDetailLine("ProbeTime: ", probeTime);
         } else if (nodeInfo.element.instanceOf(AggregationNode.class)) {
@@ -936,11 +944,257 @@ public class ExplainAnalyzer {
 
             if (CollectionUtils.isNotEmpty(mergedUniqueMetrics.getChildCounterMap().get(RuntimeProfile.ROOT_COUNTER))) {
                 appendDetailLine("Counters:");
-                metricTraverser.accept(name -> true, true);
+                boolean applied = appendGroupedMetricsByOperator(mergedUniqueMetrics, nodeInfo);
+                if (!applied) {
+                    metricTraverser.accept(name -> true, true);
+                }
             }
 
             popIndent(); // metric indent
         }
+    }
+
+    private boolean appendGroupedMetricsByOperator(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
+        if (nodeInfo.element.instanceOf(JoinNode.class)) {
+            appendGroupedMetricsForJoin(uniqueMetrics, nodeInfo);
+        } else if (nodeInfo.element.instanceOf(AggregationNode.class)) {
+            appendGroupedMetricsForAggregate(uniqueMetrics, nodeInfo);
+        } else if (nodeInfo.element.instanceOf(ScanNode.class)) {
+            appendGroupedMetricsForScan(uniqueMetrics, nodeInfo);
+        } else {
+            appendGroupedMetricsForOthers(uniqueMetrics, nodeInfo);
+        }
+        return true;
+    }
+
+    private void appendGroupedMetricsForJoin(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+
+        appendDetailLine("HashTable:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "BuildBuckets");
+        appendMetric(uniqueMetrics, nodeInfo, "BuildKeysPerBucket%");
+        appendMetric(uniqueMetrics, nodeInfo, "BuildHashTableTime");
+        appendMetric(uniqueMetrics, nodeInfo, "BuildConjunctEvaluateTime");
+        appendMetric(uniqueMetrics, nodeInfo, "HashTableMemoryUsage");
+        appendMetric(uniqueMetrics, nodeInfo, "PartitionNums");
+        appendMetric(uniqueMetrics, nodeInfo, "PartitionProbeOverhead");
+        popIndent();
+
+        appendDetailLine("ProbeSide:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "SearchHashTableTime");
+        appendMetric(uniqueMetrics, nodeInfo, "probeCount");
+        appendMetric(uniqueMetrics, nodeInfo, "ProbeConjunctEvaluateTime");
+        appendMetric(uniqueMetrics, nodeInfo, "CopyRightTableChunkTime");
+        appendMetric(uniqueMetrics, nodeInfo, "OtherJoinConjunctEvaluateTime");
+        appendMetric(uniqueMetrics, nodeInfo, "OutputBuildColumnTime");
+        appendMetric(uniqueMetrics, nodeInfo, "OutputProbeColumnTime");
+        appendMetric(uniqueMetrics, nodeInfo, "WhereConjunctEvaluateTime");
+        popIndent();
+
+        appendDetailLine("RuntimeFilter:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterBuildTime");
+        appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterNum");
+        appendMetric(uniqueMetrics, nodeInfo, "PartialRuntimeMembershipFilterBytes");
+        popIndent();
+
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getJoinKnownMetrics());
+
+        popIndent();
+    }
+
+    private void appendGroupedMetricsForAggregate(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+
+        appendDetailLine("Aggregation:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "AggFuncComputeTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ExprComputeTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ExprReleaseTime");
+        appendMetric(uniqueMetrics, nodeInfo, "HashTableSize");
+        appendMetric(uniqueMetrics, nodeInfo, "HashTableMemoryUsage");
+        popIndent();
+
+        appendDetailLine("Memory Management:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkBufferPeakMem");
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkBufferPeakSize");
+        appendMetric(uniqueMetrics, nodeInfo, "StateAllocate");
+        appendMetric(uniqueMetrics, nodeInfo, "StateDestroy");
+        popIndent();
+
+        appendDetailLine("Result Processing:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "GetResultsTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ResultAggAppendTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ResultGroupByAppendTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ResultIteratorTime");
+        popIndent();
+
+        appendDetailLine("Data Flow:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "InputRowCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PassThroughRowCount");
+        appendMetric(uniqueMetrics, nodeInfo, "StreamingTime");
+        appendMetric(uniqueMetrics, nodeInfo, "RowsReturned");
+        popIndent();
+
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getAggregateKnownMetrics());
+
+        popIndent();
+    }
+
+    private void appendGroupedMetricsForScan(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+
+        // Scan Filters & Row Processing
+        appendDetailLine("ScanFilters:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "ShortKeyFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "BitmapIndexFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "BloomFilterFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "ZoneMapIndexFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "SegmentZoneMapFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "SegmentRuntimeZoneMapFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "PredFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "GinFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "VectorIndexFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "DelVecFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "RuntimeFilter");
+        popIndent();
+
+        appendDetailLine("RowProcessing:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "RawRowsRead");
+        appendMetric(uniqueMetrics, nodeInfo, "RowsRead");
+        appendMetric(uniqueMetrics, nodeInfo, "DictDecode");
+        appendMetric(uniqueMetrics, nodeInfo, "DictDecodeCount");
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkCopy");
+        popIndent(); // RowProcessing indent
+
+        appendDetailLine("IOMetrics:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "IOTime");
+        appendMetric(uniqueMetrics, nodeInfo, "BytesRead");
+        appendMetric(uniqueMetrics, nodeInfo, "CompressedBytesRead");
+        appendMetric(uniqueMetrics, nodeInfo, "UncompressedBytesRead");
+        appendMetric(uniqueMetrics, nodeInfo, "ReadPagesNum");
+        appendMetric(uniqueMetrics, nodeInfo, "CachedPagesNum");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockFetch");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockFetchCount");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockSeek");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockSeekCount");
+        appendMetric(uniqueMetrics, nodeInfo, "DecompressT");
+        popIndent();
+
+        appendDetailLine("SegmentProcessing:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "TabletCount");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentsReadCount");
+        appendMetric(uniqueMetrics, nodeInfo, "RowsetsReadCount");
+        appendMetric(uniqueMetrics, nodeInfo, "TotalColumnsDataPageCount");
+        appendMetric(uniqueMetrics, nodeInfo, "ColumnIteratorInit");
+        appendMetric(uniqueMetrics, nodeInfo, "BitmapIndexIteratorInit");
+        appendMetric(uniqueMetrics, nodeInfo, "FlatJsonInit");
+        appendMetric(uniqueMetrics, nodeInfo, "FlatJsonMerge");
+        popIndent();
+
+        appendDetailLine("IOTask:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "IOTaskExecTime");
+        appendMetric(uniqueMetrics, nodeInfo, "IOTaskWaitTime");
+        appendMetric(uniqueMetrics, nodeInfo, "SubmitTaskCount");
+        appendMetric(uniqueMetrics, nodeInfo, "SubmitTaskTime");
+        appendMetric(uniqueMetrics, nodeInfo, "PrepareChunkSourceTime");
+        appendMetric(uniqueMetrics, nodeInfo, "MorselsCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PeakIOTasks");
+        appendMetric(uniqueMetrics, nodeInfo, "PeakScanTaskQueueSize");
+        popIndent();
+
+        appendDetailLine("IOBuffer:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "PeakChunkBufferMemoryUsage");
+        appendMetric(uniqueMetrics, nodeInfo, "PeakChunkBufferSize");
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkBufferCapacity");
+        appendMetric(uniqueMetrics, nodeInfo, "DefaultChunkBufferCapacity");
+        popIndent();
+
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getScanKnownMetrics());
+
+        popIndent(); // main indent
+    }
+
+    private void appendFilterMetrics(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo, String filterName) {
+        Counter timeCounter = uniqueMetrics.getCounter(filterName);
+        Counter rowsCounter = uniqueMetrics.getCounter(filterName + "Rows");
+
+        if (timeCounter == null && rowsCounter == null) {
+            return;
+        }
+        if (rowsCounter == null || rowsCounter.getValue() == 0L) {
+            return;
+        }
+
+        List<Object> items = Lists.newArrayList();
+        items.add(filterName);
+        items.add(": ");
+
+        items.add("Rows: ");
+        items.add(rowsCounter);
+        if (timeCounter != null) {
+            items.add(", ");
+        }
+
+        if (timeCounter != null) {
+            items.add("Time: ");
+            items.add(timeCounter);
+
+            Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + filterName);
+            Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + filterName);
+            if (minCounter != null || maxCounter != null) {
+                items.add(" [");
+                items.add("min=");
+                items.add(minCounter);
+                items.add(", max=");
+                items.add(maxCounter);
+                items.add("]");
+            }
+        }
+
+        appendDetailLine(items.toArray());
+    }
+
+    private void appendMetric(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo, String name) {
+        Counter counter = uniqueMetrics.getCounter(name);
+        if (counter == null) {
+            return;
+        }
+
+        Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
+        Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
+        boolean needHighlight = colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+
+        List<Object> items = Lists.newArrayList();
+        if (needHighlight) {
+            items.add(getBackGround());
+        }
+        items.add(name);
+        items.add(": ");
+        items.add(counter);
+        if (minCounter != null || maxCounter != null) {
+            items.add(" [");
+            items.add("min=");
+            items.add(minCounter);
+            items.add(", max=");
+            items.add(maxCounter);
+            items.add("]");
+        }
+        if (needHighlight) {
+            items.add(ANSI_RESET);
+        }
+        appendDetailLine(items.toArray());
     }
 
     private void appendDetailMetric(NodeInfo nodeInfo, RuntimeProfile uniqueMetrics, String name,
@@ -956,7 +1210,8 @@ public class ExplainAnalyzer {
         }
         Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
         Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
-        boolean needHighlight = enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+        boolean needHighlight =
+                enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
         List<Object> items = Lists.newArrayList();
         if (needHighlight) {
             items.add(getBackGround());
@@ -1278,17 +1533,20 @@ public class ExplainAnalyzer {
 
         public void computeTimeUsage(long cumulativeOperatorTime) {
             totalTime = new Counter(TUnit.TIME_NS, null, 0);
-            cpuTime = sumUpMetric(this, SearchMode.BOTH, true, "CommonMetrics", "OperatorTotalTime");
+            cpuTime =
+                    sumUpMetric(this, SearchMode.BOTH, true, "CommonMetrics", ProfileKeyDictionary.OPERATOR_TOTAL_TIME);
             if (cpuTime != null) {
                 totalTime.update(cpuTime.getValue());
             }
             if (element.instanceOf(ExchangeNode.class)) {
-                networkTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics", "NetworkTime");
+                networkTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics",
+                        ProfileKeyDictionary.NETWORK_TIME);
                 if (networkTime != null) {
                     totalTime.update(networkTime.getValue());
                 }
             } else if (element.instanceOf(ScanNode.class)) {
-                scanTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics", "ScanTime");
+                scanTime = searchMetric(this, SearchMode.NATIVE_ONLY, null, true, "UniqueMetrics",
+                        ProfileKeyDictionary.SCAN_TIME);
                 if (scanTime != null) {
                     totalTime.update(scanTime.getValue());
                 }
@@ -1396,5 +1654,105 @@ public class ExplainAnalyzer {
                 operatorIdx = 0;
             }
         }
+    }
+
+    private void appendGroupedMetricsOthers(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo, Set<String> knownMetrics) {
+        Set<String> allMetrics = uniqueMetrics.getCounterMap().keySet();
+        Set<String> otherMetrics = Sets.newTreeSet();
+
+        for (String metric : allMetrics) {
+            if (!knownMetrics.contains(metric) &&
+                    !metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN) &&
+                    !metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX) &&
+                    !EXCLUDE_DETAIL_METRIC_NAMES.contains(metric)) {
+                otherMetrics.add(metric);
+            }
+        }
+
+        if (!otherMetrics.isEmpty()) {
+            appendDetailLine("Others:");
+            pushIndent(GraphElement.LEAF_METRIC_INDENT);
+            for (String metric : otherMetrics) {
+                appendMetric(uniqueMetrics, nodeInfo, metric);
+            }
+            popIndent();
+        }
+    }
+
+    private void appendGroupedMetricsForOthers(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendDetailLine("Others:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+
+        Set<String> allMetrics = uniqueMetrics.getCounterMap().keySet();
+        Set<String> otherMetrics = Sets.newTreeSet();
+
+        for (String metric : allMetrics) {
+            if (!metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN) &&
+                    !metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX) &&
+                    !EXCLUDE_DETAIL_METRIC_NAMES.contains(metric)) {
+                otherMetrics.add(metric);
+            }
+        }
+
+        for (String metric : otherMetrics) {
+            appendMetric(uniqueMetrics, nodeInfo, metric);
+        }
+
+        popIndent();
+        popIndent();
+    }
+
+    private Set<String> getJoinKnownMetrics() {
+        return Sets.newHashSet(
+                // HashTable group metrics
+                "BuildBuckets", "BuildKeysPerBucket%", "BuildHashTableTime", "BuildConjunctEvaluateTime",
+                "HashTableMemoryUsage", "PartitionNums", "PartitionProbeOverhead",
+                // ProbeSide group metrics
+                "SearchHashTableTime", "probeCount", "ProbeConjunctEvaluateTime", "CopyRightTableChunkTime",
+                "OtherJoinConjunctEvaluateTime", "OutputBuildColumnTime", "OutputProbeColumnTime",
+                "WhereConjunctEvaluateTime",
+                // RuntimeFilter group metrics
+                "RuntimeFilterBuildTime", "RuntimeFilterNum", "PartialRuntimeMembershipFilterBytes",
+                // Legacy metrics (kept for backward compatibility)
+                "BuildRows", "BuildTime", "BuildHashTableMemoryUsage", "HashBuckets", "HashCollisions",
+                "BuildSpillBytes", "BuildSpillTime", "ProbeRows", "ProbeTime", "JoinOutputRows",
+                "RowsAfterJoinFilter", "JoinConjunctEvaluateTime", "ProbeSpillBytes", "ProbeSpillTime",
+                "RuntimeFilterPushDownTime", "RuntimeFilterInputRows", "RuntimeFilterOutputRows"
+        );
+    }
+
+    private Set<String> getAggregateKnownMetrics() {
+        return Sets.newHashSet(
+                "AggInputRows", "AggOutputRows", "AggComputeTime", "HashAggBuildTime", "HashAggProbeTime",
+                "HashBuckets", "HashCollisions", "HashTableMemoryUsage", "SpillBytes", "SpillTime",
+                "DistinctInputRows", "DistinctOutputRows", "DistinctTime",
+                // Additional metrics from real data
+                "AggFuncComputeTime", "ChunkBufferPeakMem", "ChunkBufferPeakSize", "ExprComputeTime",
+                "ExprReleaseTime", "GetResultsTime", "HashTableSize", "InputRowCount", "PassThroughRowCount",
+                "ResultAggAppendTime", "ResultGroupByAppendTime", "ResultIteratorTime", "RowsReturned",
+                "StateAllocate", "StateDestroy", "StreamingTime"
+        );
+    }
+
+    private Set<String> getScanKnownMetrics() {
+        return Sets.newHashSet(
+                "ShortKeyFilter", "ShortKeyFilterRows", "BitmapIndexFilter", "BitmapIndexFilterRows",
+                "BloomFilterFilter", "BloomFilterFilterRows", "ZoneMapIndexFilter", "ZoneMapIndexFilterRows",
+                "PredFilter", "PredFilterRows", "GinFilter", "GinFilterRows", "VectorIndexFilter",
+                "VectorIndexFilterRows", "DelVecFilter", "DelVecFilterRows", "RuntimeFilter", "RuntimeFilterRows",
+                "SegmentRuntimeZoneMapFilterRows", "SegmentZoneMapFilterRows",
+                "RawRowsRead", "RowsRead", "DictDecode", "DictDecodeCount", "ChunkCopy",
+                "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
+                "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
+                "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "TotalColumnsDataPageCount",
+                "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+                "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
+                "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
+                "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",
+                "CreateSegmentIter", "GetDelVec", "GetDeltaColumnGroup", "GetRowsets", "ReadPKIndex",
+                "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
+                "PushdownAccessPaths", "PushdownPredicates"
+        );
     }
 }

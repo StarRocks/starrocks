@@ -16,10 +16,10 @@
 
 #include <queue>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/utility/factory_method.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/factory_method.h"
-#include "util/moodycamel/concurrentqueue.h"
 
 namespace starrocks::pipeline {
 
@@ -124,7 +124,7 @@ public:
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
 
-    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
+    static double ratio_of_adjacent_queue();
     static constexpr size_t QUEUE_SIZE = 8;
 
 private:
@@ -136,8 +136,8 @@ private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
     // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2.0s, 3.0s, 4.2s, 5.6s, 7.4s.
     // it will move to next level.
-    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_driver_queue_level_time_slice_base_ns;
-    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
+    const int64_t LEVEL_TIME_SLICE_BASE_NS;
+    const double RATIO_OF_ADJACENT_QUEUE;
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.

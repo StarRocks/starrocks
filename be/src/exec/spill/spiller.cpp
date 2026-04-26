@@ -25,8 +25,8 @@
 #include <mutex>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "column/chunk.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"
@@ -38,8 +38,15 @@
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
+#include "util/global_metrics_registry.h"
+#include "util/metrics/spill_metrics.h"
 
 namespace starrocks::spill {
+DEFINE_FAIL_POINT(spill_restore_sleep);
+
+TQueryType::type spill_query_type(RuntimeState* state) {
+    return state->query_options().query_type;
+}
 
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     DCHECK(profile != nullptr);
@@ -112,13 +119,23 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
     skew_mem_table_count = ADD_CHILD_COUNTER(profile, "SkewMemTableCount", TUnit::UNIT, parent);
     skew_mem_table_skew_ratio = profile->AddLowWaterMarkCounter(
-            "SkewMemTableSkewRatio", TUnit::DOUBLE_VALUE,
-            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), parent);
+            "SkewMemTableSkewRatio", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            parent);
     skew_mem_table_merge_timer = ADD_CHILD_TIMER(profile, "SkewMemTableMergeTime", parent);
     skew_mem_table_input_bytes = ADD_CHILD_COUNTER(profile, "SkewMemTableInputBytes", TUnit::BYTES, parent);
     skew_mem_table_output_bytes = ADD_CHILD_COUNTER(profile, "SkewMemTableOutputBytes", TUnit::BYTES, parent);
     skew_mem_table_input_rows = ADD_CHILD_COUNTER(profile, "SkewMemTableInputRows", TUnit::UNIT, parent);
     skew_mem_table_output_rows = ADD_CHILD_COUNTER(profile, "SkewMemTableOutputRows", TUnit::UNIT, parent);
+
+    // Resolve the server-level spill counter buckets here (rather than in
+    // Spiller::prepare()) so the pointers travel with the SpillProcessMetrics
+    // value. Several operators (e.g. SpillableAggregateBlockingSinkOperator)
+    // call Spiller::prepare() before set_metrics(), and a later set_metrics()
+    // assignment would otherwise clobber pointers cached on the Spiller.
+    if (auto* sm = GlobalMetricsRegistry::instance()->spill_metrics(); sm != nullptr) {
+        global_local = sm->get(/*is_remote=*/false);
+        global_remote = sm->get(/*is_remote=*/true);
+    }
 }
 
 Status Spiller::prepare(RuntimeState* state) {

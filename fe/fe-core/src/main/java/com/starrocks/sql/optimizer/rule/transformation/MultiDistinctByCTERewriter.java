@@ -18,15 +18,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -50,6 +48,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -287,9 +288,9 @@ public class MultiDistinctByCTERewriter {
                     // TODO(stephen): support auto scale up decimal precision
                     ScalarType decimalType;
                     if (avgCallOperatorType.isDecimal256()) {
-                        decimalType = ScalarType.createDecimalV3NarrowestType(76, 0);
+                        decimalType = TypeFactory.createDecimalV3NarrowestType(76, 0);
                     } else {
-                        decimalType = ScalarType.createDecimalV3NarrowestType(38, 0);
+                        decimalType = TypeFactory.createDecimalV3NarrowestType(38, 0);
                     }
                     distinctAvgCallOperator.getChildren().set(
                             1, new CastOperator(decimalType, distinctAvgCallOperator.getChild(1), true));

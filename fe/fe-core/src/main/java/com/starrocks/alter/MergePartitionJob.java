@@ -27,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -129,6 +130,26 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         super(jobId, JobType.OPTIMIZE, dbId, tableId, tableName, timeoutMs);
 
         this.postfix = "job" + jobId;
+    }
+
+    protected MergePartitionJob(MergePartitionJob job) {
+        super(job);
+        this.watershedTxnId = job.watershedTxnId;
+        if (job.tempPartitionIdToSourcePartitionIds != null) {
+            this.tempPartitionIdToSourcePartitionIds = ArrayListMultimap.create();
+            this.tempPartitionIdToSourcePartitionIds.putAll(job.tempPartitionIdToSourcePartitionIds);
+        } else {
+            this.tempPartitionIdToSourcePartitionIds = null;
+        }
+        if (job.tempPartitionNameToSourcePartitionNames != null) {
+            this.tempPartitionNameToSourcePartitionNames = ArrayListMultimap.create();
+            this.tempPartitionNameToSourcePartitionNames.putAll(job.tempPartitionNameToSourcePartitionNames);
+        } else {
+            this.tempPartitionNameToSourcePartitionNames = null;
+        }
+        this.rewriteTasks = job.rewriteTasks == null ? null : Lists.newArrayList(job.rewriteTasks);
+        this.distributionInfo = job.distributionInfo;
+        this.optimizeOperation = job.optimizeOperation;
     }
 
     public List<Long> getTmpPartitionIds() {
@@ -272,7 +293,6 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
             List<String> partitionValues = Lists.newArrayList();
             partitionValues.add(range.lowerEndpoint().getKeys().get(0).getStringValue());
-            String targetPartitionKey = partitionValues.get(0);
 
             Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
             if (sourcePartition == null) {
@@ -294,7 +314,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             List<String> partitionNames;
             if (partitionDesc instanceof RangePartitionDesc) {
-                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionNames();
             } else {
                 throw new DdlException("Unsupported partitionDesc");
             }
@@ -391,13 +411,14 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         // wait previous transactions finished
         this.watershedTxnId =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        this.jobState = JobState.WAITING_TXN;
         span.setAttribute("createPartitionElapse", createPartitionElapse);
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
         // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        // AddPartitions log will be written when creating temp partitions,
+        // so do not need to add createMergedTempPartitionsFromPartitions into applier.
+        persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer merge partition job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -505,7 +526,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             try {
-                taskManager.createTask(rewriteTask, false);
+                taskManager.createTask(rewriteTask);
                 taskManager.executeTask(rewriteTask.getName());
                 LOG.info("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
@@ -546,7 +567,9 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
         // wait insert tasks finished
         boolean allFinished = true;
-        int progress = 0;
+        // Use double to avoid integer division precision loss when task count > 100
+        double progressAcc = 0.0;
+        int taskCount = Math.max(1, rewriteTasks.size());
         TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
 
@@ -561,14 +584,14 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         for (OptimizeTask rewriteTask : rewriteTasks) {
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                         || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
-                progress += 100 / rewriteTasks.size();
+                progressAcc += 100.0 / taskCount;
                 continue;
             }
 
             TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(rewriteTask.getId());
             if (taskRun != null) {
                 if (taskRun.getStatus() != null) {
-                    progress += taskRun.getStatus().getProgress() / rewriteTasks.size();
+                    progressAcc += (double) taskRun.getStatus().getProgress() / taskCount;
                 }
                 allFinished = false;
                 continue;
@@ -591,12 +614,13 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
             }
-            progress += 100 / rewriteTasks.size();
+            progressAcc += 100.0 / taskCount;
         }
 
         if (!allFinished) {
             LOG.info("wait insert tasks to be finished, merge partition job: {}", jobId);
-            this.progress = progress;
+            // Cap progress at 99 until all tasks are fully finished
+            this.progress = Math.min(99, (int) Math.floor(progressAcc));
             return;
         }
 
@@ -611,10 +635,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         }
 
         this.progress = 100;
-        this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        // Replace partition log will be written in onFinished function, so do not need to add onFinished into applier.
+        persistStateChange(this, JobState.FINISHED);
         LOG.info("optimize job finished: {}", jobId);
         this.span.end();
     }
@@ -622,6 +646,11 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
     @Override
     protected void runFinishedRewritingJob() {
         // nothing to do
+    }
+
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(dbId, tableId, partitionId);
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
@@ -664,6 +693,30 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 }
             }
 
+            for (String tempPartitionName : Lists.newArrayList(tempPartitionNameToSourcePartitionNames.keySet())) {
+                Partition tempPartition = targetTable.getPartition(tempPartitionName, true);
+                if (tempPartition == null) {
+                    LOG.warn("merge partitions job {} temp partition {} missing before replace", jobId, tempPartitionName);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    hasFailedTask = true;
+                    errMsg += tempPartitionName + " temp partition missing, ";
+                    continue;
+                }
+                if (hasCommittedNotVisible(tempPartition.getId())) {
+                    LOG.warn("merge partitions job {} temp partition {} has committed transactions not visible, drop it",
+                            jobId, tempPartitionName);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    targetTable.dropTempPartition(tempPartitionName, true);
+                    hasFailedTask = true;
+                    errMsg += tempPartitionName + " rewrite task not visible, ";
+                    for (OptimizeTask task : rewriteTasks) {
+                        if (tempPartitionName.equals(task.getTempPartitionName())) {
+                            task.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                        }
+                    }
+                }
+            }
+
             if (hasFailedTask && tempPartitionNameToSourcePartitionNames.isEmpty()) {
                 throw new AlterCancelException("all partitions rewrite failed [" + errMsg + "]");
             }
@@ -673,7 +726,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 Partition partition = targetTable.getPartition(sourcePartitionName);
                 if (partition != null) {
                     for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         sourceTablets.addAll(index.getTablets());
                     }
                 }
@@ -688,23 +741,24 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     LOG.info("merge partitions job {} replace partition dbId:{}, tableId:{},"
                             + "source partitions:{}, target partition:{}",
                             jobId, dbId, tableId, sourcePartitionNames, tmpPartitionName);
-                    targetTable.replaceTempPartitions(
-                            db.getId(),
-                            new ArrayList<>(sourcePartitionNames), 
-                            Collections.singletonList(tmpPartitionName), 
-                            false, true);
+                    List<String> sourcePartitions = new ArrayList<>(sourcePartitionNames);
+                    List<String> tempPartitions = Collections.singletonList(tmpPartitionName);
+                    targetTable.checkReplaceTempPartitions(sourcePartitions, tempPartitions, false);
 
                     // write log
                     ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(
                             db.getId(),
                             targetTable.getId(),
-                            new ArrayList<>(sourcePartitionNames),
-                            Collections.singletonList(tmpPartitionName),
+                            sourcePartitions,
+                            tempPartitions,
                             false,
                             true,
                             partitionInfo instanceof SinglePartitionInfo);
 
-                    GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info, wal -> {
+                        targetTable.replaceTempPartitionsWithoutCheck(
+                                db.getId(), sourcePartitions, tempPartitions, true);
+                    });
                 }
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
@@ -742,16 +796,19 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
-
-        jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new MergePartitionJob(this);
     }
 
     private void cancelInternal() {
@@ -788,7 +845,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
                         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                                .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             // hash set is able to deduplicate the elements
                             sourceTablets.addAll(index.getTablets());
                         }
@@ -881,8 +938,8 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         for (long id : replayedJob.getTmpPartitionIds()) {
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
-                for (MaterializedIndex index
-                        : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index :
+                        partition.getDefaultPhysicalPartition().getAllMaterializedIndices(IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
                 targetTable.dropTempPartition(partition.getName(), true);

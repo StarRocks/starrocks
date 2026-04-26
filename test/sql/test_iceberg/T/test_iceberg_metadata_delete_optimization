@@ -1,0 +1,312 @@
+-- name: test_iceberg_metadata_delete_optimization
+
+-- ====================================================
+-- SECTION 1: Setup
+-- ====================================================
+
+-- Create external catalog for Iceberg
+create external catalog iceberg_meta_del_${uuid0}
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "${hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false"
+);
+
+-- Create database
+create database iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}
+properties ("location" = "oss://${oss_bucket}/test_metadata_delete/${uuid0}/db");
+
+-- Create partitioned table (partitioned by dt and region)
+create table iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned (
+    id INT,
+    name STRING,
+    dt STRING,
+    region STRING
+)
+PARTITION BY (dt, region);
+
+-- Insert test data
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(1, 'Alice', '2023-01-01', 'North'),
+(2, 'Bob', '2023-01-01', 'North'),
+(3, 'Charlie', '2023-01-02', 'South'),
+(4, 'David', '2023-01-02', 'South'),
+(5, 'Eve', '2023-01-03', 'East'),
+(6, 'Frank', '2023-01-03', 'West');
+
+-- ====================================================
+-- SECTION 2: Basic Metadata Delete Tests
+-- ====================================================
+
+-- Test 2.1: Delete single partition - should trigger metadata delete optimization
+-- Verify EXPLAIN contains ICEBERG METADATA DELETE
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' and region = 'North'", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' and region = 'North';
+
+-- Verify remaining data
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- ====================================================
+-- SECTION 3: Complex Delete Conditions
+-- ====================================================
+
+-- Test 3.1: Delete with IN clause on partition columns - should trigger optimization
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-02' and region in ('South', 'East')", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-02' and region in ('South', 'East');
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 3.2: Delete with OR condition on same partition column - should trigger optimization
+-- (OR condition where all partitions match the predicate)
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(5, 'Eve', '2023-01-03', 'East'),
+(6, 'Frank', '2023-01-03', 'West');
+
+-- Delete with dt = '2023-01-03' or region = 'West' - should trigger metadata delete optimization
+-- because all data is in dt='2023-01-03' partition, which matches the first part of the OR condition
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' or region = 'West'", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' or region = 'West';
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 3.3: Delete with BETWEEN on partition column - should trigger optimization
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(1, 'Alice', '2023-01-01', 'North'),
+(2, 'Bob', '2023-01-01', 'North'),
+(3, 'Charlie', '2023-01-02', 'South'),
+(4, 'David', '2023-01-02', 'South');
+
+-- Delete with dt between '2023-01-01' and '2023-01-02' - should trigger metadata delete optimization
+-- because all data is in dt='2023-01-01' and dt='2023-01-02' partitions, which match the BETWEEN condition
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt between '2023-01-01' and '2023-01-02'", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt between '2023-01-01' and '2023-01-02';
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 3.4: Delete with mixed partition and non-partition conditions - should trigger optimization
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(5, 'Eve', '2023-01-03', 'East'),
+(6, 'Frank', '2023-01-03', 'West');
+
+-- Delete with dt = '2023-01-03' and id = 5 - should trigger metadata delete optimization
+-- because the table scan will filter out files that don't match the predicate
+-- The file with id=6 will be excluded from scan, and the file with id=5 will match
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and id = 5", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and id = 5;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 3.5: Delete with LIKE pattern on partition column - should trigger optimization
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(7, 'Grace', '2023-01-01', 'North'),
+(8, 'Henry', '2023-01-02', 'South');
+
+-- Delete with dt like '2023-01-%' - should trigger metadata delete optimization
+-- because all data is in dt='2023-01-01' and dt='2023-01-02' partitions, which match the LIKE pattern
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt like '2023-01-%'", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt like '2023-01-%';
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 3.6: Delete with IS NULL on partition column
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(9, 'Ivy', null, 'North'),
+(10, 'Jack', null, 'South');
+
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt is null", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt is null;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 3.7: Delete with compound AND conditions matching single partition
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(11, 'Kate', '2023-01-03', 'East'),
+(12, 'Leo', '2023-01-03', 'East');
+
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and region = 'East' and 1 = 1", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and region = 'East' and 1 = 1;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- ====================================================
+-- SECTION 4: Non-Partition Column Delete Tests
+-- ====================================================
+
+-- Test 4.1: Delete with only non-partition column conditions - should use position delete
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(13, 'Mike', '2023-01-01', 'North'),
+(14, 'Nancy', '2023-01-02', 'South'),
+(15, 'Oscar', '2023-01-03', 'East'),
+(16, 'Patty', '2023-01-03', 'West');
+
+-- Delete with id > 3 - should trigger metadata delete optimization
+-- because file statistics will show that all rows in files have id > 3
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 3", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 3;
+
+-- Verify remaining data
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 4.2: Delete with name condition - should trigger optimization
+-- Re-insert test data for this test
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(17, 'Quincy', '2023-01-01', 'North'),
+(18, 'Rachel', '2023-01-02', 'South'),
+(19, 'Charlie', '2023-01-03', 'East');
+
+-- Delete with name = 'Charlie' - should trigger metadata delete optimization
+-- because table scan will filter out files that don't match the predicate
+-- Only the file with name='Charlie' will be included in scan
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where name = 'Charlie'", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where name = 'Charlie';
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 4.3: Delete with non-partition column condition using file-level statistics
+-- This test verifies that metadata delete can be used when file statistics indicate all rows match
+-- even though the predicate is on a non-partition column
+-- Re-insert test data with high id values to ensure file-level statistics match
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(100, 'Alice', '2023-01-01', 'North'),
+(101, 'Bob', '2023-01-01', 'North'),
+(102, 'Charlie', '2023-01-02', 'South'),
+(103, 'David', '2023-01-02', 'South');
+
+-- Delete with id > 50 - should trigger metadata delete optimization
+-- because file statistics will show that all rows in the files have id > 50
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 50", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 50;
+
+-- Verify remaining data
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 4.4: Delete with non-partition column condition - partial match in same partition
+-- This test verifies that position delete is used when only some rows in a file match
+-- Re-insert test data with mixed id values in same partition
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(1, 'Alice', '2023-01-01', 'North'),
+(2, 'Bob', '2023-01-01', 'North'),
+(3, 'Charlie', '2023-01-01', 'North'),
+(4, 'David', '2023-01-01', 'North');
+
+-- Delete with id = 2 - should use position delete
+-- because the file contains id=1,2,3,4, and only id=2 matches
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id = 2", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id = 2;
+
+-- Verify remaining data
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 4.5: Delete with non-partition column condition - partial match across partitions
+-- This test verifies that position delete is used when some rows in each partition don't match
+-- Re-insert test data with mixed id values across partitions
+-- Each partition file contains ids that partially match the condition
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(10, 'Eve', '2023-01-01', 'North'),
+(20, 'Frank', '2023-01-01', 'North'),
+(15, 'Grace', '2023-01-02', 'South'),
+(25, 'Henry', '2023-01-02', 'South');
+
+-- Delete with id < 25 - should use position delete
+-- because each partition file contains ids that both match and don't match the condition
+-- Partition 1: id range [10,20], both 10 and 20 < 25, so metricsMatch=true
+-- Partition 2: id range [15,25], 15 < 25 but 25 not < 25, so metricsMatch=false
+-- Since partition 2 doesn't satisfy metricsMatch, position delete is required
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id < 25", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id < 25;
+
+-- Verify remaining data
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 4.6: Delete with OR condition that cannot be optimized
+-- This test verifies that position delete is used when OR condition causes partial match in scanned files
+-- Re-insert test data
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(100, 'Test1', '2023-01-01', 'North'),
+(101, 'Test2', '2023-01-01', 'North'),
+(102, 'Test3', '2023-01-02', 'South'),
+(103, 'Test4', '2023-01-02', 'South');
+
+-- Delete with dt = '2023-01-01' or id = 103 - should use position delete
+-- Partition 1: dt='2023-01-01' matches, partitionMatches=true, id range [100,101]
+-- Partition 2: dt='2023-01-02' doesn't match, id=103 is in [102,103], so included in scan
+-- Partition 1 file doesn't match id=103, so metricsMatch=false
+-- Since partition 1 doesn't satisfy metricsMatch, position delete is required
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' or id = 103", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' or id = 103;
+
+-- Verify remaining data
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+
+-- Cleanup
+drop table iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned force;
+drop database iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_meta_del_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_metadata_delete/${uuid0} >/dev/null || echo "exit 0" >/dev/null

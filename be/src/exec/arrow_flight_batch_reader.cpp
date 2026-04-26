@@ -14,32 +14,31 @@
 
 #include "arrow_flight_batch_reader.h"
 
-#include "runtime/exec_env.h"
 #include "runtime/result_buffer_mgr.h"
 
 namespace starrocks {
 
 ArrowFlightBatchReader::ArrowFlightBatchReader(ResultBufferMgr* result_buffer_mgr, const TUniqueId& query_id)
-        : _result_buffer_mgr(result_buffer_mgr), _query_id(std::move(query_id)) {}
+        : _result_buffer_mgr(result_buffer_mgr), _query_id(query_id) {}
 
 arrow::Status ArrowFlightBatchReader::init() {
     _schema = _result_buffer_mgr->get_arrow_schema(_query_id);
     if (_schema == nullptr) {
-        return arrow::Status::ExecutionError("Failed to fetch schema for query ID", print_id(_query_id));
+        return arrow::Status::ExecutionError("Failed to fetch schema for query ID: ", print_id(_query_id));
     }
     return arrow::Status::OK();
 }
 
 arrow::Status ArrowFlightBatchReader::ReadNext(std::shared_ptr<arrow::RecordBatch>* out) {
     if (!_schema) {
-        return arrow::Status::IOError("Failed to fetch schema for query ID ", print_id(_query_id));
+        return arrow::Status::IOError("Failed to fetch schema for query ID: ", print_id(_query_id));
     }
 
     *out = nullptr;
-    auto status = ExecEnv::GetInstance()->result_mgr()->fetch_arrow_data(_query_id, out);
+    auto status = _result_buffer_mgr->fetch_arrow_data(_query_id, out);
     if (!status.ok()) {
-        return arrow::Status::IOError("Failed to fetch arrow data for query ID ", print_id(_query_id), ": ",
-                                      status.to_string());
+        return arrow::Status::IOError("Failed to fetch arrow data for query ID: ", print_id(_query_id),
+                                      ", error: ", status.to_string());
     }
 
     return arrow::Status::OK();

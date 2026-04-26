@@ -14,25 +14,27 @@
 
 #include "column/fixed_length_column_base.h"
 
-#include "column/column_helper.h"
+#include "base/hash/hash_util.hpp"
+#include "base/simd/gather.h"
+#include "base/types/decimal12.h"
+#include "base/types/int128.h"
+#include "base/types/int256.h"
+#include "column/column_filter_range.h"
+#include "column/column_sorter_comparator.h"
+#include "column/mysql_row_buffer.h"
+#include "column/raw_data_visitor.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
-#include "exec/sorting/sort_helper.h"
+#include "common/config_local_io_fwd.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "simd/gather.h"
-#include "storage/decimal12.h"
-#include "types/int256.h"
-#include "types/large_int_value.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 
 template <typename T>
-StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
     RETURN_IF_ERROR(capacity_limit_reached());
     return nullptr;
 }
@@ -45,7 +47,9 @@ void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t c
     const size_t orig_size = datas.size();
     raw::stl_vector_resize_uninitialized(&datas, orig_size + count);
 
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    RawDataVisitor rv;
+    CHECK(src.accept(&rv).ok());
+    const T* src_data = reinterpret_cast<const T*>(rv.result());
     strings::memcpy_inlined(datas.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
@@ -60,7 +64,9 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     raw::stl_vector_resize_uninitialized(&datas, orig_size + size);
     auto* dest_data = datas.data() + orig_size;
 
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    RawDataVisitor rv;
+    CHECK(src.accept(&rv).ok());
+    const T* src_data = reinterpret_cast<const T*>(rv.result());
     SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 
@@ -110,7 +116,7 @@ void FixedLengthColumnBase<T>::append_default(size_t count) {
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-StatusOr<ColumnPtr> FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
     auto& dest_datas = dest_data.get_data();
@@ -175,7 +181,7 @@ size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from,
     // TODO: FIXME
     const auto src = immutable_data();
     raw::stl_vector_resize_uninitialized(&_data, src.size());
-    auto size = ColumnHelper::filter_range<T>(filter, _data.data(), src.data(), from, to);
+    auto size = column_filter_range::filter_range<T>(filter, _data.data(), src.data(), from, to);
     _data.resize(size);
     _resource.reset();
     return size;
@@ -253,8 +259,9 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
 
 template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                             size_t start, size_t count) const {
+                                                             uint32_t max_row_size, size_t start, size_t count) const {
     const size_t value_size = sizeof(T);
+    DCHECK_EQ(max_row_size, value_size);
     const auto key_data = this->immutable_data();
     uint8_t* buf = dst + byte_offset;
     for (size_t i = start; i < start + count; ++i) {
@@ -279,121 +286,6 @@ void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs,
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(&datas[i], srcs[i].data, sizeof(T));
         srcs[i].data = srcs[i].data + sizeof(T);
-    }
-}
-
-template <typename T>
-void FixedLengthColumnBase<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    const auto datas = this->immutable_data();
-    for (uint32_t i = from; i < to; ++i) {
-        hash[i] = HashUtil::fnv_hash(&datas[i], sizeof(ValueType), hash[i]);
-    }
-}
-
-template <typename T>
-void FixedLengthColumnBase<T>::fnv_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from,
-                                                       uint16_t to) const {
-    const auto datas = this->immutable_data();
-    for (uint16_t i = from; i < to; i++) {
-        if (selection[i]) {
-            hash[i] = HashUtil::fnv_hash(&datas[i], sizeof(ValueType), hash[i]);
-        }
-    }
-}
-template <typename T>
-void FixedLengthColumnBase<T>::fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
-    const auto datas = this->immutable_data();
-    for (uint16_t i = 0; i < sel_size; i++) {
-        hash[sel[i]] = HashUtil::fnv_hash(&datas[sel[i]], sizeof(ValueType), hash[sel[i]]);
-    }
-}
-
-// Must same with RawValue::zlib_crc32
-template <typename T>
-void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    const auto datas = this->immutable_data();
-    for (uint32_t i = from; i < to; ++i) {
-        if constexpr (IsDate<T> || IsTimestamp<T>) {
-            std::string str = datas[i].to_string();
-            hash[i] = HashUtil::zlib_crc_hash(str.data(), static_cast<int32_t>(str.size()), hash[i]);
-        } else if constexpr (IsDecimal<T>) {
-            int64_t int_val = datas[i].int_value();
-            int32_t frac_val = datas[i].frac_value();
-            uint32_t seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), hash[i]);
-            hash[i] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
-        } else {
-            hash[i] = HashUtil::zlib_crc_hash(&datas[i], sizeof(ValueType), hash[i]);
-        }
-    }
-}
-
-template <typename T>
-void FixedLengthColumnBase<T>::crc32_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from,
-                                                         uint16_t to) const {
-    const auto datas = this->immutable_data();
-    for (uint16_t i = from; i < to; i++) {
-        if (!selection[i]) {
-            continue;
-        }
-        if constexpr (IsDate<T> || IsTimestamp<T>) {
-            std::string str = datas[i].to_string();
-            hash[i] = HashUtil::zlib_crc_hash(str.data(), static_cast<int32_t>(str.size()), hash[i]);
-        } else if constexpr (IsDecimal<T>) {
-            int64_t int_val = datas[i].int_value();
-            int32_t frac_val = datas[i].frac_value();
-            uint32_t seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), hash[i]);
-            hash[i] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
-        } else {
-            hash[i] = HashUtil::zlib_crc_hash(&datas[i], sizeof(ValueType), hash[i]);
-        }
-    }
-}
-
-template <typename T>
-void FixedLengthColumnBase<T>::crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
-    const auto datas = this->immutable_data();
-
-    for (uint16_t i = 0; i < sel_size; i++) {
-        if constexpr (IsDate<T> || IsTimestamp<T>) {
-            std::string str = datas[sel[i]].to_string();
-            hash[sel[i]] = HashUtil::zlib_crc_hash(str.data(), static_cast<int32_t>(str.size()), hash[sel[i]]);
-        } else if constexpr (IsDecimal<T>) {
-            int64_t int_val = datas[sel[i]].int_value();
-            int32_t frac_val = datas[sel[i]].frac_value();
-            uint32_t seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), hash[sel[i]]);
-            hash[sel[i]] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
-        } else {
-            hash[sel[i]] = HashUtil::zlib_crc_hash(&datas[sel[i]], sizeof(ValueType), hash[sel[i]]);
-        }
-    }
-}
-
-template <typename T>
-void FixedLengthColumnBase<T>::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
-    const auto datas = this->immutable_data();
-    for (uint32_t i = from; i < to; ++i) {
-        uint32_t hash_value = 0;
-        if constexpr (IsDate<T>) {
-            // Julian Day -> epoch day
-            // TODO, This is not a good place to do a project, this is just for test.
-            // If we need to make it more general, we should do this project in `IcebergMurmurHashProject`
-            // but consider that use date type column as bucket transform is rare, we can do it later.
-            int64_t long_value = datas[i].julian() - date::UNIX_EPOCH_JULIAN;
-            hash_value = HashUtil::murmur_hash3_32(&long_value, sizeof(int64_t), 0);
-        } else if constexpr (std::is_same<T, int32_t>::value) {
-            // Integer and long hash results must be identical for all integer values.
-            // This ensures that schema evolution does not change bucket partition values if integer types are promoted.
-            int64_t long_value = datas[i];
-            hash_value = HashUtil::murmur_hash3_32(&long_value, sizeof(int64_t), 0);
-        } else if constexpr (std::is_same<T, int64_t>::value) {
-            hash_value = HashUtil::murmur_hash3_32(&datas[i], sizeof(ValueType), 0);
-        } else {
-            // for decimal/timestamp type, the storage is very different from iceberg,
-            // and consider they are merely used, these types are forbidden by fe
-            DCHECK(false);
-            return;
-        }
-        hash[i] = hash_value;
     }
 }
 

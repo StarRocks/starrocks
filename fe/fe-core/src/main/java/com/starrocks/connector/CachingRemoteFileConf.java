@@ -22,8 +22,6 @@ import java.util.Map;
 public class CachingRemoteFileConf {
     private final long cacheTtlSec;
     private final long cacheRefreshIntervalSec;
-    private long cacheMaxSize = 1000000L; //deprecated, use memSizeRatio ratio instead
-    private final int perQueryCacheMaxSize = 10000;
     private final int refreshMaxThreadNum;
     private double memSizeRatio = 0.1; // 10% of the total memory
 
@@ -32,8 +30,6 @@ public class CachingRemoteFileConf {
                 String.valueOf(Config.remote_file_cache_ttl_s)));
         this.cacheRefreshIntervalSec = Long.parseLong(conf.getOrDefault("remote_file_cache_refresh_interval_sec",
                 String.valueOf(Config.remote_file_cache_refresh_interval_s)));
-        //deprecated, use memSizeRatio ratio instead
-        this.cacheMaxSize = Long.parseLong(conf.getOrDefault("remote_file_cache_max_num", String.valueOf(cacheMaxSize)));
         this.refreshMaxThreadNum = Integer.parseInt(conf.getOrDefault("async_refresh_max_thread_num", "32"));
         this.memSizeRatio = Double.parseDouble(conf.getOrDefault("remote_file_cache_memory_ratio", String.valueOf(memSizeRatio)));
     }
@@ -44,14 +40,6 @@ public class CachingRemoteFileConf {
 
     public long getCacheRefreshIntervalSec() {
         return cacheRefreshIntervalSec;
-    }
-
-    public long getCacheMaxSize() {
-        return cacheMaxSize;
-    }
-
-    public int getPerQueryCacheMaxSize() {
-        return perQueryCacheMaxSize;
     }
 
     public int getRefreshMaxThreadNum() {

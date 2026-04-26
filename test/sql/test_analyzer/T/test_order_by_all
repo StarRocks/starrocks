@@ -1,0 +1,32 @@
+-- name: test_order_by_all
+
+CREATE TABLE `t0` (
+  `v1` bigint NULL COMMENT "",
+  `v2` bigint NULL COMMENT "",
+  `v3` bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, v3)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+INSERT INTO t0 VALUES (1, 2, 3), (4, 5, 6), (7, 8, 9), (NULL, NULL, NULL);
+
+SELECT * FROM t0 ORDER BY ALL;
+SELECT * FROM t0 ORDER BY ALL DESC;
+SELECT * FROM t0 ORDER BY ALL ASC;
+SELECT * FROM t0 ORDER BY ALL DESC NULLS FIRST;
+SELECT * FROM t0 ORDER BY ALL ASC NULLS LAST;
+SELECT * FROM t0 ORDER BY ALL ASC NULLS FIRST;
+SELECT * FROM t0 ORDER BY ALL DESC NULLS LAST;
+SELECT * FROM t0 ORDER BY ALL ASC NULLS FIRST;
+
+SELECT v1, v2, count(*) from t0 group by v1, v2 ORDER BY ALL;
+SELECT v1, v2, count(*) from t0 group by v1, v2 ORDER BY ALL DESC;
+SELECT v1, v2, count(*) from t0 group by v1, v2 ORDER BY ALL ASC;
+SELECT v1, v2, count(*) from t0 group by v1, v2 ORDER BY ALL DESC NULLS FIRST;
+SELECT v1, v2, count(*), sum(v3) from t0 group by v1, v2 ORDER BY ALL ASC NULLS LAST;
+SELECT v1, v2, count(*), sum(v3) from t0 group by v1, v2 ORDER BY ALL ASC NULLS FIRST;
+SELECT v1, v2, count(*), sum(v3) from t0 group by v1, v2 ORDER BY ALL DESC NULLS LAST;
+SELECT v1, v2, count(*), sum(v3) from t0 group by v1, v2 ORDER BY ALL ASC NULLS FIRST;

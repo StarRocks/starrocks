@@ -18,9 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 
-import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * {@link PRangeCell} contains the range partition's value which contains a `PartitionKey` range.
@@ -117,24 +115,13 @@ public final class PRangeCell extends PCell {
 
     @Override
     public String toString() {
-        return "PRangeCell{" +
-                "range=" + range +
-                '}';
+        return "[%s-%s]".formatted(toString(range.lowerEndpoint()), toString(range.upperEndpoint()));
     }
 
-    public static Map<String, Range<PartitionKey>> toRangeMap(Map<String, PCell> input) {
-        if (input == null) {
-            return null;
+    private String toString(PartitionKey partitionKey) {
+        if (partitionKey == null) {
+            return "null";
         }
-        return input.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, v -> ((PRangeCell) v.getValue()).getRange()));
-    }
-
-    public static Map<String, PCell> toCellMap(Map<String, Range<PartitionKey>> input) {
-        if (input == null) {
-            return null;
-        }
-        return input.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, v -> new PRangeCell(v.getValue())));
+        return partitionKey.toSql();
     }
 }

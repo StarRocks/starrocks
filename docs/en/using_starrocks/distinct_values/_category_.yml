@@ -1,5 +1,5 @@
 position: 70 # float position is supported
-label: 'Computing the number of distinct values'
+label: 'Computing distinct value count'
 collapsible: true
 collapsed: true
 link:

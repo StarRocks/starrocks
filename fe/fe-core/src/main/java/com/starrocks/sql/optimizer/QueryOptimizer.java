@@ -26,18 +26,21 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.ivm.IvmRewriter;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
@@ -46,6 +49,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule
 import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
+import com.starrocks.sql.optimizer.rule.transformation.DistinctAggregationOverWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
@@ -57,6 +61,7 @@ import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewr
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.InnerToSemiRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
+import com.starrocks.sql.optimizer.rule.transformation.LargeInPredicateToJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -86,12 +91,15 @@ import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitJoinORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitWindowSkewToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.ExtractRangePredicateFromScalarApplyRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
@@ -113,6 +121,7 @@ import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PruneShuffleDistributionNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
@@ -121,7 +130,9 @@ import com.starrocks.sql.optimizer.rule.tree.SemiJoinDeduplicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
+import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMaterializationRewriter;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
@@ -131,7 +142,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
-import com.starrocks.sql.optimizer.validate.PlanValidator;
+import com.starrocks.sql.util.Util;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -309,8 +320,9 @@ public class QueryOptimizer extends Optimizer {
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
+            rootTaskContext.getPlanValidator().enableAllCheckers();
             // valid the final plan
-            PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
+            rootTaskContext.getPlanValidator().validatePlan(finalPlan, rootTaskContext);
             // validate mv and log tracer if needed
             MVRewriteValidator mvRewriteValidator = new MVRewriteValidator(allLogicalOlapScanOperators);
             mvRewriteValidator.validateMV(connectContext, finalPlan, rootTaskContext);
@@ -456,7 +468,6 @@ public class QueryOptimizer extends Optimizer {
         if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
             return;
         }
-
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -498,17 +509,6 @@ public class QueryOptimizer extends Optimizer {
         deriveLogicalProperty(tree);
     }
 
-
-    private OptExpression logicalTvrRuleRewrite(OptExpression tree,
-                                                TaskContext rootTaskContext,
-                                                ColumnRefSet requiredColumns) {
-        new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.TVR_REWRITE_RULES);
-        new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        deriveLogicalProperty(tree);
-        return tree;
-    }
-
     private OptExpression logicalRuleRewrite(
             OptExpression tree,
             TaskContext rootTaskContext) {
@@ -544,13 +544,14 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_SUBQUERY_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_EXTRACT_CORRELATION_PREDICATE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_WINDOW_RULES);
+        scheduler.rewriteOnce(tree, rootTaskContext, new ExtractRangePredicateFromScalarApplyRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
 
-        // tvr rule rewrite
+        // IVM rule rewrite
         if (context.getSessionVariable().isEnableIVMRefresh()) {
-            tree = logicalTvrRuleRewrite(tree, rootTaskContext, requiredColumns);
+            IvmRewriter.rewrite(tree, rootTaskContext, scheduler, requiredColumns);
         }
 
         if (sessionVariable.isEnableFineGrainedRangePredicate()) {
@@ -559,6 +560,14 @@ public class QueryOptimizer extends Optimizer {
 
         // rewrite transparent materialized view
         tree = transparentMVRewrite(tree, rootTaskContext);
+
+        // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES because it introduces filter expressions
+        if (sessionVariable.isEnableSplitWindowSkewToUnion()) {
+            Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+            scheduler.rewriteOnce(tree, rootTaskContext, SplitWindowSkewToUnionRule.getInstance());
+        }
+        // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES
+        scheduler.rewriteOnce(tree, rootTaskContext, new LargeInPredicateToJoinRule());
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
@@ -578,6 +587,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_UKFK_JOIN_RULES);
         deriveLogicalProperty(tree);
 
+        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
+
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAsofJoinTemporalExpressionToChildProject());
 
@@ -588,6 +599,9 @@ public class QueryOptimizer extends Optimizer {
 
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
+
+        // Enable input dependencies checker after column pruning for rule transformation validation
+        rootTaskContext.getPlanValidator().enableInputDependenciesChecker();
 
         pruneTables(tree, rootTaskContext, requiredColumns);
 
@@ -613,8 +627,7 @@ public class QueryOptimizer extends Optimizer {
 
         // apply skew join optimize after push down join on expression to child project,
         // we need to compute the stats of child project(like subfield).
-        if (sessionVariable.isEnableOptimizerSkewJoinByQueryRewrite() &&
-                !sessionVariable.isEnableOptimizerSkewJoinByBroadCastSkewValues()) {
+        if (sessionVariable.isEnableOptimizerSkewJoinOptimizeV1()) {
             skewJoinOptimize(tree, rootTaskContext);
         }
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergEqualityDeleteRewriteRule());
@@ -663,11 +676,11 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteDownTop(tree, rootTaskContext, OnPredicateMoveAroundRule.INSTANCE);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_PREDICATE_RULES);
-
         scheduler.rewriteIterative(tree, rootTaskContext, new PartitionColumnMinMaxRewriteRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_PREDICATE_RULES);
+        scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_EMPTY_OPERATOR_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new CTEProduceAddProjectionRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
@@ -699,10 +712,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
         // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
         scheduler.rewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
-
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
@@ -712,15 +723,16 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
+        scheduler.rewriteOnce(tree, rootTaskContext, new SplitTopNAggregateRule());
 
         // rule based materialized view rewrite
         ruleBasedMaterializedViewRewriteStage2(tree, rootTaskContext, requiredColumns);
 
         // =============================== Rules after the MV rewrite ===============================
         scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
+        scheduler.rewriteOnce(tree, rootTaskContext, VariantPathRewriteRule.createForIcebergScan());
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMinMaxByMonotonicFunctionRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
-
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b
         // if this rule has applied before MV.
@@ -771,7 +783,10 @@ public class QueryOptimizer extends Optimizer {
         boolean isRewrittenSuccess = false;
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
-            OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
+            // Clone the tree to avoid modifying the original tree stored in QueryMaterializationContext
+            OptExpression treeWithView = MvUtils.cloneExpression(queryMaterializationContext.getQueryOptPlanWithView());
+            // Derive logical property for the cloned tree to ensure it has complete metadata
+            MvUtils.deriveLogicalProperty(treeWithView);
             OptimizerTraceUtil.logOptExpression("before ViewBasedMvRuleRewrite:\n%s", tree);
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
@@ -831,7 +846,8 @@ public class QueryOptimizer extends Optimizer {
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
-            if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+            boolean hasAgg = Util.getStream(tree).anyMatch(op -> op instanceof LogicalAggregationOperator);
+            if (hasAgg && context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
                 if (pushDistinctBelowWindowFlag) {
                     deriveLogicalProperty(tree);
                 }
@@ -841,11 +857,13 @@ public class QueryOptimizer extends Optimizer {
                 joinReorder = true;
             }
 
-            PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
-            rule.getRewriter().collectRewriteContext(tree);
-            if (rule.getRewriter().isNeedRewrite()) {
-                pushAggFlag = true;
-                tree = rule.rewrite(tree, rootTaskContext);
+            if (hasAgg) {
+                PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
+                rule.getRewriter().collectRewriteContext(tree);
+                if (rule.getRewriter().isNeedRewrite()) {
+                    pushAggFlag = true;
+                    tree = rule.rewrite(tree, rootTaskContext);
+                }
             }
         }
 
@@ -913,10 +931,30 @@ public class QueryOptimizer extends Optimizer {
         return tree;
     }
 
+    private OptExpression convertDistinctAggOverWindowToNullSafeEqualJoin(OptExpression tree,
+                                                                          TaskContext rootTaskContext) {
+        if (!rootTaskContext.getOptimizerContext().getSessionVariable().isEnableDistinctAggOverWindow()) {
+            return tree;
+        }
+        if (Util.getStream(tree).noneMatch(op -> op instanceof LogicalWindowOperator)) {
+            return tree;
+        }
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
+        deriveLogicalProperty(tree);
+        DistinctAggregationOverWindowRule rule = new DistinctAggregationOverWindowRule();
+        tree = rule.rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        return tree;
+    }
+
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
         context.setInMemoPhase(true);
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        CTEUtils.collectCteOperators(tree, context);
         // add CboTablePruneRule
         if (Utils.countJoinNodeSize(tree, CboTablePruneRule.JOIN_TYPES) < 10 &&
                 sessionVariable.isEnableCboTablePrune()) {
@@ -947,20 +985,16 @@ public class QueryOptimizer extends Optimizer {
             context.getRuleSet().addOuterJoinTransformationRules();
         }
 
-        if (!sessionVariable.isMVPlanner()) {
-            // add join implementRule
-            String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
-            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addMergeJoinImplementationRule();
-            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addHashJoinImplementationRule();
-            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addNestLoopJoinImplementationRule();
-            } else {
-                context.getRuleSet().addAutoJoinImplementationRule();
-            }
+        // Legacy MV planner mode is inert, so use the normal join implementation rules unconditionally.
+        String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
+        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addMergeJoinImplementationRule();
+        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addHashJoinImplementationRule();
+        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addNestLoopJoinImplementationRule();
         } else {
-            context.getRuleSet().addRealtimeMVRules();
+            context.getRuleSet().addAutoJoinImplementationRule();
         }
 
         if (mvRewriteStrategy.enableCBOBasedMvRewrite && mvRewriteStrategy.enableMultiTableRewrite) {
@@ -975,7 +1009,6 @@ public class QueryOptimizer extends Optimizer {
     private OptExpression physicalRuleRewrite(ConnectContext connectContext, TaskContext rootTaskContext,
                                               OptExpression result) {
         Preconditions.checkState(result.getOp().isPhysical());
-
         int planCount = result.getPlanCount();
 
         // Since there may be many different plans in the logic phase, it's possible
@@ -986,6 +1019,7 @@ public class QueryOptimizer extends Optimizer {
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result, rootTaskContext);
         result = new PruneAggregateNodeRule().rewrite(result, rootTaskContext);
+        result = new PruneShuffleDistributionNodeRule().rewrite(result, rootTaskContext);
         result = new PruneShuffleColumnRule().rewrite(result, rootTaskContext);
         result = new PhysicalDistributionAggOptRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
@@ -1006,7 +1040,7 @@ public class QueryOptimizer extends Optimizer {
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
         result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
 
-        // set subfield expr copy flag
+        // set a subfield expr copy flag
         if (rootTaskContext.getOptimizerContext().getSessionVariable().getEnableSubfieldNoCopy()) {
             result = new SubfieldExprNoCopyRule().rewrite(result, rootTaskContext);
         }
@@ -1015,24 +1049,20 @@ public class QueryOptimizer extends Optimizer {
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
         result = new RemoveUselessScanOutputPropertyRule().rewrite(result, rootTaskContext);
+        result = new GlobalLateMaterializationRewriter().rewrite(result, context);
+
         result.setPlanCount(planCount);
         return result;
     }
 
     private OptExpression dynamicRewrite(ConnectContext connectContext, TaskContext rootTaskContext,
                                          OptExpression result) {
-        // update the existRequiredDistribution value in optExpression. The next rules need it to determine
-        // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
-        result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
-
-        // this rule must be put after MarkParentRequiredDistributionRule
-        if (rootTaskContext.getOptimizerContext().getSessionVariable()
-                .isEnableOptimizerSkewJoinByBroadCastSkewValues() &&
-                !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2()) {
+            result = new MarkParentRequiredDistributionRule(false).rewrite(result, rootTaskContext);
             result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
         }
 
-
+        result = new MarkParentRequiredDistributionRule(true).rewrite(result, rootTaskContext);
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
 
         OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()

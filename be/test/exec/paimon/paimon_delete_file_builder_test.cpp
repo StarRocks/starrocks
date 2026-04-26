@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

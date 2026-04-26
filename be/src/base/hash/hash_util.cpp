@@ -1,0 +1,179 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "base/hash/hash_util.hpp"
+
+#ifdef __SSE4_2__
+#include <nmmintrin.h>
+#endif
+
+#include <mutex>
+
+#include "base/hash/murmur_hash3.h"
+#include "base/hash/unaligned_access.h"
+#include "base/hash/xxh3.h"
+#include "gutil/cpu.h"
+
+namespace starrocks {
+
+#ifdef __SSE4_2__
+// Forward declarations for SSE4.2 implementations (only used within this file)
+static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash);
+static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash);
+#endif
+
+// Function pointer types for hash functions to avoid runtime CPU checks
+using Hash32Func = uint32_t (*)(const void*, int32_t, uint32_t);
+using Hash64Func = uint64_t (*)(const void*, int32_t, uint64_t);
+
+// Forward declarations for stub functions.
+static uint32_t hash32_init_stub(const void* data, int32_t bytes, uint32_t hash);
+static uint64_t hash64_init_stub(const void* data, int32_t bytes, uint64_t hash);
+static uint32_t crc32_init_stub(const void* data, int32_t bytes, uint32_t hash);
+static uint64_t crc64_init_stub(const void* data, int32_t bytes, uint64_t hash);
+
+// Function pointers that will be initialized at program startup based on CPU capabilities
+static Hash32Func g_hash32_func = hash32_init_stub;
+static Hash64Func g_hash64_func = hash64_init_stub;
+static Hash32Func g_crc32_func = crc32_init_stub;
+static Hash64Func g_crc64_func = crc64_init_stub;
+
+static std::once_flag g_hash_init_once;
+
+static uint64_t crc_hash64_fallback(const void* data, int32_t bytes, uint64_t hash) {
+    // For 64-bit fallback, use zlib_crc_hash on both halves.
+    uint32_t h1 = hash >> 32;
+    uint32_t h2 = (hash << 32) >> 32;
+    h1 = HashUtil::zlib_crc_hash(data, bytes, h1);
+    h2 = HashUtil::zlib_crc_hash(data, bytes, h2);
+    return (static_cast<uint64_t>(h1) << 32) | h2;
+}
+
+static void init_hash_functions() {
+    g_hash32_func = HashUtil::fnv_hash;
+    g_hash64_func = HashUtil::hash64_fallback;
+    g_crc32_func = HashUtil::zlib_crc_hash;
+    g_crc64_func = crc_hash64_fallback;
+
+#ifdef __SSE4_2__
+    base::CPU cpu;
+    if (cpu.has_sse42()) {
+        g_hash32_func = crc_hash_sse42;
+        g_hash64_func = crc_hash64_sse42;
+        g_crc32_func = crc_hash_sse42;
+        g_crc64_func = crc_hash64_sse42;
+    }
+#endif
+}
+
+static uint32_t hash32_init_stub(const void* data, int32_t bytes, uint32_t hash) {
+    std::call_once(g_hash_init_once, init_hash_functions);
+    return g_hash32_func(data, bytes, hash);
+}
+
+static uint64_t hash64_init_stub(const void* data, int32_t bytes, uint64_t hash) {
+    std::call_once(g_hash_init_once, init_hash_functions);
+    return g_hash64_func(data, bytes, hash);
+}
+
+static uint32_t crc32_init_stub(const void* data, int32_t bytes, uint32_t hash) {
+    std::call_once(g_hash_init_once, init_hash_functions);
+    return g_crc32_func(data, bytes, hash);
+}
+
+static uint64_t crc64_init_stub(const void* data, int32_t bytes, uint64_t hash) {
+    std::call_once(g_hash_init_once, init_hash_functions);
+    return g_crc64_func(data, bytes, hash);
+}
+
+uint64_t HashUtil::xx_hash3_64(const void* key, int32_t len, uint64_t seed) {
+    return XXH3_64bits_withSeed(key, len, seed);
+}
+
+uint64_t HashUtil::xx_hash64(const void* key, int32_t len, uint64_t seed) {
+    return XXH64(key, len, seed);
+}
+
+uint64_t HashUtil::hash64_fallback(const void* data, int32_t bytes, uint64_t seed) {
+    uint64_t hash = 0;
+    murmur_hash3_x64_64(data, bytes, seed, &hash);
+    return hash;
+}
+
+#ifdef __SSE4_2__
+static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash) {
+    uint32_t words = bytes / sizeof(uint32_t);
+    bytes = bytes % sizeof(uint32_t);
+
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+
+    while (words--) {
+        hash = _mm_crc32_u32(hash, unaligned_load<uint32_t>(p));
+        p += sizeof(uint32_t);
+    }
+
+    while (bytes--) {
+        hash = _mm_crc32_u8(hash, *p);
+        ++p;
+    }
+
+    // The lower half of the CRC hash has poor uniformity, so swap the halves
+    // for anyone who only uses the first several bits of the hash.
+    hash = (hash << 16) | (hash >> 16);
+    return hash;
+}
+
+static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash) {
+    uint32_t words = bytes / sizeof(uint32_t);
+    bytes = bytes % sizeof(uint32_t);
+
+    uint32_t h1 = hash >> 32;
+    uint32_t h2 = (hash << 32) >> 32;
+
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+    while (words--) {
+        const uint32_t value = unaligned_load<uint32_t>(p);
+        (words & 1) ? (h1 = _mm_crc32_u32(h1, value)) : (h2 = _mm_crc32_u32(h2, value));
+        p += sizeof(uint32_t);
+    }
+
+    while (bytes--) {
+        (bytes & 1) ? (h1 = _mm_crc32_u8(h1, *p)) : (h2 = _mm_crc32_u8(h2, *p));
+        ++p;
+    }
+
+    h1 = (h1 << 16) | (h1 >> 16);
+    h2 = (h2 << 16) | (h2 >> 16);
+    hash = (static_cast<uint64_t>(h2) << 32) | h1;
+    return hash;
+}
+#endif
+
+uint32_t HashUtil::hash(const void* data, int32_t bytes, uint32_t seed) {
+    return g_hash32_func(data, bytes, seed);
+}
+
+uint64_t HashUtil::hash64(const void* data, int32_t bytes, uint64_t seed) {
+    return g_hash64_func(data, bytes, seed);
+}
+
+uint32_t HashUtil::crc_hash(const void* data, int32_t bytes, uint32_t hash) {
+    return g_crc32_func(data, bytes, hash);
+}
+
+uint64_t HashUtil::crc_hash64(const void* data, int32_t bytes, uint64_t hash) {
+    return g_crc64_func(data, bytes, hash);
+}
+
+} // namespace starrocks

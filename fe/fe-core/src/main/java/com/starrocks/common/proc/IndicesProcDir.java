@@ -59,7 +59,7 @@ import java.util.List;
 public class IndicesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime")
-            .add("TabletBalanceStat").add("VirtualBuckets").add("Tablets")
+            .add("TabletBalanceStat").add("Tablets")
             .build();
 
     private Database db;
@@ -84,14 +84,13 @@ public class IndicesProcDir implements ProcDirInterface {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             result.setNames(TITLE_NAMES);
-            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
+            for (MaterializedIndex materializedIndex : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 List<Comparable> indexInfo = new ArrayList<Comparable>();
                 indexInfo.add(materializedIndex.getId());
-                indexInfo.add(olapTable.getIndexNameById(materializedIndex.getId()));
+                indexInfo.add(olapTable.getIndexNameByMetaId(materializedIndex.getMetaId()));
                 indexInfo.add(materializedIndex.getState());
                 indexInfo.add(TimeUtils.longToTimeString(materializedIndex.getLastCheckTime()));
                 indexInfo.add(materializedIndex.getBalanceStat().toString());
-                indexInfo.add(materializedIndex.getVirtualBuckets().size());
                 indexInfo.add(materializedIndex.getTablets().size());
 
                 indexInfos.add(indexInfo);

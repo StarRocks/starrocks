@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -82,8 +83,10 @@ public class PruneGroupByKeysRule extends TransformationRule {
         Map<ColumnRefOperator, ColumnRefOperator> inputToOutputMap = Maps.newHashMap();
         for (ColumnRefOperator groupingKey : groupingKeys) {
             ScalarOperator groupingExpr = projections.get(groupingKey);
-            Preconditions.checkState(groupingExpr != null,
-                    "cannot find grouping key from projections");
+            if (groupingExpr == null) {
+                throw new SemanticException("cannot find grouping key in projection, key:%s, projections:%s",
+                        groupingKey, projections);
+            }
 
             // if the output col of this groupingExpr had been added into the newGroupingKeys, it means this
             // is a duplicate group by key, we can skip it. But we need add a projection above the agg

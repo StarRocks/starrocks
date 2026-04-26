@@ -19,9 +19,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -30,13 +30,13 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -47,6 +47,8 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.NamedArgument;
 import com.starrocks.lake.LakeTable;
@@ -58,10 +60,13 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
+import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -74,12 +79,15 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -90,7 +98,7 @@ import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -98,6 +106,7 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.ReplacePartitionColumnClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
@@ -107,11 +116,11 @@ import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -127,16 +136,19 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
-    private final Table table;
+    protected final Table table;
 
     public AlterTableClauseAnalyzer(Table table) {
         this.table = table;
@@ -149,6 +161,33 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     @Override
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexAnalyzer.analyze(clause.getIndexDef());
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Only support OLAP table");
+        }
+        OlapTable tbl = (OlapTable) table;
+        if (!(tbl.getDefaultDistributionInfo() instanceof HashDistributionInfo)) {
+            throw new SemanticException("Only support hash distribution tables");
+        }
+        HashDistributionInfo current = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+        List<Column> cols = MetaUtils.getColumnsByColumnIds(tbl, current.getDistributionColumns());
+        List<String> currentNames = cols.stream().map(c -> c.getName()).collect(Collectors.toList());
+        List<String> input = clause.getDistributionColumns();
+        if (currentNames.size() != input.size()) {
+            throw new SemanticException("Distribution columns mismatch: " + input + " vs " + currentNames);
+        }
+        for (int i = 0; i < currentNames.size(); i++) {
+            if (!currentNames.get(i).equalsIgnoreCase(input.get(i))) {
+                throw new SemanticException("Distribution columns mismatch: " + input + " vs " + currentNames);
+            }
+        }
+        if (clause.getBucketNum() <= 0) {
+            throw new SemanticException("Bucket num must > 0");
+        }
         return null;
     }
 
@@ -238,7 +277,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             String storageMedium = properties.remove("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-            // do nothing
+            properties.remove(PropertyAnalyzer.PROPERTIES_INMEMORY);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
             String valStr = properties.get(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
             try {
@@ -328,6 +367,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzeMutableBucketNum(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
@@ -427,12 +468,36 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
                         "update for a primary key table. ");
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
-            try {
-                PropertyAnalyzer.analyzeEnableDynamicTablet(properties, false);
-            } catch (Exception e) {
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+            PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+            if (!table.isCloudNativeTableOrMaterializedView()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET +
+                        "Property " + PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL +
+                                " can only be set for cloud native tables");
+            }
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            try {
+                int maxParallel = Integer.parseInt(value);
+                if (maxParallel < 0) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid lake_compaction_max_parallel value: " + value + ". Value must be non-negative.");
+                }
+            } catch (NumberFormatException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Invalid lake_compaction_max_parallel value: " + value + ". Value must be an integer.");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                PropertyAnalyzer.analyzeTableQueryTimeout(Maps.newHashMap(properties));
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
                                 " must be bool type(false/true)");
             }
         } else {
@@ -532,7 +597,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)) {
                 ErrorReport.reportSemanticException("Unsupported change to %s partition function when merge partitions",
                         ErrorCode.ERR_COMMON_ERROR, functionName);
@@ -620,7 +685,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         // analyze partitions
-        PartitionNames partitionNames = clause.getPartitionNames();
+        PartitionRef partitionNames = clause.getPartitionNames();
         if (partitionNames != null) {
             if (clause.getSortKeys() != null || clause.getKeysDesc() != null) {
                 throw new SemanticException("not support change sort keys or keys type when specify partitions");
@@ -727,7 +792,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(Column.fromColumnDef(table, columnDef));
             return null;
         }
 
@@ -745,15 +809,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
-        }
-
-        if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
-            throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(columnDef.getName()), columnDef.getPos());
         }
 
         if (columnDef.getAggregateType() != null && colPos != null && colPos.isFirst()) {
@@ -764,7 +822,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(Column.fromColumnDef(table, columnDef));
+        Column column = ColumnBuilder.buildColumn(columnDef);
+        if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+            throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()), columnDef.getPos());
+        }
         return null;
     }
 
@@ -785,10 +846,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
             }
-            if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
-                throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(colDef.getName()), colDef.getPos());
-            }
-
             if (colDef.isGeneratedColumn()) {
                 hasGeneratedColumn = true;
 
@@ -859,7 +916,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        columnDefs.forEach(columnDef -> clause.addColumn(Column.fromColumnDef(table, columnDef)));
+        if (!hasGeneratedColumn) {
+            columnDefs.forEach(columnDef -> {
+                Column column = ColumnBuilder.buildColumn(columnDef);
+                if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+                    throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()),
+                            columnDef.getPos());
+                }
+            });
+        }
         return null;
     }
 
@@ -898,11 +963,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = clause.getFieldDesc();
-        try {
-            fieldDesc.analyze(baseColumn, false);
-        } catch (AnalysisException e) {
-            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
-        }
+        StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, false);
         return null;
     }
 
@@ -919,11 +980,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
-        try {
-            fieldDesc.analyze(baseColumn, true);
-        } catch (AnalysisException e) {
-            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
-        }
+        StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, true);
         return null;
     }
 
@@ -935,7 +992,21 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         try {
             if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
-                columnDef.setAggregateType(AggregateType.REPLACE);
+                Column baseColumn = ((OlapTable) table).getBaseColumn(columnDef.getName());
+                if (baseColumn != null) {
+                    if (baseColumn.isKey()) {
+                        // Keep MODIFY COLUMN semantics aligned with CREATE TABLE: existing PK columns
+                        // are analyzed as key + implicit NOT NULL even if the clause omits these attributes.
+                        columnDef.setIsKey(true);
+                        columnDef.setPrimaryKeyNonNullable();
+                        if (columnDef.isAllowNull()) {
+                            throw new SemanticException("primary key column[" + columnDef.getName()
+                                    + "] cannot be nullable");
+                        }
+                    } else {
+                        columnDef.setAggregateType(AggregateType.REPLACE);
+                    }
+                }
             }
             ColumnDefAnalyzer.analyze(columnDef, true);
         } catch (AnalysisException e) {
@@ -992,16 +1063,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(Column.fromColumnDef(table, columnDef));
             return null;
         }
 
         ColumnPosition colPos = clause.getColPos();
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
@@ -1012,8 +1080,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
-
-        clause.setColumn(Column.fromColumnDef(table, columnDef));
         return null;
     }
 
@@ -1059,6 +1125,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     // 2. storage_medium && storage_cooldown_time
     // 3. in_memory
     // 4. tablet type
+    // 5. datacache.enable
     private void checkProperties(Map<String, String> properties) throws AnalysisException {
         // 1. data property
         DataProperty newDataProperty = null;
@@ -1076,6 +1143,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         // 4. tablet type
         PropertyAnalyzer.analyzeTabletType(properties);
+
+        // 5. datacache.enable (validate bool value if present)
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE
+                        + " must be bool type(false/true)");
+            }
+        }
     }
 
     @Override
@@ -1106,7 +1182,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
             throw new SemanticException("Unknown properties: " + clause.getProperties());
         }
-
 
         if (table instanceof OlapTable) {
             List<String> partitionNames = clause.getPartitionNames();
@@ -1255,8 +1330,57 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long dynamicTabletSplitSize = PropertyAnalyzer.analyzeDynamicTabletSplitSize(copiedProperties, true);
-            clause.setDynamicTabletSplitSize(dynamicTabletSplitSize);
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            clause.setTabletReshardTargetSize(tabletReshardTargetSize);
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage(), e);
+        }
+
+        if (!copiedProperties.isEmpty()) {
+            throw new SemanticException("Unknown properties: " + copiedProperties);
+        }
+
+        return null;
+    }
+
+    @Override
+    public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new SemanticException("Merge tablet only support cloud native tables");
+        }
+
+        if (clause.getPartitionNames() != null && clause.getTabletGroupList() != null) {
+            throw new SemanticException("Partitions and tablets cannot be specified at the same time");
+        }
+
+        if (clause.getPartitionNames() != null) {
+            if (clause.getPartitionNames().isTemp()) {
+                throw new SemanticException("Cannot merge tablet in temp partition");
+            }
+            if (clause.getPartitionNames().getPartitionNames().isEmpty()) {
+                throw new SemanticException("Empty partitions");
+            }
+        }
+
+        if (clause.getTabletGroupList() != null) {
+            if (clause.getTabletGroupList().getTabletIdGroups().isEmpty()) {
+                throw new SemanticException("Empty tablets");
+            }
+            for (List<Long> tabletIds : clause.getTabletGroupList().getTabletIdGroups()) {
+                if (tabletIds.isEmpty()) {
+                    throw new SemanticException("Empty tablets");
+                }
+                if (tabletIds.size() < 2) {
+                    throw new SemanticException("Tablet list must contain at least 2 tablets");
+                }
+            }
+        }
+
+        Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
+                : Maps.newHashMap(clause.getProperties());
+        try {
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            clause.setTabletReshardTargetSize(tabletReshardTargetSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
         }
@@ -1362,7 +1486,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             properties.putAll(clauseProperties);
         }
 
-        for (PartitionDesc partitionDesc : partitionDescs) {
+        List<String> rangePartitionNames = null;
+        if (addPartitionClause.getPartitionDesc() instanceof RangePartitionDesc) {
+            rangePartitionNames =
+                    ((RangePartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
+        }
+
+        Iterator<PartitionDesc> iterator = partitionDescs.iterator();
+        while (iterator.hasNext()) {
+            PartitionDesc partitionDesc = iterator.next();
             Map<String, String> cloneProperties = Maps.newHashMap(properties);
             Map<String, String> sourceProperties = partitionDesc.getProperties();
             if (sourceProperties != null && !sourceProperties.isEmpty()) {
@@ -1381,6 +1513,23 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc,
                         rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
+                    if (singleRangePartitionDesc.isSystem()) {
+                        long enclosingId = rangePartitionInfo.getEnclosingPartitionId(
+                                table.getIdToColumn(), singleRangePartitionDesc,
+                                addPartitionClause.isTempPartition());
+                        if (enclosingId >= 0) {
+                            Partition enclosingPartition = olapTable.getPartition(enclosingId);
+                            if (enclosingPartition != null && rangePartitionNames != null) {
+                                int idx = rangePartitionNames.indexOf(
+                                        singleRangePartitionDesc.getPartitionName());
+                                if (idx >= 0) {
+                                    rangePartitionNames.set(idx, enclosingPartition.getName());
+                                }
+                            }
+                            iterator.remove();
+                            continue;
+                        }
+                    }
                     rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
                 }
@@ -1391,12 +1540,29 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         .collect(Collectors.toList());
                 PartitionDescAnalyzer.analyze(partitionDesc, columnDefList, cloneProperties);
                 if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
-                    CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
-                            addPartitionClause.isTempPartition());
+                    boolean isDuplicate = CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable,
+                            partitionDesc, addPartitionClause.isTempPartition());
+                    if (isDuplicate) {
+                        if (partitionDesc.isSystem()) {
+                            // For system-created partitions (automatic partition), skip if values already exist.
+                            // duplicate partition will be ignored in create partition phase
+                            continue;
+                        } else {
+                            // For user-created partitions, throw error
+                            throw new DdlException("Duplicate partition values exist for partition: " +
+                                    partitionDesc.getPartitionName());
+                        }
+                    }
                 }
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }
+        }
+
+        if (rangePartitionNames != null) {
+            LinkedHashSet<String> deduped = new LinkedHashSet<>(rangePartitionNames);
+            rangePartitionNames.clear();
+            rangePartitionNames.addAll(deduped);
         }
     }
 
@@ -1442,15 +1608,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         List<String> sortKeys = new ArrayList<>();
         for (OrderByElement orderByElement : orderByElements) {
-            String column = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             if (column == null) {
-                throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                throw new SemanticException("Unknown column '%s' in order by clause", ExprToSql.toSql(orderByElement.getExpr()));
             }
             sortKeys.add(column);
         }
         return sortKeys;
     }
-
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
@@ -1525,6 +1691,67 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
 
+        return null;
+    }
+
+    @Override
+    public Void visitAddPartitionColumnClause(AddPartitionColumnClause clause, ConnectContext context) {
+        analyzeIcebergPartitionColumnClause(clause.getPartitionExprList(), false, true);
+        return null;
+    }
+
+    @Override
+    public Void visitDropPartitionColumnClause(DropPartitionColumnClause clause, ConnectContext context) {
+        analyzeIcebergPartitionColumnClause(clause.getPartitionExprList(), true, false);
+        return null;
+    }
+
+    @Override
+    public Void visitReplacePartitionColumnClause(ReplacePartitionColumnClause clause, ConnectContext context) {
+        IcebergTable icebergTable = getIcebergTable();
+        if (!icebergTable.isV2Format()) {
+            throw new SemanticException("REPLACE PARTITION COLUMN is only supported for Iceberg v2 tables, " +
+                    "but table %s is v%d format", icebergTable.getName(), icebergTable.getFormatVersion());
+        }
+
+        Expr oldPartitionExpr = clause.getOldPartitionExpr();
+        boolean oldResolvedByName = false;
+
+        // Old partition: support both transform expression (e.g. day(dt)) and field name (e.g. dt_day)
+        if (oldPartitionExpr instanceof SlotRef slotRef
+                && icebergTable.getColumn(slotRef.getColumnName()) == null) {
+            // Not a table column - check if it's a partition field name
+            String fieldName = slotRef.getColumnName();
+            boolean isFieldName = icebergTable.getNativeTable().spec().fields().stream()
+                    .anyMatch(f -> f.name().equalsIgnoreCase(fieldName));
+            if (!isFieldName) {
+                throw new SemanticException("Partition column or field name does not exist: %s", fieldName);
+            }
+            oldResolvedByName = true;
+        } else {
+            analyzeIcebergPartitionColumnExpr(oldPartitionExpr);
+        }
+
+        // New partition: always a transform expression
+        analyzeIcebergPartitionColumnExpr(clause.getNewPartitionExpr());
+
+        String newExpr = IcebergPartitionUtils.normalizePartitionExpr(clause.getNewPartitionExpr());
+
+        if (!oldResolvedByName) {
+            String oldExpr = IcebergPartitionUtils.normalizePartitionExpr(oldPartitionExpr);
+            if (oldExpr.equalsIgnoreCase(newExpr)) {
+                throw new SemanticException("Old partition column and new partition column are the same: %s", oldExpr);
+            }
+            Set<String> currentPartitionExprs = getCurrentIcebergPartitionExprs();
+            if (!currentPartitionExprs.contains(oldExpr.toLowerCase(Locale.ROOT))) {
+                throw new SemanticException("Partition column does not exist: %s", oldExpr);
+            }
+        }
+
+        Set<String> currentPartitionExprs = getCurrentIcebergPartitionExprs();
+        if (currentPartitionExprs.contains(newExpr.toLowerCase(Locale.ROOT))) {
+            throw new SemanticException("Partition column already exists: %s", newExpr);
+        }
         return null;
     }
 
@@ -1625,7 +1852,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         clause.setAnalyzedArgs(constantArgs);
 
-        if (clause.getWhere() != null) {
+        if (clause.getWhere() != null && icebergTableProcedure.getOperation() == IcebergTableOperation.REWRITE_DATA_FILES) {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             List<ColumnRefOperator> columnRefOperators = table.getBaseSchema()
                     .stream()
@@ -1647,6 +1874,46 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         return null;
+    }
+
+    private void analyzeIcebergPartitionColumnClause(List<Expr> partitionExprs,
+                                                     boolean shouldExist,
+                                                     boolean shouldNotExist) {
+        partitionExprs.forEach(this::analyzeIcebergPartitionColumnExpr);
+        Set<String> currentPartitionExprs = getCurrentIcebergPartitionExprs();
+        for (Expr partitionExpr : partitionExprs) {
+            String normalizedExpr = IcebergPartitionUtils.normalizePartitionExpr(partitionExpr);
+            boolean exists = currentPartitionExprs.contains(normalizedExpr.toLowerCase(Locale.ROOT));
+            if (shouldExist && !exists) {
+                throw new SemanticException("Partition column does not exist: %s", normalizedExpr);
+            }
+            if (shouldNotExist && exists) {
+                throw new SemanticException("Partition column already exists: %s", normalizedExpr);
+            }
+        }
+    }
+
+    private void analyzeIcebergPartitionColumnExpr(Expr partitionExpr) {
+        IcebergTable icebergTable = getIcebergTable();
+        IcebergPartitionUtils.convertPartitionExprToTerm(partitionExpr);
+
+        String columnName = IcebergPartitionUtils.getPartitionExprSourceColumn(partitionExpr);
+        if (icebergTable.getColumn(columnName) == null) {
+            throw new SemanticException("Column %s not found in table %s", columnName, icebergTable.getName());
+        }
+    }
+
+    private IcebergTable getIcebergTable() {
+        if (!(table instanceof IcebergTable icebergTable)) {
+            throw new SemanticException("Alter table operation is only supported for Iceberg tables");
+        }
+        return icebergTable;
+    }
+
+    private Set<String> getCurrentIcebergPartitionExprs() {
+        return getIcebergTable().getPartitionColumnNamesWithTransform().stream()
+                .map(expr -> expr.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
     }
 
     @Override

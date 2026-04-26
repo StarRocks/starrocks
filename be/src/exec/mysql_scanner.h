@@ -39,8 +39,8 @@
 #include <string>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "common/status.h"
-#include "util/slice.h"
 
 #ifndef __StarRocksMysql
 #define __StarRocksMysql void
@@ -89,8 +89,8 @@ private:
     __StarRocksMysql* _my_conn;
     __StarRocksMysqlRes* _my_result;
     std::string _sql_str;
-    bool _opened;
-    int _field_num;
+    bool _opened{false};
+    int _field_num{0};
 };
 
 } // namespace starrocks

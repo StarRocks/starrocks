@@ -14,7 +14,31 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/gen_cpp")
 
-set (GEN_CPP_DIR ${GENSRC_DIR}/gen_cpp)
+set (GEN_CPP_DIR ${BE_PROTO_THRIFT_GEN_CPP_DIR})
+include(${BASE_DIR}/cmake_modules/StarRocksGenCodegen.cmake)
+
+set(GENSRC_PROTO_DIR "${BASE_DIR}/../gensrc/proto")
+set(GENSRC_THRIFT_DIR "${BASE_DIR}/../gensrc/thrift")
+set(GEN_CPP_MANIFEST_DIR "${BE_PROTO_THRIFT_CODEGEN_DIR}")
+
+starrocks_define_proto_codegen_target(
+    be_proto_codegen
+    SOURCE_ROOT "${GENSRC_PROTO_DIR}"
+    OUTPUT_DIR "${GEN_CPP_DIR}"
+    MANIFEST_DIR "${GEN_CPP_MANIFEST_DIR}/proto"
+    SCRIPT "${BASE_DIR}/cmake_modules/RunProtoCodegen.cmake"
+    TOOL "${STARROCKS_PROTOC_EXECUTABLE}"
+    CONFIGURE_GENERATE)
+
+starrocks_define_thrift_codegen_target(
+    be_thrift_codegen
+    SOURCE_ROOT "${GENSRC_THRIFT_DIR}"
+    OUTPUT_DIR "${GEN_CPP_DIR}"
+    MANIFEST_DIR "${GEN_CPP_MANIFEST_DIR}/thrift"
+    SCRIPT "${BASE_DIR}/cmake_modules/RunThriftCodegen.cmake"
+    TOOL "${STARROCKS_THRIFT_EXECUTABLE}"
+    CONFIGURE_GENERATE)
+
 set(SRC_FILES
     ${SRC_DIR}/gen_cpp/thrift_types_customize_impl.cpp
     ${GEN_CPP_DIR}/AgentService_types.cpp
@@ -71,7 +95,6 @@ set(SRC_FILES
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc
     ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
-    ${GEN_CPP_DIR}/version.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
     ${GEN_CPP_DIR}/ShortCircuit_types.cpp
     ${GEN_CPP_DIR}/DataCache_types.cpp
@@ -80,12 +103,10 @@ set(SRC_FILES
 
 # keep everything in one library, the object files reference
 # each other
-add_library(StarRocksGen STATIC ${SRC_FILES})
+ADD_BE_LIB(StarRocksGen ${SRC_FILES})
+add_dependencies(StarRocksGen be_proto_codegen be_thrift_codegen)
+set_target_properties(StarRocksGen PROPERTIES CXX_CLANG_TIDY "")
 
 # Setting these files as code-generated lets make clean and incremental builds work
 # correctly
 set_source_files_properties(${SRC_FILES} PROPERTIES GENERATED TRUE)
-
-#add_dependencies(StarRocksGen thrift-cpp)
-#add_dependencies(Opcode function)
-

@@ -20,7 +20,6 @@
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/german_string.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -30,6 +29,7 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -179,10 +179,10 @@ public:
             auto& right_data = down_cast<const ColumnType*>(_right_col)->get_german_strings();
             return merge_ordinary_column<Container, GermanString>(left_data, right_data);
         } else {
-            using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
-            auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
-            auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
-            return merge_ordinary_column<Container, Slice>(left_data, right_data);
+            using ImmContainer = typename BinaryColumnBase<SizeT>::ImmContainer;
+            auto left_data = down_cast<const ColumnType*>(_left_col)->immutable_data();
+            auto right_data = down_cast<const ColumnType*>(_right_col)->immutable_data();
+            return merge_ordinary_column<ImmContainer, Slice>(left_data, right_data);
         }
     }
 
@@ -387,7 +387,7 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
                     auto copy = column->clone_empty();
                     copy->reserve(reserved_rows);
                     copy->append(*column, range.first + skipped_rows, reserved_rows);
-                    res_orderby.push_back(std::move(copy));
+                    res_orderby.emplace_back(std::move(copy));
                 }
             }
         }
@@ -406,7 +406,7 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
                 auto copy = column->clone_empty();
                 copy->reserve(reserved_rows);
                 copy->append(*column, range.first + skipped_rows, required_rows);
-                res_orderby.push_back(std::move(copy));
+                res_orderby.emplace_back(std::move(copy));
             }
         }
 
@@ -608,10 +608,10 @@ Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns
     while ((index_of_merging < limit) && (index_of_left < left_size) && (index_of_right < right_size)) {
         int cmp = compare_chunk_row(descs, left_columns, right_columns, index_of_left, index_of_right);
         if (cmp <= 0) {
-            output->emplace_back(PermutationItem(kLeftChunkIndex, index_of_left));
+            output->emplace_back(kLeftChunkIndex, index_of_left);
             ++index_of_left;
         } else {
-            output->emplace_back(PermutationItem(kRightChunkIndex, index_of_right));
+            output->emplace_back(kRightChunkIndex, index_of_right);
             ++index_of_right;
         }
         ++index_of_merging;

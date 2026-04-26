@@ -70,6 +70,18 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("planBuilderMessage")
     public Map<String, String> planBuilderMessage = Maps.newHashMap();
 
+    @SerializedName("adaptivePartitionRefreshNumber")
+    private int adaptivePartitionRefreshNumber = -1;
+
+    // the refresh mode of this task run
+    @SerializedName("refreshMode")
+    public String refreshMode = "";
+
+    // For pinned PCT batches: base-table identifier -> frozen Iceberg snapshot id.
+    // Serialized into information_schema.task_runs.EXTRA_MESSAGE for post-mortem debugging.
+    @SerializedName("pinnedSnapshotIdMap")
+    private Map<String, Long> pinnedSnapshotIdMap = Maps.newHashMap();
+
     public MVTaskRunExtraMessage() {
     }
 
@@ -183,6 +195,31 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public Map<String, String> getPlanBuilderMessage() {
         return planBuilderMessage;
+    }
+
+    public void setRefreshMode(String refreshMode) {
+        this.refreshMode = refreshMode;
+    }
+
+    public String getRefreshMode() {
+        return refreshMode;
+    }
+
+    public int getAdaptivePartitionRefreshNumber() {
+        return adaptivePartitionRefreshNumber;
+    }
+
+    public void setAdaptivePartitionRefreshNumber(int adaptivePartitionRefreshNumber) {
+        this.adaptivePartitionRefreshNumber = adaptivePartitionRefreshNumber;
+    }
+
+    public Map<String, Long> getPinnedSnapshotIdMap() {
+        return pinnedSnapshotIdMap;
+    }
+
+    public void setPinnedSnapshotIdMap(Map<String, Long> pinnedSnapshotIdMap) {
+        this.pinnedSnapshotIdMap = MvUtils.shrinkToSize(pinnedSnapshotIdMap,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     @Override

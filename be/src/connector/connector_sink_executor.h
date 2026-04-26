@@ -17,11 +17,12 @@
 #include <fmt/format.h>
 
 #include <map>
+#include <utility>
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "connector/utils.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 class LoadChunkSpiller;
@@ -33,8 +34,8 @@ class SpillPartitionChunkWriter;
 
 class ConnectorSinkExecutor {
 public:
-    ConnectorSinkExecutor(const std::string& executor_name) : _executor_name(executor_name) {}
-    virtual ~ConnectorSinkExecutor() {}
+    ConnectorSinkExecutor(std::string executor_name) : _executor_name(std::move(executor_name)) {}
+    virtual ~ConnectorSinkExecutor() = default;
 
     virtual Status init() = 0;
 
@@ -71,9 +72,12 @@ protected:
 
 class ChunkSpillTask final : public Runnable {
 public:
-    ChunkSpillTask(LoadChunkSpiller* load_chunk_spiller, ChunkPtr chunk,
+    ChunkSpillTask(LoadChunkSpiller* load_chunk_spiller, ChunkPtr chunk, MemTracker* mem_tracker,
                    std::function<void(ChunkPtr chunk, const StatusOr<size_t>&)> cb)
-            : _load_chunk_spiller(load_chunk_spiller), _chunk(chunk), _cb(std::move(cb)) {}
+            : _load_chunk_spiller(load_chunk_spiller),
+              _chunk(std::move(chunk)),
+              _mem_tracker(mem_tracker),
+              _cb(std::move(cb)) {}
 
     ~ChunkSpillTask() override = default;
 
@@ -82,18 +86,20 @@ public:
 private:
     LoadChunkSpiller* _load_chunk_spiller;
     ChunkPtr _chunk;
+    MemTracker* _mem_tracker;
     std::function<void(ChunkPtr, const StatusOr<size_t>&)> _cb;
 };
 
 class MergeBlockTask : public Runnable {
 public:
-    MergeBlockTask(SpillPartitionChunkWriter* writer, std::function<void(const Status&)> cb)
-            : _writer(writer), _cb(std::move(cb)) {}
+    MergeBlockTask(SpillPartitionChunkWriter* writer, MemTracker* mem_tracker, std::function<void(const Status&)> cb)
+            : _writer(writer), _mem_tracker(mem_tracker), _cb(std::move(cb)) {}
 
     void run() override;
 
 private:
     SpillPartitionChunkWriter* _writer;
+    MemTracker* _mem_tracker;
     std::function<void(const Status&)> _cb;
 };
 

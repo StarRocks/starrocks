@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
 
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
 
 Status BlackHoleTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

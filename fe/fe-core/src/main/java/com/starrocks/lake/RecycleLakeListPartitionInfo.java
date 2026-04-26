@@ -24,20 +24,21 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
     public RecycleLakeListPartitionInfo(long dbId, long tableId, Partition partition,
                                         DataProperty dataProperty, short replicationNum,
-                                        boolean isInMemory, DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                                        DataCacheInfo dataCacheInfo) {
+        super(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
     }
 
     @Override
     public boolean delete() {
         if (isRecoverable()) {
-            setRecoverable(false);
-            GlobalStateMgr.getCurrentState().getEditLog().logDisablePartitionRecovery(partition.getId());
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logDisablePartitionRecovery(partition.getId(), wal -> setRecoverable(false));
         }
         try {
             ComputeResource computeResource =
                     GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
-            if (LakeTableHelper.removePartitionDirectory(partition, computeResource)) {
+            if (LakeTableHelper.removePartitionDirectory(partition, computeResource,
+                    getDataCacheInfo() != null ? getDataCacheInfo().isEnabled() : false, isForceRemoveDirectory())) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 LakeTableHelper.deleteShardGroupMeta(partition);
                 return true;

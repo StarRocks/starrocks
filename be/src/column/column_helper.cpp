@@ -14,31 +14,26 @@
 
 #include "column/column_helper.h"
 
-#include <runtime/types.h>
-
+#include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
-#include "column/chunk.h"
+#include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
-#include "column/json_column.h"
+#include "column/column_visitor_adapter.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "simd/simd.h"
-#include "storage/chunk_helper.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/date_func.h"
-#include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
         auto nulls = nullable_column->null_column_data().data();
-        auto& sel_vec = (down_cast<UInt8Column*>(nullable_column->mutable_data_column()))->get_data();
+        auto& sel_vec = (down_cast<UInt8Column*>(nullable_column->data_column_raw_ptr()))->get_data();
         // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
         auto selected = sel_vec.data();
         size_t num_rows = sel_vec.size();
@@ -112,6 +107,46 @@ void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filt
     }
 }
 
+void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescriptor& type) {
+    const Column* data_column = get_data_column(column);
+
+    switch (type.type) {
+    case TYPE_BINARY:
+    case TYPE_VARBINARY: {
+        if (data_column->is_binary()) {
+            auto* binary_column = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_column));
+            binary_column->set_is_binary_type(true);
+        } else {
+            DCHECK(data_column->is_large_binary());
+            auto* large_binary_column =
+                    const_cast<LargeBinaryColumn*>(down_cast<const LargeBinaryColumn*>(data_column));
+            large_binary_column->set_is_binary_type(true);
+        }
+        break;
+    }
+    case TYPE_STRUCT: {
+        const auto* struct_column = down_cast<const StructColumn*>(data_column);
+        for (size_t i = 0; i < type.children.size(); ++i) {
+            mark_binary_columns(struct_column->get_column_by_idx(i), type.children[i]);
+        }
+        break;
+    }
+    case TYPE_ARRAY: {
+        const auto* array_column = down_cast<const ArrayColumn*>(data_column);
+        mark_binary_columns(array_column->elements_column(), type.children[0]);
+        break;
+    }
+    case TYPE_MAP: {
+        const auto* map_column = down_cast<const MapColumn*>(data_column);
+        mark_binary_columns(map_column->keys_column(), type.children[0]);
+        mark_binary_columns(map_column->values_column(), type.children[1]);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected, bool* all_zero) {
     uint8_t* data = filter->data();
     size_t num_rows = filter->size();
@@ -142,7 +177,7 @@ size_t ColumnHelper::count_nulls(const starrocks::ColumnPtr& col) {
         return col->size();
     }
 
-    const Buffer<uint8_t>& null_data = as_raw_column<NullableColumn>(col)->null_column_data();
+    const ImmutableNullData null_data = as_raw_column<NullableColumn>(col)->null_column_data();
     // @Warn: be careful, should rewrite the code if NullColumn type changed!
     return SIMD::count_nonzero(null_data);
 }
@@ -159,8 +194,10 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
 
     if (col->is_nullable()) {
         auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
-        const Buffer<uint8_t>& null_data = tmp->null_column_data();
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
+        const ImmutableNullData null_data = static_cast<const NullableColumn*>(tmp)->null_column_data();
+        const ImmutableNullData bool_data =
+                ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(static_cast<const NullableColumn*>(tmp)->data_column())
+                        ->immutable_data();
 
         size_t null_count = SIMD::count_nonzero(null_data);
         size_t true_count = SIMD::count_nonzero(bool_data);
@@ -174,7 +211,7 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
             return null_count;
         }
     } else {
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
+        const ImmutableNullData bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->immutable_data();
         return SIMD::count_nonzero(bool_data);
     }
 }
@@ -191,8 +228,10 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
 
     if (col->is_nullable()) {
         auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
-        const Buffer<uint8_t>& null_data = tmp->null_column_data();
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
+        const ImmutableNullData null_data = static_cast<const NullableColumn*>(tmp)->null_column_data();
+        const ImmutableNullData bool_data =
+                ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(static_cast<const NullableColumn*>(tmp)->data_column())
+                        ->get_data();
 
         size_t null_count = SIMD::count_nonzero(null_data);
         size_t false_count = SIMD::count_zero(bool_data);
@@ -206,7 +245,7 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
             return null_count;
         }
     } else {
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
+        const ImmutableNullData bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
         return SIMD::count_zero(bool_data);
     }
 }
@@ -231,19 +270,23 @@ public:
     }
 
     Status do_visit(NullableColumn* column) {
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        auto* data_col = column->data_column_raw_ptr();
+        RETURN_IF_ERROR(data_col->accept_mutable(this));
         column->update_has_null();
         return Status::OK();
     }
 
     Status do_visit(ArrayColumn* column) {
-        RETURN_IF_ERROR(column->elements_column()->accept_mutable(this));
+        auto* elements_col = column->elements_column_raw_ptr();
+        RETURN_IF_ERROR(elements_col->accept_mutable(this));
         return Status::OK();
     }
 
     Status do_visit(MapColumn* column) {
-        RETURN_IF_ERROR(column->keys_column()->accept_mutable(this));
-        RETURN_IF_ERROR(column->values_column()->accept_mutable(this));
+        auto* keys_col = column->keys_column_raw_ptr();
+        auto* values_col = column->values_column_raw_ptr();
+        RETURN_IF_ERROR(keys_col->accept_mutable(this));
+        RETURN_IF_ERROR(values_col->accept_mutable(this));
         return Status::OK();
     }
 
@@ -320,9 +363,9 @@ int64_t ColumnHelper::find_first_not_equal(const Column* column, int64_t target,
 // expression trees' return column should align return type when some return columns maybe diff from the required
 // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
-ColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
-                                          const bool is_nullable) {
-    MutableColumnPtr new_column = (std::move(*old_col)).mutate();
+MutableColumnPtr ColumnHelper::align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
+                                                 size_t num_rows, bool is_nullable) {
+    MutableColumnPtr new_column;
     if (old_col->only_null()) {
         new_column = ColumnHelper::create_column(type_desc, true);
         new_column->append_nulls(num_rows);
@@ -333,11 +376,18 @@ ColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescrip
         auto* const_column = down_cast<const ConstColumn*>(old_col.get());
         new_column->append(*const_column->data_column(), 0, 1);
         new_column->assign(num_rows, 0);
+    } else {
+        new_column = std::move(old_col);
     }
     if (is_nullable && !new_column->is_nullable()) {
         new_column = NullableColumn::create(std::move(new_column), NullColumn::create(new_column->size(), 0));
     }
     return new_column;
+}
+
+MutableColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                                 bool is_nullable) {
+    return align_return_type(Column::mutate(std::move(old_col)), type_desc, num_rows, is_nullable);
 }
 
 MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
@@ -359,24 +409,13 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
 struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
-        switch (ltype) {
-        case TYPE_UNKNOWN:
-        case TYPE_NULL:
-        case TYPE_BINARY:
-        case TYPE_DECIMAL:
-        case TYPE_STRUCT:
-        case TYPE_ARRAY:
-        case TYPE_MAP:
+        if constexpr (ltype == TYPE_UNKNOWN || ltype == TYPE_NULL || ltype == TYPE_BINARY || ltype == TYPE_DECIMAL ||
+                      lt_is_collection<ltype>) {
             LOG(FATAL) << "Unsupported column type" << ltype;
-        case TYPE_DECIMAL32:
-            return Decimal32Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL64:
-            return Decimal64Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL128:
-            return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL256:
-            return Decimal256Column::create(type_desc.precision, type_desc.scale, size);
-        default:
+            return nullptr;
+        } else if constexpr (lt_is_decimal<ltype>) {
+            return RunTimeColumnType<ltype>::create(type_desc.precision, type_desc.scale, size);
+        } else {
             return RunTimeColumnType<ltype>::create(size);
         }
     }
@@ -401,7 +440,7 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_MAP) {
-        MutableColumnPtr offsets = UInt32Column::create(size);
+        auto offsets = UInt32Column::create(size);
         MutableColumnPtr keys = nullptr;
         MutableColumnPtr values = nullptr;
         if (type_desc.children[0].is_unknown_type()) {
@@ -486,47 +525,41 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
         }
         auto binary = ColumnHelper::get_binary_column(col.get());
         if (col->is_constant()) {
-            n += binary->get_bytes().size() * row_num;
+            n += binary->get_immutable_bytes().size() * row_num;
         } else {
-            n += binary->get_bytes().size();
+            n += binary->get_immutable_bytes().size();
         }
     }
     return n;
 }
 
-ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& column) {
-    auto get_binary_column = [](const DoubleColumn* data_column, size_t size) -> MutableColumnPtr {
-        auto new_data_column = BinaryColumn::create();
-        new_data_column->reserve(size);
-
-        for (int row = 0; row < size; ++row) {
-            auto time = data_column->immutable_data()[row];
-            std::string time_str = time_str_from_double(time);
-            new_data_column->append(time_str);
-        }
-
-        return new_data_column;
-    };
-
-    ColumnPtr res;
-
-    if (column->only_null()) {
-        res = std::move(column);
-    } else if (column->is_nullable()) {
-        auto* nullable_column = down_cast<const NullableColumn*>(column.get());
-        auto* data_column = down_cast<const DoubleColumn*>(nullable_column->data_column().get());
-        res = NullableColumn::create(get_binary_column(data_column, column->size()),
-                                     nullable_column->null_column()->as_mutable_ptr());
-    } else if (column->is_constant()) {
-        auto* const_column = down_cast<const ConstColumn*>(column.get());
-        std::string time_str = time_str_from_double(const_column->get(0).get_double());
-        res = ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
-    } else {
-        auto* data_column = down_cast<const DoubleColumn*>(column.get());
-        res = get_binary_column(data_column, column->size());
+MutableColumns ColumnHelper::to_mutable_columns(const Columns& columns) {
+    MutableColumns mutable_columns;
+    mutable_columns.reserve(columns.size());
+    for (auto& column : columns) {
+        mutable_columns.emplace_back(std::move(*column).mutate());
     }
+    return mutable_columns;
+}
 
-    return res;
+MutableColumns ColumnHelper::to_mutable_columns(Columns&& columns) {
+    MutableColumns mutable_columns;
+    mutable_columns.reserve(columns.size());
+    for (auto& column : columns) {
+        mutable_columns.emplace_back(Column::mutate(std::move(column)));
+    }
+    columns.clear();
+    return mutable_columns;
+}
+
+Columns ColumnHelper::to_columns(MutableColumns&& columns) {
+    Columns immutable_columns;
+    immutable_columns.reserve(columns.size());
+    for (auto& column : columns) {
+        immutable_columns.emplace_back(std::move(column));
+    }
+    columns.clear();
+    return immutable_columns;
 }
 
 std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_array_column(const ColumnPtr& column) {
@@ -540,72 +573,20 @@ std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_arr
     return {offsets_column, elements_column, null_column};
 }
 
-template <class Ptr>
-bool ChunkSliceTemplate<Ptr>::empty() const {
-    return !chunk || offset == chunk->num_rows();
-}
-
-template <class Ptr>
-size_t ChunkSliceTemplate<Ptr>::rows() const {
-    return chunk->num_rows() - offset;
-}
-
-template <class Ptr>
-void ChunkSliceTemplate<Ptr>::reset(Ptr input) {
-    chunk = std::move(input);
-}
-
-template <class Ptr>
-size_t ChunkSliceTemplate<Ptr>::skip(size_t skip_rows) {
-    size_t real_skipped = std::min(rows(), skip_rows);
-    offset += real_skipped;
-    if (empty()) {
-        chunk.reset();
-        offset = 0;
+bool ColumnHelper::get_binary_slice_at(const Column* column, size_t row, Slice* out) {
+    if (column == nullptr || out == nullptr) return false;
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
     }
-
-    return real_skipped;
-}
-
-// Cutoff required rows from this chunk
-template <class Ptr>
-ChunkUniquePtr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
-    DCHECK(!empty());
-    size_t cut_rows = std::min(rows(), required_rows);
-    auto res = chunk->clone_empty(cut_rows);
-    res->append(*chunk, offset, cut_rows);
-    offset += cut_rows;
-    if (empty()) {
-        chunk.reset();
-        offset = 0;
+    if (column->is_nullable()) {
+        const auto* nc = down_cast<const NullableColumn*>(column);
+        if (nc->is_null(row)) return false;
+        column = nc->data_column().get();
     }
-    return res;
+    if (!column->is_binary()) return false;
+    *out = down_cast<const BinaryColumn*>(column)->get_slice(row);
+    return true;
 }
 
-// Specialized for SegmentedChunkPtr
-template <>
-ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_rows) {
-    DCHECK(!empty());
-    // cutoff a chunk from current segment, if it doesn't meet the requirement just let it be
-    ChunkPtr segment = chunk->segments()[segment_id];
-    size_t segment_offset = offset % chunk->segment_size();
-    size_t cut_rows = std::min(segment->num_rows() - segment_offset, required_rows);
-
-    auto res = segment->clone_empty(cut_rows);
-    res->append(*segment, segment_offset, cut_rows);
-    offset += cut_rows;
-
-    // move to next segment
-    segment_id = offset / chunk->segment_size();
-
-    if (empty()) {
-        chunk->reset();
-        offset = 0;
-    }
-    return res;
-}
-
-template struct ChunkSliceTemplate<ChunkPtr>;
-template struct ChunkSliceTemplate<ChunkUniquePtr>;
-template struct ChunkSliceTemplate<SegmentedChunkPtr>;
 } // namespace starrocks

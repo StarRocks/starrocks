@@ -14,11 +14,18 @@
 
 #pragma once
 
+#include <unordered_map>
+
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "hive_chunk_sink.h"
+
+namespace starrocks {
+class HiveTableDescriptor;
+}
 
 namespace starrocks::connector {
 
@@ -42,6 +49,7 @@ public:
     ~HiveDataSourceProvider() override = default;
     friend class HiveDataSource;
     HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    HiveDataSourceProvider(ConnectorScanNode* scan_node, int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
@@ -51,6 +59,7 @@ public:
     friend class HiveDataSource;
 
 protected:
+    int32_t _plan_node_id;
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
@@ -62,6 +71,7 @@ public:
     ~HiveDataSource() override = default;
 
     HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range);
+    HiveDataSource(const HiveDataSourceProvider* provider, const THdfsScanRange& hdfs_scan_range);
     std::string name() const override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -96,12 +106,15 @@ private:
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     void _init_rf_counters();
+    void _init_global_late_materialization_context(RuntimeState* state);
 
     Status _init_partition_values();
     Status _init_extended_values();
     Status _init_global_dicts(HdfsScannerParams* params);
     Status _init_scanner(RuntimeState* state);
     Status _check_all_slots_nullable();
+
+    const std::string OPENXJSON_SERDE_LIB = "org.openx.data.jsonserde.JsonSerDe";
 
     // =====================================
     ObjectPool _pool;
@@ -145,6 +158,9 @@ private:
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
     std::vector<int> _materialize_index_in_chunk;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> _materialize_slot_default_values;
 
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
@@ -167,11 +183,20 @@ private:
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
     bool _use_min_max_opt = false;
+    // Mirrors THdfsScanNode.can_use_any_column: set when PruneHDFSScanColumnRule
+    // injected a placeholder materialized column because every queried column was
+    // a partition column.  Used together with _use_min_max_opt to avoid reading
+    // that placeholder column from the data file.
+    bool _can_use_any_column = false;
     bool _use_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     bool _has_scan_range_indicate_const_column = false;
     bool _use_partition_column_value_only = false;
+    // only used in global late materialization
+    int32_t _scan_range_id = -1;
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
+    bool _disable_column_access_path_hints = false;
 
     // ======================================
     // The following are profile metrics

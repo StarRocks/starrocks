@@ -39,11 +39,12 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/memory/counting_allocator.h"
-#include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "runtime/runtime_state_fwd.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class RuntimeFilter;
+class AggTopNRuntimeFilterBuilder;
 class AggInRuntimeFilterMerger;
 struct HashTableKeyAllocator;
 class VectorizedLiteral;
@@ -123,9 +124,23 @@ struct AggFunctionTypes {
 
     bool is_distinct = false;
     bool is_always_nullable_result = false;
+    bool serialize_always_nullable = false;
 
     template <bool UseIntermediateAsOutput>
-    bool is_result_nullable() const;
+    bool is_result_nullable() const {
+        if constexpr (UseIntermediateAsOutput) {
+            // If using intermediate results as output, no output will be generated and only the input will be serialized.
+            // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
+            return has_nullable_child || serialize_always_nullable;
+        } else {
+            // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
+            // Therefore, we need to decide whether the output is really nullable case by case:
+            // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
+            // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
+            // 3. Always nullable: `is_always_nullable_result`.
+            return (has_nullable_child && is_nullable) || is_always_nullable_result;
+        }
+    }
     bool use_nullable_fn(bool use_intermediate_as_output) const;
 };
 
@@ -246,7 +261,7 @@ public:
     }
 
     virtual Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
@@ -323,6 +338,9 @@ public:
     Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
 
     RuntimeFilter* build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc);
+    RuntimeFilter* build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc);
+    AggTopNRuntimeFilterBuilder* topn_runtime_filter_builder() { return _topn_runtime_filter_builder; }
+
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
 
@@ -407,7 +425,10 @@ protected:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
-    ObjectPool* _pool;
+    // Expr/Object pool owned by Aggregator.
+    // Used to allocate ExprContext and other helper objects whose lifetime
+    // is tied to the Aggregator itself rather than a specific operator.
+    std::unique_ptr<ObjectPool> _pool;
     std::unique_ptr<MemPool> _mem_pool;
     // used to count heap memory usage of agg states
     std::unique_ptr<CountingAllocatorWithHook> _allocator;
@@ -511,15 +532,18 @@ protected:
     int64_t _agg_state_mem_usage = 0;
 
     // aggregate combinator functions since they are not persisted in agg hash map
-    std::vector<AggregateFunctionPtr> _combinator_function;
+    std::vector<const AggregateFunction*> _combinator_function;
 
     pipeline::PipeObservable _pip_observable;
+    // used to build the topn runtime filter
+    AggTopNRuntimeFilterBuilder* _topn_runtime_filter_builder = nullptr;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map_with_topn_runtime_filter(size_t chunk_size);
     Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
                                      bool force_use_intermediate_as_output = false);
 
@@ -528,7 +552,7 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
     bool is_pre_cache() { return _aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE; }
-    Columns create_group_by_columns(size_t num_rows) const { return _create_group_by_columns(num_rows); }
+    MutableColumns create_group_by_columns(size_t num_rows) const { return _create_group_by_columns(num_rows); }
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -555,14 +579,16 @@ protected:
     Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
-    Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
-    Columns _create_group_by_columns(size_t num_rows) const;
+    MutableColumns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
+    MutableColumns _create_group_by_columns(size_t num_rows) const;
 
-    void _serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
-    void _finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
+    void _serialize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);
+    void _finalize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);
     void _destroy_state(AggDataPtr __restrict state);
 
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
+                                 bool use_intermediate);
+    ChunkPtr _build_output_chunk(MutableColumns&& group_by_columns, MutableColumns&& agg_result_columns,
                                  bool use_intermediate);
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }
@@ -604,12 +630,7 @@ protected:
     Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
                                       const AggregateFunction** ret);
 
-    int64_t get_two_level_threahold() {
-        if (config::two_level_memory_threshold < 0) {
-            return agg::two_level_memory_threshold;
-        }
-        return config::two_level_memory_threshold;
-    }
+    int64_t get_two_level_threahold();
 
     template <class HashMapWithKey>
     friend struct AllocateState;

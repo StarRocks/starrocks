@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOWER_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT;
 
@@ -175,29 +176,25 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             return processChild(optExpression, context);
         }
 
-        // rewrite
-        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
-        context.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
-        context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
+        ColumnRefSet aggUsedColumns = new ColumnRefSet();
+        context.aggregations.values().forEach(v -> aggUsedColumns.union(v.getUsedColumns()));
 
-        if (project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef)) {
-            return processChild(optExpression, context);
-        }
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = project.getColumnRefMap();
+        Map<ColumnRefOperator, ScalarOperator> aggRewriteMap = columnRefMap;
 
         // handle specials functions case-when/if
         // split to groupBys and mock new aggregations by values, don't need to save
         // origin predicate, we just do check in collect phase
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
-            CallOperator aggFn = entry.getValue();
-            ScalarOperator aggInput = aggFn.getChild(0);
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
+            ColumnRefOperator key = entry.getKey();
+            ScalarOperator value = entry.getValue();
 
-            if (!(aggInput instanceof CallOperator)) {
+            if (!aggUsedColumns.contains(key) || !(value instanceof CallOperator call)) {
                 continue;
             }
 
-            CallOperator callInput = (CallOperator) aggInput;
-            if (aggInput instanceof CaseWhenOperator) {
-                CaseWhenOperator caseWhen = (CaseWhenOperator) aggInput;
+            if (call instanceof CaseWhenOperator) {
+                CaseWhenOperator caseWhen = (CaseWhenOperator) value;
                 for (ScalarOperator condition : caseWhen.getAllConditionClause()) {
                     condition.getUsedColumns().getStream().map(factory::getColumnRef)
                             .forEach(v -> context.groupBys.put(v, v));
@@ -217,19 +214,38 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                 CaseWhenOperator newCaseWhen = new CaseWhenOperator(caseWhen.getType(), null,
                         caseWhen.hasElse() ? caseWhen.getElseClause() : null, newWhenThen);
 
-                // replace origin
-                aggFn.setChild(0, newCaseWhen);
-            } else if (callInput.getFunction() != null &&
-                    FunctionSet.IF.equals(callInput.getFunction().getFunctionName().getFunction())) {
-                if (aggInput.getChildren().stream().skip(1).anyMatch(c -> c.isConstant() && !c.isConstantNull())) {
+                if (aggRewriteMap == columnRefMap) {
+                    aggRewriteMap = Maps.newHashMap(columnRefMap);
+                }
+                aggRewriteMap.put(key, newCaseWhen);
+            } else if (call.getFunction() != null &&
+                        FunctionSet.IF.equals(call.getFunction().getFunctionName().getFunction())) {
+                if (call.getChildren().stream().skip(1).anyMatch(c -> c.isConstant() && !c.isConstantNull())) {
                     // forbidden push down
                     return visit(optExpression, context);
                 }
 
-                aggInput.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
+                call.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
                         .forEach(v -> context.groupBys.put(v, v));
-                aggInput.setChild(0, ConstantOperator.createBoolean(false));
+
+                CallOperator newIf = new CallOperator(call.getFnName(), call.getType(), Lists.newArrayList(call.getArguments()),
+                        call.getFunction());
+                newIf.setChild(0, ConstantOperator.createBoolean(false));
+
+                if (aggRewriteMap == columnRefMap) {
+                    aggRewriteMap = Maps.newHashMap(columnRefMap);
+                }
+                aggRewriteMap.put(key, newIf);
             }
+        }
+
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(aggRewriteMap);
+        context.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
+        if (aggRewriteMap != columnRefMap) {
+            ReplaceColumnRefRewriter originalRewriter = new ReplaceColumnRefRewriter(columnRefMap);
+            context.groupBys.replaceAll((k, v) -> originalRewriter.rewrite(v));
+        } else {
+            context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
         }
 
         // check has constant aggregate, forbidden
@@ -519,7 +535,8 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             if (maxSingleColumnDistinct > SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT) {
                 return false;
             }
-            if (maxMultiColumnDistinct > SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT) {
+            if (maxMultiColumnDistinct > SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT ||
+                    maxMultiColumnDistinct * LOWER_AGGREGATE_EFFECT_COEFFICIENT >= outputRowCount) {
                 return false;
             }
         }
@@ -698,6 +715,13 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         ColumnRefSet allGroupByColumns = new ColumnRefSet();
         context.groupBys.values().forEach(c -> allGroupByColumns.union(c.getUsedColumns()));
+
+        for (int colId : allGroupByColumns.getColumnIds()) {
+            ColumnRefOperator colRef = factory.getColumnRef(colId);
+            if (colRef.getType() != null && !colRef.getType().canGroupBy()) {
+                return false;
+            }
+        }
 
         ColumnRefSet allAggregateColumns = new ColumnRefSet();
         context.aggregations.values().forEach(c -> allAggregateColumns.union(c.getUsedColumns()));

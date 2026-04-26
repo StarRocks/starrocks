@@ -322,11 +322,11 @@ public class BackupJobInfo implements Writable {
                     BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
                     physicalPartitionInfo.id = physicalPartition.getId();
                     physicalPartitionInfo.version = physicalPartition.getVisibleVersion();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         BackupIndexInfo idxInfo = new BackupIndexInfo();
                         idxInfo.id = index.getId();
-                        idxInfo.name = olapTbl.getIndexNameById(index.getId());
-                        idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
+                        idxInfo.name = olapTbl.getIndexNameByMetaId(index.getMetaId());
+                        idxInfo.schemaHash = olapTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                         physicalPartitionInfo.indexes.put(idxInfo.name, idxInfo);
                         // tablets
                         for (Tablet tablet : index.getTablets()) {

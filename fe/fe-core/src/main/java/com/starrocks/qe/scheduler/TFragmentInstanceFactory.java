@@ -28,13 +28,13 @@ import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAdaptiveDopParam;
+import com.starrocks.thrift.TArrowFlightSQLVersion;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
-import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryQueueOptions;
 import org.apache.commons.collections4.CollectionUtils;
@@ -121,6 +121,7 @@ public class TFragmentInstanceFactory {
         result.setFragment(fragment.toThrift());
         result.setDesc_tbl(descTable);
         result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
+        result.setArrow_flight_sql_version(TArrowFlightSQLVersion.V1.getValue());
         result.setCoord(coordAddress);
 
         result.setParams(new TPlanFragmentExecParams());
@@ -132,8 +133,8 @@ public class TFragmentInstanceFactory {
         } else {
             result.params.setNum_senders(execFragment.getInstances().size());
         }
-        result.setIs_stream_pipeline(jobSpec.isEnableStreamPipeline());
         result.params.setPer_exch_num_senders(execFragment.getNumSendersPerExchange());
+        result.params.setPer_look_up_num_fetchers(execFragment.getNumFetchersPerLookUp());
         if (execFragment.getRuntimeFilterParams().isSetRuntime_filter_builder_number()) {
             result.params.setRuntime_filter_params(execFragment.getRuntimeFilterParams());
         }
@@ -181,9 +182,7 @@ public class TFragmentInstanceFactory {
                     queryOptions.setQuery_queue_options(queryQueueOptions);
                 }
 
-                result.setPred_tree_params(new TPredicateTreeParams());
-                result.pred_tree_params.setEnable_or(sessionVariable.isEnablePushdownOrPredicate());
-                result.pred_tree_params.setEnable_show_in_profile(sessionVariable.isEnableShowPredicateTreeInProfile());
+                result.setPred_tree_params(sessionVariable.getPredicateTreeParams());
 
                 if (CollectionUtils.isNotEmpty(fragment.getCollectExecStatsIds())) {
                     result.setExec_stats_node_ids(fragment.getCollectExecStatsIds());

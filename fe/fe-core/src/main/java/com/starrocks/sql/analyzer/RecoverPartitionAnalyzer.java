@@ -16,11 +16,13 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.TableRef;
+
+import static com.starrocks.sql.analyzer.AnalyzerUtils.normalizedTableRef;
 
 public class RecoverPartitionAnalyzer {
     public static void analyze(RecoverPartitionStmt statement, ConnectContext context) {
-        TableName tbl = statement.getDbTblName();
-        tbl.normalization(context);
+        TableRef tableRef = normalizedTableRef(statement.getTableRef(), context);
+        statement.setTableRef(tableRef);
     }
 }

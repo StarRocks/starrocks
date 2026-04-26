@@ -57,7 +57,7 @@ TEST_F(StringFunctionReverseTest, reverseASCIITest) {
     for (int k = 0; k < 100; ++k) {
         auto tmp_s = str->get_slice(k).to_string();
         std::string expect(tmp_s.rbegin(), tmp_s.rend());
-        ASSERT_EQ(expect, v->get_data()[k].to_string());
+        ASSERT_EQ(expect, v->get_slice(k).to_string());
     }
 }
 
@@ -85,7 +85,7 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
 
     for (auto i = 0; i < str->size(); ++i) {
         auto expect = std::get<1>(cases[i]);
-        ASSERT_EQ(expect, v->get_data()[i].to_string());
+        ASSERT_EQ(expect, v->get_slice(i).to_string());
     }
 }
 

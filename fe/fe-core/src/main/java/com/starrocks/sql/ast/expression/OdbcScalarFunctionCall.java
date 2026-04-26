@@ -21,7 +21,7 @@ import com.starrocks.sql.parser.ParsingException;
 
 import java.util.Set;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class OdbcScalarFunctionCall implements ParseNode {
     private final Expr function;
@@ -68,10 +68,10 @@ public class OdbcScalarFunctionCall implements ParseNode {
 
     public Expr mappingFunction() {
         if (!(function instanceof FunctionCallExpr)) {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(function.toSql()), function.getPos());
+            throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(ExprToSql.toSql(function)), function.getPos());
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) function;
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
 
         // for information function
         if (ODBC_SCALAR_INFORMATION_FUNCTIONS.contains(fnName)) {
@@ -83,7 +83,7 @@ public class OdbcScalarFunctionCall implements ParseNode {
             return function;
         }
 
-        throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(function.toSql()), function.getPos());
+        throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(ExprToSql.toSql(function)), function.getPos());
     }
 
     @Override

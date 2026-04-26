@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
@@ -58,6 +59,11 @@ public class MultiCastPlanFragment extends PlanFragment {
 
     @Override
     public void createDataSink(TResultSinkType resultSinkType) {
+        createDataSink(resultSinkType, null);
+    }
+
+    @Override
+    public void createDataSink(TResultSinkType resultSinkType, ExecPlan execPlan) {
         if (sink != null) {
             return;
         }

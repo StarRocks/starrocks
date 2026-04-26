@@ -17,14 +17,15 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/phmap/phmap.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/base64.h"
 #include "exprs/function_context.h"
 #include "types/bitmap_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class VecBitmapFunctionsTest : public ::testing::Test {
@@ -56,13 +57,13 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
     {
         Columns columns;
 
-        BinaryColumn::Ptr s = BinaryColumn::create();
+        auto s = BinaryColumn::create();
 
         s->append(Slice("12312313"));
         s->append(Slice("1"));
         s->append(Slice("0"));
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
 
@@ -78,13 +79,13 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
     {
         Columns columns;
 
-        BinaryColumn::Ptr s = BinaryColumn::create();
+        auto s = BinaryColumn::create();
 
         s->append(Slice("-1"));
         s->append(Slice("1"));
         s->append(Slice("0"));
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto v = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
 
@@ -103,13 +104,13 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
     {
         Columns columns;
 
-        Int32Column::Ptr s = Int32Column::create();
+        auto s = Int32Column::create();
 
         s->append(-1);
         s->append(1);
         s->append(0);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto v = BitmapFunctions::to_bitmap<TYPE_INT>(ctx, columns).value();
 
@@ -126,13 +127,13 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
     {
         Columns columns;
 
-        Int64Column::Ptr s = Int64Column::create();
+        auto s = Int64Column::create();
 
         s->append(12312313);
         s->append(1);
         s->append(0);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::to_bitmap<TYPE_BIGINT>(ctx, columns).value();
 
@@ -149,14 +150,14 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
     {
         Columns columns;
 
-        Int128Column::Ptr s = Int128Column::create();
+        auto s = Int128Column::create();
 
         int128_t inputs[] = {-1, 1, 0, int128_t(std::numeric_limits<uint64_t>::max()),
                              int128_t(std::numeric_limits<uint64_t>::max()) + 1};
         for (int128_t input : inputs) {
             s->append(input);
         }
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto v = BitmapFunctions::to_bitmap<TYPE_LARGEINT>(ctx, columns).value();
 
@@ -180,13 +181,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
     {
         Columns columns;
 
-        BinaryColumn::Ptr s = BinaryColumn::create();
+        auto s = BinaryColumn::create();
 
         s->append(Slice("12312313"));
         s->append(Slice("1"));
         s->append(Slice("0"));
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_hash(ctx, columns).value();
 
@@ -202,8 +203,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
     {
         Columns columns;
 
-        BinaryColumn::Ptr s = BinaryColumn::create();
-        NullColumn::Ptr n = NullColumn::create();
+        auto s = BinaryColumn::create();
+        auto n = NullColumn::create();
 
         s->append(Slice("-1"));
         s->append(Slice("1"));
@@ -213,7 +214,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
         n->append(0);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_hash(ctx, columns).value();
 
@@ -232,13 +233,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapHash64Test) {
     {
         Columns columns;
 
-        BinaryColumn::Ptr s = BinaryColumn::create();
+        auto s = BinaryColumn::create();
 
         s->append(Slice("12312313"));
         s->append(Slice("1"));
         s->append(Slice("0"));
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_hash64(ctx, columns).value();
 
@@ -254,8 +255,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapHash64Test) {
     {
         Columns columns;
 
-        BinaryColumn::Ptr s = BinaryColumn::create();
-        NullColumn::Ptr n = NullColumn::create();
+        auto s = BinaryColumn::create();
+        auto n = NullColumn::create();
 
         s->append(Slice("-1"));
         s->append(Slice("1"));
@@ -265,7 +266,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapHash64Test) {
         n->append(0);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_hash64(ctx, columns).value();
 
@@ -309,14 +310,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapCountTest) {
     {
         Columns columns;
 
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
 
         s->append(&b1);
         s->append(&b2);
         s->append(&b3);
         s->append(&b4);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_count(ctx, columns).value();
 
@@ -332,21 +333,21 @@ TEST_F(VecBitmapFunctionsTest, bitmapCountTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
 
         s->append(&b1);
         s->append(&b2);
         s->append(&b3);
         s->append(&b4);
 
-        NullColumn::Ptr n = NullColumn::create();
+        auto n = NullColumn::create();
 
         n->append(0);
         n->append(0);
         n->append(1);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_count(ctx, columns).value();
 
@@ -391,16 +392,16 @@ TEST_F(VecBitmapFunctionsTest, bitmapOrTest) {
     {
         Columns columns;
 
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
         s2->append(&b3);
         s2->append(&b4);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_or(ctx, columns).value();
 
@@ -414,21 +415,21 @@ TEST_F(VecBitmapFunctionsTest, bitmapOrTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
         s2->append(&b3);
         s2->append(&b4);
 
-        NullColumn::Ptr n = NullColumn::create();
+        auto n = NullColumn::create();
 
         n->append(0);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s1, n));
-        columns.push_back(s2);
+        columns.emplace_back(NullableColumn::create(s1, n));
+        columns.emplace_back(s2);
 
         auto v = BitmapFunctions::bitmap_or(ctx, columns).value();
 
@@ -471,16 +472,16 @@ TEST_F(VecBitmapFunctionsTest, bitmapAndTest) {
     {
         Columns columns;
 
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
         s2->append(&b3);
         s2->append(&b4);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_and(ctx, columns).value();
 
@@ -510,12 +511,12 @@ TEST_F(VecBitmapFunctionsTest, bitmapToStringTest) {
     {
         Columns columns;
 
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_string(ctx, columns).value();
 
@@ -545,12 +546,12 @@ TEST_F(VecBitmapFunctionsTest, bitmapToStringTest) {
     {
         Columns columns;
 
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
 
         s1->append(&b3);
         s1->append(&b4);
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_string(ctx, columns).value();
 
@@ -567,12 +568,12 @@ TEST_F(VecBitmapFunctionsTest, bitmapToStringTest) {
 TEST_F(VecBitmapFunctionsTest, bitmapFromStringTest) {
     {
         Columns columns;
-        BinaryColumn::Ptr s1 = BinaryColumn::create();
+        auto s1 = BinaryColumn::create();
 
         s1->append(Slice("1,2,3,4"));
         s1->append(Slice("4,5,6,7"));
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_from_string(ctx, columns).value();
 
@@ -586,12 +587,12 @@ TEST_F(VecBitmapFunctionsTest, bitmapFromStringTest) {
 
     {
         Columns columns;
-        BinaryColumn::Ptr s1 = BinaryColumn::create();
+        auto s1 = BinaryColumn::create();
 
         s1->append(Slice("1,2,3,4"));
         s1->append(Slice("asdf,7"));
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto v = BitmapFunctions::bitmap_from_string(ctx, columns).value();
         ASSERT_TRUE(v->is_nullable());
@@ -619,18 +620,18 @@ TEST_F(VecBitmapFunctionsTest, bitmapContainsTest) {
     b2.add(7);
     {
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
 
-        Int64Column::Ptr b1 = Int64Column::create();
+        auto b1 = Int64Column::create();
 
         b1->append(4);
         b1->append(1);
 
-        columns.push_back(s1);
-        columns.push_back(b1);
+        columns.emplace_back(s1);
+        columns.emplace_back(b1);
 
         auto column = BitmapFunctions::bitmap_contains(ctx, columns).value();
 
@@ -670,8 +671,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapHasAnyTest) {
     b4.add(17);
     {
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
@@ -679,8 +680,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapHasAnyTest) {
         s2->append(&b3);
         s2->append(&b4);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_has_any(ctx, columns).value();
 
@@ -708,14 +709,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -739,14 +740,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -768,14 +769,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -796,14 +797,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -827,14 +828,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -857,14 +858,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -885,14 +886,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -912,14 +913,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -941,14 +942,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -969,14 +970,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -995,14 +996,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1020,14 +1021,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1048,14 +1049,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1075,14 +1076,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1100,14 +1101,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1124,14 +1125,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1158,14 +1159,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1189,14 +1190,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1218,14 +1219,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1246,14 +1247,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1277,14 +1278,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1307,14 +1308,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1335,14 +1336,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1362,14 +1363,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1391,14 +1392,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1419,14 +1420,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1445,14 +1446,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1470,14 +1471,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1498,14 +1499,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(4);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1525,14 +1526,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(634);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1550,14 +1551,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         b1_column1.add(6);
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1574,14 +1575,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         BitmapValue b1_column1;
 
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        BitmapColumn::Ptr s2 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = BitmapColumn::create();
 
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1612,8 +1613,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapRemoveTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
-        Int64Column::Ptr s2 = Int64Column::create();
+        auto s1 = BitmapColumn::create();
+        auto s2 = Int64Column::create();
 
         s1->append(&b1);
         s1->append(&b2);
@@ -1625,8 +1626,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapRemoveTest) {
         s2->append(634);
         s2->append(632);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_remove(ctx, columns).value();
 
@@ -1660,14 +1661,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
         s1->append(&b3);
         s1->append(&b4);
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         auto array_column = ColumnHelper::as_column<ArrayColumn>(column);
@@ -1713,21 +1714,21 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayNullTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
 
         s1->append(&b1);
         s1->append(&b2);
         s1->append(&b3);
         s1->append(&b4);
 
-        NullColumn::Ptr n = NullColumn::create();
+        auto n = NullColumn::create();
 
         n->append(0);
         n->append(0);
         n->append(1);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s1, n));
+        columns.emplace_back(NullableColumn::create(s1, n));
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         auto null_column = ColumnHelper::as_column<NullableColumn>(column);
@@ -1761,11 +1762,11 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayConstTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s1 = BitmapColumn::create();
+        auto s1 = BitmapColumn::create();
 
         s1->append(&b1);
 
-        columns.push_back(ConstColumn::create(s1, 4));
+        columns.emplace_back(ConstColumn::create(s1, 4));
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         auto array_column = ColumnHelper::as_column<ArrayColumn>(column);
@@ -1786,7 +1787,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayOnlyNullTest) {
         Columns columns;
         size_t size = 8;
         ColumnPtr s1 = ColumnHelper::create_const_null_column(size);
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         // auto null_column = ColumnHelper::as_column<NullableColumn>(column);
@@ -1869,14 +1870,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
     {
         Columns columns;
 
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
 
         s->append(&b1);
         s->append(&b2);
         s->append(&b3);
         s->append(&b4);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_max(ctx, columns).value();
 
@@ -1901,21 +1902,21 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
 
         s->append(&b1);
         s->append(&b2);
         s->append(&b3);
         s->append(&b4);
 
-        NullColumn::Ptr n = NullColumn::create();
+        auto n = NullColumn::create();
 
         n->append(0);
         n->append(1);
         n->append(1);
         n->append(0);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_max(ctx, columns).value();
 
@@ -1960,14 +1961,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
     {
         Columns columns;
 
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
 
         s->append(&b1);
         s->append(&b2);
         s->append(&b3);
         s->append(&b4);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_min(ctx, columns).value();
 
@@ -1992,21 +1993,21 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
 
     {
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
 
         s->append(&b1);
         s->append(&b2);
         s->append(&b3);
         s->append(&b4);
 
-        NullColumn::Ptr n = NullColumn::create();
+        auto n = NullColumn::create();
 
         n->append(0);
         n->append(1);
         n->append(1);
         n->append(0);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_min(ctx, columns).value();
 
@@ -2051,28 +2052,28 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapTest) {
 
 TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
     auto builder = [](const Buffer<int64_t>& val) {
-        NullableColumn::Ptr ele_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        auto ele_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
         for (auto& v : val) {
             ele_column->append_datum(v);
         }
-        UInt32Column::Ptr offset_column = UInt32Column::create();
+        auto offset_column = UInt32Column::create();
         offset_column->append(0);
         offset_column->append(val.size());
-        return ArrayColumn::create(ele_column, offset_column);
+        return ArrayColumn::create(std::move(ele_column), std::move(offset_column));
     };
 
     auto nullable_builder = [](const Buffer<int64_t>& val, const Buffer<int32_t>& null_idx) {
-        Int64Column::Ptr ele_column = Int64Column::create();
+        auto ele_column = Int64Column::create();
         ele_column->append(val);
 
-        NullableColumn::Ptr nullable_column = NullableColumn::create(ele_column, NullColumn::create(val.size()));
+        auto nullable_column = NullableColumn::create(std::move(ele_column), NullColumn::create(val.size()));
         for (auto idx : null_idx) {
             nullable_column->set_null(idx);
         }
-        UInt32Column::Ptr offset_column = UInt32Column::create();
+        auto offset_column = UInt32Column::create();
         offset_column->append(0);
         offset_column->append(val.size());
-        return ArrayColumn::create(nullable_column, offset_column);
+        return ArrayColumn::create(std::move(nullable_column), std::move(offset_column));
     };
 
     Columns columns = {builder(Buffer<int64_t>{1, 2, 3, 4})};
@@ -2091,16 +2092,16 @@ TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
 TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
     { // Empty Bitmap
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
         BitmapValue empty;
         s->append(&empty);
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
 
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
@@ -2111,18 +2112,18 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
     { // Single Bitmap
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
         BitmapValue single(1);
         s->append(&single);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
 
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
@@ -2134,7 +2135,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
     { // Set Bitmap
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
         // Adding values one by one, no more than 32, which makes the bitmap stores value with set
         BitmapValue set;
         set.add(1);
@@ -2143,14 +2144,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
         set.add(4);
         s->append(&set);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
         ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
@@ -2164,19 +2165,19 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
     { // 32bit Bitmap
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit({1, 2, 3, 4});
         s->append(&bmp32bit);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
         ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
@@ -2190,19 +2191,19 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
     { // 64bit Bitmap
         Columns columns;
-        BitmapColumn::Ptr s = BitmapColumn::create();
+        auto s = BitmapColumn::create();
         // Constructing bitmap with vector which contains 64bit values makes it a 64bit bitmap
         BitmapValue bmp64bit({600123456781, 600123456782, 600123456783, 600123456784});
         s->append(&bmp64bit);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
         ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
@@ -2217,13 +2218,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
 TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
     BitmapValue bitmap({1, 2, 3, 4, 5, 64, 128, 256, 512, 1024});
-    BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+    auto bitmap_column = BitmapColumn::create();
     bitmap_column->append(&bitmap);
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -2238,8 +2239,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(5);
         len->append(100);
 
@@ -2254,8 +2255,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(5);
         len->append(INT64_MAX);
 
@@ -2270,8 +2271,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(2);
 
@@ -2286,8 +2287,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-1);
         len->append(1);
 
@@ -2302,8 +2303,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-1);
         len->append(100);
 
@@ -2318,8 +2319,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-6);
         len->append(100);
 
@@ -2334,8 +2335,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-6);
         len->append(5);
 
@@ -2350,8 +2351,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(0);
 
@@ -2365,8 +2366,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(100);
         len->append(5);
 
@@ -2380,8 +2381,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-100);
         len->append(5);
 
@@ -2395,8 +2396,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 
     {
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(5);
         len->append(INT64_MIN);
 
@@ -2411,9 +2412,9 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
     {
         Columns columns;
         BitmapValue bitmap1;
-        BitmapColumn::Ptr bitmap_column1 = BitmapColumn::create();
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto bitmap_column1 = BitmapColumn::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         bitmap_column1->append(&bitmap1);
         offset->append(5);
         len->append(5);
@@ -2430,13 +2431,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
 TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     // empty bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue empty;
         bitmap_column->append(&empty);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -2449,13 +2450,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(1);
 
@@ -2469,13 +2470,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(0);
 
@@ -2488,13 +2489,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-1);
         len->append(1);
 
@@ -2508,7 +2509,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // set bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Adding values one by one, no more than 32, which makes the bitmap stores value with set
         BitmapValue set;
         set.add(1);
@@ -2518,8 +2519,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
         bitmap_column->append(&set);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -2533,7 +2534,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // set bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Adding values one by one, no more than 32, which makes the bitmap stores value with set
         BitmapValue set;
         set.add(1);
@@ -2543,8 +2544,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
         bitmap_column->append(&set);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-3);
         len->append(3);
 
@@ -2558,14 +2559,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(1);
 
@@ -2579,14 +2580,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-1);
         len->append(1);
 
@@ -2600,14 +2601,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit({1, 2, 3, 4});
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(-3);
         len->append(3);
 
@@ -2621,14 +2622,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit({1, 2, 3, 4});
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -2642,14 +2643,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     }
     // 64bit bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 64bit values makes it a 64bit bitmap
         BitmapValue bmp64bit({600123456781, 600123456782, 600123456783, 600123456784});
         bitmap_column->append(&bmp64bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -2665,13 +2666,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
 
 TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
     BitmapValue bitmap({1, 2, 3, 4, 5, 64, 128, 256, 512, 1024});
-    BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+    auto bitmap_column = BitmapColumn::create();
     bitmap_column->append(&bitmap);
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(2);
         limit->append(3);
 
@@ -2686,8 +2687,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(5);
         limit->append(100);
 
@@ -2702,8 +2703,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(5);
         limit->append(INT64_MAX);
 
@@ -2718,8 +2719,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(0);
         limit->append(2);
 
@@ -2734,8 +2735,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(-1);
         limit->append(1);
 
@@ -2750,8 +2751,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(5);
         limit->append(-2);
 
@@ -2766,8 +2767,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(1025);
         limit->append(-100);
 
@@ -2782,8 +2783,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(1025);
         limit->append(-2);
 
@@ -2798,8 +2799,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(0);
         limit->append(0);
 
@@ -2813,8 +2814,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(1025);
         limit->append(5);
 
@@ -2828,8 +2829,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(0);
         limit->append(-5);
 
@@ -2843,8 +2844,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         start->append(1025);
         limit->append(INT64_MAX);
 
@@ -2859,9 +2860,9 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
     {
         Columns columns;
         BitmapValue bitmap1;
-        BitmapColumn::Ptr bitmap_column1 = BitmapColumn::create();
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto bitmap_column1 = BitmapColumn::create();
+        auto start = Int64Column::create();
+        auto limit = Int64Column::create();
         bitmap_column1->append(&bitmap1);
         start->append(5);
         limit->append(5);
@@ -2878,13 +2879,13 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     // empty bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue empty;
         bitmap_column->append(&empty);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -2897,13 +2898,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(1);
 
@@ -2917,13 +2918,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(-1);
 
@@ -2937,13 +2938,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(-1);
 
@@ -2956,7 +2957,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // set bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Adding values one by one, no more than 32, which makes the bitmap stores value with set
         BitmapValue set;
         set.add(1);
@@ -2966,8 +2967,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
         bitmap_column->append(&set);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -2981,7 +2982,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // set bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Adding values one by one, no more than 32, which makes the bitmap stores value with set
         BitmapValue set;
         set.add(1);
@@ -2991,8 +2992,8 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
         bitmap_column->append(&set);
 
         Columns columns;
-        Int64Column::Ptr range_start = Int64Column::create();
-        Int64Column::Ptr limit = Int64Column::create();
+        auto range_start = Int64Column::create();
+        auto limit = Int64Column::create();
         range_start->append(3);
         limit->append(-3);
 
@@ -3006,14 +3007,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(1);
 
@@ -3027,14 +3028,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(-1);
 
@@ -3047,14 +3048,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(-1);
 
@@ -3068,14 +3069,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit({1, 2, 3, 4});
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -3089,14 +3090,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit({1, 2, 3, 4});
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(3);
         len->append(-3);
 
@@ -3110,14 +3111,14 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     }
     // 64bit bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 64bit values makes it a 64bit bitmap
         BitmapValue bmp64bit({600123456781, 600123456782, 600123456783, 600123456784});
         bitmap_column->append(&bmp64bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -3133,13 +3134,13 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
 
 TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
     BitmapValue bitmap({1, 2, 3, 4, 5, 64, 128, 256, 512, 1024});
-    BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+    auto bitmap_column = BitmapColumn::create();
     bitmap_column->append(&bitmap);
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(2);
         end->append(3);
 
@@ -3154,8 +3155,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(5);
         end->append(100);
 
@@ -3170,8 +3171,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(5);
         end->append(INT64_MAX);
 
@@ -3186,8 +3187,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(0);
         end->append(3);
 
@@ -3202,8 +3203,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(1);
         end->append(2);
 
@@ -3218,8 +3219,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(4);
         end->append(6);
 
@@ -3234,8 +3235,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(0);
         end->append(1025);
 
@@ -3250,8 +3251,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(510);
         end->append(1025);
 
@@ -3266,8 +3267,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(0);
         end->append(0);
 
@@ -3281,8 +3282,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(1025);
         end->append(5);
 
@@ -3296,8 +3297,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(0);
         end->append(-5);
 
@@ -3311,8 +3312,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 
     {
         Columns columns;
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         start->append(1025);
         end->append(INT64_MAX);
 
@@ -3327,9 +3328,9 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
     {
         Columns columns;
         BitmapValue bitmap1;
-        BitmapColumn::Ptr bitmap_column1 = BitmapColumn::create();
-        Int64Column::Ptr start = Int64Column::create();
-        Int64Column::Ptr end = Int64Column::create();
+        auto bitmap_column1 = BitmapColumn::create();
+        auto start = Int64Column::create();
+        auto end = Int64Column::create();
         bitmap_column1->append(&bitmap1);
         start->append(5);
         end->append(5);
@@ -3346,13 +3347,13 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
 TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     // empty bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue empty;
         bitmap_column->append(&empty);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -3365,13 +3366,13 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(0);
         len->append(2);
 
@@ -3385,13 +3386,13 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     }
     // single bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(3);
 
@@ -3404,7 +3405,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     }
     // set bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Adding values one by one, no more than 32, which makes the bitmap stores value with set
         BitmapValue set;
         set.add(1);
@@ -3414,8 +3415,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
         bitmap_column->append(&set);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(4);
 
@@ -3429,14 +3430,14 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     }
     // 32bit Bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
         BitmapValue bmp32bit({1, 2, 3, 4});
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(2);
         len->append(4);
 
@@ -3450,14 +3451,14 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     }
     // 64bit bitmap
     {
-        BitmapColumn::Ptr bitmap_column = BitmapColumn::create();
+        auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 64bit values makes it a 64bit bitmap
         BitmapValue bmp64bit({600123456781, 600123456782, 600123456783, 600123456784});
         bitmap_column->append(&bmp64bit);
 
         Columns columns;
-        Int64Column::Ptr offset = Int64Column::create();
-        Int64Column::Ptr len = Int64Column::create();
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
         offset->append(600123456781);
         len->append(600123456782);
 

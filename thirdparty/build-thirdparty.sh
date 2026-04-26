@@ -34,6 +34,10 @@ curdir=`cd "$curdir"; pwd`
 export STARROCKS_HOME=${STARROCKS_HOME:-$curdir/..}
 export TP_DIR=$curdir
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    exec "${TP_DIR}/build-thirdparty-darwin.sh" "$@"
+fi
+
 # include custom environment variables
 if [[ -f ${STARROCKS_HOME}/env.sh ]]; then
     . ${STARROCKS_HOME}/env.sh
@@ -388,7 +392,7 @@ build_thrift() {
     --prefix=$TP_INSTALL_DIR --docdir=$TP_INSTALL_DIR/doc --enable-static --disable-shared --disable-tests \
     --disable-tutorial --without-qt4 --without-qt5 --without-csharp --without-erlang --without-nodejs \
     --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby \
-    --without-haskell --without-go --without-haxe --without-d --without-python -without-java -without-rs --with-cpp \
+    --without-haskell --without-go --without-haxe --without-d --without-python -without-java -without-rs --without-cl --with-cpp \
     --with-libevent=$TP_INSTALL_DIR --with-boost=$TP_INSTALL_DIR --with-openssl=$TP_INSTALL_DIR
 
     if [ -f compiler/cpp/thrifty.hh ];then
@@ -476,16 +480,19 @@ build_llvm() {
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
 
-    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
+    BASE_DY_LIB_BASE=$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH
+
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD -S ../llvm -G "${CMAKE_GENERATOR}" \
     -DLLVM_ENABLE_EH:Bool=True \
     -DLLVM_ENABLE_RTTI:Bool=True \
     -DLLVM_ENABLE_PIC:Bool=True \
     -DLLVM_ENABLE_TERMINFO:Bool=False \
     -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
-    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
-    -DLLVM_INCLUDE_TOOLS:BOOL=False \
-    -DLLVM_BUILD_TOOLS:BOOL=False \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON \
+    -DLLVM_INCLUDE_TOOLS:BOOL=ON \
+    -DLLVM_BUILD_TOOLS:BOOL=ON \
     -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
@@ -493,12 +500,12 @@ build_llvm() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
-    # TODO(yueyang): Add more targets.
-    # This is a little bit hack, we need to minimize the build time and binary size.
     REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
+    ${BUILD_SYSTEM} install-LLVM
 
+    export LD_LIBRARY_PATH="${BASE_DY_LIB_BASE}"
     restore_compile_flags
 }
 # protobuf
@@ -537,7 +544,11 @@ build_glog() {
     check_if_source_exist $GLOG_SOURCE
     cd $TP_SOURCE_DIR/$GLOG_SOURCE
 
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -557,6 +568,14 @@ build_gtest() {
     ${BUILD_SYSTEM} install
 }
 
+# xxhash
+build_xxhash() {
+    check_if_source_exist $XXHASH_SOURCE
+    mkdir -p $TP_INCLUDE_DIR
+    # xxhash.h is in the root directory of xxHash source
+    mkdir -p $TP_INCLUDE_DIR/xxhash && cp $TP_SOURCE_DIR/$XXHASH_SOURCE/xxhash.h $TP_INCLUDE_DIR/xxhash/
+}
+
 # rapidjson
 build_rapidjson() {
     check_if_source_exist $RAPIDJSON_SOURCE
@@ -573,7 +592,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF -DSIMDJSON_SKIPUTF8VALIDATION=ON ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -694,8 +713,10 @@ build_curl() {
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
-    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
-    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli
+    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static  \
+                --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 \
+                --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli \
+                --disable-symbol-hiding
     make -j$PARALLEL
     make install
 }
@@ -778,7 +799,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
+    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
     make -j$PARALLEL
     make install
 }
@@ -862,6 +883,7 @@ build_arrow() {
     export ARROW_ZLIB_URL=${TP_SOURCE_DIR}/${ZLIB_NAME}
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
+    export ARROW_THRIFT_URL=${TP_SOURCE_DIR}/${THRIFT_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
     if [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
         # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
@@ -911,7 +933,8 @@ build_arrow() {
     -DARROW_FLIGHT_SQL=ON \
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
-    -DThrift_ROOT=$TP_INSTALL_DIR/ ..
+    -DThrift_ROOT=$TP_INSTALL_DIR/ \
+    -Dthrift_SOURCE=SYSTEM ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1076,6 +1099,18 @@ build_fmt() {
     ${BUILD_SYSTEM} install
 }
 
+build_fmt_shared() {
+    check_if_source_exist $FMT_SOURCE
+    cd $TP_SOURCE_DIR/$FMT_SOURCE
+    mkdir -p build
+    cd build
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF \
+            -DBUILD_SHARED_LIBS=ON 
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 #ryu
 build_ryu() {
     check_if_source_exist $RYU_SOURCE
@@ -1101,14 +1136,14 @@ build_breakpad() {
 }
 
 #hadoop
-build_hadoop() {
-    check_if_source_exist $HADOOP_SOURCE
-    cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/hadoop
-    # remove unnecessary doc and logs
-    rm -rf $TP_INSTALL_DIR/hadoop/logs/* $TP_INSTALL_DIR/hadoop/share/doc/hadoop
+build_hadoop_src() {
+    check_if_source_exist $HADOOPSRC_SOURCE
+    cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
+    cd hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs
+    make
     mkdir -p $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h $TP_INSTALL_DIR/include/hdfs
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a $TP_INSTALL_DIR/lib
 }
 
 #jdk
@@ -1284,14 +1319,18 @@ build_benchmark() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    # https://github.com/google/benchmark/issues/773
+    # benchmark 1.9.5 switched CXX feature checks to HAVE_* cache variables.
+    # Force the POSIX regex backend to avoid CentOS7 try_run failures when the
+    # probe binaries pick up the system libstdc++ instead of the toolchain one.
     cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
           -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
+          -DBENCHMARK_INSTALL_DOCS=OFF \
+          -DBENCHMARK_INSTALL_TOOLS=OFF \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
-          -DRUN_HAVE_STD_REGEX=0 \
-          -DRUN_HAVE_POSIX_REGEX=0 \
-          -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
+          -DHAVE_STD_REGEX=0 \
+          -DHAVE_GNU_POSIX_REGEX=0 \
+          -DHAVE_POSIX_REGEX=1 \
           -DCMAKE_BUILD_TYPE=Release ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1344,6 +1383,8 @@ build_avro_c() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     mkdir -p build
     cd build
+    
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1356,6 +1397,8 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
+
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 
@@ -1403,14 +1446,6 @@ build_datasketches() {
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/sampling/include/* $TP_INSTALL_DIR/include/datasketches/
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/theta/include/* $TP_INSTALL_DIR/include/datasketches/
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
-}
-
-# async-profiler
-build_async_profiler() {
-    check_if_source_exist $ASYNC_PROFILER_SOURCE
-    mkdir -p $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/bin $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/lib $TP_INSTALL_DIR/async-profiler
 }
 
 # fiu
@@ -1539,11 +1574,9 @@ build_simdutf() {
 build_tenann() {
     check_if_source_exist $TENANN_SOURCE
     rm -rf $TP_INSTALL_DIR/include/tenann
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle.a
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle-avx2.a
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/tenann
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle.a $TP_INSTALL_DIR/lib/
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundl*.a
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundl*.a $TP_INSTALL_DIR/lib/
 }
 
 build_icu() {
@@ -1630,6 +1663,36 @@ build_libdivide() {
     cp libdivide.h $TP_INSTALL_DIR/include/
 }
 
+# pprof
+build_pprof() {
+    check_if_archieve_exist $PPROF_SOURCE
+    mkdir -p $TP_INSTALL_DIR/flamegraph
+    cp $TP_SOURCE_DIR/$PPROF_SOURCE $TP_INSTALL_DIR/flamegraph/
+    chmod +x $TP_INSTALL_DIR/flamegraph/pprof
+}
+
+# flamegraph
+build_flamegraph() {
+    check_if_source_exist $FLAMEGRAPH_SOURCE
+    mkdir -p $TP_INSTALL_DIR/flamegraph
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-perf.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-go.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/flamegraph.pl $TP_INSTALL_DIR/flamegraph/
+    chmod +x $TP_INSTALL_DIR/flamegraph/*.pl
+}
+
+# benchgen
+build_benchgen() {
+    check_if_source_exist ${BENCHGEN_SOURCE}
+    cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
+    ${CMAKE_CMD} --build build -j "${PARALLEL}"
+    ${CMAKE_CMD} --install build
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1638,6 +1701,8 @@ restore_compile_flags() {
     export CFLAGS=$GLOBAL_CFLAGS
     # c++ flags
     export CXXFLAGS=$GLOBAL_CXXFLAGS
+
+    unset LDFLAGS
 }
 
 strip_binary() {
@@ -1659,88 +1724,16 @@ export CPPFLAGS=$GLOBAL_CPPFLAGS
 export CXXFLAGS=$GLOBAL_CXXFLAGS
 export CFLAGS=$GLOBAL_CFLAGS
 
-# Define default build order
-declare -a all_packages=(
-    libevent
-    zlib
-    lz4
-    lzo2
-    bzip
-    openssl
-    boost # must before thrift
-    protobuf
-    gflags
-    gtest
-    glog
-    rapidjson
-    simdjson
-    snappy
-    gperftools
-    curl
-    re2
-    thrift
-    leveldb
-    brpc
-    rocksdb
-    kerberos
-    # must build before arrow
-    sasl
-    absl
-    grpc
-    flatbuffers
-    jemalloc
-    brotli
-    arrow
-    # NOTE: librdkafka depends on ZSTD which is generated by Arrow, So this SHOULD be
-    # built after arrow
-    librdkafka
-    pulsar
-    s2
-    bitshuffle
-    croaringbitmap
-    cctz
-    fmt
-    ryu
-    hadoop
-    jdk
-    ragel
-    hyperscan
-    mariadb
-    aliyun_jindosdk
-    gcs_connector
-    aws_cpp_sdk
-    vpack
-    opentelemetry
-    benchmark
-    fast_float
-    starcache
-    streamvbyte
-    jansson
-    avro_c
-    avro_cpp
-    serdes
-    datasketches
-    async_profiler
-    fiu
-    llvm
-    clucene
-    simdutf
-    poco
-    icu
-    xsimd
-    libxml2
-    azure
-    libdivide
-)
-
-# Machine specific packages
-if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate tenann)
+if [[ ! -f "${TP_DIR}/package-manifest.sh" ]]; then
+    echo "package-manifest.sh is missing".
+    exit 1
 fi
+. "${TP_DIR}/package-manifest.sh"
+starrocks_set_default_packages "${MACHINE_TYPE}"
 
 # Initialize packages array - if none specified, build all
 if [[ "${#packages[@]}" -eq 0 ]]; then
-    packages=("${all_packages[@]}")
+    packages=("${STARROCKS_THIRDPARTY_ALL_PACKAGES[@]}")
 fi
 
 # Build packages

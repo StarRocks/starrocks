@@ -16,6 +16,7 @@ package com.starrocks.datacache;
 
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +67,7 @@ public class DataCacheRule {
         if (predicates == null) {
             result.add("NULL");
         } else {
-            result.add(predicates.toMySql());
+            result.add(ExprToSql.toMySql(predicates));
         }
         if (properties == null) {
             result.add("NULL");
@@ -93,7 +94,7 @@ public class DataCacheRule {
     public String toString() {
         // TODO properties
         return String.format("[id = %d, target = %s, predicates = %s, priority = %d, properties = %s]", id, target,
-                predicates == null ? "NULL" : predicates.toMySql(),
+                predicates == null ? "NULL" : ExprToSql.toMySql(predicates),
                 priority, properties == null ? "NULL" : printProperties(properties));
     }
 }

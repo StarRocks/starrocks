@@ -1,0 +1,311 @@
+-- name: test_iceberg_metadata_delete_optimization
+create external catalog iceberg_meta_del_${uuid0}
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "${hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false"
+);
+-- result:
+-- !result
+create database iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}
+properties ("location" = "oss://${oss_bucket}/test_metadata_delete/${uuid0}/db");
+-- result:
+-- !result
+create table iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned (
+    id INT,
+    name STRING,
+    dt STRING,
+    region STRING
+)
+PARTITION BY (dt, region);
+-- result:
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(1, 'Alice', '2023-01-01', 'North'),
+(2, 'Bob', '2023-01-01', 'North'),
+(3, 'Charlie', '2023-01-02', 'South'),
+(4, 'David', '2023-01-02', 'South'),
+(5, 'Eve', '2023-01-03', 'East'),
+(6, 'Frank', '2023-01-03', 'West');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' and region = 'North'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' and region = 'North';
+-- result:
+-- !result
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+-- result:
+3	Charlie	2023-01-02	South
+4	David	2023-01-02	South
+5	Eve	2023-01-03	East
+6	Frank	2023-01-03	West
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-02' and region in ('South', 'East')", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-02' and region in ('South', 'East');
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(5, 'Eve', '2023-01-03', 'East'),
+(6, 'Frank', '2023-01-03', 'West');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' or region = 'West'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' or region = 'West';
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	4
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(1, 'Alice', '2023-01-01', 'North'),
+(2, 'Bob', '2023-01-01', 'North'),
+(3, 'Charlie', '2023-01-02', 'South'),
+(4, 'David', '2023-01-02', 'South');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt between '2023-01-01' and '2023-01-02'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt between '2023-01-01' and '2023-01-02';
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(5, 'Eve', '2023-01-03', 'East'),
+(6, 'Frank', '2023-01-03', 'West');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and id = 5", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and id = 5;
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(7, 'Grace', '2023-01-01', 'North'),
+(8, 'Henry', '2023-01-02', 'South');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt like '2023-01-%'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt like '2023-01-%';
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	3
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(9, 'Ivy', null, 'North'),
+(10, 'Jack', null, 'South');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt is null", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt is null;
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(11, 'Kate', '2023-01-03', 'East'),
+(12, 'Leo', '2023-01-03', 'East');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and region = 'East' and 1 = 1", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-03' and region = 'East' and 1 = 1;
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(13, 'Mike', '2023-01-01', 'North'),
+(14, 'Nancy', '2023-01-02', 'South'),
+(15, 'Oscar', '2023-01-03', 'East'),
+(16, 'Patty', '2023-01-03', 'West');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 3", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 3;
+-- result:
+-- !result
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	4
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(17, 'Quincy', '2023-01-01', 'North'),
+(18, 'Rachel', '2023-01-02', 'South'),
+(19, 'Charlie', '2023-01-03', 'East');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where name = 'Charlie'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where name = 'Charlie';
+-- result:
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(100, 'Alice', '2023-01-01', 'North'),
+(101, 'Bob', '2023-01-01', 'North'),
+(102, 'Charlie', '2023-01-02', 'South'),
+(103, 'David', '2023-01-02', 'South');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 50", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id > 50;
+-- result:
+-- !result
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+-- result:
+17	Quincy	2023-01-01	North
+18	Rachel	2023-01-02	South
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(1, 'Alice', '2023-01-01', 'North'),
+(2, 'Bob', '2023-01-01', 'North'),
+(3, 'Charlie', '2023-01-01', 'North'),
+(4, 'David', '2023-01-01', 'North');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id = 2", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id = 2;
+-- result:
+-- !result
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+-- result:
+1	Alice	2023-01-01	North
+3	Charlie	2023-01-01	North
+4	David	2023-01-01	North
+17	Quincy	2023-01-01	North
+18	Rachel	2023-01-02	South
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(10, 'Eve', '2023-01-01', 'North'),
+(20, 'Frank', '2023-01-01', 'North'),
+(15, 'Grace', '2023-01-02', 'South'),
+(25, 'Henry', '2023-01-02', 'South');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id < 25", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where id < 25;
+-- result:
+-- !result
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+-- result:
+25	Henry	2023-01-02	South
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	8
+-- !result
+insert into iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned values
+(100, 'Test1', '2023-01-01', 'North'),
+(101, 'Test2', '2023-01-01', 'North'),
+(102, 'Test3', '2023-01-02', 'South'),
+(103, 'Test4', '2023-01-02', 'South');
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' or id = 103", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned where dt = '2023-01-01' or id = 103;
+-- result:
+-- !result
+select * from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned order by id;
+-- result:
+25	Henry	2023-01-02	South
+102	Test3	2023-01-02	South
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	3
+-- !result
+drop table iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0}.test_partitioned force;
+-- result:
+-- !result
+drop database iceberg_meta_del_${uuid0}.iceberg_meta_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_meta_del_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_metadata_delete/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

@@ -17,10 +17,8 @@ package com.starrocks.qe;
 import com.google.api.client.util.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceMgr;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.BrokerProcNode;
@@ -31,12 +29,16 @@ import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -103,6 +105,7 @@ import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.ShowStatusStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
@@ -128,8 +131,18 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
+
+import static com.starrocks.type.BooleanType.BOOLEAN;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.FloatType.DOUBLE;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.IntegerType.INT;
 
 public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResultSetMetaData, Void> {
     public ShowResultSetMetaData getMetadata(StatementBase stmt) {
@@ -145,7 +158,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowLoadStatement(ShowLoadStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : LoadProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -153,17 +166,17 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder()
-                .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Catalog", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Schedule", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LastWorkTime", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Reason", ScalarType.createVarchar(100)));
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Catalog", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Columns", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Schedule", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LastWorkTime", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Reason", TypeFactory.createVarcharType(100)));
         return builder.build();
     }
 
@@ -171,7 +184,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowDeleteStatement(ShowDeleteStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : DeleteInfoProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -179,45 +192,45 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowEnginesStatement(ShowEnginesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Engine", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Support", ScalarType.createVarchar(8)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Transactions", ScalarType.createVarchar(3)))
-                .addColumn(new Column("XA", ScalarType.createVarchar(3)))
-                .addColumn(new Column("Savepoints", ScalarType.createVarchar(3)))
+                .addColumn(new Column("Engine", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Support", TypeFactory.createVarcharType(8)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Transactions", TypeFactory.createVarcharType(3)))
+                .addColumn(new Column("XA", TypeFactory.createVarcharType(3)))
+                .addColumn(new Column("Savepoints", TypeFactory.createVarcharType(3)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowEventStatement(ShowEventsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Db", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Name", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Definer", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Time", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Execute at", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Interval value", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Interval field", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Ends", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Originator", ScalarType.createVarchar(30)))
-                .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Database Collation", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Db", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Definer", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Time", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Execute at", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Interval value", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Interval field", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Ends", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Originator", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("character_set_client", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("collation_connection", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Database Collation", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Column", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Column", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("UpdateTime", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
                 .build();
     }
 
@@ -225,15 +238,19 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowPartitionsStatement(ShowPartitionsStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
+        if (Strings.isNullOrEmpty(statement.getProcPath())) {
+            return builder.build();
+        }
+
         ProcResult result = null;
         try {
-            result = statement.getNode().fetchResult();
+            result = ProcService.getInstance().open(statement.getProcPath()).fetchResult();
         } catch (AnalysisException e) {
             return builder.build();
         }
 
         for (String col : result.getColumnNames()) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(col, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -241,34 +258,34 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowCreateDbStatement(ShowCreateDbStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Database", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Create Database", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Create Database", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
-                .addColumn(new Column("ColumnStats", ScalarType.createVarcharType(128)))
-                .addColumn(new Column("TabletStatsReportTime", ScalarType.createVarcharType(60)))
-                .addColumn(new Column("TableHealthyMetrics", ScalarType.createVarcharType(128)))
-                .addColumn(new Column("TableUpdateTime", ScalarType.createVarcharType(60)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Columns", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("UpdateTime", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Healthy", TypeFactory.createVarcharType(5)))
+                .addColumn(new Column("ColumnStats", TypeFactory.createVarcharType(128)))
+                .addColumn(new Column("TabletStatsReportTime", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("TableHealthyMetrics", TypeFactory.createVarcharType(128)))
+                .addColumn(new Column("TableUpdateTime", TypeFactory.createVarcharType(60)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowAuthorStatement(ShowAuthorStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Location", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Location", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
@@ -276,7 +293,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowDictionaryStatement(ShowDictionaryStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : ShowDictionaryStmt.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -284,21 +301,21 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowWhiteListStatement(ShowWhiteListStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("user_name", ScalarType.createVarchar(20)))
-                .addColumn(new Column("white_list", ScalarType.createVarchar(1000)))
+                .addColumn(new Column("user_name", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("white_list", TypeFactory.createVarcharType(1000)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowSmallFilesStatement(ShowSmallFilesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Id", ScalarType.createVarchar(32)))
-                .addColumn(new Column("DbName", ScalarType.createVarchar(256)))
-                .addColumn(new Column("GlobalStateMgr", ScalarType.createVarchar(32)))
-                .addColumn(new Column("FileName", ScalarType.createVarchar(16)))
-                .addColumn(new Column("FileSize", ScalarType.createVarchar(16)))
-                .addColumn(new Column("IsContent", ScalarType.createVarchar(16)))
-                .addColumn(new Column("MD5", ScalarType.createVarchar(16)))
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("DbName", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("GlobalStateMgr", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("FileName", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("FileSize", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("IsContent", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("MD5", TypeFactory.createVarcharType(16)))
                 .build();
     }
 
@@ -306,7 +323,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : ShowRoutineLoadTaskStmt.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -316,11 +333,11 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         if (!Strings.isNullOrEmpty(statement.getSnapshotName()) && !Strings.isNullOrEmpty(statement.getTimestamp())) {
             for (String title : ShowSnapshotStmt.SNAPSHOT_DETAIL) {
-                builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+                builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
             }
         } else {
             for (String title : ShowSnapshotStmt.SNAPSHOT_ALL) {
-                builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+                builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
             }
         }
         return builder.build();
@@ -329,68 +346,99 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowAuthenticationStatement(ShowAuthenticationStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)))
-                .addColumn(new Column("Password", ScalarType.createVarchar(20)))
-                .addColumn(new Column("AuthPlugin", ScalarType.createVarchar(100)))
-                .addColumn(new Column("UserForAuthPlugin", ScalarType.createVarchar(100)))
+                .addColumn(new Column("UserIdentity", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Password", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("AuthPlugin", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("UserForAuthPlugin", TypeFactory.createVarcharType(100)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowProfilelistStatement(ShowProfilelistStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("QueryId", ScalarType.createVarchar(48)))
-                .addColumn(new Column("StartTime", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Time", ScalarType.createVarchar(16)))
-                .addColumn(new Column("State", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Statement", ScalarType.createVarchar(128)))
+                .addColumn(new Column("QueryId", TypeFactory.createVarcharType(48)))
+                .addColumn(new Column("StartTime", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Time", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Statement", TypeFactory.createVarcharType(128)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Id", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Forbidden SQL", ScalarType.createVarchar(100)))
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Forbidden SQL", TypeFactory.createVarcharType(100)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitShowSqlDigestBlackListStatement(ShowSqlDigestBlackListStmt statement,
+                                                                      Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Digests", TypeFactory.createVarcharType(32)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("TabletId", ScalarType.createVarchar(30)))
-                .addColumn(new Column("ReplicaId", ScalarType.createVarchar(30)))
-                .addColumn(new Column("BackendId", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Version", ScalarType.createVarchar(30)))
-                .addColumn(new Column("LastFailedVersion", ScalarType.createVarchar(30)))
-                .addColumn(new Column("LastSuccessVersion", ScalarType.createVarchar(30)))
-                .addColumn(new Column("CommittedVersion", ScalarType.createVarchar(30)))
-                .addColumn(new Column("SchemaHash", ScalarType.createVarchar(30)))
-                .addColumn(new Column("VersionNum", ScalarType.createVarchar(30)))
-                .addColumn(new Column("IsBad", ScalarType.createVarchar(30)))
-                .addColumn(new Column("IsSetBadForce", ScalarType.createVarchar(30)))
-                .addColumn(new Column("State", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(30)))
+                .addColumn(new Column("TabletId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("ReplicaId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("BackendId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("LastFailedVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("LastSuccessVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("CommittedVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("SchemaHash", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("VersionNum", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("IsBad", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("IsSetBadForce", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("TabletId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFileCount", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFiles", StringType.STRING))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminRepairTableStatement(AdminRepairTableStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("VisibleVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RepairStatus", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("TabletRecoverInfo", StringType.STRING))
+                .addColumn(new Column("ErrorMsg", StringType.STRING))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitHelpStatement(HelpStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                .addColumn(new Column("description", ScalarType.createVarchar(1000)))
-                .addColumn(new Column("example", ScalarType.createVarchar(1000)))
+                .addColumn(new Column("name", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("description", TypeFactory.createVarcharType(1000)))
+                .addColumn(new Column("example", TypeFactory.createVarcharType(1000)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("BackendId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("AddBlackListType", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LostConnectionTime", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LostConnectionNumberInPeriod", ScalarType.createVarchar(10)))
-                .addColumn(new Column("CheckTimePeriod(s)", ScalarType.createVarchar(10)))
+                .addColumn(new Column("BackendId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("AddBlackListType", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LostConnectionTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LostConnectionNumberInPeriod", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("CheckTimePeriod(s)", TypeFactory.createVarcharType(10)))
                 .build();
     }
 
@@ -398,9 +446,9 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowTableStatement(ShowTableStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         builder.addColumn(
-                new Column("Tables_in_" + statement.getDb(), ScalarType.createVarchar(20)));
+                new Column("Tables_in_" + statement.getDb(), TypeFactory.createVarcharType(20)));
         if (statement.isVerbose()) {
-            builder.addColumn(new Column("Table_type", ScalarType.createVarchar(20)));
+            builder.addColumn(new Column("Table_type", TypeFactory.createVarcharType(20)));
         }
         return builder.build();
     }
@@ -413,11 +461,11 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowComputeNodeBlackListStatement(ShowComputeNodeBlackListStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("ComputeNodeId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("AddBlackListType", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LostConnectionTime", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LostConnectionNumberInPeriod", ScalarType.createVarchar(10)))
-                .addColumn(new Column("CheckTimePeriod(s)", ScalarType.createVarchar(10)))
+                .addColumn(new Column("ComputeNodeId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("AddBlackListType", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LostConnectionTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LostConnectionNumberInPeriod", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("CheckTimePeriod(s)", TypeFactory.createVarcharType(10)))
                 .build();
     }
 
@@ -425,7 +473,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowFrontendsStatement(ShowFrontendsStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : FrontendsProcNode.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -433,9 +481,9 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("JobId", ScalarType.createVarchar(15)))
-                .addColumn(new Column("Label", ScalarType.createVarchar(15)))
-                .addColumn(new Column("ErrorMsgDetail", ScalarType.createVarchar(100)))
+                .addColumn(new Column("JobId", TypeFactory.createVarcharType(15)))
+                .addColumn(new Column("Label", TypeFactory.createVarcharType(15)))
+                .addColumn(new Column("ErrorMsgDetail", TypeFactory.createVarcharType(100)))
                 .build();
     }
 
@@ -443,7 +491,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowBackendsStatement(ShowBackendsStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : BackendsProcDir.getMetadata()) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -451,21 +499,21 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Rule Id", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Catalog", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Database", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Priority", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Predicates", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Rule Id", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Catalog", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Priority", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Predicates", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowCreateTableStatement(ShowCreateTableStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Table", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Create Table", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Create Table", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
@@ -473,7 +521,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowRepositoriesStatement(ShowRepositoriesStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : ShowRepositoriesStmt.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -482,7 +530,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowExportStatement(ShowExportStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : ExportProcNode.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -491,24 +539,24 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowColumnStatement(ShowColumnStmt statement, Void context) {
         if (statement.isVerbose()) {
             return ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Collation", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Privileges", ScalarType.createVarchar(80)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Field", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Collation", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Null", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Key", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Default", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Extra", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Privileges", TypeFactory.createVarcharType(80)))
+                    .addColumn(new Column("Comment", TypeFactory.createVarcharType(20)))
                     .build();
         } else {
             return ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Key", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Extra", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Field", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Null", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Key", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Default", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Extra", TypeFactory.createVarcharType(20)))
                     .build();
         }
     }
@@ -516,55 +564,55 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Enable", ScalarType.createVarchar(20)))
-                .addColumn(new Column("TimeUnit", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Start", ScalarType.createVarchar(20)))
-                .addColumn(new Column("End", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Prefix", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Buckets", ScalarType.createVarchar(20)))
-                .addColumn(new Column("ReplicationNum", ScalarType.createVarchar(20)))
-                .addColumn(new Column("StartOf", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LastUpdateTime", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LastSchedulerTime", ScalarType.createVarchar(20)))
-                .addColumn(new Column("State", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LastCreatePartitionMsg", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LastDropPartitionMsg", ScalarType.createVarchar(20)))
-                .addColumn(new Column("InScheduler", ScalarType.createVarchar(20)))
+                .addColumn(new Column("TableName", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Enable", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("TimeUnit", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Start", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("End", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Prefix", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Buckets", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("ReplicationNum", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("StartOf", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LastUpdateTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LastSchedulerTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LastCreatePartitionMsg", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LastDropPartitionMsg", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("InScheduler", TypeFactory.createVarcharType(20)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Schedule", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(20)))
-                .addColumn(new Column("StartTime", ScalarType.createVarchar(60)))
-                .addColumn(new Column("EndTime", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Columns", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Schedule", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("StartTime", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("EndTime", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Reason", TypeFactory.createVarcharType(100)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowProcedureStatement(ShowProcedureStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Db", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Name", ScalarType.createVarchar(10)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Definer", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Modified", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Created", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Security_type", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(80)))
-                .addColumn(new Column("character_set_client", ScalarType.createVarchar(80)))
-                .addColumn(new Column("collation_connection", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Database Collation", ScalarType.createVarchar(80)))
+                .addColumn(new Column("Db", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Definer", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Modified", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Created", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Security_type", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("character_set_client", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("collation_connection", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Database Collation", TypeFactory.createVarcharType(80)))
                 .build();
     }
 
@@ -572,7 +620,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowResourceStatement(ShowResourcesStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : ResourceMgr.RESOURCE_PROC_NODE_TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -581,15 +629,15 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowVariablesStatement(ShowVariablesStmt statement, Void context) {
         if (statement.getType() != SetType.VERBOSE) {
             return ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Variable_name", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Value", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Variable_name", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Value", TypeFactory.createVarcharType(20)))
                     .build();
         } else {
             return ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Variable_name", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Value", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default_value", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Is_changed", ScalarType.createType(PrimitiveType.BOOLEAN)))
+                    .addColumn(new Column("Variable_name", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Value", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Default_value", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Is_changed", BOOLEAN))
                     .build();
         }
     }
@@ -597,47 +645,47 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowCharsetStatement(ShowCharsetStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Charset", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Description", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Default collation", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Maxlen", ScalarType.createVarchar(20)))
+                .addColumn(new Column("Charset", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Description", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Default collation", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Maxlen", TypeFactory.createVarcharType(20)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitDescPipeStatement(DescPipeStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
-                .addColumn(new Column("ID", ScalarType.BIGINT))
-                .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
-                .addColumn(new Column("TYPE", ScalarType.createVarchar(8)))
-                .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
-                .addColumn(new Column("SOURCE", ScalarType.createVarcharType(128)))
-                .addColumn(new Column("SQL", ScalarType.createVarcharType(128)))
-                .addColumn(new Column("PROPERTIES", ScalarType.createVarchar(512)))
+                .addColumn(new Column("DATABASE_ID", IntegerType.BIGINT))
+                .addColumn(new Column("ID", IntegerType.BIGINT))
+                .addColumn(new Column("NAME", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("TYPE", TypeFactory.createVarcharType(8)))
+                .addColumn(new Column("TABLE_NAME", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("SOURCE", TypeFactory.createVarcharType(128)))
+                .addColumn(new Column("SQL", TypeFactory.createVarcharType(128)))
+                .addColumn(new Column("PROPERTIES", TypeFactory.createVarcharType(512)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowPipeStatement(ShowPipeStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("DATABASE_NAME", ScalarType.createVarchar(64)))
-                .addColumn(new Column("PIPE_ID", ScalarType.BIGINT))
-                .addColumn(new Column("PIPE_NAME", ScalarType.createVarchar(64)))
-                .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
-                .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
-                .addColumn(new Column("LOAD_STATUS", ScalarType.createVarchar(512)))
-                .addColumn(new Column("LAST_ERROR", ScalarType.createVarchar(1024)))
-                .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
+                .addColumn(new Column("DATABASE_NAME", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("PIPE_ID", IntegerType.BIGINT))
+                .addColumn(new Column("PIPE_NAME", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("STATE", TypeFactory.createVarcharType(8)))
+                .addColumn(new Column("TABLE_NAME", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("LOAD_STATUS", TypeFactory.createVarcharType(512)))
+                .addColumn(new Column("LAST_ERROR", TypeFactory.createVarcharType(1024)))
+                .addColumn(new Column("CREATED_TIME", DateType.DATETIME))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowWarningStatement(ShowWarningStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Level", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Code", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Message", ScalarType.createVarchar(20)))
+                .addColumn(new Column("Level", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Code", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Message", TypeFactory.createVarcharType(20)))
                 .build();
     }
 
@@ -645,17 +693,17 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowDataStatement(ShowDataStmt statement, Void context) {
         if (statement.getTableName() != null) {
             return ShowResultSetMetaData.builder()
-                    .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("IndexName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("ReplicaCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("RowCount", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("TableName", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("IndexName", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Size", TypeFactory.createVarcharType(30)))
+                    .addColumn(new Column("ReplicaCount", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("RowCount", TypeFactory.createVarcharType(20)))
                     .build();
         } else {
             return ShowResultSetMetaData.builder()
-                    .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("ReplicaCount", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("TableName", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Size", TypeFactory.createVarcharType(30)))
+                    .addColumn(new Column("ReplicaCount", TypeFactory.createVarcharType(20)))
                     .build();
         }
     }
@@ -663,39 +711,43 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Id", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Backend", ScalarType.createVarchar(64)))
-                .addColumn(new Column("BEInUseCpuCores", ScalarType.createVarchar(64)))
-                .addColumn(new Column("BEInUseMemBytes", ScalarType.createVarchar(64)))
-                .addColumn(new Column("BERunningQueries", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Backend", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEInUseCpuCores", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEInUseMemBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BERunningQueries", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemLimitBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPool", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPoolInUseMemBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPoolMemLimitBytes", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowUserStatement(ShowUserStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("User", ScalarType.createVarchar(50)))
+                .addColumn(new Column("User", TypeFactory.createVarcharType(50)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowWarehousesStatement(ShowWarehousesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Id", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Name", ScalarType.createVarchar(256)))
-                .addColumn(new Column("State", ScalarType.createVarchar(20)))
-                .addColumn(new Column("NodeCount", ScalarType.createVarchar(20)))
-                .addColumn(new Column("CurrentClusterCount", ScalarType.createVarchar(20)))
-                .addColumn(new Column("MaxClusterCount", ScalarType.createVarchar(20)))
-                .addColumn(new Column("StartedClusters", ScalarType.createVarchar(20)))
-                .addColumn(new Column("RunningSql", ScalarType.createVarchar(20)))
-                .addColumn(new Column("QueuedSql", ScalarType.createVarchar(20)))
-                .addColumn(new Column("CreatedOn", ScalarType.createVarchar(20)))
-                .addColumn(new Column("ResumedOn", ScalarType.createVarchar(20)))
-                .addColumn(new Column("UpdatedOn", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Property", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(256)))
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("NodeCount", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("CurrentClusterCount", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("MaxClusterCount", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("StartedClusters", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("RunningSql", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("QueuedSql", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("CreatedOn", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("ResumedOn", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("UpdatedOn", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Property", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(256)))
                 .build();
     }
 
@@ -703,7 +755,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowBrokerStatement(ShowBrokerStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : BrokerProcNode.BROKER_PROC_NODE_TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -711,110 +763,125 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowRunningQueriesStatement(ShowRunningQueriesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("QueryId", ScalarType.createVarchar(64)))
-                .addColumn(new Column("WarehouseId", ScalarType.createVarchar(64)))
-                .addColumn(new Column("ResourceGroupId", ScalarType.createVarchar(64)))
-                .addColumn(new Column("StartTime", ScalarType.createVarchar(64)))
-                .addColumn(new Column("PendingTimeout", ScalarType.createVarchar(64)))
-                .addColumn(new Column("QueryTimeout", ScalarType.createVarchar(64)))
-                .addColumn(new Column("State", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Slots", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Fragments", ScalarType.createVarchar(64)))
-                .addColumn(new Column("DOP", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Frontend", ScalarType.createVarchar(64)))
-                .addColumn(new Column("FeStartTime", ScalarType.createVarchar(64)))
+                .addColumn(new Column("QueryId", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("WarehouseId", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("ResourceGroupId", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("StartTime", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("PendingTimeout", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("QueryTimeout", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Slots", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Fragments", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("DOP", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Frontend", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("FeStartTime", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Job", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Create Job", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Job", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Create Job", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitAdminShowConfigStatement(AdminShowConfigStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Key", ScalarType.createVarchar(30)))
-                .addColumn(new Column("AliasNames", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Value", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(30)))
-                .addColumn(new Column("IsMutable", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Key", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("AliasNames", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Value", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("IsMutable", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                          Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Enabled", TypeFactory.createVarcharType(5)))
+                .addColumn(new Column("Interval", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("StorageVolume", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("LastSnapshotTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("NextSnapshotTime", TypeFactory.createVarcharType(20)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowPluginsStatement(ShowPluginsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(10)))
-                .addColumn(new Column("Description", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Version", ScalarType.createVarchar(20)))
-                .addColumn(new Column("JavaVersion", ScalarType.createVarchar(20)))
-                .addColumn(new Column("ClassName", ScalarType.createVarchar(64)))
-                .addColumn(new Column("SoName", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Sources", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(250)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("Description", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("JavaVersion", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("ClassName", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("SoName", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Sources", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(250)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("IsDefault", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Location", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Params", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Enabled", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("IsDefault", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Location", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Params", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Enabled", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(20)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .column("id", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("database_name", ScalarType.createVarchar(20))
-                .column("name", ScalarType.createVarchar(50))
-                .column("refresh_type", ScalarType.createVarchar(10))
-                .column("is_active", ScalarType.createVarchar(10))
-                .column("inactive_reason", ScalarType.createVarcharType(64))
-                .column("partition_type", ScalarType.createVarchar(16))
-                .column("task_id", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("task_name", ScalarType.createVarchar(50))
-                .column("last_refresh_start_time", ScalarType.createType(PrimitiveType.DATETIME))
-                .column("last_refresh_finished_time", ScalarType.createType(PrimitiveType.DATETIME))
-                .column("last_refresh_duration", ScalarType.createType(PrimitiveType.DOUBLE))
-                .column("last_refresh_state", ScalarType.createVarchar(20))
-                .column("last_refresh_force_refresh", ScalarType.createVarchar(8))
-                .column("last_refresh_start_partition", ScalarType.createVarchar(1024))
-                .column("last_refresh_end_partition", ScalarType.createVarchar(1024))
-                .column("last_refresh_base_refresh_partitions", ScalarType.createVarchar(1024))
-                .column("last_refresh_mv_refresh_partitions", ScalarType.createVarchar(1024))
-                .column("last_refresh_error_code", ScalarType.createVarchar(20))
-                .column("last_refresh_error_message", ScalarType.createVarchar(1024))
-                .column("rows", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("text", ScalarType.createVarchar(1024))
-                .column("extra_message", ScalarType.createVarchar(1024))
-                .column("query_rewrite_status", ScalarType.createVarchar(64))
-                .column("creator", ScalarType.createVarchar(64))
-                .column("last_refresh_process_time", ScalarType.createType(PrimitiveType.DATETIME))
-                .column("last_refresh_job_id", ScalarType.createVarchar(64))
+                .column("id", BIGINT)
+                .column("database_name", TypeFactory.createVarcharType(20))
+                .column("name", TypeFactory.createVarcharType(50))
+                .column("refresh_type", TypeFactory.createVarcharType(10))
+                .column("is_active", TypeFactory.createVarcharType(10))
+                .column("inactive_reason", TypeFactory.createVarcharType(64))
+                .column("partition_type", TypeFactory.createVarcharType(16))
+                .column("task_id", BIGINT)
+                .column("task_name", TypeFactory.createVarcharType(50))
+                .column("last_refresh_start_time", DATETIME)
+                .column("last_refresh_finished_time", DATETIME)
+                .column("last_refresh_duration", DOUBLE)
+                .column("last_refresh_state", TypeFactory.createVarcharType(20))
+                .column("last_refresh_force_refresh", TypeFactory.createVarcharType(8))
+                .column("last_refresh_start_partition", TypeFactory.createVarcharType(1024))
+                .column("last_refresh_end_partition", TypeFactory.createVarcharType(1024))
+                .column("last_refresh_base_refresh_partitions", TypeFactory.createVarcharType(1024))
+                .column("last_refresh_mv_refresh_partitions", TypeFactory.createVarcharType(1024))
+                .column("last_refresh_error_code", TypeFactory.createVarcharType(20))
+                .column("last_refresh_error_message", TypeFactory.createVarcharType(1024))
+                .column("rows", BIGINT)
+                .column("text", TypeFactory.createVarcharType(1024))
+                .column("extra_message", TypeFactory.createVarcharType(1024))
+                .column("query_rewrite_status", TypeFactory.createVarcharType(64))
+                .column("creator", TypeFactory.createVarcharType(64))
+                .column("last_refresh_process_time", DATETIME)
+                .column("last_refresh_job_id", TypeFactory.createVarcharType(64))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowProcStmt(ShowProcStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        if (Strings.isNullOrEmpty(statement.getPath())) {
+            return builder.build();
+        }
         try {
-            ProcResult result = statement.getNode().fetchResult();
+            ProcResult result = ProcService.getInstance().open(statement.getPath()).fetchResult();
             for (String col : result.getColumnNames()) {
-                builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
+                builder.addColumn(new Column(col, TypeFactory.createVarcharType(30)));
             }
         } catch (AnalysisException e) {
             // Return empty builder if fetch fails
@@ -825,31 +892,31 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowDatabasesStatement(ShowDbStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Database", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowTableStatusStatement(ShowTableStatusStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Engine", ScalarType.createVarchar(10)))
-                .addColumn(new Column("Version", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Row_format", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Rows", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Avg_row_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Data_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Max_data_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Index_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Data_free", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Auto_increment", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Create_time", ScalarType.createType(PrimitiveType.DATETIME)))
-                .addColumn(new Column("Update_time", ScalarType.createType(PrimitiveType.DATETIME)))
-                .addColumn(new Column("Check_time", ScalarType.createType(PrimitiveType.DATETIME)))
-                .addColumn(new Column("Collation", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Checksum", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Create_options", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Engine", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("Version", BIGINT))
+                .addColumn(new Column("Row_format", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Rows", BIGINT))
+                .addColumn(new Column("Avg_row_length", BIGINT))
+                .addColumn(new Column("Data_length", BIGINT))
+                .addColumn(new Column("Max_data_length", BIGINT))
+                .addColumn(new Column("Index_length", BIGINT))
+                .addColumn(new Column("Data_free", BIGINT))
+                .addColumn(new Column("Auto_increment", BIGINT))
+                .addColumn(new Column("Create_time", DATETIME))
+                .addColumn(new Column("Update_time", DATETIME))
+                .addColumn(new Column("Check_time", DATETIME))
+                .addColumn(new Column("Collation", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Checksum", BIGINT))
+                .addColumn(new Column("Create_options", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
@@ -857,28 +924,31 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitDescTableStmt(DescribeStmt statement, Void context) {
         if (statement.isTableFunctionTable()) {
             return ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Null", ScalarType.createVarchar(10)))
+                    .addColumn(new Column("Field", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Null", TypeFactory.createVarcharType(10)))
                     .build();
         }
 
         if (!statement.isAllTables()) {
             if (statement.isMaterializedView()) {
                 return ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Null", ScalarType.createVarchar(10)))
-                        .addColumn(new Column("Key", ScalarType.createVarchar(10)))
-                        .addColumn(new Column("Default", ScalarType.createVarchar(30)))
-                        .addColumn(new Column("Extra", ScalarType.createVarchar(30)))
+                        .addColumn(new Column("Field", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Null", TypeFactory.createVarcharType(10)))
+                        .addColumn(new Column("Key", TypeFactory.createVarcharType(10)))
+                        .addColumn(new Column("Default", TypeFactory.createVarcharType(30)))
+                        .addColumn(new Column("Extra", TypeFactory.createVarcharType(30)))
                         .build();
             } else {
                 ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+                if (Strings.isNullOrEmpty(statement.getProcPath())) {
+                    return builder.build();
+                }
                 try {
-                    ProcResult result = statement.getNode().fetchResult();
+                    ProcResult result = ProcService.getInstance().open(statement.getProcPath()).fetchResult();
                     for (String col : result.getColumnNames()) {
-                        builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
+                        builder.addColumn(new Column(col, TypeFactory.createVarcharType(30)));
                     }
                 } catch (AnalysisException e) {
                     // Return empty builder if fetch fails
@@ -888,32 +958,32 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         } else {
             if (statement.isOlapTable()) {
                 return ShowResultSetMetaData.builder()
-                        .addColumn(new Column("IndexName", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("IndexKeysType", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Null", ScalarType.createVarchar(10)))
-                        .addColumn(new Column("Key", ScalarType.createVarchar(10)))
-                        .addColumn(new Column("Default", ScalarType.createVarchar(30)))
-                        .addColumn(new Column("Extra", ScalarType.createVarchar(30)))
+                        .addColumn(new Column("IndexName", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("IndexKeysType", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Field", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Null", TypeFactory.createVarcharType(10)))
+                        .addColumn(new Column("Key", TypeFactory.createVarcharType(10)))
+                        .addColumn(new Column("Default", TypeFactory.createVarcharType(30)))
+                        .addColumn(new Column("Extra", TypeFactory.createVarcharType(30)))
                         .build();
             } else if (statement.isMaterializedView()) {
                 return ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Field", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Null", ScalarType.createVarchar(10)))
-                        .addColumn(new Column("Key", ScalarType.createVarchar(10)))
-                        .addColumn(new Column("Default", ScalarType.createVarchar(30)))
-                        .addColumn(new Column("Extra", ScalarType.createVarchar(30)))
+                        .addColumn(new Column("Field", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Null", TypeFactory.createVarcharType(10)))
+                        .addColumn(new Column("Key", TypeFactory.createVarcharType(10)))
+                        .addColumn(new Column("Default", TypeFactory.createVarcharType(30)))
+                        .addColumn(new Column("Extra", TypeFactory.createVarcharType(30)))
                         .build();
             } else {
                 return ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Host", ScalarType.createVarchar(30)))
-                        .addColumn(new Column("Port", ScalarType.createVarchar(10)))
-                        .addColumn(new Column("User", ScalarType.createVarchar(30)))
-                        .addColumn(new Column("Password", ScalarType.createVarchar(30)))
-                        .addColumn(new Column("Database", ScalarType.createVarchar(30)))
-                        .addColumn(new Column("Table", ScalarType.createVarchar(30)))
+                        .addColumn(new Column("Host", TypeFactory.createVarcharType(30)))
+                        .addColumn(new Column("Port", TypeFactory.createVarcharType(10)))
+                        .addColumn(new Column("User", TypeFactory.createVarcharType(30)))
+                        .addColumn(new Column("Password", TypeFactory.createVarcharType(30)))
+                        .addColumn(new Column("Database", TypeFactory.createVarcharType(30)))
+                        .addColumn(new Column("Table", TypeFactory.createVarcharType(30)))
                         .build();
             }
         }
@@ -922,32 +992,32 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowProcesslistStatement(ShowProcesslistStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("ServerName", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Id", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("User", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Host", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Db", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Command", ScalarType.createVarchar(16)))
-                .addColumn(new Column("ConnectionStartTime", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Time", ScalarType.createType(PrimitiveType.INT)))
-                .addColumn(new Column("State", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Info", ScalarType.createVarchar(32 * 1024)))
-                .addColumn(new Column("IsPending", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Warehouse", ScalarType.createVarchar(20)))
-                .addColumn(new Column("CNGroup", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Catalog", ScalarType.createVarchar(64)))
-                .addColumn(new Column("QueryId", ScalarType.createVarchar(64)))
+                .addColumn(new Column("ServerName", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Id", BIGINT))
+                .addColumn(new Column("User", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Host", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Db", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Command", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("ConnectionStartTime", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Time", INT))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Info", TypeFactory.createVarcharType(32 * 1024)))
+                .addColumn(new Column("IsPending", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Warehouse", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("CNGroup", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Catalog", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("QueryId", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowFunctionsStatement(ShowFunctionsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Signature", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Return Type", ScalarType.createVarchar(32)))
-                .addColumn(new Column("Function Type", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Intermediate Type", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(16)))
+                .addColumn(new Column("Signature", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Return Type", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Function Type", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Intermediate Type", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(16)))
                 .build();
     }
 
@@ -956,7 +1026,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
         for (String title : ShowRoutineLoadStmt.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -966,7 +1036,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
         for (String title : ShowStreamLoadStmt.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -986,7 +1056,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         }
 
         for (String title : titleNames) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
 
         return builder.build();
@@ -995,34 +1065,33 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowUserPropertyStatement(ShowUserPropertyStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Key", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Value", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Key", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Value", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowDataDistributionStatement(ShowDataDistributionStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("PartitionName", ScalarType.createVarchar(30)))
-                .addColumn(new Column("SubPartitionId", ScalarType.createVarchar(30)))
-                .addColumn(new Column("MaterializedIndexName", ScalarType.createVarchar(30)))
-                .addColumn(new Column("VirtualBuckets", ScalarType.createVarchar(30)))
-                .addColumn(new Column("RowCount", ScalarType.createVarchar(30)))
-                .addColumn(new Column("RowCount%", ScalarType.createVarchar(10)))
-                .addColumn(new Column("DataSize", ScalarType.createVarchar(30)))
-                .addColumn(new Column("DataSize%", ScalarType.createVarchar(10)))
+                .addColumn(new Column("PartitionName", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("SubPartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MaterializedIndexName", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RowCount", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RowCount%", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("DataSize", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("DataSize%", TypeFactory.createVarcharType(10)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowCollationStatement(ShowCollationStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Collation", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Charset", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Id", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Compiled", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Sortlen", ScalarType.createType(PrimitiveType.BIGINT)))
+                .addColumn(new Column("Collation", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Charset", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Id", BIGINT))
+                .addColumn(new Column("Default", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Compiled", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Sortlen", BIGINT))
                 .build();
     }
 
@@ -1032,7 +1101,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : titleNames) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -1040,71 +1109,71 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowBackupStatement(ShowBackupStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("JobId", ScalarType.createVarchar(30)))
-                .addColumn(new Column("SnapshotName", ScalarType.createVarchar(30)))
-                .addColumn(new Column("DbName", ScalarType.createVarchar(30)))
-                .addColumn(new Column("State", ScalarType.createVarchar(30)))
-                .addColumn(new Column("BackupObjs", ScalarType.createVarchar(30)))
-                .addColumn(new Column("CreateTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("SnapshotFinishedTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("UploadFinishedTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("FinishedTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("UnfinishedTasks", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Progress", ScalarType.createVarchar(30)))
-                .addColumn(new Column("TaskErrMsg", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Timeout", ScalarType.createVarchar(30)))
+                .addColumn(new Column("JobId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("SnapshotName", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("DbName", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("BackupObjs", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("CreateTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("SnapshotFinishedTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("UploadFinishedTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("FinishedTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("UnfinishedTasks", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Progress", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("TaskErrMsg", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Timeout", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowRestoreStatement(ShowRestoreStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("JobId", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Label", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Timestamp", ScalarType.createVarchar(30)))
-                .addColumn(new Column("DbName", ScalarType.createVarchar(30)))
-                .addColumn(new Column("State", ScalarType.createVarchar(30)))
-                .addColumn(new Column("AllowLoad", ScalarType.createVarchar(30)))
-                .addColumn(new Column("ReplicationNum", ScalarType.createVarchar(30)))
-                .addColumn(new Column("RestoreObjs", ScalarType.createVarchar(30)))
-                .addColumn(new Column("CreateTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("MetaPreparedTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("SnapshotFinishedTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("DownloadFinishedTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("FinishedTime", ScalarType.createVarchar(30)))
-                .addColumn(new Column("UnfinishedTasks", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Progress", ScalarType.createVarchar(30)))
-                .addColumn(new Column("TaskErrMsg", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Status", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Timeout", ScalarType.createVarchar(30)))
+                .addColumn(new Column("JobId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Label", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Timestamp", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("DbName", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("State", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("AllowLoad", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("ReplicationNum", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RestoreObjs", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("CreateTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MetaPreparedTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("SnapshotFinishedTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("DownloadFinishedTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("FinishedTime", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("UnfinishedTasks", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Progress", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("TaskErrMsg", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Timeout", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowGrantsStatement(ShowGrantsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)))
-                .addColumn(new Column("Catalog", ScalarType.createVarchar(400)))
-                .addColumn(new Column("Grants", ScalarType.createVarchar(400)))
+                .addColumn(new Column("UserIdentity", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Catalog", TypeFactory.createVarcharType(400)))
+                .addColumn(new Column("Grants", TypeFactory.createVarcharType(400)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowRolesStatement(ShowRolesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(100)))
-                .addColumn(new Column("Builtin", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(300)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Builtin", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(300)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(100)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(100)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(300)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(300)))
                 .build();
     }
 
@@ -1112,25 +1181,25 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowCreateSecurityIntegrationStatement(
             com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Security Integration", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Create Security Integration", ScalarType.createVarchar(500)))
+                .addColumn(new Column("Security Integration", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Create Security Integration", TypeFactory.createVarcharType(500)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(100)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(100)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(300)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(300)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Group Provider", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Create Group Provider", ScalarType.createVarchar(500)))
+                .addColumn(new Column("Group Provider", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Create Group Provider", TypeFactory.createVarcharType(500)))
                 .build();
     }
 
@@ -1138,28 +1207,28 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                             Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("BackendId", ScalarType.createVarchar(30)))
-                .addColumn(new Column("ReplicaNum", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Graph", ScalarType.createVarchar(30)))
-                .addColumn(new Column("Percent", ScalarType.createVarchar(30)))
+                .addColumn(new Column("BackendId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("ReplicaNum", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Graph", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Percent", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowIndexStatement(ShowIndexStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Table", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Non_unique", ScalarType.createVarchar(10)))
-                .addColumn(new Column("Key_name", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Seq_in_index", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Column_name", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Collation", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Cardinality", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Sub_part", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Packed", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Null", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Index_type", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(80)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Non_unique", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("Key_name", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Seq_in_index", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Column_name", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Collation", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Cardinality", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Sub_part", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Packed", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Null", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Index_type", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(80)))
                 .build();
     }
 
@@ -1167,7 +1236,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowTransactionStatement(ShowTransactionStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : TransProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }
@@ -1175,30 +1244,30 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowMultiColumnsStatsMetaStatement(ShowMultiColumnStatsMetaStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("StatisticsTypes", ScalarType.createVarchar(200)))
-                .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Columns", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("StatisticsTypes", TypeFactory.createVarcharType(200)))
+                .addColumn(new Column("UpdateTime", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-                .addColumn(new Column("global", ScalarType.createVarchar(10)))
-                .addColumn(new Column("enable", ScalarType.createVarchar(10)))
-                .addColumn(new Column("bindSQLDigest", ScalarType.createVarchar(65535)))
-                .addColumn(new Column("bindSQLHash", ScalarType.createVarchar(60)))
-                .addColumn(new Column("bindSQL", ScalarType.createVarchar(65535)))
-                .addColumn(new Column("planSQL", ScalarType.createVarchar(65535)))
-                .addColumn(new Column("costs", ScalarType.createVarchar(60)))
-                .addColumn(new Column("queryMs", ScalarType.createVarchar(60)))
-                .addColumn(new Column("source", ScalarType.createVarchar(60)))
-                .addColumn(new Column("updateTime", ScalarType.createVarchar(60)))
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("global", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("enable", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("bindSQLDigest", TypeFactory.createVarcharType(65535)))
+                .addColumn(new Column("bindSQLHash", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("bindSQL", TypeFactory.createVarcharType(65535)))
+                .addColumn(new Column("planSQL", TypeFactory.createVarcharType(65535)))
+                .addColumn(new Column("costs", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("queryMs", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("source", TypeFactory.createVarcharType(60)))
+                .addColumn(new Column("updateTime", TypeFactory.createVarcharType(60)))
                 .build();
     }
 
@@ -1213,132 +1282,132 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowCatalogsStatement(ShowCatalogsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Catalog", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Catalog", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Catalog", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Create Catalog", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Catalog", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Create Catalog", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Storage Volume", ScalarType.createVarchar(256)))
+                .addColumn(new Column("Storage Volume", TypeFactory.createVarcharType(256)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowFailPointStatement(ShowFailPointStatement statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Name", ScalarType.createVarchar(256)))
-                .addColumn(new Column("TriggerMode", ScalarType.createVarchar(32)))
-                .addColumn(new Column("Times/Probability", ScalarType.createVarchar(16)))
-                .addColumn(new Column("Host", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("TriggerMode", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Times/Probability", TypeFactory.createVarcharType(16)))
+                .addColumn(new Column("Host", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowNodesStatement(ShowNodesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("WarehouseName", ScalarType.createVarchar(256)))
-                .addColumn(new Column("CNGroupId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("WorkerGroupId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("NodeId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("WorkerId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("IP", ScalarType.createVarchar(256)))
-                .addColumn(new Column("HeartbeatPort", ScalarType.createVarchar(20)))
-                .addColumn(new Column("BePort", ScalarType.createVarchar(20)))
-                .addColumn(new Column("HttpPort", ScalarType.createVarchar(20)))
-                .addColumn(new Column("BrpcPort", ScalarType.createVarchar(20)))
-                .addColumn(new Column("StarletPort", ScalarType.createVarchar(20)))
-                .addColumn(new Column("LastStartTime", ScalarType.createVarchar(256)))
-                .addColumn(new Column("LastUpdateMs", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Alive", ScalarType.createVarchar(20)))
-                .addColumn(new Column("ErrMsg", ScalarType.createVarchar(256)))
-                .addColumn(new Column("Version", ScalarType.createVarchar(20)))
-                .addColumn(new Column("NumRunningQueries", ScalarType.createVarchar(20)))
-                .addColumn(new Column("CpuCores", ScalarType.createVarchar(20)))
-                .addColumn(new Column("MemUsedPct", ScalarType.createVarchar(20)))
-                .addColumn(new Column("CpuUsedPct", ScalarType.createVarchar(20)))
-                .addColumn(new Column("CNGroupName", ScalarType.createVarchar(256)))
+                .addColumn(new Column("WarehouseName", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("CNGroupId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("WorkerGroupId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("NodeId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("WorkerId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("IP", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("HeartbeatPort", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("BePort", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("HttpPort", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("BrpcPort", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("StarletPort", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("LastStartTime", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("LastUpdateMs", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Alive", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("ErrMsg", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("NumRunningQueries", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("CpuCores", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("MemUsedPct", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("CpuUsedPct", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("CNGroupName", TypeFactory.createVarcharType(256)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowClusterStatement(ShowClustersStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("CNGroupId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("CNGroupName", ScalarType.createVarchar(256)))
-                .addColumn(new Column("WorkerGroupId", ScalarType.createVarchar(20)))
-                .addColumn(new Column("ComputeNodeIds", ScalarType.createVarchar(4096)))
-                .addColumn(new Column("Pending", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Running", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Enabled", ScalarType.createVarchar(10)))
-                .addColumn(new Column("Properties", ScalarType.createVarchar(1024)))
+                .addColumn(new Column("CNGroupId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("CNGroupName", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("WorkerGroupId", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("ComputeNodeIds", TypeFactory.createVarcharType(4096)))
+                .addColumn(new Column("Pending", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Running", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Enabled", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("Properties", TypeFactory.createVarcharType(1024)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowOpenTableStatement(ShowOpenTableStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Database", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(10)))
-                .addColumn(new Column("In_use", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Name_locked", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Database", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("In_use", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Name_locked", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowPrivilegeStatement(ShowPrivilegesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Privilege", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Context", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Comment", ScalarType.createVarchar(200)))
+                .addColumn(new Column("Privilege", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Context", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(200)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowStatusStatement(ShowStatusStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Variable_name", ScalarType.createVarchar(20)))
-                .addColumn(new Column("Value", ScalarType.createVarchar(20)))
+                .addColumn(new Column("Variable_name", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Value", TypeFactory.createVarcharType(20)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowTriggersStatement(ShowTriggersStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Trigger", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Event", ScalarType.createVarchar(10)))
-                .addColumn(new Column("Table", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Statement", ScalarType.createVarchar(64)))
-                .addColumn(new Column("Timing", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Created", ScalarType.createVarchar(80)))
-                .addColumn(new Column("sql_mode", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Definer", ScalarType.createVarchar(80)))
-                .addColumn(new Column("character_set_client", ScalarType.createVarchar(80)))
-                .addColumn(new Column("collation_connection", ScalarType.createVarchar(80)))
-                .addColumn(new Column("Database Collation", ScalarType.createVarchar(80)))
+                .addColumn(new Column("Trigger", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Event", TypeFactory.createVarcharType(10)))
+                .addColumn(new Column("Table", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Statement", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Timing", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Created", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("sql_mode", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Definer", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("character_set_client", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("collation_connection", TypeFactory.createVarcharType(80)))
+                .addColumn(new Column("Database Collation", TypeFactory.createVarcharType(80)))
                 .build();
     }
 
     @Override
     public ShowResultSetMetaData visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, Void context) {
-        return ShowResultSetMetaData.builder().addColumn(new Column("QUERY_ID", ScalarType.createVarchar(60))).build();
+        return ShowResultSetMetaData.builder().addColumn(new Column("QUERY_ID", TypeFactory.createVarcharType(60))).build();
     }
 
     @Override
     public ShowResultSetMetaData visitShowComputeNodes(ShowComputeNodesStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : ComputeNodeProcDir.getMetadata()) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+            builder.addColumn(new Column(title, TypeFactory.createVarcharType(30)));
         }
         return builder.build();
     }

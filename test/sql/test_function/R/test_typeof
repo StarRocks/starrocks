@@ -73,7 +73,7 @@ map<tinyint,varchar>
 -- !result
 select typeof(struct(1, 2, 3, 4));
 -- result:
-struct<col1 tinyint, col2 tinyint, col3 tinyint, col4 tinyint>
+struct<`col1` tinyint, `col2` tinyint, `col3` tinyint, `col4` tinyint>
 -- !result
 select typeof(bitmap_empty());
 -- result:
@@ -137,7 +137,7 @@ select typeof(c1)
   ,typeof(c20)
   from t1;
 -- result:
-tinyint	smallint	int	bigint	largeint	decimal128(19, 2)	decimal128(38, 9)	decimal128(38, 9)	boolean	varchar	varchar	varchar	varbinary	date	datetime	array<tinyint>	varchar	map<tinyint,varchar>	struct<col1 tinyint, col2 tinyint, col3 tinyint, col4 tinyint>	json
+tinyint	smallint	int	bigint	largeint	decimal128(19, 2)	decimal128(38, 9)	decimal128(38, 9)	boolean	varchar	varchar	varchar	varbinary	date	datetime	array<tinyint>	varchar	map<tinyint,varchar>	struct<`col1` tinyint, `col2` tinyint, `col3` tinyint, `col4` tinyint>	json
 -- !result
 -- name: test_typeof_table_bitmap
 CREATE TABLE pv_bitmap (

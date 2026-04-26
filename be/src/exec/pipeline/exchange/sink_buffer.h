@@ -16,27 +16,21 @@
 
 #include <bthread/mutex.h>
 
-#include <algorithm>
 #include <atomic>
-#include <future>
+#include <functional>
 #include <list>
 #include <memory>
-#include <mutex>
 #include <queue>
 #include <unordered_set>
 
-#include "column/chunk.h"
-#include "common/compiler_util.h"
+#include "base/phmap/phmap.h"
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/fragment_context.h"
-#include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
-#include "runtime/query_statistics.h"
-#include "runtime/runtime_state.h"
-#include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_fwd.h"
 #include "util/disposable_closure.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::pipeline {
 
@@ -55,7 +49,9 @@ struct TransmitChunkInfo {
     std::shared_ptr<PInternalService_RecoverableStub> brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
-    int64_t attachment_physical_bytes;
+    // The byte size of this request
+    // maybe passthrough or rpc request (physical attachment size)
+    size_t request_byte_size;
     const TNetworkAddress brpc_addr;
 };
 
@@ -102,16 +98,13 @@ public:
 
     void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
     void notify_observers() { _observable.notify_sink_observers(); }
-    auto defer_notify() {
-        return DeferOp([this]() {
-            _observable.notify_sink_observers();
-            if (bthread_self()) {
-                CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
-            }
-        });
-    }
+    DeferOp<std::function<void()>> defer_notify();
 
     int64_t get_sent_bytes() const { return _bytes_sent; }
+
+    void update_memory_limit(size_t mem_limit);
+
+    std::string to_string() const;
 
 private:
     using Mutex = bthread::Mutex;
@@ -183,8 +176,9 @@ private:
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
 
     std::atomic<int32_t> _total_in_flight_rpc = 0;
-    std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
+
+    size_t _memory_limit = 0;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.
@@ -202,6 +196,7 @@ private:
     std::atomic<int64_t> _rpc_count = 0;
     std::atomic<int64_t> _rpc_cumulative_time = 0;
 
+    std::unique_ptr<MemTracker> _buffered_mem_usage;
     // RuntimeProfile counters
     std::atomic<int64_t> _bytes_enqueued = 0;
     std::atomic<int64_t> _request_enqueued = 0;

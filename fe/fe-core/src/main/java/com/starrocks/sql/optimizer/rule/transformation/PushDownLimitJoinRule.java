@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -67,7 +67,7 @@ public class PushDownLimitJoinRule extends TransformationRule {
             return Lists.newArrayList(result);
         }
 
-        // Cross-Join || Full-Outer-Join
+        // Cross-Join (without ON) || Inner-Join (without ON) || Left-Outer-Join || Right-Outer-Join
         int[] pushDownChildIdx = {0, 1};
 
         // push down all child

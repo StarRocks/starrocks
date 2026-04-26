@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/object_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -81,9 +81,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         auto& src_column = down_cast<const InputColumnType&>(*src[0].get());
-        auto* dest_column = down_cast<BitmapColumn*>(dst->get());
+        auto* dest_column = down_cast<BitmapColumn*>(dst.get());
         for (size_t i = 0; i < chunk_size; i++) {
             BitmapValue bitmap;
             auto v = src_column.immutable_data()[i];

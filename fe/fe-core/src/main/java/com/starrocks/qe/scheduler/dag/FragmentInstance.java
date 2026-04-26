@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
+import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -25,6 +26,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.ComputeNode;
@@ -354,11 +356,24 @@ public class FragmentInstance {
 
         DataSink dataSink = fragment.getSink();
         int dop = fragment.getPipelineDop();
-        if (!(dataSink instanceof IcebergTableSink || dataSink instanceof HiveTableSink
+        ConnectContext connectContext = ConnectContext.get();
+        SessionVariable sessionVariable = connectContext != null ? connectContext.getSessionVariable() : null;
+        if (!(dataSink instanceof IcebergTableSink 
+                || dataSink instanceof IcebergDeleteSink
+                || dataSink instanceof HiveTableSink
                 || dataSink instanceof TableFunctionTableSink)) {
             return dop;
+        } else if (dataSink instanceof IcebergDeleteSink icebergDeleteSink && icebergDeleteSink.isUnpartitionedTable()) {
+            if (sessionVariable == null) {
+                return dop;
+            }
+            int sinkDop = sessionVariable.getPipelineSinkDop();
+            if (sinkDop > 0) {
+                return sinkDop;
+            }
+            return sessionVariable.getSinkDegreeOfParallelism(connectContext.getCurrentWarehouseId());
         } else {
-            return ConnectContext.get().getSessionVariable().getPipelineSinkDop();
+            return sessionVariable.getPipelineSinkDop();
         }
     }
 

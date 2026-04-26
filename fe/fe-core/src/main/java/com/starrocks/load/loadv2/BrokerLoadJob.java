@@ -65,6 +65,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -120,7 +121,8 @@ public class BrokerLoadJob extends BulkLoadJob {
             throws MetaNotFoundException {
         super(dbId, label, stmt != null ? stmt.getOrigStmt() : null);
         this.timeoutSecond = Config.broker_load_default_timeout_second;
-        this.brokerDesc = brokerDesc;
+        this.brokerPersistInfo =
+                brokerDesc != null ? new BrokerPropertiesPersistInfo(brokerDesc.getName(), brokerDesc.getProperties()) : null;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
         this.stmt = stmt;
@@ -146,15 +148,15 @@ public class BrokerLoadJob extends BulkLoadJob {
 
         try {
             if (stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY)) {
-                priority = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
+                int prio = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
                 AlterLoadJobOperationLog log = new AlterLoadJobOperationLog(id,
                         stmt.getAnalyzedJobProperties());
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log, wal -> setPriority(prio));
 
                 for (LoadTask loadTask : newLoadingTasks) {
                     GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().updatePriority(
                             loadTask.getSignature(),
-                            priority);
+                            prio);
                 }
             }
 
@@ -167,13 +169,19 @@ public class BrokerLoadJob extends BulkLoadJob {
     @Override
     public void replayAlterJob(AlterLoadJobOperationLog log) {
         if (log.getJobProperties().containsKey(LoadStmt.PRIORITY)) {
-            priority = LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY));
+            setPriority(LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY)));
         }
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
     }
 
     @Override
     protected void unprotectedExecuteJob() throws LoadException {
-        LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(), brokerDesc);
+        LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(),
+                brokerPersistInfo == null ? null :
+                        new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
         idToTasks.put(task.getSignature(), task);
         submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
     }
@@ -237,7 +245,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("database_id", dbId)
                     .add("error_msg", "Failed to divide job into loading task.")
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true);
             return;
         }
     }
@@ -289,7 +297,8 @@ public class BrokerLoadJob extends BulkLoadJob {
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
                         .setTable(table)
-                        .setBrokerDesc(brokerDesc)
+                        .setBrokerDesc(brokerPersistInfo == null ? null :
+                                new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()))
                         .setFileGroups(brokerFileGroups)
                         .setJobDeadlineMs(getDeadlineMs())
                         .setExecMemLimit(loadMemLimit)
@@ -323,16 +332,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // use newLoadingTasks to save new created loading tasks and submit them later.
                 newLoadingTasks.add(task);
                 // load id will be added to loadStatistic when executing this task
-
-                // save all related tables and rollups in transaction state
-                TransactionState txnState =
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
-                if (txnState == null) {
-                    throw new StarRocksException("txn does not exist: " + transactionId);
-                }
-                txnState.addTableIndexes(table);
             }
-
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -344,10 +344,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
         writeLock();
         try {
             // check if job has been completed
@@ -356,7 +353,8 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .add("state", state)
                         .add("error_msg", "this task will be ignored when job is: " + state)
                         .build());
-                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, System.currentTimeMillis());
+                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
+                        "BrokerLoad: jobId[" + id + "] label[" + label + "]");
                 return;
             }
 
@@ -366,7 +364,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // record attachment in load job
                 unprotectUpdateLoadingStatus(txnState);
                 // cancel load job
-                unprotectedExecuteCancel(failMsg, true);
+                unprotectedExecuteCancel(failMsg, true, false);
                 return;
             }
 
@@ -379,7 +377,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 state = JobState.PENDING;
                 unprotectedExecute();
             } catch (Exception e) {
-                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true);
             }
         } finally {
             writeUnlock();
@@ -387,9 +385,9 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        super.afterVisible(txnState, txnOperated);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "BrokerLoad: jobId[" + id + "] label[" + label + "]");
     }
 
     /**
@@ -490,7 +488,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
                             DataQualityException.QUALITY_FAIL_MSG +
                                     ". You can find detailed error message from running `TrackingSQL`."),
-                    true, true);
+                    true);
             return;
         }
         Database db = null;
@@ -501,7 +499,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("database_id", dbId)
                     .add("error_msg", "db has been deleted when job is loading")
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
             return;
         }
         while (true) {
@@ -512,7 +510,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
             } catch (StarRocksException e) {
-                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
                 break;
             }
         }

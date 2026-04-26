@@ -21,15 +21,18 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "base/utility/defer_op.h"
+#include "base/utility/integer_util.h"
+#include "column/chunk_extra_data.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
-#include "testutil/scoped_updater.h"
-#include "util/defer_op.h"
-#include "util/integer_util.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
@@ -47,6 +50,9 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
     }
 
     void TearDown() override {}
@@ -62,17 +68,17 @@ public:
     MOCK_METHOD(StatusOr<WriterAndStream>, create, (const std::string&), (const override));
 };
 
-class MockWriter : public formats::FileWriter {
+class MockWriter final : public formats::FileWriter {
 public:
     MOCK_METHOD(Status, init, (), (override));
     MOCK_METHOD(int64_t, get_written_bytes, (), (override));
     MOCK_METHOD(int64_t, get_allocated_bytes, (), (override));
     MOCK_METHOD(int64_t, get_flush_batch_size, (), (override));
     MOCK_METHOD(Status, write, (Chunk * chunk), (override));
-    MOCK_METHOD(CommitResult, commit, (), (override));
+    MOCK_METHOD(CommitResult, close, (), (override));
 };
 
-class MockFile : public WritableFile {
+class MockFile final : public WritableFile {
 public:
     MOCK_METHOD(Status, append, (const Slice& data), (override));
     MOCK_METHOD(Status, appendv, (const Slice* data, size_t cnt), (override));
@@ -112,6 +118,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
                 std::move(partition_chunk_writer_factory), _runtime_state);
         auto poller = MockPoller();
         sink->set_io_poller(&poller);
+        sink->init_profile();
 
         Columns partition_key_columns;
         ChunkPtr chunk = std::make_shared<Chunk>();
@@ -128,8 +135,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         auto chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
-        Chunk* raw_chunk_ptr = chunk.get();
-        auto ret = sink->add(raw_chunk_ptr);
+        auto ret = sink->add(chunk);
         EXPECT_EQ(ret.ok(), true);
         sink->callback_on_commit(CommitResult{
                 .io_status = Status::OK(),

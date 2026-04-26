@@ -24,43 +24,54 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.hive.HiveWriteUtils;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -91,18 +102,12 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
-        boolean isLockTaken = false;
         try {
             // insert properties
             analyzeProperties(insertStmt, session);
 
             // push down schema to files
-            // should lock because this needs target table schema, only affacts insert from files()
-            if (pushDownTargetTableSchemaToFiles(insertStmt, session)) {
-                // Take the PlannerMetaLock
-                takeLock.run();
-                isLockTaken = true;
-            }
+            pushDownTargetTableSchemaToFiles(insertStmt, session);
 
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
@@ -112,10 +117,7 @@ public class InsertAnalyzer {
                 session.setUseConnectorMetadataCache(Optional.of(false));
             }
         } finally {
-            if (!isLockTaken) {
-                // Take the PlannerMetaLock
-                takeLock.run();
-            }
+            takeLock.run();
         }
 
         /*
@@ -133,7 +135,7 @@ public class InsertAnalyzer {
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
             List<Long> targetPartitionIds = Lists.newArrayList();
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
+            PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (insertStmt.isSpecifyPartitionNames()) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
@@ -144,8 +146,8 @@ public class InsertAnalyzer {
                 List<String> deduplicatePartitionNames =
                         targetPartitionNames.getPartitionNames().stream().distinct().collect(Collectors.toList());
                 if (deduplicatePartitionNames.size() != targetPartitionNames.getPartitionNames().size()) {
-                    insertStmt.setTargetPartitionNames(new PartitionNames(targetPartitionNames.isTemp(),
-                            deduplicatePartitionNames, targetPartitionNames.getPartitionColNames(),
+                    insertStmt.setTargetPartitionNames(new PartitionRef(deduplicatePartitionNames,
+                            targetPartitionNames.isTemp(), targetPartitionNames.getPartitionColNames(),
                             targetPartitionNames.getPartitionColValues(), targetPartitionNames.getPos()));
                 }
                 for (String partitionName : deduplicatePartitionNames) {
@@ -181,18 +183,13 @@ public class InsertAnalyzer {
         }
 
         if (table.isIcebergTable() || table.isHiveTable()) {
-            if (table.isHiveTable() && table.isUnPartitioned() &&
-                    HiveWriteUtils.isS3Url(table.getTableLocation()) && insertStmt.isOverwrite()) {
-                throw new SemanticException("Unsupported insert overwrite hive unpartitioned table with s3 location");
-            }
-
             if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE &&
                     !session.getSessionVariable().enableWriteHiveExternalTable()) {
                 throw new SemanticException("Only support to write hive managed table, tableType: " +
                         ((HiveTable) table).getHiveTableType());
             }
 
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
+            PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
@@ -258,9 +255,14 @@ public class InsertAnalyzer {
                         .collect(Collectors.toSet()));
             } else if (table instanceof IcebergTable) {
                 IcebergTable icebergTable = (IcebergTable) table;
+                boolean writeRowLineage = IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, icebergTable);
                 targetColumns = new ArrayList<>();
                 icebergTable.getFullSchema().forEach(column -> {
-                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) &&
+                            (!IcebergTable.ICEBERG_META_COLUMNS.contains(column.getName())
+                                    || (writeRowLineage
+                                    && (column.getName().equals(IcebergTable.ROW_ID)
+                                    || column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))))) {
                         targetColumns.add(column);
                     }
                 });
@@ -295,7 +297,8 @@ public class InsertAnalyzer {
                         String missingKeyColumns = String.join(",", requiredKeyColumns);
                         ErrorReport.reportSemanticException(ErrorCode.ERR_MISSING_KEY_COLUMNS, missingKeyColumns);
                     }
-                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size()) {
+                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size() && 
+                            session.getSessionVariable().isEnableInsertPartialUpdate()) {
                         insertStmt.setUsePartialUpdate();
                         // mark if partial update for auto increment column if and only if:
                         // 1. There is auto increment defined in base schema
@@ -366,7 +369,7 @@ public class InsertAnalyzer {
 
         insertStmt.setTargetTable(table);
         if (session.getDumpInfo() != null) {
-            session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
+            session.getDumpInfo().addTable(insertStmt.getDbName(), table);
         }
 
         // Set table function table used for load
@@ -393,6 +396,11 @@ public class InsertAnalyzer {
             properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
         }
 
+        // enable_push_down_schema is an INSERT-only property; validate and consume it here so that
+        // malformed values are rejected regardless of the INSERT shape, and LoadStmt.checkProperties
+        // does not see the key at all.
+        insertStmt.setEnablePushDownSchema(PropertyAnalyzer.analyzeBooleanPropStrictly(
+                properties, PropertyAnalyzer.PROPERTIES_ENABLE_PUSH_DOWN_SCHEMA, false));
         try {
             LoadStmt.checkProperties(properties);
         } catch (DdlException e) {
@@ -413,112 +421,327 @@ public class InsertAnalyzer {
     }
 
     /**
-     * files() schema infer is not strict.
-     * for example, integer in csv will be inferred to bigint type.
-     * when the target table column is tinyint, the data may be filtered because it is bigger than tinyint.
-     * but strict mode will not take effect in file scan if using bigint type.
+     * Push down target table column schema to files() table function.
      *
-     * only push down slot ref select column to files.
-     *
-     * @return true if can push down schema, else false.
+     * Two modes controlled by different switches:
+     * 1. insert property "enable_push_down_schema" = true:
+     *    Full push-down — reshapes files() schema to match the effective SELECT list:
+     *    - SlotRef columns: type is rewritten to the matching target column type; added if missing.
+     *    - Function-expression columns: inner SlotRef columns are only ensured to exist in the schema
+     *      (defaulting to VARCHAR if absent); no type push-down, because the function itself determines
+     *      the output type.
+     *    - Extra file columns not referenced in the SELECT list are excluded.
+     * 2. FE config "files_enable_insert_push_down_column_type" = true (default):
+     *    Type-only push-down — only rewrites types of columns that already exist in the inferred files() schema.
      */
-    private static boolean pushDownTargetTableSchemaToFiles(InsertStmt insertStmt, ConnectContext session) {
-        if (!Config.files_enable_insert_push_down_schema) {
-            return false;
+    private static void pushDownTargetTableSchemaToFiles(InsertStmt insertStmt, ConnectContext session) {
+        if (!insertStmt.isEnablePushDownSchema() && !Config.files_enable_insert_push_down_column_type) {
+            return;
         }
 
         if (insertStmt.useTableFunctionAsTargetTable() || insertStmt.useBlackHoleTableAsTargetTable()) {
-            return false;
-        }
-
-        // check insert native table from files()
-        Table targetTable = getTargetTable(insertStmt, session);
-        if (!targetTable.isNativeTable()) {
-            return false;
+            return;
         }
 
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if (!(queryRelation instanceof SelectRelation)) {
-            return false;
+            return;
         }
         SelectRelation selectRelation = (SelectRelation) queryRelation;
         Relation fromRelation = selectRelation.getRelation();
         if (!(fromRelation instanceof FileTableFunctionRelation)) {
-            return false;
+            return;
+        }
+
+        Table targetTable = getTargetTable(insertStmt, session);
+        if (!targetTable.isNativeTable()) {
+            return;
+        }
+
+        String dbName = insertStmt.getDbName();
+        String catalogName = insertStmt.getCatalogName();
+
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
+        if (database == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
         Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
-            // get target column names
-            List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+            Locker locker = new Locker(session.getQueryId());
+            locker.lockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
+            try {
+                if (insertStmt.isEnablePushDownSchema()) {
+                    rewriteFileTableSchema(fileTable, insertStmt, targetTable, selectRelation);
+                } else {
+                    rewriteFileTableColumnTypes(fileTable, insertStmt, targetTable, selectRelation);
+                }
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
+            }
+        };
+
+        FileTableFunctionRelation fileRelation = (FileTableFunctionRelation) fromRelation;
+        fileRelation.setPushDownSchemaFunc(pushDownSchemaFunc);
+    }
+
+    // ======================== Type-only push-down (original behavior) ========================
+
+    /**
+     * Rewrite column types only for columns that already exist in the inferred files schema.
+     * Does not add or remove columns.
+     */
+    private static void rewriteFileTableColumnTypes(TableFunctionTable fileTable, InsertStmt insertStmt,
+            Table targetTable, SelectRelation selectRelation) {
+        List<String> selectColumnNames = Lists.newArrayList();
+        List<String> selectOutputNames = Lists.newArrayList();
+        for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+            if (item.isStar()) {
+                List<String> fileColNames = fileTable.getFullSchema().stream().map(Column::getName)
+                        .collect(Collectors.toList());
+                selectColumnNames.addAll(fileColNames);
+                selectOutputNames.addAll(fileColNames);
+            } else if (item.getExpr() instanceof SlotRef) {
+                SlotRef ref = (SlotRef) item.getExpr();
+                selectColumnNames.add(ref.getColumnName());
+                String alias = item.getAlias();
+                selectOutputNames.add(alias != null ? alias : ref.getColumnName());
+            } else {
+                selectColumnNames.add(null);
+                selectOutputNames.add(null);
+            }
+        }
+
+        List<String> targetColumnNames;
+        if (insertStmt.isColumnMatchByName()) {
+            targetColumnNames = selectOutputNames;
+        } else {
+            targetColumnNames = insertStmt.getTargetColumnNames();
             if (targetColumnNames == null) {
                 targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
                         .map(Column::getName).collect(Collectors.toList());
             }
+        }
 
-            // get select column names, null if it is not slot ref column
-            List<String> selectColumnNames = Lists.newArrayList();
-            List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
-            for (SelectListItem item : listItems) {
-                if (item.isStar()) {
-                    selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
-                            .collect(Collectors.toList()));
-                    continue;
-                }
+        if (targetColumnNames.size() != selectColumnNames.size()) {
+            return;
+        }
 
-                Expr expr = item.getExpr();
-                if (expr instanceof SlotRef) {
-                    selectColumnNames.add(((SlotRef) expr).getColumnName());
-                    continue;
-                }
-
-                selectColumnNames.add(null);
+        Map<String, Column> targetTableColumns = targetTable.getNameToColumn();
+        Map<String, Column> newFileColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        newFileColumns.putAll(fileTable.getNameToColumn());
+        for (int i = 0; i < selectColumnNames.size(); ++i) {
+            String selectCol = selectColumnNames.get(i);
+            if (selectCol == null || !newFileColumns.containsKey(selectCol)) {
+                continue;
             }
-
-            if (targetColumnNames.size() != selectColumnNames.size()) {
-                return;
+            String targetCol = targetColumnNames.get(i);
+            if (!targetTableColumns.containsKey(targetCol)) {
+                continue;
             }
-
-            // update files table schema according to target table schema
-            Map<String, Column> targetTableColumns = targetTable.getNameToColumn();
-            Map<String, Column> newFileTableColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-            newFileTableColumns.putAll(fileTable.getNameToColumn());
-            for (int i = 0; i < selectColumnNames.size(); ++i) {
-                String selectColumnName = selectColumnNames.get(i);
-                // if select column is a field of struct and the name is 'struct_name.field_name',
-                // it will be not in newFileTableColumns.
-                if (selectColumnName == null || !newFileTableColumns.containsKey(selectColumnName)) {
-                    continue;
-                }
-
-                String targetColumnName = targetColumnNames.get(i);
-                if (!targetTableColumns.containsKey(targetColumnName)) {
-                    continue;
-                }
-
-                Column oldCol = newFileTableColumns.get(selectColumnName);
-                Column newCol = targetTableColumns.get(targetColumnName).deepCopy();
-                // bad case: complex types may fail to convert in scanner.
-                // such as parquet json -> array<varchar>
-                if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
-                    continue;
-                }
-
-                // file table function table should use original column name because BE is case-sensitive when reading columns.
-                String origColumnName = oldCol.getName();
-                newCol.setName(origColumnName);
-                newFileTableColumns.put(origColumnName, newCol);
+            Column oldCol = newFileColumns.get(selectCol);
+            Column newCol = targetTableColumns.get(targetCol).deepCopy();
+            if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
+                continue;
             }
+            // Keep original column name (BE is case-sensitive) and nullable property
+            newCol.setName(oldCol.getName());
+            newCol.setIsAllowNull(oldCol.isAllowNull());
+            newFileColumns.put(oldCol.getName(), newCol);
+        }
 
-            List<Column> newFileTableSchema = fileTable.getFullSchema().stream()
-                    .map(col -> newFileTableColumns.get(col.getName())).collect(Collectors.toList());
-            fileTable.setNewFullSchema(newFileTableSchema);
-        };
-
-        ((FileTableFunctionRelation) fromRelation).setPushDownSchemaFunc(pushDownSchemaFunc);
-        return true;
+        List<Column> newSchema = fileTable.getFullSchema().stream()
+                .map(col -> newFileColumns.get(col.getName())).collect(Collectors.toList());
+        fileTable.setNewFullSchema(newSchema);
     }
 
-    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
+    // ======================== Full schema push-down ========================
+
+    /**
+     * Rewrite the files() table schema by pushing down target table column names and types.
+     *
+     * Three kinds of SELECT items are handled:
+     *   - SELECT *: reshape files schema to exactly the target columns (by name or by position)
+     *   - SlotRef (e.g., col_a): push down the corresponding target column's type; add column if missing
+     *   - Function expr (e.g., CAST(col_b AS INT)): inner SlotRef columns are kept as VARCHAR if missing
+     *
+     * The final files schema only contains columns that are actually used in the SELECT list.
+     */
+    private static void rewriteFileTableSchema(TableFunctionTable fileTable, InsertStmt insertStmt,
+            Table targetTable, SelectRelation selectRelation) {
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames == null) {
+            targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
+                    .map(Column::getName).collect(Collectors.toList());
+        }
+
+        // Step 1: parse SELECT list into column name mappings.
+        // selectColumnNames: file-side column names (null for non-SlotRef expressions)
+        // selectOutputNames: output names used to find the matching target column in BY NAME mode
+        List<String> selectColumnNames = Lists.newArrayList();
+        List<String> selectOutputNames = Lists.newArrayList();
+        List<Expr> funcExprs = Lists.newArrayList();
+
+        for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+            if (item.isStar()) {
+                expandStarColumns(selectColumnNames, selectOutputNames,
+                        insertStmt, targetColumnNames, fileTable);
+            } else if (item.getExpr() instanceof SlotRef) {
+                SlotRef ref = (SlotRef) item.getExpr();
+                selectColumnNames.add(ref.getColumnName());
+                String alias = item.getAlias();
+                selectOutputNames.add(alias != null ? alias : ref.getColumnName());
+            } else {
+                selectColumnNames.add(null);
+                selectOutputNames.add(null);
+                funcExprs.add(item.getExpr());
+            }
+        }
+
+        // For BY NAME, each SELECT item maps to its target column by output name independently.
+        // targetColumnNames (full schema) is only needed above for expandStarColumns(*).
+        // Override it with selectOutputNames so the size check works correctly for partial SELECTs.
+        if (insertStmt.isColumnMatchByName()) {
+            targetColumnNames = selectOutputNames;
+        }
+
+        if (targetColumnNames.size() != selectColumnNames.size()) {
+            return;
+        }
+
+        // Step 2: for each SlotRef column, push down the target column's type.
+        // If the column is absent from the inferred files schema, add it with the target type.
+        Map<String, Column> targetTableColumns = targetTable.getNameToColumn();
+        Map<String, Column> newFileColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        newFileColumns.putAll(fileTable.getNameToColumn());
+
+        for (int i = 0; i < selectColumnNames.size(); i++) {
+            String selectCol = selectColumnNames.get(i);
+            if (selectCol == null) {
+                continue;
+            }
+            String targetCol = insertStmt.isColumnMatchByName()
+                    ? selectOutputNames.get(i) : targetColumnNames.get(i);
+            if (targetCol == null || !targetTableColumns.containsKey(targetCol)) {
+                continue;
+            }
+            pushDownColumnType(selectCol, targetTableColumns.get(targetCol), newFileColumns);
+        }
+
+        // Step 3: for function expressions, ensure inner SlotRef columns exist in the schema.
+        // Their output type is determined by the function, so we only need the column to be readable.
+        // Columns that already exist in the file (added in Step 2) are untouched.
+        // Columns absent from the physical file are added as nullable VARCHAR as a placeholder;
+        // they will read NULL at runtime (requires fill_mismatch_column_with=null).
+        // Note: if such a missing column is used in a type-sensitive expression (e.g. arithmetic),
+        // the VARCHAR placeholder may cause a semantic type error. This is an obscure edge case.
+        for (Expr funcExpr : funcExprs) {
+            List<SlotRef> refs = Lists.newArrayList();
+            funcExpr.collect(SlotRef.class, refs);
+            for (SlotRef ref : refs) {
+                String colName = ref.getColumnName();
+                if (!newFileColumns.containsKey(colName)) {
+                    newFileColumns.put(colName, new Column(colName, VarcharType.VARCHAR, true));
+                }
+            }
+        }
+
+        // Step 4: rebuild files schema with only the columns used in the SELECT list.
+        // selectColumnNames (after star expansion) covers direct SlotRefs and star-expanded columns.
+        // funcExprs inner SlotRefs are appended after.
+        fileTable.setNewFullSchema(buildNewFileSchema(selectColumnNames, funcExprs, newFileColumns));
+    }
+
+    /**
+     * Expand SELECT * to column names based on the insert matching mode.
+     * BY NAME: use target column names so extra file columns are excluded.
+     * BY POSITION: use file column names trimmed or extended to match target column count.
+     */
+    private static void expandStarColumns(List<String> selectColumnNames, List<String> selectOutputNames,
+            InsertStmt insertStmt, List<String> targetColumnNames, TableFunctionTable fileTable) {
+        if (insertStmt.isColumnMatchByName()) {
+            selectColumnNames.addAll(targetColumnNames);
+            selectOutputNames.addAll(targetColumnNames);
+        } else {
+            List<Column> fileSchema = fileTable.getFullSchema();
+            for (int j = 0; j < targetColumnNames.size(); j++) {
+                String name = j < fileSchema.size()
+                        ? fileSchema.get(j).getName() : targetColumnNames.get(j);
+                selectColumnNames.add(name);
+                selectOutputNames.add(name);
+            }
+        }
+    }
+
+    /**
+     * Push down a target column's type to the corresponding file column.
+     * If the file column doesn't exist, add it with the target type.
+     * Skips complex types which may fail to convert in the scanner.
+     */
+    private static void pushDownColumnType(String fileColName, Column targetCol,
+            Map<String, Column> fileColumns) {
+        Column newCol = targetCol.deepCopy();
+        if (newCol.getType().isComplexType()) {
+            return;
+        }
+
+        if (!fileColumns.containsKey(fileColName)) {
+            // Column not inferred from files; add it so the scanner can look it up by name.
+            // The scanner returns null if the column is absent from the physical file.
+            newCol.setName(fileColName);
+            newCol.setIsAllowNull(true);
+            fileColumns.put(fileColName, newCol);
+            return;
+        }
+
+        Column oldCol = fileColumns.get(fileColName);
+        if (oldCol.getType().isComplexType()) {
+            return;
+        }
+
+        // Keep original column name (BE is case-sensitive) and nullable property
+        newCol.setName(oldCol.getName());
+        newCol.setIsAllowNull(oldCol.isAllowNull());
+        fileColumns.put(oldCol.getName(), newCol);
+    }
+
+    /**
+     * Build the final file schema containing only columns used in the SELECT list:
+     *   1. Non-null entries in selectColumnNames (SlotRefs and star-expanded columns), in order.
+     *   2. Inner SlotRef columns from function expressions, appended after.
+     * Duplicate column names are deduplicated (case-insensitive).
+     */
+    private static List<Column> buildNewFileSchema(List<String> selectColumnNames,
+            List<Expr> funcExprs, Map<String, Column> fileColumns) {
+        Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        List<Column> schema = Lists.newArrayList();
+
+        for (String name : selectColumnNames) {
+            if (name != null && seen.add(name)) {
+                Column col = fileColumns.get(name);
+                if (col != null) {
+                    schema.add(col);
+                }
+            }
+        }
+
+        for (Expr funcExpr : funcExprs) {
+            List<SlotRef> refs = Lists.newArrayList();
+            funcExpr.collect(SlotRef.class, refs);
+            for (SlotRef ref : refs) {
+                String colName = ref.getColumnName();
+                if (seen.add(colName)) {
+                    Column col = fileColumns.get(colName);
+                    if (col != null) {
+                        schema.add(col);
+                    }
+                }
+            }
+        }
+
+        return schema;
+    }
+
+    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionRef targetPartitionNames) {
         List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
         List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
         List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
@@ -552,15 +775,15 @@ public class InsertAnalyzer {
 
             Expr partitionValue = partitionColValues.get(i);
 
-            if (!partitionValue.isLiteral()) {
+            if (!ExprUtils.isLiteral(partitionValue)) {
                 throw new SemanticException("partition value should be literal expression");
             }
 
             LiteralExpr literalExpr = (LiteralExpr) partitionValue;
             Column column = table.getColumn(actualName);
             try {
-                Type type = literalExpr.isConstantNull() ? Type.NULL : column.getType();
-                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), type);
+                Type type = literalExpr.isConstantNull() ? NullType.NULL : column.getType();
+                Expr expr = LiteralExprFactory.create(literalExpr.getStringValue(), type);
                 insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
@@ -575,10 +798,20 @@ public class InsertAnalyzer {
             return insertStmt.makeBlackHoleTable();
         }
 
-        insertStmt.getTableName().normalization(session);
-        String catalogName = insertStmt.getTableName().getCatalog();
-        String dbName = insertStmt.getTableName().getDb();
-        String tableName = insertStmt.getTableName().getTbl();
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (Strings.isNullOrEmpty(tableRef.getDbName()) || Strings.isNullOrEmpty(tableRef.getCatalogName())) {
+            TableName tableName = TableName.fromTableRef(tableRef);
+            tableName.normalization(session);
+            QualifiedName normalizedName = QualifiedName.of(
+                    Arrays.asList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()),
+                    tableRef.getPos());
+            String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+            tableRef = new TableRef(normalizedName, tableRef.getPartitionRef(), alias, tableRef.getPos());
+        }
+        insertStmt.setTableRef(tableRef);
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
@@ -586,7 +819,8 @@ public class InsertAnalyzer {
         if (database == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
+        TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
+        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -595,7 +829,7 @@ public class InsertAnalyzer {
             throw new SemanticException(
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +
                             "and the data of materialized view must be consistent with the base table.",
-                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+                    tableName, tableName);
         }
 
         if (insertStmt.isOverwrite()) {

@@ -37,6 +37,13 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 >
 > 刷新基于外部数据目录（External Catalog）创建的异步物化视图时，StarRocks 会刷新所有分区。
 
+## 监控
+
+执行 `REFRESH MATERIALIZED VIEW` 后，你可以通过以下方式监控刷新操作的状态和结果：
+
+- 执行 [`SHOW MATERIALIZED VIEWS`](SHOW_MATERIALIZED_VIEW.md) 查看物化视图的状态，包括最后刷新时间、刷新状态和任何错误信息。
+- 对于更详细的执行信息，特别是异步刷新任务，查询系统视图 [`information_schema.task_runs`](../../information_schema/task_runs.md)。此视图提供任务执行记录和状态（PENDING, RUNNING, SUCCESS, FAILED）。对于物化视图刷新，`EXTRA_MESSAGE` 字段包含关于每个刷新子任务的分区和执行详情的详细信息。详情请参见 [理解物化视图 Task Run](../../../using_starrocks/async_mv/materialized_view_task_run_details.md)。
+
 ## 示例
 
 示例一：异步调用任务手动刷新指定物化视图。

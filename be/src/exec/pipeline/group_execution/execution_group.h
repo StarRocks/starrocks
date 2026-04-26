@@ -15,19 +15,40 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <functional>
+#include <mutex>
 #include <unordered_set>
 
-#include "exec/pipeline/fragment_context.h"
+#include "common/status.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
+
+// Synchronization context for parallel driver preparation
+// Use shared_ptr to manage lifecycle and avoid use-after-free
+// Use raw pointer with atomic to avoid std::atomic<std::shared_ptr<T>> compilation issue in Clang 14
+struct DriverPrepareSyncContext {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::atomic<Status*> first_error{nullptr};
+    std::atomic<int> pending_tasks{0};
+
+    ~DriverPrepareSyncContext() {
+        // Clean up the dynamically allocated Status object
+        Status* expected = first_error.load();
+        Status* new_value = nullptr;
+        first_error.compare_exchange_strong(expected, new_value);
+        if (expected != nullptr) {
+            delete expected;
+        }
+    }
+};
+
 // execution group is a collection of pipelines
 // clang-format off
 template <typename T>
@@ -64,24 +85,21 @@ public:
     virtual std::string to_string() const = 0;
     void attach_driver_executor(DriverExecutor* executor) { _executor = executor; }
 
-    void count_down_pipeline(RuntimeState* state) {
-        if (++_num_finished_pipelines == _num_pipelines) {
-            state->fragment_ctx()->count_down_execution_group();
-        }
-    }
-
-    void count_down_epoch_pipeline(RuntimeState* state) {
-        if (++_num_epoch_finished_pipelines == _num_pipelines) {
-            state->fragment_ctx()->count_down_epoch_pipeline(state);
-        }
-    }
+    void count_down_pipeline(RuntimeState* state);
 
     size_t total_logical_dop() const { return _total_logical_dop; }
+
+    size_t total_active_driver_size();
+
+    void prepare_active_drivers_parallel(RuntimeState* state, std::shared_ptr<DriverPrepareSyncContext> sync_ctx);
+
+    Status prepare_active_drivers_sequentially(RuntimeState* state);
 
     ExecutionGroupType type() const { return _type; }
     bool is_colocate_exec_group() const { return type() == ExecutionGroupType::COLOCATE; }
 
     bool contains(int32_t plan_node_id) { return _plan_node_ids.contains(plan_node_id); }
+    const std::unordered_set<int32_t>& plan_node_ids() const { return _plan_node_ids; }
 
 protected:
     // only used in colocate groups
@@ -91,7 +109,6 @@ protected:
     // will be inited in prepare_pipelines
     size_t _total_logical_dop{};
     std::atomic<size_t> _num_finished_pipelines{};
-    std::atomic<size_t> _num_epoch_finished_pipelines{};
     size_t _num_pipelines{};
     DriverExecutor* _executor;
     PipelineRawPtrs _pipelines;

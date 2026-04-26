@@ -26,6 +26,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
+import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -275,8 +276,8 @@ public class PipeManagerTest {
         Assertions.assertEquals(pm1.getPipesUnlock(), follower.getPipesUnlock());
         opEntry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
         follower.getRepo().replay(opEntry);
-        opEntry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
-        follower.getRepo().replay(opEntry);
+        AlterPipeLog alterLog = (AlterPipeLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_PIPE);
+        follower.getRepo().replayAlterPipe(alterLog);
         Assertions.assertEquals(pm2.getPipesUnlock(), follower.getPipesUnlock());
 
         // Validate pipe execution

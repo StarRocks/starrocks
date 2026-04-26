@@ -18,20 +18,33 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.mv.ivm.MVIVMBasedMVRefreshProcessor;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
+import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
+
+import java.util.Map;
 
 public class MVRefreshProcessorFactory {
     public static final MVRefreshProcessorFactory INSTANCE = new MVRefreshProcessorFactory();
 
-    public BaseMVRefreshProcessor newProcessor(Database db, MaterializedView mv,
-                                               MvTaskRunContext mvContext,
-                                               IMaterializedViewMetricsEntity mvEntity) {
-        MaterializedView.RefreshMode refreshMode = mv.getRefreshMode();
+    public MVRefreshProcessor newProcessor(Database db, MaterializedView mv,
+                                           MvTaskRunContext mvContext,
+                                           IMaterializedViewMetricsEntity mvEntity) {
+        MaterializedView.RefreshMode refreshMode = mv.getCurrentRefreshMode();
         switch (refreshMode) {
             case INCREMENTAL:
-                return new MVIVMBasedMVRefreshProcessor(db, mv, mvContext, mvEntity);
+                return new MVIVMRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
+            case AUTO:
+                return new MVHybridRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
+            case FULL: {
+                // full refresh
+                Map<String, String> props = mvContext.getProperties();
+                props.put(TaskRun.FORCE, "true");
+                return new MVPCTRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
+            }
             default:
-                return new MVPCTBasedRefreshProcessor(db, mv, mvContext, mvEntity);
+                return new MVPCTRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
         }
     }
 }

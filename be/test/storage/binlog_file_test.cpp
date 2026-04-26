@@ -16,9 +16,10 @@
 
 #include <iostream>
 
+#include "base/testutil/assert.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "storage/binlog_test_base.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -27,7 +28,7 @@ public:
     void SetUp() override {
         CHECK_OK(fs::remove_all(_binlog_file_dir));
         CHECK_OK(fs::create_directories(_binlog_file_dir));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(_binlog_file_dir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(_binlog_file_dir));
     }
 
     void TearDown() override { fs::remove_all(_binlog_file_dir); }
@@ -344,7 +345,7 @@ TEST_F(BinlogFileTest, DISABLED_test_random_write_read) {
     int32_t avg_entries_per_version = expect_file_size / estimated_log_entry_size;
 
     std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, 1);
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(file_path));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_path));
     std::shared_ptr<BinlogFileWriter> file_writer =
             std::make_shared<BinlogFileWriter>(1, file_path, max_page_size, compression_type);
     ASSERT_OK(file_writer->init());
@@ -388,7 +389,7 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
     int32_t num_log_entries_per_page = max_page_size / estimated_log_entry_size;
 
     std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, 1);
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(file_path));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_path));
     std::shared_ptr<BinlogFileWriter> file_writer =
             std::make_shared<BinlogFileWriter>(1, file_path, max_page_size, compression_type);
     ASSERT_OK(file_writer->init());

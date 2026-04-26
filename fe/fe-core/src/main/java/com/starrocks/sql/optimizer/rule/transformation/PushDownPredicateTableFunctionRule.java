@@ -47,6 +47,10 @@ public class PushDownPredicateTableFunctionRule extends TransformationRule {
 
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator filter = iter.next();
+            // if filter cannot be pushed down, skip it
+            if (!Utils.canPushDownPredicate(filter)) {
+                continue;
+            }
             if (tvfOuterColSet.containsAll(filter.getUsedColumns())) {
                 iter.remove();
                 pushDownPredicates.add(filter);

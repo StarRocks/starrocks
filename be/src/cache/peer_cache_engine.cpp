@@ -14,11 +14,11 @@
 
 #include "cache/peer_cache_engine.h"
 
+#include "base/hash/hash_std.hpp"
 #include "common/logging.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/hash_util.hpp"
 #include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {
@@ -29,7 +29,7 @@ Status PeerCacheEngine::init(const RemoteCacheOptions& options) {
 }
 
 Status PeerCacheEngine::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                             ReadCacheOptions* options) {
+                             DiskCacheReadOptions* options) {
     if (options->use_adaptor && !_cache_adaptor->check_read_cache()) {
         return Status::ResourceBusy("resource is busy");
     }

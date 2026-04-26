@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "base/phmap/phmap_fwd_decl.h"
 #include "column/column_access_path.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
@@ -25,8 +26,8 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/rowset/rowset.h"
-#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
@@ -37,6 +38,7 @@ class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 
 class RuntimeFilterProbeCollector;
+class OlapScanLazyMaterializationContext;
 
 namespace pipeline {
 
@@ -47,14 +49,14 @@ using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
 class ConcurrentJitRewriter {
 public:
-    ConcurrentJitRewriter(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
+    ConcurrentJitRewriter() : _barrier(), _errors(0), _id(0) {}
     Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
 
 private:
     // TODO: use c++20 barrier after upgrading gcc
     class Barrier {
     public:
-        explicit Barrier() : _count(0), _current(0) {}
+        explicit Barrier() = default;
 
         void arrive() {
             std::unique_lock<std::mutex> lock(_mutex);
@@ -71,12 +73,11 @@ private:
         }
 
     private:
-        std::size_t _count;
-        std::size_t _current;
+        std::size_t _count{0};
+        std::size_t _current{0};
         std::mutex _mutex;
         std::condition_variable _cv;
     };
-    const int32_t _dop;
     Barrier _barrier;
     std::atomic_int _errors;
     std::atomic_int _id = 0;
@@ -103,6 +104,9 @@ public:
                            RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
+    // Returns the next unique ID. only used in flat json column access path.
+    size_t next_unique_id() const;
+
     ScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
@@ -116,13 +120,16 @@ public:
     bool has_active_input() const;
     BalancedChunkBuffer& get_shared_buffer();
 
-    Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
+    Status capture_tablet_rowsets(RuntimeState* state, const std::vector<TInternalScanRange*>& olap_scan_ranges);
+
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
     const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const {
         return _rowset_release_guard.tablet_rowsets();
     };
 
     const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
+
+    const OlapScanLazyMaterializationContext* glm_ctx() const { return _glm_ctx; }
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
 
@@ -142,6 +149,7 @@ private:
     int64_t _scan_table_id;
 
     std::vector<ExprContext*> _conjunct_ctxs;
+    OlapScanLazyMaterializationContext* _glm_ctx = nullptr;
     std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
@@ -186,7 +194,7 @@ public:
               _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
                             std::move(chunk_buffer_limiter)),
               _contexts(shared_morsel_queue ? 1 : dop),
-              _jit_rewriter(dop) {}
+              _jit_rewriter() {}
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 

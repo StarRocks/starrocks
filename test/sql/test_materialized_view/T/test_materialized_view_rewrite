@@ -106,18 +106,18 @@ group by user_id, time;
 
 refresh materialized view agg_mv1 with sync mode;
 
-function: check_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+function: print_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
 select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
 
-function: check_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+function: print_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
 select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
 
 set enable_materialized_view_rewrite = off;
 
-function: check_no_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+function: print_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
 select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
 
-function: check_no_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+function: print_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
 select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
 
 -- name: test_all_join_type_rewrite
@@ -170,15 +170,15 @@ create materialized view mv_right_outer
 distributed by hash(`empid`) buckets 10
 refresh manual
 as
-select empid, depts.deptno
+select empid, deptno
 from emps right outer join depts using (deptno);
 
 refresh materialized view mv_right_outer with sync mode;
 
-explain logical select empid, depts.deptno
+explain logical select empid, deptno
 from emps right outer join depts using (deptno);
 
-select empid, depts.deptno
+select empid, deptno
 from emps right outer join depts using (deptno) order by empid;
 
 drop materialized view mv_right_outer;
@@ -187,15 +187,15 @@ create materialized view mv_full_outer
 distributed by hash(`empid`) buckets 10
 refresh manual
 as
-select empid, depts.deptno 
+select empid, deptno
 from emps full outer join depts using (deptno);
 
 refresh materialized view mv_full_outer with sync mode;
 
-explain logical select empid, depts.deptno 
+explain logical select empid, deptno
 from emps full outer join depts using (deptno);
 
-select empid, depts.deptno 
+select empid, deptno
 from emps full outer join depts using (deptno) order by empid;
 
 drop materialized view mv_full_outer;
@@ -260,10 +260,10 @@ from emps right anti join depts using (deptno);
 
 refresh materialized view mv_right_anti with sync mode;
 
-[UC]explain select depts.deptno
+[UC]explain select deptno
 from emps right anti join depts using (deptno);
 
-select depts.deptno 
+select deptno
 from emps right anti join depts using (deptno);
 
 -- name: test_single_table_mv_rewrite

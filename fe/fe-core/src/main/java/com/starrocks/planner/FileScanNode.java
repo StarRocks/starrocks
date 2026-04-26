@@ -38,14 +38,13 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -61,11 +60,15 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -76,6 +79,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
@@ -88,9 +92,12 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -297,7 +304,7 @@ public class FileScanNode extends LoadScanNode {
             String path = filePaths.get(0);
             if (fileScanType == TFileScanType.LOAD) {
                 THdfsProperties hdfsProperties = new THdfsProperties();
-                HdfsUtil.getTProperties(path, brokerDesc, hdfsProperties);
+                HdfsUtil.getTProperties(path, brokerDesc.getProperties(), hdfsProperties);
                 params.setHdfs_properties(hdfsProperties);
             } else {
                 // FILES_INSERT, FILES_QUERY
@@ -364,10 +371,12 @@ public class FileScanNode extends LoadScanNode {
             columnsFromPath = context.fileGroup.getColumnsFromPath();
         }
 
+        // Json format type check does not need file path
+        boolean isLoadJson = Load.getFormatType(context.fileGroup.getFileFormat(), "") == TFileFormatType.FORMAT_JSON;
         Load.initColumns(targetTable, columnExprs,
                 context.fileGroup.getColumnToHadoopFunction(), context.exprMap, descriptorTable,
                 context.tupleDescriptor, context.slotDescByName, context.params, true,
-                useVectorizedLoad, columnsFromPath);
+                useVectorizedLoad, columnsFromPath, isLoadJson);
     }
 
     private void finalizeParams(ParamCreateContext context) throws StarRocksException, AnalysisException {
@@ -424,13 +433,13 @@ public class FileScanNode extends LoadScanNode {
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
-                if (!fn.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH) &&
-                        !fn.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
+                if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH) &&
+                        !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
                     throw new AnalysisException("HLL column must use hll_hash function, like "
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx) or " +
                             destSlotDesc.getColumn().getName() + "=hll_empty()");
                 }
-                expr.setType(Type.HLL);
+                expr.setType(HLLType.HLL);
             }
 
             checkBitmapCompatibility(destSlotDesc, expr);
@@ -438,10 +447,10 @@ public class FileScanNode extends LoadScanNode {
             // analyze negative
             if (isNegative && destSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr = Expr.analyzeAndCastFold(expr);
+                expr = ExprUtils.analyzeAndCastFold(expr);
             }
             expr = castToSlot(destSlotDesc, expr);
-            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());
+            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThrift.treeToThrift(expr));
         }
         context.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         context.params.setSrc_tuple_id(context.tupleDescriptor.getId().asInt());
@@ -503,7 +512,7 @@ public class FileScanNode extends LoadScanNode {
                     if (brokerDesc.hasBroker()) {
                         BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
                     } else {
-                        HdfsUtil.parseFile(path, brokerDesc, fileStatuses);
+                        HdfsUtil.parseFile(path, brokerDesc.getProperties(), fileStatuses);
                     }
                 }
                 fileStatusesList.add(fileStatuses);
@@ -582,9 +591,8 @@ public class FileScanNode extends LoadScanNode {
             long rangeBytes = 0;
             // The rest of the file belongs to one range
             boolean isEndOfFile = false;
-            if (smallestLocations.second + leftBytes > bytesPerInstance &&
-                    ((formatType == TFileFormatType.FORMAT_CSV_PLAIN || formatType == TFileFormatType.FORMAT_PARQUET)
-                            && fileStatus.isSplitable)) {
+            if (smallestLocations.second + leftBytes > bytesPerInstance && isFileFormatSupportSplit(formatType)
+                            && fileStatus.isSplitable) {
                 rangeBytes = bytesPerInstance - smallestLocations.second;
             } else {
                 rangeBytes = leftBytes;
@@ -599,6 +607,14 @@ public class FileScanNode extends LoadScanNode {
             rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
             rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
             rangeDesc.setJson_root(jsonOptions.jsonRoot);
+            if (!Strings.isNullOrEmpty(jsonOptions.envelope)) {
+                if (formatType != TFileFormatType.FORMAT_JSON) {
+                    throw new StarRocksException(LoadStmt.ENVELOPE + " can only be specified when format is json");
+                }
+                if (jsonOptions.envelope.equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)) {
+                    rangeDesc.setEnvelope(TEnvelopeType.DEBEZIUM);
+                }
+            }
 
             brokerScanRange(smallestLocations.first).addToRanges(rangeDesc);
             smallestLocations.second += rangeBytes;
@@ -613,6 +629,17 @@ public class FileScanNode extends LoadScanNode {
             if (brokerScanRange(locations).isSetRanges()) {
                 locationsList.add(locations);
             }
+        }
+    }
+    
+    private boolean isFileFormatSupportSplit(TFileFormatType format) {
+        switch (format) {
+            case FORMAT_CSV_PLAIN:
+            case FORMAT_PARQUET:
+            case FORMAT_ORC:
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -651,6 +678,13 @@ public class FileScanNode extends LoadScanNode {
 
     @Override
     public void finalizeStats() throws StarRocksException {
+        if (!Strings.isNullOrEmpty(jsonOptions.envelope)
+                && jsonOptions.envelope.equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)
+                && targetTable instanceof OlapTable
+                && ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
+            throw new StarRocksException("envelope=debezium is only supported on PRIMARY KEY tables");
+        }
+
         locationsList = Lists.newArrayList();
         locationsHeap = new PriorityQueue<>(SCAN_RANGE_LOCATIONS_COMPARATOR);
 

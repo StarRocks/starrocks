@@ -16,3 +16,7 @@ displayed_sidebar: docs
 | DATABASE    | 任务所属的数据库。                                           |
 | DEFINITION  | 任务的 SQL 定义。                                            |
 | EXPIRE_TIME | 任务过期的时间。                                             |
+
+## 参考手册
+
+[`SUBMIT_TASK`](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md)

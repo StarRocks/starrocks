@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/tracer_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -244,16 +243,16 @@ private:
     Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* table_schema_param,
                                         const TabletSchemaCSPtr& ori_tablet_schema);
 
-    Status _fill_auto_increment_id(const Chunk& chunk);
+    Status _fill_auto_increment_id(Chunk& chunk);
     Status _check_partial_update_with_sort_key(const Chunk& chunk);
 
     void _garbage_collection();
 
-    void _reset_mem_table();
+    Status _reset_mem_table();
 
     void _set_state(State state, const Status& st);
 
-    State _state;
+    State _state{kUninitialized};
     Status _err_status;
     mutable std::mutex _state_lock;
 
@@ -265,7 +264,7 @@ private:
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    bool _schema_initialized;
+    bool _schema_initialized{false};
     Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
@@ -277,7 +276,7 @@ private:
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     std::unique_ptr<SegmentFlushToken> _segment_flush_token;
-    bool _with_rollback_log;
+    bool _with_rollback_log{true};
     // initial value is max value
     size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
     bool _partial_schema_with_sort_key_conflict = false;

@@ -14,20 +14,21 @@
 
 #include <utility>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/simd_selector.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "glog/logging.h"
-#include "simd/selector.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -178,13 +179,20 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        //TODO(SmithCruise)
-        return Status::NotSupported("Not support");
+        // Convert the datum to a struct column
+        auto rhs_column = column.clone_empty();
+        rhs_column->append_datum(_rhs_value);
+        auto cmp = [&](int lhs_index) {
+            return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
+        };
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
+
+        return Status::OK();
     }
 
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        const auto& lhs_datas = column.get_proxy_data();
+        const auto lhs_datas = column.immutable_data();
         Slice rhs_data = _rhs_value.get<Slice>();
 
         if (_sort_order == 1) {
@@ -219,6 +227,11 @@ public:
         DCHECK(false) << "not support object column sort_and_tie";
 
         return Status::NotSupported("not support object column sort_and_tie");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("not support AdaptiveNullableColumn in ColumnCompare");
     }
 
     Status do_visit(const JsonColumn& column) {
@@ -274,7 +287,7 @@ public:
 
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        auto& data = column.get_proxy_data();
+        auto data = column.immutable_data();
         ImmutableNullData null_data;
         if (_nullable_column != nullptr) {
             null_data = _nullable_column->immutable_data();
@@ -306,6 +319,7 @@ public:
     Status do_visit(const ArrayColumn& column) { return Status::NotSupported("Not support"); }
     Status do_visit(const MapColumn& column) { return Status::NotSupported("Not support"); }
     Status do_visit(const StructColumn& column) { return Status::NotSupported("Not support"); }
+
     template <typename T>
     Status do_visit(const ObjectColumn<T>& column) {
         return Status::NotSupported("not support");

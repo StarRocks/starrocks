@@ -17,13 +17,12 @@
 #include <span>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column.h"
 #include "column/container_resource.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "util/raw_container.h"
-
+#include "types/datum.h"
 namespace starrocks {
 
 template <typename T>
@@ -59,8 +58,7 @@ public:
 
     FixedLengthColumnBase(const size_t n, const ValueType x) : _data(n, x) {}
 
-    FixedLengthColumnBase(const FixedLengthColumnBase& src)
-            : _resource(src._resource), _data(src.immutable_data().begin(), src.immutable_data().end()) {}
+    DISALLOW_COPY_TEMPLATE(FixedLengthColumnBase, FixedLengthColumnBase<T>);
 
     // Only used as a underlying type for other column type(i.e. DecimalV3Column), C++
     // is weak to implement delegation for composite type like golang, so we have to use
@@ -78,9 +76,10 @@ public:
 
     bool is_timestamp() const override { return IsTimestamp<ValueType>; }
 
-    const uint8_t* raw_data() const override { return reinterpret_cast<const uint8_t*>(immutable_data().data()); }
+    const uint8_t* raw_data() const { return reinterpret_cast<const uint8_t*>(immutable_data().data()); }
+    const uint8_t* raw_bytes() const { return raw_data(); }
 
-    uint8_t* mutable_raw_data() override {
+    uint8_t* mutable_raw_data() {
         get_data();
         return reinterpret_cast<uint8_t*>(_data.data());
     }
@@ -111,7 +110,9 @@ public:
 
     void assign(size_t n, size_t idx) override {
         auto& datas = get_data();
-        datas.assign(n, _data[idx]);
+        // Avoid use-after-free: save value before assign() deallocates _data
+        T value = _data[idx];
+        datas.assign(n, value);
     }
 
     void remove_first_n_values(size_t count) override;
@@ -179,7 +180,7 @@ public:
 
     void append_default(size_t count) override;
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
@@ -189,9 +190,9 @@ public:
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
     // access the item, so we should use 2^32 as the limit
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 
@@ -208,8 +209,8 @@ public:
                                          uint32_t max_one_row_size, const uint8_t* null_masks,
                                          bool has_null) const override;
 
-    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) const override;
+    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
+                                       size_t start, size_t count) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -220,16 +221,6 @@ public:
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
-
-    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-    void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-    void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
-
-    void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -246,6 +237,8 @@ public:
         }
         return _data;
     }
+
+    const ImmContainer get_data() const { return immutable_data(); }
 
     const ImmContainer immutable_data() const {
         if (!_resource.empty()) {

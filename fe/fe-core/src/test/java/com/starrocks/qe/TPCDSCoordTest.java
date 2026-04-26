@@ -89,7 +89,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
 
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
-                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
         coord.prepareExec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
@@ -135,7 +135,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         Assertions.assertTrue(filterLines.size() == 5);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
-                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
         coord.prepareExec();
 
         int filterId = 2;
@@ -180,7 +180,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         Assertions.assertTrue(filterLines.stream().anyMatch(ln -> ln.contains("remote = true")));
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
-                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
         coord.prepareExec();
 
         ExecutionFragment rootExecFragment = coord.getExecutionDAG().getFragmentsInPreorder().get(0);

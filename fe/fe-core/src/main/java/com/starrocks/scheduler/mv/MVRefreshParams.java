@@ -17,6 +17,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.common.PListCell;
 import org.apache.commons.collections4.CollectionUtils;
@@ -40,6 +41,8 @@ public class MVRefreshParams {
     // whether the refresh is tentative, when it's true, it means the refresh is triggered temporarily and used for
     // find candidate partitions to refresh.
     private boolean isTentative = false;
+    // whether can generate next task runs, if false, the scheduler will not generate next task runs.
+    private boolean isCanGenerateNextTaskRun = true;
 
     public MVRefreshParams(MaterializedView mv,
                            Map<String, String> properties) {
@@ -63,7 +66,37 @@ public class MVRefreshParams {
         }
         MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy =
                 mv.getPartitionRefreshStrategy();
-        return partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE;
+        if (partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE) {
+            return true;
+        }
+        // Check if force refresh is enabled for this partition type via config
+        return isForceRefreshByConfig();
+    }
+
+    /**
+     * Check if force refresh is enabled for this MV's partition type via config.
+     * Config value is a bitmap:
+     * - 0: disabled (default)
+     * - 1: force refresh non-partitioned MV
+     * - 2: force refresh range partitioned MV
+     * - 4: force refresh list partitioned MV
+     */
+    private boolean isForceRefreshByConfig() {
+        int configValue = Config.mv_refresh_force_partition_type;
+        if (configValue == 0) {
+            return false;
+        }
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned() && (configValue & 1) != 0) {
+            return true;
+        }
+        if (partitionInfo.isRangePartition() && (configValue & 2) != 0) {
+            return true;
+        }
+        if (partitionInfo.isListPartition() && (configValue & 4) != 0) {
+            return true;
+        }
+        return false;
     }
 
     public boolean isNonTentativeForce() {
@@ -106,6 +139,14 @@ public class MVRefreshParams {
 
     public Set<PListCell> getListValues() {
         return listValues;
+    }
+
+    public void setCanGenerateNextTaskRun(boolean canGenerateNextTaskRun) {
+        this.isCanGenerateNextTaskRun = canGenerateNextTaskRun;
+    }
+
+    public boolean isCanGenerateNextTaskRun() {
+        return isCanGenerateNextTaskRun;
     }
 
     @Override

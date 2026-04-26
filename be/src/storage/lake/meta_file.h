@@ -16,6 +16,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
@@ -34,6 +35,17 @@ class UpdateManager;
 
 enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
+// Segment index stored in SegmentMetadataPB.
+// Initially contiguous, but may become non-contiguous after partial compaction or batch merge.
+// Backward compatibility: old metadata may not have segment_idx, fallback to positional index.
+uint32_t get_max_segment_idx(const RowsetMetadataPB& rowset_meta);
+
+// Number of rssid slots occupied by one rowset.
+// Rowset without segments still occupies one rssid for delete-file operation.
+uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta);
+uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
+uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
@@ -46,17 +58,16 @@ public:
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
-    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
-                            int64_t output_rowset_schema_id);
+    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
+                              int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
 
     // batch processing functions for merging multiple opwrites into one rowset
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                    const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
-                    const std::vector<std::string>& del_encryption_metas);
-    void set_final_rowset();
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels);
+    Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
@@ -72,11 +83,28 @@ public:
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
+    // Number of rssid slots already assigned (accumulated) in current pending batch rowset build.
+    uint32_t assigned_segment_idx() const { return _pending_rowset_data.assigned_segment_idx; }
+
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
     void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
 
+    // Mark Lake Compaction Rows Mapper file as orphan for deferred GC cleanup
+    // WHY: lcrm files on remote storage must be cleaned up asynchronously to handle
+    // distributed access patterns and potential failures gracefully.
+    void remove_lcrm_file(const TxnLogPB_OpCompaction& op_compaction);
+
     const TabletMetadata* tablet_meta() const { return _tablet_meta.get(); }
+
+    const DelvecPagePB& delvec_page(uint32_t segment_id) const {
+        static DelvecPagePB empty;
+        auto it = _delvecs.find(segment_id);
+        if (it != _delvecs.end()) {
+            return it->second;
+        }
+        return empty;
+    }
 
 private:
     // update delvec in tablet meta
@@ -94,8 +122,11 @@ private:
         RowsetMetadataPB rowset_pb;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
-        std::vector<std::string> dels;
-        std::vector<std::string> del_encryption_metas;
+        // Per-del metadata: name + shared + encryption_meta carried together so the
+        // parallel-array invariant between filename / shared / encryption can't drift.
+        // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
+        std::vector<FileMetaPB> dels;
+        uint32_t assigned_segment_idx = 0;
     };
 
     Tablet _tablet;
@@ -113,6 +144,18 @@ private:
     PendingRowsetData _pending_rowset_data;
 };
 
+struct DelvecFileInfo {
+    int64_t tablet_id;
+    FileMetaPB delvec_file;
+};
+
+Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
+                          int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
+                          std::vector<uint64_t>* offsets, const Slice& extra_data = {},
+                          uint64_t* extra_data_offset = nullptr);
+
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
+                   bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);

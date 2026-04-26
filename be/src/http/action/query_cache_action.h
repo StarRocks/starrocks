@@ -24,9 +24,10 @@
 #include <unordered_map>
 
 #include "http/http_handler.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
+
+class ExecEnv;
 
 class QueryCacheAction : public HttpHandler {
 public:

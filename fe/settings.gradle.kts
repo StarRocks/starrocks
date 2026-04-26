@@ -16,6 +16,7 @@ rootProject.name = "starrocks-fe"
 
 include(
     "fe-grammar",
+    "fe-type",
     "fe-parser",
     "fe-spi",
     "fe-utils",

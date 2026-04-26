@@ -14,19 +14,21 @@
 
 #pragma once
 
-#include "column/column_builder.h"
-#include "column/column_helper.h"
-#include "column/column_viewer.h"
-#include "common/statusor.h"
-#include "exec/file_scanner/file_scanner.h"
-#include "exec/file_scanner/parquet_scanner.h"
+#include <memory>
+
+#include "column/column.h"
+#include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
+
+class FileScanner;
+class RuntimeProfile;
+class ScannerCounter;
+class SlotDescriptor;
+class TupleDescriptor;
 
 class PushBrokerReader {
 public:
@@ -38,11 +40,7 @@ public:
 
     void print_profile();
 
-    Status close() {
-        _scanner->close();
-        _ready = false;
-        return Status::OK();
-    }
+    Status close();
     bool eof() const { return _eof; }
 
 private:

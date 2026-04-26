@@ -18,7 +18,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 

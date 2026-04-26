@@ -14,9 +14,13 @@
 
 #include <gtest/gtest.h>
 
-#include "column/datum.h"
+#include "base/testutil/assert.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Partitions_types.h"
@@ -24,7 +28,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
+#include "types/datum.h"
 
 namespace starrocks::pipeline {
 
@@ -36,12 +40,13 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_exec_env(_exec_env);
+        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
+                                                        &_exec_env->query_execution_services(), _exec_env);
         _runtime_state->set_query_ctx(_query_context.get());
         _runtime_state->init_instance_mem_tracker();
 
@@ -49,6 +54,7 @@ public:
         _fragment_context->set_fragment_instance_id(_fragment_id);
         _fragment_context->set_runtime_state(std::shared_ptr<RuntimeState>{_runtime_state});
         _runtime_state->set_fragment_ctx(_fragment_context.get());
+        _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
 
         TNetworkAddress address;
         address.__set_hostname(BackendOptions::get_local_ip());
@@ -60,7 +66,7 @@ public:
     void TearDown() override {
         _recvr->close();
         _exec_env->stream_mgr()->close();
-        _query_context->set_exec_env(nullptr);
+        _query_context->set_query_execution_services(nullptr);
     }
 
 protected:
@@ -99,9 +105,9 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
     std::vector<ExprContext*> partition_exprs;
-    Expr::create_expr_trees(&_object_pool, t_conjuncts, &partition_exprs, nullptr);
-    Expr::prepare(partition_exprs, _runtime_state.get());
-    Expr::open(partition_exprs, _runtime_state.get());
+    ExprFactory::create_expr_trees(&_object_pool, t_conjuncts, &partition_exprs, nullptr);
+    ExprExecutor::prepare(partition_exprs, _runtime_state.get());
+    ExprExecutor::open(partition_exprs, _runtime_state.get());
 
     TBucketProperty bucket_prperty = TBucketProperty();
     bucket_prperty.bucket_func = TBucketFunction::MURMUR3_X86_32;
@@ -163,7 +169,7 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
 
     int row_num = 0;
 
-    std::unique_ptr<Chunk> received_chunk = nullptr;
+    ChunkUniquePtr received_chunk = nullptr;
     do {
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, 0);
         if (received_chunk != nullptr) {

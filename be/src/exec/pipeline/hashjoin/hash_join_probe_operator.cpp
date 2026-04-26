@@ -16,7 +16,9 @@
 
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

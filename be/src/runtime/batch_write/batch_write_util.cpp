@@ -16,10 +16,15 @@
 
 #include <vector>
 
+#include "common/config_merge_commit_fwd.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
 
 namespace starrocks {
+
+bool batch_write_trace_log_enabled() {
+    return config::merge_commit_trace_log_enable;
+}
 
 const std::vector<std::string> LOAD_PARAMETER_NAMES = {HTTP_FORMAT_KEY,
                                                        HTTP_COLUMNS,
@@ -52,7 +57,8 @@ const std::vector<std::string> LOAD_PARAMETER_NAMES = {HTTP_FORMAT_KEY,
                                                        HTTP_ESCAPE,
                                                        HTTP_JSONPATHS,
                                                        HTTP_JSONROOT,
-                                                       HTTP_STRIP_OUTER_ARRAY};
+                                                       HTTP_STRIP_OUTER_ARRAY,
+                                                       HTTP_ENVELOPE};
 
 std::ostream& operator<<(std::ostream& out, const BatchWriteId& id) {
     out << "db: " << id.db << ", table: " << id.table << ", load_params: {";

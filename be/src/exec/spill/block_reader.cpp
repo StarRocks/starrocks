@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/string/slice.h"
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
 #include "fmt/format.h"
-#include "io/input_stream.h"
-#include "util/slice.h"
+#include "io/core/input_stream.h"
 
 namespace starrocks::spill {
 
@@ -25,18 +25,31 @@ namespace starrocks::spill {
 // if at_least_length is not set and the actual length read is not equal to expected_length, an error will be returned.
 StatusOr<int64_t> try_to_read_from_file(io::InputStreamWrapper* readable, void* dst, int64_t expected_length,
                                         int64_t at_least_length = 0) {
-    ASSIGN_OR_RETURN(auto read_len, readable->read(dst, expected_length));
-    RETURN_IF(read_len == 0, Status::EndOfFile("no more data to read"));
-    if (at_least_length > 0) {
-        RETURN_IF(read_len < at_least_length,
-                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], at least[{}]", read_len,
-                                                    at_least_length)));
-    } else {
-        RETURN_IF(read_len != expected_length,
-                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], expected[{}]", read_len,
-                                                    expected_length)));
+    char* ptr = static_cast<char*>(dst);
+    int64_t left = expected_length;
+    int64_t total_read = 0;
+
+    while (left > 0) {
+        ASSIGN_OR_RETURN(auto read_len, readable->read(ptr, left));
+        if (read_len == 0) {
+            break;
+        }
+        ptr += read_len;
+        total_read += read_len;
+        left -= read_len;
     }
-    return read_len;
+
+    RETURN_IF(total_read == 0, Status::EndOfFile("no more data to read"));
+    if (at_least_length > 0) {
+        RETURN_IF(total_read < at_least_length,
+                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], at least[{}]",
+                                                    total_read, at_least_length)));
+    } else {
+        RETURN_IF(total_read != expected_length,
+                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], expected[{}]",
+                                                    total_read, expected_length)));
+    }
+    return total_read;
 }
 
 Status BlockReader::read_fully(void* data, int64_t count) {
@@ -71,28 +84,61 @@ Status BlockReader::read_fully(void* data, int64_t count) {
             int64_t length_need_read = count - length_in_buffer;
             if (length_need_read >= _options.max_buffer_bytes) {
                 // if res length is larger than max_buffer_bytes, read from file directly
-                SCOPED_TIMER(_options.read_io_timer);
+                int64_t io_ns = 0;
+                int64_t read_len = 0;
+                {
+                    SCOPED_RAW_TIMER(&io_ns);
+                    ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), offset, length_need_read));
+                }
+                COUNTER_UPDATE(_options.read_io_timer, io_ns);
                 COUNTER_UPDATE(_options.read_io_count, 1);
-                ASSIGN_OR_RETURN(auto read_len, try_to_read_from_file(_readable.get(), offset, length_need_read));
-                _slice.clear();
                 COUNTER_UPDATE(_options.read_io_bytes, read_len);
+                if (_options.global_read_io_duration_ns != nullptr) {
+                    _options.global_read_io_duration_ns->increment(io_ns);
+                }
+                if (_options.global_read_bytes != nullptr) {
+                    _options.global_read_bytes->increment(read_len);
+                }
+                _slice.clear();
             } else {
                 // refill buffer, then read res data from buffer
-                SCOPED_TIMER(_options.read_io_timer);
+                int64_t io_ns = 0;
+                int64_t read_len = 0;
+                {
+                    SCOPED_RAW_TIMER(&io_ns);
+                    ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), _buffer.get(),
+                                                                     _options.max_buffer_bytes, length_need_read));
+                }
+                COUNTER_UPDATE(_options.read_io_timer, io_ns);
                 COUNTER_UPDATE(_options.read_io_count, 1);
-                ASSIGN_OR_RETURN(auto read_len, try_to_read_from_file(_readable.get(), _buffer.get(),
-                                                                      _options.max_buffer_bytes, length_need_read));
+                COUNTER_UPDATE(_options.read_io_bytes, read_len);
+                if (_options.global_read_io_duration_ns != nullptr) {
+                    _options.global_read_io_duration_ns->increment(io_ns);
+                }
+                if (_options.global_read_bytes != nullptr) {
+                    _options.global_read_bytes->increment(read_len);
+                }
                 _slice = Slice(_buffer.get(), read_len);
                 std::memcpy(offset, _slice.data, length_need_read);
                 _slice.remove_prefix(length_need_read);
-                COUNTER_UPDATE(_options.read_io_bytes, read_len);
             }
         }
     } else {
-        SCOPED_TIMER(_options.read_io_timer);
+        int64_t io_ns = 0;
+        int64_t read_len = 0;
+        {
+            SCOPED_RAW_TIMER(&io_ns);
+            ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), data, count));
+        }
+        COUNTER_UPDATE(_options.read_io_timer, io_ns);
         COUNTER_UPDATE(_options.read_io_count, 1);
-        ASSIGN_OR_RETURN(auto read_len, try_to_read_from_file(_readable.get(), data, count));
         COUNTER_UPDATE(_options.read_io_bytes, read_len);
+        if (_options.global_read_io_duration_ns != nullptr) {
+            _options.global_read_io_duration_ns->increment(io_ns);
+        }
+        if (_options.global_read_bytes != nullptr) {
+            _options.global_read_bytes->increment(read_len);
+        }
     }
     _offset += count;
     return Status::OK();

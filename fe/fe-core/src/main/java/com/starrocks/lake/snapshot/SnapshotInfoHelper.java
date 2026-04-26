@@ -62,12 +62,12 @@ public class SnapshotInfoHelper {
 
     public static PhysicalPartitionSnapshotInfo buildPhysicalPartitionSnapshotInfo(PhysicalPartition physicalPart) {
         Map<Long, MaterializedIndexSnapshotInfo> indexInfos = new HashMap<>();
-        List<MaterializedIndex> indexes = physicalPart.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+        List<MaterializedIndex> indexes = physicalPart.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         for (MaterializedIndex index : indexes) {
             indexInfos.put(index.getId(), SnapshotInfoHelper.buildMaterializedIndexSnapshotInfo(index));
         }
         return new PhysicalPartitionSnapshotInfo(
-                physicalPart.getId(), physicalPart.getVisibleVersion(), indexInfos);
+                physicalPart.getId(), physicalPart.getVisibleVersion(), physicalPart.getCommittedVersion(), indexInfos);
     }
 
     public static MaterializedIndexSnapshotInfo buildMaterializedIndexSnapshotInfo(MaterializedIndex index) {

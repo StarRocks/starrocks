@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
+#include "base/phmap/phmap.h"
+#include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/statusor.h"
 #include "exec/intersect_hash_set.h"
 #include "exec/olap_common.h"
@@ -26,9 +29,6 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/hash_util.hpp"
-#include "util/phmap/phmap.h"
-#include "util/slice.h"
 
 namespace starrocks::pipeline {
 

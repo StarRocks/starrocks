@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 マテリアライズドビューを削除します。
 
-このコマンドでは、作成中の同期マテリアライズドビューを削除することはできません。作成中の同期マテリアライズドビューを削除するには、[同期マテリアライズドビュー - 未完成のマテリアライズドビューを削除する](../../../using_starrocks/Materialized_view-single_table.md#drop-an-unfinished-synchronous-materialized-view)を参照してください。
+**FORCE** オプションを使用しない限り、このコマンドでは作成中の同期マテリアライズドビューを削除することはできません。**FORCE** を使用すると、StarRocks はハングした同期 MV ビルドジョブをキャンセルし、ベーステーブルの状態を NORMAL に戻してからマテリアライズドビューを削除します。FORCE なしの場合は、[同期マテリアライズドビュー - 未完成のマテリアライズドビューを削除する](../../../using_starrocks/Materialized_view-single_table.md#drop-an-unfinished-synchronous-materialized-view)を参照してください。
 
 :::tip
 
@@ -19,7 +19,7 @@ displayed_sidebar: docs
 ## 構文
 
 ```SQL
-DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name [FORCE]
 ```
 
 角括弧 [] 内のパラメータはオプションです。
@@ -30,6 +30,7 @@ DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 | ------------- | -------- | -------- |
 | IF EXISTS     | いいえ   | このパラメータが指定されている場合、存在しないマテリアライズドビューを削除しても StarRocks は例外をスローしません。このパラメータが指定されていない場合、存在しないマテリアライズドビューを削除するとシステムは例外をスローします。 |
 | mv_name       | はい     | 削除するマテリアライズドビューの名前。 |
+| FORCE         | いいえ   | ベーステーブルが NORMAL 状態でない場合（同期 MV ビルドがハングした場合など）、FORCE を使用すると関連する alter ジョブをキャンセルし、テーブルを NORMAL に戻してからマテリアライズドビューを削除します。通常の削除時は省略できます。 |
 
 ## 例
 

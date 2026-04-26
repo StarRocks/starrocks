@@ -19,8 +19,9 @@
 #include <atomic>
 #include <utility>
 
+#include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/spill/spiller.h"

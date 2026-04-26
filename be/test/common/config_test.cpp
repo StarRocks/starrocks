@@ -15,9 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#define __IN_CONFIGBASE_CPP__
-#include "common/configbase.h"
-#undef __IN_CONFIGBASE_CPP__
+// clang-format off
+#include "common/configbase_impl.h"
+// clang-format on
 
 #include <gmock/gmock.h> // EXPECT_THAT, ElementsAre
 #include <gtest/gtest.h>

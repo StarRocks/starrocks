@@ -53,6 +53,7 @@ import com.starrocks.common.util.concurrent.LockUtils.SlowLockLogStats;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -105,6 +106,7 @@ public class Database extends MetaObject implements Writable {
     @SerializedName(value = "r")
     private volatile long replicaQuotaSize;
 
+    @IgnoreMemoryTrack
     private final Map<String, Table> nameToTable;
     private final Map<Long, Table> idToTable;
 
@@ -219,6 +221,14 @@ public class Database extends MetaObject implements Writable {
         return replicaQuotaSize;
     }
 
+    public boolean isTableExist(Table table) {
+        if (table.isTemporaryTable()) {
+            return idToTable.containsKey(table.getId());
+        } else {
+            return nameToTable.containsKey(table.getName());
+        }
+    }
+
     public boolean registerTableUnlocked(Table table) {
         if (table == null) {
             return false;
@@ -271,9 +281,10 @@ public class Database extends MetaObject implements Writable {
                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
                         " please use \"DROP TABLE <table> FORCE\".");
             }
-            unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info, wal -> {
+                unprotectDropTable(table.getId(), isForce, false);
+            });
         } finally {
             locker.unLockDatabase(id, LockType.WRITE);
         }
@@ -298,9 +309,10 @@ public class Database extends MetaObject implements Writable {
                 }
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
-            unprotectDropTemporaryTable(tableId, isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info, wal -> {
+                unprotectDropTemporaryTable(tableId, isForce, false);
+            });
         } finally {
             locker.unLockDatabase(id, LockType.WRITE);
         }
@@ -397,14 +409,19 @@ public class Database extends MetaObject implements Writable {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns an unmodifiable view of the table names in this database.
+     *
+     * <p>NOTE: despite the "WithLock" suffix, this method acquires <b>no</b>
+     * database lock. The name is retained for API compatibility with
+     * existing callers. {@code nameToTable} is a {@link ConcurrentHashMap},
+     * and its {@code keySet()} is already a thread-safe weakly-consistent
+     * view, so no locking is required to read it safely. Callers that need
+     * a stable snapshot must copy the returned set themselves (e.g.
+     * {@code new HashSet<>(db.getTableNamesViewWithLock())}).
+     */
     public Set<String> getTableNamesViewWithLock() {
-        Locker locker = new Locker();
-        locker.lockDatabase(id, LockType.READ);
-        try {
-            return Collections.unmodifiableSet(this.nameToTable.keySet());
-        } finally {
-            locker.unLockDatabase(id, LockType.READ);
-        }
+        return Collections.unmodifiableSet(this.nameToTable.keySet());
     }
 
     /**
@@ -424,7 +441,7 @@ public class Database extends MetaObject implements Writable {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
-                    String indexName = olapTable.getIndexNameById(mvMeta.getIndexId());
+                    String indexName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
                     if (indexName == null) {
                         continue;
                     }
@@ -504,16 +521,16 @@ public class Database extends MetaObject implements Writable {
 
     public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws
             StarRocksException {
-        addFunctionImpl(function, false, allowExists, createIfNotExists);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);
+        if (checkAddFunction(function, allowExists, createIfNotExists)) {
+            GlobalFunctionMgr.assignIdToUserDefinedFunction(function);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function, wail -> addFunctionInternal(function));
+        }
     }
 
-    public synchronized void replayAddFunction(Function function) {
-        try {
-            addFunctionImpl(function, true, false, false);
-        } catch (StarRocksException e) {
-            Preconditions.checkArgument(false);
-        }
+    private synchronized void addFunctionInternal(Function function) {
+        String functionName = function.getFunctionName().getFunction();
+        List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
+        name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
     }
 
     public static void replayCreateFunctionLog(Function function) {
@@ -522,53 +539,44 @@ public class Database extends MetaObject implements Writable {
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
-        db.replayAddFunction(function);
+        db.addFunctionInternal(function);
     }
 
-    private void addFunctionImpl(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
+    private boolean checkAddFunction(Function function, boolean allowExists, boolean createIfNotExists)
             throws StarRocksException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (allowExists && createIfNotExists) {
-            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are not allowed to use together
             throw new StarRocksException(
                     "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
         }
-        if (!isReplay) {
-            for (Function existFunc : existFuncs) {
-                if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
-                    if (createIfNotExists) {
-                        LOG.info("create function [{}] which already exists", functionName);
-                        return;
-                    } else if (!allowExists) {
-                        throw new StarRocksException("function already exists");
-                    }
+        for (Function existFunc : existFuncs) {
+            if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                if (createIfNotExists) {
+                    LOG.info("create function [{}] which already exists", functionName);
+                    return false;
+                } else if (!allowExists) {
+                    throw new StarRocksException("function already exists");
                 }
             }
-            GlobalFunctionMgr.assignIdToUserDefinedFunction(function);
         }
-        name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
+        return true;
     }
 
     public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
-        dropFunctionImpl(function, dropIfExists);
-        GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
+        if (checkDropFunction(function, dropIfExists)) {
+            GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function, wal -> dropFunctionInternal(function));
+        }
     }
 
     public synchronized void dropFunctionForRestore(Function function) {
         FunctionSearchDesc fnDesc = new FunctionSearchDesc(function.getFunctionName(), function.getArgs(), function.hasVarArgs());
-        try {
-            dropFunctionImpl(fnDesc, true);
-        } catch (StarRocksException ignore) {
-        }
+        dropFunctionInternal(fnDesc);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
-        try {
-            dropFunctionImpl(functionSearchDesc, false);
-        } catch (StarRocksException e) {
-            Preconditions.checkArgument(false);
-        }
+        dropFunctionInternal(functionSearchDesc);
     }
 
     public static void replayDropFunctionLog(FunctionSearchDesc functionSearchDesc) {
@@ -596,15 +604,11 @@ public class Database extends MetaObject implements Writable {
         return func;
     }
 
-    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
+    private void dropFunctionInternal(FunctionSearchDesc function) {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
-            if (dropIfExists) {
-                LOG.info("drop function [{}] which does not exist", functionName);
-                return;
-            }
-            throw new StarRocksException("Unknown function, function=" + function.toString());
+            return;
         }
         boolean isFound = false;
         List<Function> newFunctions = new ArrayList<>();
@@ -616,17 +620,39 @@ public class Database extends MetaObject implements Writable {
             }
         }
         if (!isFound) {
-            if (dropIfExists) {
-                LOG.info("drop function [{}] which does not exist", functionName);
-                return;
-            }
-            throw new StarRocksException("Unknown function, function=" + function.toString());
+            return;
         }
         if (newFunctions.isEmpty()) {
             name2Function.remove(functionName);
         } else {
             name2Function.put(functionName, newFunctions);
         }
+    }
+
+    private boolean checkDropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
+        String functionName = function.getName().getFunction();
+        List<Function> existFuncs = name2Function.get(functionName);
+        if (existFuncs == null) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return false;
+            }
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+        }
+        boolean isFound = false;
+        for (Function existFunc : existFuncs) {
+            if (function.isIdentical(existFunc)) {
+                isFound = true;
+            } 
+        }
+        if (!isFound) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return false;
+            }
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+        }
+        return true;
     }
 
     public synchronized Function getFunction(Function desc, Function.CompareMode mode) {

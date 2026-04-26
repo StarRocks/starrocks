@@ -17,6 +17,8 @@
 #include <string>
 #include <utility>
 
+#include "base/bit/bit_util.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
@@ -27,7 +29,6 @@
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
 #include "runtime/mem_pool.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -43,13 +44,13 @@ public:
         DCHECK(_function != nullptr);
     }
 
-    ~StateMergeFunction() {
+    ~StateMergeFunction() override {
         if (_nested_ctx != nullptr) {
             delete _nested_ctx;
         }
     }
 
-    virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) override {
         if (_function == nullptr) {
             return Status::InternalError("AggStateBaseFunction is nullptr  for " + _agg_state_desc.get_func_name());
         }
@@ -70,14 +71,13 @@ public:
         bool is_result_nullable = _agg_state_desc.is_result_nullable() || _arg_nullables[0];
         ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[0], is_result_nullable, true));
 
-        // TODO: use mutable ptr as result
         auto& ret_type = _agg_state_desc.get_return_type();
-        ColumnPtr result = ColumnHelper::create_column(ret_type, _agg_state_desc.is_result_nullable());
+        MutableColumnPtr result = ColumnHelper::create_column(ret_type, _agg_state_desc.is_result_nullable());
         auto chunk_size = columns[0]->size();
 
         // finalize agg states into result
         auto align_size = _function->alignof_size();
-        auto state_size = align_to(_function->size(), align_size);
+        auto state_size = BitUtil::round_up(_function->size(), align_size);
         AlignedMemoryGuard guard(align_size, state_size);
         RETURN_IF_ERROR(guard.allocate());
         AggDataPtr agg_state = guard.get();

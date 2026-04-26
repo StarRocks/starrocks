@@ -1,4 +1,4 @@
--- name: test_refresh_statistics
+-- name: test_refresh_statistics @slow
 DROP DATABASE IF EXISTS test_refresh_statistics_db;
 -- result:
 -- !result

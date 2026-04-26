@@ -17,31 +17,43 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
+import com.starrocks.thrift.TOpType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -89,11 +101,11 @@ public class LoadTest {
     public void testInitColumnsPathColumns() throws StarRocksException {
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c1Name, null));
 
         // column mappings
@@ -121,13 +133,13 @@ public class LoadTest {
         };
 
         Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
-                slotDescByName, params, true, true, columnsFromPath);
+                slotDescByName, params, true, true, columnsFromPath, false);
 
         // check
         System.out.println(slotDescByName);
         Assertions.assertEquals(2, slotDescByName.size());
         SlotDescriptor c1SlotDesc = slotDescByName.get(c1Name);
-        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
     }
 
     @Test
@@ -137,22 +149,22 @@ public class LoadTest {
 
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c1Name, null));
 
         String c2Name = "c2";
-        columns.add(new Column(c2Name, Type.BITMAP, false, AggregateType.BITMAP_UNION, true, null, ""));
+        columns.add(new Column(c2Name, BitmapType.BITMAP, false, AggregateType.BITMAP_UNION, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c2Name, null));
 
         String c3Name = "c3";
-        columns.add(new Column(c3Name, Type.VARCHAR, false, AggregateType.REPLACE, true, null, ""));
+        columns.add(new Column(c3Name, VarcharType.VARCHAR, false, AggregateType.REPLACE, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c3Name, null));
         String c31Name = "c31";
-        columns.add(new Column(c31Name, Type.INT, true, AggregateType.SUM, true, null, ""));
+        columns.add(new Column(c31Name, IntegerType.INT, true, AggregateType.SUM, true, null, ""));
 
         // column mappings
         // c1 = year(c1)
@@ -169,7 +181,7 @@ public class LoadTest {
 
         // c31 = c3 + 1
         Expr mapping3 = new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, c3Name),
-                new IntLiteral(1, Type.INT));
+                new IntLiteral(1, IntegerType.INT));
         columnExprs.add(new ImportColumnDesc(c31Name, mapping3));
 
         new Expectations() {
@@ -190,17 +202,17 @@ public class LoadTest {
         };
 
         Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
-                slotDescByName, params, true, true, columnsFromPath);
+                slotDescByName, params, true, true, columnsFromPath, false);
 
         // check
         System.out.println(slotDescByName);
         Assertions.assertEquals(4, slotDescByName.size());
         SlotDescriptor c1SlotDesc = slotDescByName.get(c1Name);
-        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
         SlotDescriptor c2SlotDesc = slotDescByName.get(c2Name);
-        Assertions.assertTrue(c2SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c2SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
         SlotDescriptor c3SlotDesc = slotDescByName.get(c3Name);
-        Assertions.assertTrue(c3SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c3SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
     }
 
     /**
@@ -211,11 +223,11 @@ public class LoadTest {
     public void testSourceColumnCaseSensitive() throws StarRocksException {
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "C1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
         // column name in source file is c1
         String c1NameInSource = "c1";
         columnExprs.add(new ImportColumnDesc(c1NameInSource, null));
@@ -239,7 +251,7 @@ public class LoadTest {
         };
 
         Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
-                slotDescByName, params, true, true, columnsFromPath);
+                slotDescByName, params, true, true, columnsFromPath, false);
 
         // check
         System.out.println(slotDescByName);
@@ -255,11 +267,11 @@ public class LoadTest {
     public void testMappingExprInvalid() {
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
 
         // column mappings
         // c1 = year()
@@ -281,7 +293,7 @@ public class LoadTest {
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Expr 'year()' analyze error: No matching function with signature: year(), derived column is 'c1'",
                 () -> Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
-                        slotDescByName, params, true, true, columnsFromPath));
+                        slotDescByName, params, true, true, columnsFromPath, false));
     }
 
     @Test
@@ -304,13 +316,13 @@ public class LoadTest {
     @Test
     public void testLambda() throws Exception {
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.STRING, false, null, true, null, ""));
+        columns.add(new Column(c1Name, StringType.STRING, false, null, true, null, ""));
         String c2Name = "c2";
-        columns.add(new Column(c2Name, Type.STRING, false, null, true, null, ""));
+        columns.add(new Column(c2Name, StringType.STRING, false, null, true, null, ""));
         String c3Name = "c3";
-        columns.add(new Column(c3Name, Type.STRING, false, null, true, null, ""));
+        columns.add(new Column(c3Name, StringType.STRING, false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -349,7 +361,7 @@ public class LoadTest {
                 SqlModeHelper.MODE_DEFAULT);
         columnExprs.addAll(columnsStmt.getColumns());
         Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
-                slotDescByName, params, true, true, columnsFromPath);
+                slotDescByName, params, true, true, columnsFromPath, false);
         Assertions.assertEquals(7, slotDescByName.size());
         Assertions.assertTrue(slotDescByName.containsKey("c0"));
         Assertions.assertTrue(slotDescByName.containsKey("t0"));
@@ -377,7 +389,7 @@ public class LoadTest {
                         + "result: ARRAY<JSON>; args nullable: true; result nullable: true][1], '$.id'); "
                         + "args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]",
                     t0SlotId, eSlotId, eSlotId, t0SlotId);
-        Assertions.assertEquals(c2ExprExplain, exprsByName.get("c2").explain());
+        Assertions.assertEquals(c2ExprExplain, ExprToSql.explain(exprsByName.get("c2")));
 
         int t1SlotId = slotDescByName.get("t1").getId().asInt();
         int kSlotId = slotDescByName.get("k").getId().asInt();
@@ -395,17 +407,17 @@ public class LoadTest {
                         + "nullable: true][1], '$.id'); args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result "
                         + "nullable: true]",
                 t1SlotId, kSlotId, vSlotId, kSlotId, vSlotId, t1SlotId);
-        Assertions.assertEquals(c3ExprExplain, exprsByName.get("c3").explain());
+        Assertions.assertEquals(c3ExprExplain, ExprToSql.explain(exprsByName.get("c3")));
     }
     
     @Test
     public void testNowPrecision() throws Exception {
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.DATETIME, false, null, true, null, ""));
+        columns.add(new Column(c1Name, DateType.DATETIME, false, null, true, null, ""));
         String c2Name = "c2";
-        columns.add(new Column(c2Name, Type.DATETIME, false, null, true, null, ""));
+        columns.add(new Column(c2Name, DateType.DATETIME, false, null, true, null, ""));
         new Expectations() {
             {
                 table.getBaseSchema();
@@ -424,15 +436,287 @@ public class LoadTest {
                 com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
         columnExprs.addAll(columnsStmt.getColumns());
         Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
-                slotDescByName, params, true, true, columnsFromPath);
+                slotDescByName, params, true, true, columnsFromPath, false);
         Expr c1Expr = exprsByName.get("c1");
         Assertions.assertNotNull(c1Expr);
         Assertions.assertEquals(
-                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", c1Expr.explain());
+                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", ExprToSql.explain(c1Expr));
 
         Expr c2Expr = exprsByName.get("c2");
         Assertions.assertNotNull(c2Expr);
         Assertions.assertEquals(
-                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", c2Expr.explain());
+                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", ExprToSql.explain(c2Expr));
+    }
+
+    @Test
+    public void testGeneratedColumnUsesMappingExprBeforeSourceSlot() throws StarRocksException {
+        Column c1 = new Column("c1", IntegerType.INT, true, null, true, null, "");
+        Column c2 = new Column("c2", IntegerType.INT, true, null, true, null, "");
+        Column c3 = new Column("c3", IntegerType.INT, true, null, true, null, "");
+        List<Column> fullSchema = Lists.newArrayList(c1, c2, c3);
+        c3.setGeneratedColumnExpr(ColumnIdExpr.create(fullSchema,
+                new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, "c2"),
+                        new IntLiteral(1, IntegerType.INT))));
+        Table localTable = new Table(1L, "table0", Table.TableType.OLAP, fullSchema);
+
+        DescriptorTable localDescTable = new DescriptorTable();
+        TupleDescriptor localSrcTupleDesc = localDescTable.createTupleDescriptor();
+        localSrcTupleDesc.setTable(localTable);
+        Map<String, Expr> localExprsByName = Maps.newHashMap();
+        Map<String, SlotDescriptor> localSlotDescByName = Maps.newHashMap();
+        List<ImportColumnDesc> localColumnExprs = Lists.newArrayList(
+                new ImportColumnDesc("c1"),
+                new ImportColumnDesc("c2"),
+                new ImportColumnDesc("c2", new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, "c2"),
+                        new IntLiteral(2, IntegerType.INT))));
+
+        Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable, localSrcTupleDesc,
+                localSlotDescByName, new TBrokerScanRangeParams(), true, true, Lists.newArrayList(), false);
+
+        Expr generatedExpr = localExprsByName.get("c3");
+        Assertions.assertNotNull(generatedExpr);
+        Assertions.assertTrue(ExprToSql.explain(generatedExpr).contains("2"));
+    }
+
+    @Test
+    public void testGeneratedColumnUsesSourceSlotWhenMappingExprMissing() throws StarRocksException {
+        Column c1 = new Column("c1", IntegerType.INT, true, null, true, null, "");
+        Column c2 = new Column("c2", IntegerType.INT, true, null, true, null, "");
+        Column c3 = new Column("c3", IntegerType.INT, true, null, true, null, "");
+        List<Column> fullSchema = Lists.newArrayList(c1, c2, c3);
+        c3.setGeneratedColumnExpr(ColumnIdExpr.create(fullSchema, new SlotRef(null, "c2")));
+        Table localTable = new Table(1L, "table0", Table.TableType.OLAP, fullSchema);
+
+        DescriptorTable localDescTable = new DescriptorTable();
+        TupleDescriptor localSrcTupleDesc = localDescTable.createTupleDescriptor();
+        localSrcTupleDesc.setTable(localTable);
+        Map<String, Expr> localExprsByName = Maps.newHashMap();
+        Map<String, SlotDescriptor> localSlotDescByName = Maps.newHashMap();
+        List<ImportColumnDesc> localColumnExprs = Lists.newArrayList(
+                new ImportColumnDesc("c1"),
+                new ImportColumnDesc("c2"));
+
+        Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable, localSrcTupleDesc,
+                localSlotDescByName, new TBrokerScanRangeParams(), true, true, Lists.newArrayList(), false);
+
+        Expr generatedExpr = localExprsByName.get("c3");
+        Assertions.assertNotNull(generatedExpr);
+        Assertions.assertInstanceOf(CastExpr.class, generatedExpr);
+        Assertions.assertInstanceOf(SlotRef.class, generatedExpr.getChild(0));
+        Assertions.assertEquals("c2", ((SlotRef) generatedExpr.getChild(0)).getColumnName());
+    }
+
+    @Test
+    public void testGeneratedColumnMissingDependencyUsesDefaultNull() throws StarRocksException {
+        Column c1 = new Column("c1", IntegerType.INT, true, null, true, null, "");
+        Column c2 = new Column("c2", IntegerType.INT, true, null, true, null, "");
+        Column c3 = new Column("c3", IntegerType.INT, true, null, true, null, "");
+        List<Column> fullSchema = Lists.newArrayList(c1, c2, c3);
+        c3.setGeneratedColumnExpr(ColumnIdExpr.create(fullSchema,
+                new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, "c2"),
+                        new IntLiteral(1, IntegerType.INT))));
+        Table localTable = new Table(1L, "table0", Table.TableType.OLAP, fullSchema);
+
+        DescriptorTable localDescTable = new DescriptorTable();
+        TupleDescriptor localSrcTupleDesc = localDescTable.createTupleDescriptor();
+        localSrcTupleDesc.setTable(localTable);
+        Map<String, Expr> localExprsByName = Maps.newHashMap();
+        Map<String, SlotDescriptor> localSlotDescByName = Maps.newHashMap();
+        List<ImportColumnDesc> localColumnExprs = Lists.newArrayList(new ImportColumnDesc("c1"));
+
+        Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable, localSrcTupleDesc,
+                localSlotDescByName, new TBrokerScanRangeParams(), true, true, Lists.newArrayList(), false);
+
+        Expr generatedExpr = localExprsByName.get("c3");
+        Assertions.assertNotNull(generatedExpr);
+        Assertions.assertTrue(ExprToSql.explain(generatedExpr).contains("NULL"));
+    }
+
+    @Test
+    public void testGeneratedColumnMissingDependencyUsesConstDefault() throws StarRocksException {
+        Column c1 = new Column("c1", IntegerType.INT, true, null, true, null, "");
+        Column c2 = new Column("c2", IntegerType.INT, true, null, false,
+                new ColumnDef.DefaultValueDef(true, new com.starrocks.sql.ast.expression.StringLiteral("7")), "");
+        Column c3 = new Column("c3", IntegerType.INT, true, null, true, null, "");
+        List<Column> fullSchema = Lists.newArrayList(c1, c2, c3);
+        c3.setGeneratedColumnExpr(ColumnIdExpr.create(fullSchema, new SlotRef(null, "c2")));
+        Table localTable = new Table(1L, "table0", Table.TableType.OLAP, fullSchema);
+
+        DescriptorTable localDescTable = new DescriptorTable();
+        TupleDescriptor localSrcTupleDesc = localDescTable.createTupleDescriptor();
+        localSrcTupleDesc.setTable(localTable);
+        Map<String, Expr> localExprsByName = Maps.newHashMap();
+        Map<String, SlotDescriptor> localSlotDescByName = Maps.newHashMap();
+        List<ImportColumnDesc> localColumnExprs = Lists.newArrayList(new ImportColumnDesc("c1"));
+
+        Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable, localSrcTupleDesc,
+                localSlotDescByName, new TBrokerScanRangeParams(), true, true, Lists.newArrayList(), false);
+
+        Expr generatedExpr = localExprsByName.get("c3");
+        Assertions.assertNotNull(generatedExpr);
+        Assertions.assertTrue(ExprToSql.explain(generatedExpr).contains("7"));
+    }
+
+    @Test
+    public void testBuildLoadDefaultExprUsesExprObjectConstDefault() throws StarRocksException {
+        Column c2 = new Column("c2", new ArrayType(IntegerType.INT), false, null, false,
+                new ColumnDef.DefaultValueDef(true, new ArrayExpr(new ArrayType(IntegerType.INT),
+                        Lists.newArrayList(new IntLiteral(7, IntegerType.INT)))), "");
+
+        Expr defaultExpr = Load.buildLoadDefaultExpr(c2);
+        Assertions.assertNotNull(defaultExpr);
+        Assertions.assertInstanceOf(ArrayExpr.class, defaultExpr);
+        Assertions.assertTrue(defaultExpr.getType().isArrayType());
+        Assertions.assertTrue(ExprToSql.explain(defaultExpr).contains("7"));
+    }
+
+    @Test
+    public void testGeneratedColumnMissingDependencyUsesVaryDefault() throws StarRocksException {
+        Column c1 = new Column("c1", IntegerType.INT, true, null, true, null, "");
+        Column c2 = new Column("c2", VarcharType.VARCHAR, true, null, false,
+                new ColumnDef.DefaultValueDef(true, new FunctionCallExpr("uuid", Lists.newArrayList())), "");
+        Column c3 = new Column("c3", VarcharType.VARCHAR, true, null, true, null, "");
+        List<Column> fullSchema = Lists.newArrayList(c1, c2, c3);
+        c3.setGeneratedColumnExpr(ColumnIdExpr.create(fullSchema, new SlotRef(null, "c2")));
+        Table localTable = new Table(1L, "table0", Table.TableType.OLAP, fullSchema);
+
+        DescriptorTable localDescTable = new DescriptorTable();
+        TupleDescriptor localSrcTupleDesc = localDescTable.createTupleDescriptor();
+        localSrcTupleDesc.setTable(localTable);
+        Map<String, Expr> localExprsByName = Maps.newHashMap();
+        Map<String, SlotDescriptor> localSlotDescByName = Maps.newHashMap();
+        List<ImportColumnDesc> localColumnExprs = Lists.newArrayList(new ImportColumnDesc("c1"));
+
+        Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable, localSrcTupleDesc,
+                localSlotDescByName, new TBrokerScanRangeParams(), true, true, Lists.newArrayList(), false);
+
+        Expr generatedExpr = localExprsByName.get("c3");
+        Assertions.assertNotNull(generatedExpr);
+        Assertions.assertTrue(ExprToSql.explain(generatedExpr).contains("uuid"));
+    }
+
+    @Test
+    public void testGeneratedColumnMissingDependencyFailsWhenNoDefault() {
+        Column c1 = new Column("c1", IntegerType.INT, true, null, true, null, "");
+        Column c2 = new Column("c2", IntegerType.INT, true, null, false, null, "");
+        Column c3 = new Column("c3", IntegerType.INT, true, null, true, null, "");
+        List<Column> fullSchema = Lists.newArrayList(c1, c2, c3);
+        c3.setGeneratedColumnExpr(ColumnIdExpr.create(fullSchema,
+                new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, "c2"),
+                        new IntLiteral(1, IntegerType.INT))));
+        Table localTable = new Table(1L, "table0", Table.TableType.OLAP, fullSchema);
+
+        DescriptorTable localDescTable = new DescriptorTable();
+        TupleDescriptor localSrcTupleDesc = localDescTable.createTupleDescriptor();
+        localSrcTupleDesc.setTable(localTable);
+        Map<String, Expr> localExprsByName = Maps.newHashMap();
+        Map<String, SlotDescriptor> localSlotDescByName = Maps.newHashMap();
+        List<ImportColumnDesc> localColumnExprs = Lists.newArrayList(new ImportColumnDesc("c1"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "missing dependency column for generated column c3",
+                () -> Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable,
+                        localSrcTupleDesc, localSlotDescByName, new TBrokerScanRangeParams(), true, true,
+                        Lists.newArrayList(), false, true));
+    }
+
+    /**
+     * For PRIMARY_KEYS tables, when __op is not explicitly specified and isLoadJson=false
+     * (e.g. CSV load), initColumns should inject an IntLiteral(UPSERT=0) expression for __op.
+     */
+    @Test
+    public void testInitColumnsAutoAddsUpsertOpExprForPrimaryKeyNonJsonLoad() throws StarRocksException {
+        String idName = "id";
+        columns.add(new Column(idName, IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(idName, null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn(idName);
+                result = columns.get(0);
+                table.getColumn(Load.LOAD_OP_COLUMN);
+                result = null;
+                result = columns.get(0);
+                table.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+            }
+        };
+
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, false);
+
+        // __op should be added as IntLiteral(UPSERT=0) in exprsByName
+        Expr opExpr = exprsByName.get(Load.LOAD_OP_COLUMN);
+        Assertions.assertNotNull(opExpr, "__op expr should be auto-injected for non-JSON primary key load");
+        Assertions.assertInstanceOf(IntLiteral.class, opExpr);
+        Assertions.assertEquals(TOpType.UPSERT.getValue(), ((IntLiteral) opExpr).getValue());
+        // __op should not create a src slot since it has a constant expr
+        Assertions.assertNull(slotDescByName.get(Load.LOAD_OP_COLUMN));
+    }
+
+    /**
+     * For PRIMARY_KEYS tables, when __op is not explicitly specified and isLoadJson=true
+     * (e.g. stream load / broker load JSON), initColumns should inject a null expression for
+     * __op so that the runtime reads __op directly from the JSON object.
+     */
+    @Test
+    public void testInitColumnsAutoAddsNullOpExprForPrimaryKeyJsonLoad() throws StarRocksException {
+        String idName = "id";
+        columns.add(new Column(idName, IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(idName, null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn(idName);
+                result = columns.get(0);
+                table.getColumn(Load.LOAD_OP_COLUMN);
+                result = null;
+                table.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+            }
+        };
+
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, true);
+
+        // __op should be added as a src slot (null expr means "read from JSON"), not as a constant expr
+        Assertions.assertNull(exprsByName.get(Load.LOAD_OP_COLUMN),
+                "__op should not have a constant expr when loading JSON — it is read from the data");
+        SlotDescriptor opSlot = slotDescByName.get(Load.LOAD_OP_COLUMN);
+        Assertions.assertNotNull(opSlot, "__op src slot should be created for JSON primary key load");
+        Assertions.assertEquals(IntegerType.TINYINT, opSlot.getColumn().getType());
+    }
+
+    /**
+     * For non-PRIMARY_KEYS tables (DUP_KEYS), initColumns should never inject __op
+     * regardless of the isLoadJson flag, since those tables do not use the op column.
+     */
+    @Test
+    public void testInitColumnsDoesNotAddOpColumnForNonPrimaryKeyTable() throws StarRocksException {
+        // DUP_KEYS table (setUp default)
+        String idName = "id";
+        columns.add(new Column(idName, IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(idName, null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn(idName);
+                result = columns.get(0);
+                table.getKeysType();
+                result = KeysType.DUP_KEYS;
+            }
+        };
+
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, true);
+
+        Assertions.assertNull(exprsByName.get(Load.LOAD_OP_COLUMN));
+        Assertions.assertNull(slotDescByName.get(Load.LOAD_OP_COLUMN));
     }
 }

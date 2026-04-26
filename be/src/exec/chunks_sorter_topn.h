@@ -15,10 +15,10 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
 #include "exprs/expr_context.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // Sort Chunks in memory with specified order by rules.
@@ -89,6 +89,8 @@ public:
     std::vector<RuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
 
 private:
+    Status _do_get_next(ChunkPtr* chunk, bool* eos);
+
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
     Status _sort_chunks(RuntimeState* state);
@@ -134,6 +136,8 @@ private:
     // the last two element [4, 5] should be pruned
     void _rank_pruning();
 
+    void _reset();
+
     const MergedRun& _lowest_merged_run() const { return _merged_runs.front(); }
 
     std::pair<const MergedRun*, int> _get_run_by_row_id(size_t rid) const {
@@ -170,7 +174,7 @@ private:
     const size_t _max_buffered_chunks;
     size_t _init_buffered_chunks;
     RawChunks _raw_chunks;
-    bool _init_merged_segment;
+    bool _init_merged_segment{false};
     MergedRuns _merged_runs;
 
     const size_t _limit;
@@ -199,6 +203,16 @@ private:
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_timer = nullptr;
+
+protected:
+    size_t _reserved_bytes(const ChunkPtr& chunk);
+    size_t _get_revocable_mem_bytes();
+    std::function<StatusOr<ChunkPtr>()> _get_chunk_iterator();
+    bool _have_no_staging_data() const;
+
+    // used in spill
+    // index for _raw_chunks
+    size_t _process_raw_chunks_idx = 0;
 };
 
 } // namespace starrocks

@@ -15,11 +15,13 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 public class RecycleBinCatalogsTable {
     public static final String NAME = "recyclebin_catalogs";
@@ -27,12 +29,12 @@ public class RecycleBinCatalogsTable {
     public static SystemTable create() {
         return new SystemTable(SystemId.RECYCLEBIN_CATALOGS, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("TYPE", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("DB_ID", ScalarType.BIGINT)
-                        .column("TABLE_ID", ScalarType.BIGINT)
-                        .column("PARTITION_ID", ScalarType.BIGINT)
-                        .column("DROP_TIME", ScalarType.DATETIME)
+                        .column("TYPE", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("DB_ID", IntegerType.BIGINT)
+                        .column("TABLE_ID", IntegerType.BIGINT)
+                        .column("PARTITION_ID", IntegerType.BIGINT)
+                        .column("DROP_TIME", DateType.DATETIME)
                         .build(),
                 TSchemaTableType.SCH_RECYCLEBIN_CATALOGS);
     }

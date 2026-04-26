@@ -19,8 +19,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/concurrency/spinlock.h"
 #include "gutil/macros.h"
-#include "util/spinlock.h"
 
 namespace starrocks::query_cache {
 

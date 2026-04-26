@@ -35,10 +35,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Enums;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -48,16 +48,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.ShowDataDistributionStmt;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 
@@ -68,8 +66,9 @@ import java.util.Map;
 
 public class MetadataViewer {
 
-    public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt) throws DdlException {
-        Replica.ReplicaStatus statusFilter = null;
+    public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt, ConnectContext context)
+            throws DdlException {
+        ReplicaStatus statusFilter = null;
         BinaryType op = null; // Default to null instead of stmt.getOp()
         Expr where = stmt.getWhere();
 
@@ -81,13 +80,26 @@ public class MetadataViewer {
                 Expr rightChild = binaryPredicate.getChild(1);
                 String leftKey = ((SlotRef) leftChild).getColumnName();
                 if (rightChild instanceof StringLiteral && leftKey.equalsIgnoreCase("status")) {
-                    statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
+                    statusFilter = Enums.getIfPresent(ReplicaStatus.class,
                             ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
                 }
             }
         }
 
-        return getTabletStatus(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions(),
+        // Get partitions from PartitionRef instead of the removed partitions field
+        List<String> partitions = Lists.newArrayList();
+        PartitionRef partitionRef = stmt.getPartitionRef();
+        if (partitionRef != null) {
+            partitions.addAll(partitionRef.getPartitionNames());
+        }
+
+        // Resolve database name from TableRef or context
+        String dbName = stmt.getDbName();
+        if (Strings.isNullOrEmpty(dbName)) {
+            dbName = context.getDatabase();
+        }
+
+        return getTabletStatus(dbName, stmt.getTblName(), partitions,
                 statusFilter, op);
     }
 
@@ -132,8 +144,8 @@ public class MetadataViewer {
 
                     long visibleVersion = physicalPartition.getVisibleVersion();
 
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                    for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             int count = replicationNum;
@@ -141,17 +153,7 @@ public class MetadataViewer {
                                 --count;
                                 List<String> row = Lists.newArrayList();
 
-                                ReplicaStatus status = ReplicaStatus.OK;
-                                Backend be = infoService.getBackend(replica.getBackendId());
-                                if (be == null || !be.isAvailable() || replica.isBad()) {
-                                    status = ReplicaStatus.DEAD;
-                                } else if (replica.getVersion() < visibleVersion
-                                        || replica.getLastFailedVersion() > 0) {
-                                    status = ReplicaStatus.VERSION_ERROR;
-
-                                } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
-                                    status = ReplicaStatus.SCHEMA_ERROR;
-                                }
+                                ReplicaStatus status = replica.computeReplicaStatus(infoService, visibleVersion, schemaHash);
 
                                 if (filterReplica(status, statusFilter, op)) {
                                     continue;
@@ -215,12 +217,7 @@ public class MetadataViewer {
         }
     }
 
-    public static List<List<String>> getTabletDistribution(AdminShowReplicaDistributionStmt stmt) throws DdlException {
-        return getTabletDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
-    }
-
-    private static List<List<String>> getTabletDistribution(String dbName, String tblName,
-                                                            PartitionNames partitionNames)
+    public static List<List<String>> getTabletDistribution(String dbName, String tblName, PartitionNames partitionNames)
             throws DdlException {
         DecimalFormat df = new DecimalFormat("##.00 %");
 
@@ -270,7 +267,7 @@ public class MetadataViewer {
             for (long partId : partitionIds) {
                 Partition partition = olapTable.getPartition(partId);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             for (long beId : tablet.getBackendIds()) {
                                 if (!countMap.containsKey(beId)) {
@@ -322,12 +319,8 @@ public class MetadataViewer {
         return allComputeNodeIds;
     }
 
-    public static List<List<String>> getDataDistribution(ShowDataDistributionStmt stmt) throws DdlException {
-        return getDataDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
-    }
-
     public static List<List<String>> getDataDistribution(
-            String dbName, String tblName, PartitionNames partitionNames) throws DdlException {
+            String dbName, String tblName, PartitionRef partitionNames) throws DdlException {
 
         DecimalFormat df = new DecimalFormat("00.00 %");
         List<List<String>> result = Lists.newArrayList();
@@ -372,7 +365,7 @@ public class MetadataViewer {
                 }
 
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         List<Tablet> tablets = index.getTablets();
 
                         List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(tablets.size());
@@ -394,8 +387,7 @@ public class MetadataViewer {
                             List<String> row = Lists.newArrayList();
                             row.add(partition.getName());
                             row.add(String.valueOf(physicalPartition.getId()));
-                            row.add(olapTable.getIndexNameById(index.getId()));
-                            row.add(index.getVirtualBucketsByTabletId(tablets.get(i).getId()).toString());
+                            row.add(olapTable.getIndexNameByMetaId(index.getMetaId()));
                             row.add(String.valueOf(rowCountStatistics.get(i)));
                             row.add(totalRowCount == 0L ? "0.00 %"
                                     : df.format((double) rowCountStatistics.get(i) / totalRowCount));

@@ -128,6 +128,13 @@ public class LoadJobMVListener implements LoadJobListener {
         }
     }
 
+    public void onTableDataChange(Database db, Table table) {
+        if (db == null || table == null) {
+            return;
+        }
+        triggerToRefreshRelatedMVs(db, table);
+    }
+
     /**
      * Trigger to refresh related materialized views if necessary.
      * @param db base table's database

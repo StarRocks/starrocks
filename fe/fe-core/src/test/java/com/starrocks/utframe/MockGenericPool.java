@@ -23,6 +23,8 @@ import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends ThriftConnectionPool<VALUE> {
@@ -65,6 +67,10 @@ public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> ext
 
     @Override
     public void invalidateObject(TNetworkAddress address, VALUE object) {
+    }
+
+    public List<MockedBackend> getAllBackends() {
+        return new ArrayList<>(backendMap.values());
     }
 
     public static class HeatBeatPool extends MockGenericPool<HeartbeatService.Client> {

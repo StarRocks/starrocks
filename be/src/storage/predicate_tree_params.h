@@ -17,8 +17,10 @@
 namespace starrocks {
 
 struct PredicateTreeParams {
+    static constexpr int32_t DEFAULT_MAX_PUSHDOWN_OR_PREDICATES = 32;
     bool enable_or = false;
     bool enable_show_in_profile = false;
+    int32_t max_pushdown_or_predicates = DEFAULT_MAX_PUSHDOWN_OR_PREDICATES;
 };
 
 } // namespace starrocks

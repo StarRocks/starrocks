@@ -36,8 +36,7 @@
 
 #include <utility>
 
-#include "runtime/runtime_state.h"
-#include "service/backend_options.h"
+#include "common/system/backend_options.h"
 
 namespace starrocks {
 
@@ -54,6 +53,7 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::SCHEMA_CHANGE, "schema_change"},
         {MemTrackerType::JEMALLOC, "jemalloc_metadata"},
         {MemTrackerType::PASSTHROUGH, "passthrough"},
+        {MemTrackerType::BRPC_IOBUF, "brpc_iobuf"},
         {MemTrackerType::CONNECTOR_SCAN, "connector_scan"},
         {MemTrackerType::METADATA, "metadata"},
         {MemTrackerType::TABLET_METADATA, "tablet_metadata"},
@@ -72,12 +72,12 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::UPDATE, "update"},
         {MemTrackerType::CLONE, "clone"},
         {MemTrackerType::DATACACHE, "datacache"},
-        {MemTrackerType::POCO_CONNECTION_POOL, "poco_connection_pool"},
         {MemTrackerType::REPLICATION, "replication"},
         {MemTrackerType::ROWSET_UPDATE_STATE, "rowset_update_state"},
         {MemTrackerType::INDEX_CACHE, "index_cache"},
         {MemTrackerType::DEL_VEC_CACHE, "del_vec_cache"},
         {MemTrackerType::COMPACTION_STATE, "compaction_state"},
+        {MemTrackerType::BUILTIN_INVERTED_INDEX, "builtin_inverted_index"},
 };
 
 static std::map<MemTrackerType, std::string> s_type_to_label_map;
@@ -113,35 +113,16 @@ MemTrackerType MemTracker::label_to_type(const std::string& label) {
 }
 
 MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent)
-        : _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(&_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(&_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) {
-        _parent->add_child_tracker(this);
-        _level = _parent->_level + 1;
-    }
-    Init();
-}
+        : MemTracker(MemTrackerType::NO_SET, byte_limit, std::move(label), parent) {}
 
 MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string label, MemTracker* parent)
-        : _type(type),
-          _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(&_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(&_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
+        : _type(type), _limit(byte_limit), _label(std::move(label)), _parent(parent) {
+    _local_consumption_holder = std::make_unique<RuntimeProfile::HighWaterMarkCounter>(TUnit::BYTES);
+    _consumption = _local_consumption_holder.get();
+    _local_allocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+    _allocation = _local_allocation_holder.get();
+    _local_deallocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+    _deallocation = _local_deallocation_holder.get();
     if (parent != nullptr) {
         _parent->add_child_tracker(this);
         _level = _parent->_level + 1;
@@ -152,26 +133,29 @@ MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string labe
 MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> attaching_info,
                        const std::string& counter_name_prefix, int64_t byte_limit, std::string label,
                        MemTracker* parent)
-        : _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(std::get<0>(attaching_info)
-                               ? profile->AddHighWaterMarkCounter(
-                                         counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
-                                         RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
-                               : &_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(std::get<1>(attaching_info)
-                              ? profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
-                                                     RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
-                              : &_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(std::get<2>(attaching_info)
-                                ? profile->add_counter(counter_name_prefix + DEALLOCATED_MEMORY_USAGE, TUnit::BYTES,
-                                                       RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
-                                : &_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
+        : _limit(byte_limit), _label(std::move(label)), _parent(parent) {
+    if (std::get<0>(attaching_info)) {
+        _consumption =
+                profile->AddHighWaterMarkCounter(counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
+                                                 RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+    } else {
+        _local_consumption_holder = std::make_unique<RuntimeProfile::HighWaterMarkCounter>(TUnit::BYTES);
+        _consumption = _local_consumption_holder.get();
+    }
+    if (std::get<1>(attaching_info)) {
+        _allocation = profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                           RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    } else {
+        _local_allocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+        _allocation = _local_allocation_holder.get();
+    }
+    if (std::get<2>(attaching_info)) {
+        _deallocation = profile->add_counter(counter_name_prefix + DEALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                             RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    } else {
+        _local_deallocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+        _deallocation = _local_deallocation_holder.get();
+    }
     if (parent != nullptr) {
         _parent->add_child_tracker(this);
         _level = _parent->_level + 1;
@@ -199,6 +183,21 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+
+#ifdef DEBUG
+    {
+        std::unique_lock<std::mutex> lock(_child_trackers_lock);
+        for (const auto& child : _child_trackers) {
+            LOG(WARNING) << "MemTracker '" << _label << "' is being destroyed without releasing child tracker "
+                         << child->label();
+        }
+        DCHECK(_child_trackers.empty()) << err_msg("Child mem trackers have not been released, may cause corruption");
+    }
+#endif
+
+    // When the mem_tracker is destroyed, manually setting _consumption to null can easily
+    // trigger a use-after-free bug in MemTracker.
+    _consumption = nullptr;
 }
 
 Status MemTracker::check_mem_limit(const std::string& msg) const {
@@ -231,12 +230,12 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     return item;
 }
 
-std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) const {
+std::string MemTracker::err_msg(const std::string& msg, std::string_view fragment_instance_id) const {
     std::stringstream str;
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
     str << "Backend: " << BackendOptions::get_localhost() << ", ";
-    if (state != nullptr) {
-        str << "fragment: " << print_id(state->fragment_instance_id()) << " ";
+    if (!fragment_instance_id.empty()) {
+        str << "fragment: " << fragment_instance_id << " ";
     }
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {
@@ -269,6 +268,9 @@ std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) con
             str << "Mem usage has exceed the limit of the resource group [" << label() << "]. "
                 << "You can change the limit by modifying [mem_limit] of this group";
         }
+        break;
+    case MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL:
+        str << "Mem usage has exceed the limit of resource group memory pool [" << label() << "]. ";
         break;
     case MemTrackerType::RESOURCE_GROUP_BIG_QUERY:
         str << "Mem usage has exceed the big query limit of the resource group [" << label() << "]. "

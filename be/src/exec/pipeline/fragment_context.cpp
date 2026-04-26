@@ -14,29 +14,77 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <memory>
+#include <mutex>
+#include <thread>
 
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/logconfig.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
-FragmentContext::FragmentContext() : _data_sink(nullptr) {}
+namespace {
+
+const QueryExecutionServices& query_execution_services(const RuntimeState* state) {
+    DCHECK(state != nullptr);
+    return *state->query_execution_services();
+}
+
+const ExecutionEnv& execution_services(const RuntimeState* state) {
+    return *query_execution_services(state).execution;
+}
+
+const RuntimeServices& runtime_services(const RuntimeState* state) {
+    return *query_execution_services(state).runtime;
+}
+
+} // namespace
+
+// RAII guard for pass-through chunk buffer lifecycle.
+class PassThroughChunkBufferGuard {
+public:
+    PassThroughChunkBufferGuard(DataStreamMgr* stream_mgr, const TUniqueId& query_id)
+            : _stream_mgr(stream_mgr), _query_id(query_id) {
+        _stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
+    }
+
+    ~PassThroughChunkBufferGuard() { _stream_mgr->destroy_pass_through_chunk_buffer(_query_id); }
+
+    PassThroughChunkBufferGuard(const PassThroughChunkBufferGuard&) = delete;
+    PassThroughChunkBufferGuard& operator=(const PassThroughChunkBufferGuard&) = delete;
+
+private:
+    DataStreamMgr* _stream_mgr;
+    TUniqueId _query_id;
+};
+
+FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
 FragmentContext::~FragmentContext() {
     _close_stream_load_contexts();
@@ -45,6 +93,9 @@ FragmentContext::~FragmentContext() {
     close_all_execution_groups();
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
+    }
+    if (_fragment_dict_state != nullptr && _runtime_state != nullptr) {
+        _fragment_dict_state->close(_runtime_state.get());
     }
     clear_pipeline_timer();
 }
@@ -97,7 +148,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
 
     if (_report_when_finish) {
         /// TODO: report fragment finish to BE coordinator
@@ -127,7 +178,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
         //
         std::shared_ptr<Runnable> runnable;
         runnable = std::make_shared<RpcRunnable>(fe_addr, res, params);
-        (void)state->exec_env()->streaming_load_thread_pool()->submit(runnable);
+        (void)execution_services(state).streaming_load_thread_pool->submit(runnable);
     }
 
     destroy_pass_through_chunk_buffer();
@@ -168,13 +219,26 @@ void FragmentContext::report_exec_state_if_necessary() {
         // Fix the report interval regardless the noise.
         normalized_report_ns = last_report_ns + interval_ns;
     }
-    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+
+    // only report after prepare successfully
+    bool allPrepared = true;
+    iterate_pipeline([&allPrepared](const Pipeline* pipeline) {
+        if (!allPrepared) return;
+        for (const auto& driver : pipeline->drivers()) {
+            if (!driver->local_prepare_is_done()) {
+                allPrepared = false;
+                break;
+            }
+        }
+    });
+
+    if (allPrepared && _last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
         iterate_pipeline([](const Pipeline* pipeline) {
             for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
             }
         });
-        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
     }
 }
 
@@ -188,29 +252,49 @@ void FragmentContext::set_final_status(const Status& status) {
 
         _driver_token.reset();
 
+        auto detailed_message = _s_status.detailed_message();
+        bool is_timeout = detailed_message == "TimeOut";
+        if (is_timeout) {
+            hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
+        }
+
+        const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
+        if (!_s_status.ok() && !finished_cancel) {
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
+            auto* query_ctx = _runtime_state->query_ctx();
+            if (query_ctx != nullptr) {
+                executor->report_audit_statistics_on_failure(query_ctx, this);
+            }
+        }
+
         if (_s_status.is_cancelled()) {
-            auto detailed_message = _s_status.detailed_message();
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
                                 print_id(_fragment_instance_id), detailed_message);
             if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
-                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                detailed_message == "UserCancel" || is_timeout) {
                 LOG(INFO) << cancel_msg;
             } else {
                 LOG(WARNING) << cancel_msg;
             }
 
-            const auto* executors = _workgroup != nullptr
-                                            ? _workgroup->executors()
-                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
+            const auto* executors =
+                    _workgroup != nullptr
+                            ? _workgroup->executors()
+                            : execution_services(_runtime_state.get()).workgroup_manager->shared_executors();
             auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
 
         // cancel drivers in event scheduler
-        iterate_drivers([](const DriverPtr& driver) {
+        iterate_drivers([is_timeout](const DriverPtr& driver) {
             driver->set_need_check_reschedule(true);
             if (driver->is_in_blocked()) {
+                LOG_IF(WARNING, config::pipeline_timeout_diagnostic && is_timeout)
+                        << "[Driver] Timeout" << driver->to_readable_string();
                 driver->observer()->cancel_trigger();
             }
         });
@@ -240,7 +324,7 @@ Status FragmentContext::prepare_all_pipelines() {
 }
 
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
-    _stream_load_contexts = std::move(contexts);
+    _stream_load_contexts = contexts;
 }
 
 // Note: this function should be thread safe
@@ -259,7 +343,8 @@ void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
+        runtime_services(_runtime_state.get())
+                .profile_report_worker->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
 }
 
@@ -293,8 +378,8 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
-                fragment_ctx->query_id(), fragment_id));
+        RETURN_IF_ERROR(runtime_services(fragment_ctx->runtime_state())
+                                .profile_report_worker->register_pipeline_load(fragment_ctx->query_id(), fragment_id));
     }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
     return Status::OK();
@@ -322,8 +407,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !it->second->runtime_state()->is_cancelled()) {
-            ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
-                                                                                      fragment_id);
+            runtime_services(it->second->runtime_state())
+                    .profile_report_worker->unregister_pipeline_load(it->second->query_id(), fragment_id);
         }
         _fragment_contexts.erase(it);
     }
@@ -336,19 +421,18 @@ void FragmentContextManager::cancel(const Status& status) {
     }
 }
 void FragmentContext::prepare_pass_through_chunk_buffer() {
-    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    _pass_through_chunk_buffer_guard =
+            std::make_unique<PassThroughChunkBufferGuard>(runtime_services(_runtime_state.get()).stream_mgr, _query_id);
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
-    if (_runtime_state) {
-        _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
-    }
+    _pass_through_chunk_buffer_guard.reset();
 }
 
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
     _pipeline_timer = timer;
-    _timeout_task = new CheckFragmentTimeout(this);
+    _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
     timespec tm = butil::seconds_from_now(runtime_state()->query_ctx()->get_query_expire_seconds());
-    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task, tm));
+    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task.get(), tm));
     return Status::OK();
 }
 
@@ -358,40 +442,27 @@ void FragmentContext::clear_pipeline_timer() {
             for (auto& [ignore, task] : _rf_timeout_tasks) {
                 if (task) {
                     task->unschedule(_pipeline_timer);
-                    SAFE_DELETE(task);
+                    task.reset();
                 }
             }
             _rf_timeout_tasks.clear();
         }
         if (_timeout_task) {
             _timeout_task->unschedule(_pipeline_timer);
-            SAFE_DELETE(_timeout_task);
+            _timeout_task.reset();
         }
     }
 }
 
-Status FragmentContext::reset_epoch() {
-    _num_finished_epoch_pipelines = 0;
-    const std::function<Status(Pipeline*)> caller = [this](Pipeline* pipeline) {
-        RETURN_IF_ERROR(_runtime_state->reset_epoch());
-        RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
-        return Status::OK();
-    };
-    return iterate_pipeline(caller);
-}
-
-void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
-    size_t total_execution_groups = _execution_groups.size();
-    bool all_groups_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == total_execution_groups;
-    if (!all_groups_finished) {
-        return;
+TQueryType::type FragmentContext::query_type() const {
+    if (_runtime_state == nullptr) {
+        return TQueryType::EXTERNAL;
     }
-
-    state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
+    return _runtime_state->query_options().query_type;
 }
 
 void FragmentContext::init_jit_profile() {
-    if (runtime_state() && runtime_state()->is_jit_enabled() && runtime_state()->runtime_profile()) {
+    if (runtime_state() && RuntimeStateHelper::is_jit_enabled(runtime_state()) && runtime_state()->runtime_profile()) {
         _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
         _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
     }
@@ -420,9 +491,62 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 }
 
 Status FragmentContext::prepare_active_drivers() {
-    for (auto& group : _execution_groups) {
-        RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+    auto* profile = runtime_state()->runtime_profile();
+    auto* prepare_driver_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-global", "prepare-pipeline-driver", 10_ms);
+
+    {
+        // prepare all driver's state in one thread, this phase's prepare don't need to be thread-safe
+        // But this is done in single thread so we can't put heavy task in this phase
+        SCOPED_TIMER(prepare_driver_timer);
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+        }
     }
+
+    auto* prepare_driver_local_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 10_ms);
+    SCOPED_TIMER(prepare_driver_local_timer);
+
+    size_t total_active_driver_size = 0;
+    for (auto& group : _execution_groups) {
+        total_active_driver_size += group->total_active_driver_size();
+    }
+
+    auto pipeline_prepare_pool = execution_services(runtime_state()).pipeline_prepare_pool;
+    // if prepare all drivers parallelly of this fragment will make queue too full, do not prepare parallelly
+    if (!config::enable_pipeline_driver_parallel_prepare ||
+        pipeline_prepare_pool->get_queue_size() + total_active_driver_size >=
+                config::pipeline_prepare_thread_pool_queue_size / 2) {
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_active_drivers_sequentially(_runtime_state.get()));
+        }
+        RETURN_IF_ERROR(submit_all_timer());
+        return Status::OK();
+    }
+
+    // prepare pipeline-driver parallelly
+    // only do prepare operation that is thread safe in prepare_operators_local_state
+    // Use shared_ptr to manage sync context lifecycle to avoid use-after-free
+    auto sync_ctx = std::make_shared<DriverPrepareSyncContext>();
+    sync_ctx->pending_tasks = total_active_driver_size;
+
+    for (auto& group : _execution_groups) {
+        group->prepare_active_drivers_parallel(runtime_state(), sync_ctx);
+    }
+
+    // wait for all the tasks finished
+    {
+        std::unique_lock<std::mutex> lock(sync_ctx->mutex);
+        sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
+    }
+
+    Status* error = sync_ctx->first_error.load();
+    if (error != nullptr) {
+        Status ret = *error;
+        return ret;
+    }
+
     RETURN_IF_ERROR(submit_all_timer());
     return Status::OK();
 }
@@ -443,9 +567,9 @@ void FragmentContext::_close_stream_load_contexts() {
     for (const auto& context : _stream_load_contexts) {
         context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
         if (context->enable_batch_write) {
-            _runtime_state->exec_env()->batch_write_mgr()->unregister_stream_load_pipe(context);
+            runtime_services(_runtime_state.get()).batch_write_mgr->unregister_stream_load_pipe(context);
         } else {
-            _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(context);
+            runtime_services(_runtime_state.get()).stream_context_mgr->remove_channel_context(context);
         }
     }
 }
@@ -459,21 +583,22 @@ void FragmentContext::init_event_scheduler() {
 void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t timeout) {
     RFScanWaitTimeout* task;
     if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
-        task = down_cast<RFScanWaitTimeout*>(iter->second);
+        task = down_cast<RFScanWaitTimeout*>(iter->second.get());
     } else {
-        task = new RFScanWaitTimeout(this);
-        _rf_timeout_tasks.emplace(timeout, task);
+        auto timeoutTask = std::make_shared<RFScanWaitTimeout>();
+        task = timeoutTask.get();
+        _rf_timeout_tasks.emplace(timeout, timeoutTask);
     }
     task->add_observer(_runtime_state.get(), observer);
 }
 
 Status FragmentContext::submit_all_timer() {
     timespec tm = butil::microseconds_to_timespec(butil::gettimeofday_us());
-    for (auto [delta_ns, task] : _rf_timeout_tasks) {
+    for (const auto& [delta_ns, task] : _rf_timeout_tasks) {
         timespec abstime = tm;
         abstime.tv_nsec += delta_ns;
         butil::timespec_normalize(&abstime);
-        RETURN_IF_ERROR(_pipeline_timer->schedule(task, abstime));
+        RETURN_IF_ERROR(_pipeline_timer->schedule(task.get(), abstime));
     }
     return Status::OK();
 }

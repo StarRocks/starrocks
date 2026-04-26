@@ -36,8 +36,8 @@
 
 #include <memory>
 
+#include "base/concurrency/concurrent_limiter.h"
 #include "common/status.h"
-#include "util/concurrent_limiter.h"
 
 namespace starrocks {
 
@@ -58,7 +58,7 @@ public:
     void join();
 
 private:
-    DataCache* _cache_env;
+    [[maybe_unused]] DataCache* _cache_env;
     ExecEnv* _env;
 
     std::unique_ptr<EvHttpServer> _ev_http_server;

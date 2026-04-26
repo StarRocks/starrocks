@@ -14,15 +14,18 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "gutil/hash/hash.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
@@ -84,9 +87,18 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
 
     // Compute hash for each partition column
     if (_part_type == TPartitionType::HASH_PARTITIONED) {
-        _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-        for (const ColumnPtr& column : _partitions_columns) {
-            column->fnv_hash(&_hash_values[0], 0, num_rows);
+        if (_exchange_hash_function_version == 1) {
+            // Use xxh3_hash for better performance
+            _hash_values.assign(num_rows, HashUtil::XXH3_SEED_32);
+            for (const ColumnPtr& column : _partitions_columns) {
+                column->xxh3_hash(&_hash_values[0], 0, num_rows);
+            }
+        } else {
+            // Default: use fnv_hash for backward compatibility
+            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+            for (const ColumnPtr& column : _partitions_columns) {
+                column->fnv_hash(&_hash_values[0], 0, num_rows);
+            }
         }
     } else if (_bucket_properties.empty()) {
         // The data distribution was calculated using CRC32_HASH,
@@ -145,19 +157,27 @@ PartitionExchanger::PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryMa
 
 void PartitionExchanger::incr_sinker() {
     LocalExchanger::incr_sinker();
-    _partitioners.emplace_back(
-            std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs, _bucket_properties));
+    auto partitioner = std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs, _bucket_properties);
+    // Set hash function version from runtime state if available
+    if (_source->runtime_state() != nullptr) {
+        int32_t exchange_hash_function_version = 0;
+        if (_source->runtime_state()->query_options().__isset.exchange_hash_function_version) {
+            exchange_hash_function_version = _source->runtime_state()->query_options().exchange_hash_function_version;
+        }
+        partitioner->set_exchange_hash_function_version(exchange_hash_function_version);
+    }
+    _partitioners.emplace_back(std::move(partitioner));
 }
 
 Status PartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     return Status::OK();
 }
 
 void PartitionExchanger::close(RuntimeState* state) {
-    Expr::close(_partition_exprs, state);
+    ExprExecutor::close(_partition_exprs, state);
     LocalExchanger::close(state);
 }
 
@@ -176,7 +196,7 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -188,13 +208,13 @@ OrderedPartitionExchanger::OrderedPartitionExchanger(const std::shared_ptr<Chunk
 
 Status OrderedPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     return Status::OK();
 }
 
 void OrderedPartitionExchanger::close(RuntimeState* state) {
-    Expr::close(_partition_exprs, state);
+    ExprExecutor::close(_partition_exprs, state);
     LocalExchanger::close(state);
 }
 
@@ -290,13 +310,17 @@ KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMe
 
 Status KeyPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_expr_ctxs, state));
+    // Read exchange_hash_function_version from query options
+    if (state->query_options().__isset.exchange_hash_function_version) {
+        _exchange_hash_function_version = state->query_options().exchange_hash_function_version;
+    }
     return Status::OK();
 }
 
 void KeyPartitionExchanger::close(RuntimeState* state) {
-    Expr::close(_partition_expr_ctxs, state);
+    ExprExecutor::close(_partition_expr_ctxs, state);
     LocalExchanger::close(state);
 }
 
@@ -346,8 +370,18 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
     }
 
     std::vector<uint32_t> hash_values(chunk->num_rows(), HashUtil::FNV_SEED);
-    for (auto& column : partition_columns) {
-        column->fnv_hash(hash_values.data(), 0, num_rows);
+    if (_exchange_hash_function_version == 1) {
+        // Use xxh3_hash for better performance
+        hash_values.assign(chunk->num_rows(), HashUtil::XXH3_SEED_32);
+        for (auto& column : partition_columns) {
+            column->xxh3_hash(hash_values.data(), 0, num_rows);
+        }
+    } else {
+        // Default: use fnv_hash for backward compatibility
+        hash_values.assign(chunk->num_rows(), HashUtil::FNV_SEED);
+        for (auto& column : partition_columns) {
+            column->fnv_hash(hash_values.data(), 0, num_rows);
+        }
     }
 
     for (auto& [key, indices] : key2indices) {
@@ -399,12 +433,11 @@ Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const in
             _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
             _writer_count++;
         }
-        // set to default value in case of _source vector out of bound in multi thread
-        if (_writer_count > sources_num) {
-            _writer_count = sources_num;
-        }
-        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
-        if (_writer_count < sources_num) {
+        // Snapshot and clamp locally so the index computation is immune to concurrent increments
+        // that may push _writer_count transiently above sources_num between the clamp write and use.
+        size_t writer_count = std::min(_writer_count.load(), sources_num);
+        _source->get_sources()[(_next_accept_source++) % writer_count]->add_chunk(chunk);
+        if (writer_count < sources_num) {
             _data_processed += chunk->bytes_usage();
         }
     }
@@ -432,7 +465,7 @@ Status RandomPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t s
     auto& partitioner = _random_partitioners[sink_driver_sequence];
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -468,7 +501,7 @@ Status AdaptivePassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t
         std::shared_ptr<std::vector<uint32_t>> partition_row_indexes =
                 std::make_shared<std::vector<uint32_t>>(num_rows);
         RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-        RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+        RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     }
     return Status::OK();
 }

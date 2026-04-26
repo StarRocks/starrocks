@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -24,13 +23,11 @@ public class OptimizeClause extends AlterTableClause {
     private KeysDesc keysDesc;
     private PartitionDesc partitionDesc;
     private DistributionDesc distributionDesc;
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
     private OptimizeRange range;
 
-    @SerializedName(value = "sourcePartitionIds")
     private List<Long> sourcePartitionIds = Lists.newArrayList();
 
-    @SerializedName(value = "isTableOptimize")
     private boolean isTableOptimize = false;
 
     // It saves the original sort order elements parsing from the order by clause.
@@ -44,7 +41,7 @@ public class OptimizeClause extends AlterTableClause {
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
                           List<OrderByElement> orderByElements,
-                          PartitionNames partitionNames,
+                          PartitionRef partitionNames,
                           OptimizeRange range) {
         this(keysDesc, partitionDesc, distributionDesc, orderByElements, partitionNames, range, NodePosition.ZERO);
     }
@@ -53,7 +50,7 @@ public class OptimizeClause extends AlterTableClause {
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
                           List<OrderByElement> orderByElements,
-                          PartitionNames partitionNames,
+                          PartitionRef partitionNames,
                           OptimizeRange range,
                           NodePosition pos) {
         super(pos);
@@ -106,7 +103,7 @@ public class OptimizeClause extends AlterTableClause {
         this.partitionDesc = partitionDesc;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -124,28 +121,6 @@ public class OptimizeClause extends AlterTableClause {
 
     public void setTableOptimize(boolean tableOptimize) {
         isTableOptimize = tableOptimize;
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER ");
-        if (partitionDesc != null) {
-            sb.append(partitionDesc.toString());
-        }
-        if (distributionDesc != null) {
-            sb.append(distributionDesc.toString());
-        }
-        if (keysDesc != null) {
-            sb.append(keysDesc.toSql());
-        }
-        if (sortKeys != null && !sortKeys.isEmpty()) {
-            sb.append(String.join(",", sortKeys));
-        }
-        if (range != null) {
-            sb.append(range.toString());
-        }
-        return sb.toString();
     }
 
     @Override

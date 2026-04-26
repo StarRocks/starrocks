@@ -14,8 +14,11 @@
 
 #include "exec/pipeline/schedule/observer.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/schedule/common.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 static void on_update(PipelineDriver* driver) {
@@ -56,9 +59,12 @@ void PipelineObserver::_do_update(int event) {
     }
 
     if (driver->is_in_blocked()) {
-        // In PRECONDITION state, has_output need_input may return false. In this case,
-        // we need to schedule the driver to INPUT_EMPTY/OUTPUT_FULL state.
-        bool pipeline_block = driver->driver_state() != DriverState::INPUT_EMPTY ||
+        // When the driver is blocked for a reason other than INPUT_EMPTY / OUTPUT_FULL
+        // (e.g. PRECONDITION_BLOCK), source->has_output() / sink->need_input() may
+        // return false while the driver still needs to be rescheduled. In that case
+        // we try_schedule directly; for INPUT_EMPTY / OUTPUT_FULL we dispatch to the
+        // event-specific handlers below.
+        bool pipeline_block = driver->driver_state() != DriverState::INPUT_EMPTY &&
                               driver->driver_state() != DriverState::OUTPUT_FULL;
         if (pipeline_block || _is_cancel_changed(event)) {
             driver->fragment_ctx()->event_scheduler()->try_schedule(driver);
@@ -82,6 +88,21 @@ std::string Observable::to_string() const {
         str += observer->driver()->to_readable_string() + "\n";
     }
     return str;
+}
+
+void Observable::add_observer(RuntimeState* state, PipelineObserver* observer) {
+    if (state->enable_event_scheduler()) {
+        DCHECK(observer != nullptr);
+        _observers.push_back(observer);
+    }
+}
+
+void PipeObservable::attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+    _sink_observable.add_observer(state, observer);
+}
+
+void PipeObservable::attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+    _source_observable.add_observer(state, observer);
 }
 
 void Observable::notify_runtime_filter_timeout() {

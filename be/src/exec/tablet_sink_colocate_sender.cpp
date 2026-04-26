@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -61,8 +62,8 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
                 uint16_t selection = validate_select_idx[j];
                 const auto* partition = partitions[selection];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
-                _index_tablet_ids[i][selection] = virtual_buckets[record_hashes[selection] % virtual_buckets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _index_tablet_ids[i][selection] = tablet_ids[record_hashes[selection] % tablet_ids.size()];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
@@ -75,8 +76,8 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
             for (size_t j = 0; j < num_rows; ++j) {
                 const auto* partition = partitions[j];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
-                _index_tablet_ids[i][j] = virtual_buckets[record_hashes[j] % virtual_buckets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _index_tablet_ids[i][j] = tablet_ids[record_hashes[j] % tablet_ids.size()];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
@@ -153,7 +154,7 @@ Status TabletSinkColocateSender::try_open(RuntimeState* state) {
         return TabletSinkSender::try_open(state);
     }
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     RETURN_IF_ERROR(_partition_params->open(state));
     for_each_node_channel([](NodeChannel* ch) { ch->try_open(); });
     return Status::OK();
@@ -201,7 +202,7 @@ Status TabletSinkColocateSender::open_wait() {
     });
 
     if (_has_intolerable_failure()) {
-        LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+        LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
         return err_st;
     }
 
@@ -320,7 +321,7 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
     COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);
     LOG(INFO) << ss.str();
 
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     if (_partition_params) {
         _partition_params->close(state);
     }

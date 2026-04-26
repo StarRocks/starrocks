@@ -44,6 +44,12 @@
             <artifactId>log4j-core</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.aliyun.odps</groupId>
             <artifactId>odps-sdk-table-api</artifactId>
@@ -80,6 +86,10 @@
                 <exclusion>
                     <groupId>org.ini4j</groupId>
                     <artifactId>ini4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>lz4-pure-java</artifactId>
+                    <groupId>org.lz4</groupId>
                 </exclusion>
             </exclusions>
         </dependency>

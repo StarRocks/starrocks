@@ -23,6 +23,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import org.apache.commons.collections.MapUtils;
 
@@ -47,6 +48,12 @@ public class TaskAnalyzer {
         submitTaskStmt.setDbName(dbName);
         analyzeTaskProperties(submitTaskStmt.getProperties());
         analyzeTaskSchedule(submitTaskStmt.getSchedule());
+    }
+
+    public static void analyzeAlterTaskStmt(AlterTaskStmt alterTaskStmt) {
+        if (alterTaskStmt.getAction() == AlterTaskStmt.AlterAction.SET) {
+            analyzeTaskProperties(alterTaskStmt.getProperties());
+        }
     }
 
     private static void analyzeTaskSchedule(TaskSchedule schedule) {

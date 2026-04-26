@@ -41,12 +41,16 @@
 #include <ctime>
 #include <memory>
 
-#include "common/config.h"
+#include "base/path/path_util.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -62,8 +66,6 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/path_util.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -84,9 +86,7 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
 TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
-        : _tablets_shards(tablet_map_lock_shard_size),
-          _tablets_shards_mask(tablet_map_lock_shard_size - 1),
-          _last_update_stat_ms(0) {
+        : _tablets_shards(tablet_map_lock_shard_size), _tablets_shards_mask(tablet_map_lock_shard_size - 1) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
@@ -412,7 +412,16 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         auto it = tablet_map.find(tablet_id);
         if (it == tablet_map.end()) {
             LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
-            return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
+            return Status::NotFound(strings::Substitute("tablet $0 not found", tablet_id));
+        }
+
+        // Check if there is an ongoing CLONE task for this tablet.
+        // This check must be done while holding the shard lock to prevent race conditions.
+        // The CLONE task registers itself in tablets_under_clone while holding the same lock.
+        TabletsShard& shard = _get_tablets_shard(tablet_id);
+        if (shard.tablets_under_clone.count(tablet_id) > 0) {
+            LOG(INFO) << "DROP tablet skipped because CLONE task is in progress for tablet_id: " << tablet_id;
+            return Status::InternalError("DROP tablet skipped because CLONE task is in progress");
         }
 
         VLOG(3) << "Start to drop tablet " << tablet_id;
@@ -447,6 +456,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             // to 'RUNNING' from 'SHUTDOWN'.
             std::unique_lock l(dropped_tablet->get_header_lock());
             (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            dropped_tablet->save_meta();
         }
 
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
@@ -533,6 +543,18 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     }
 
     return Status::OK();
+}
+
+StatusOr<TabletSharedPtr> TabletManager::get_tablet_by_id(TTabletId tablet_id, bool include_deleted) {
+    std::string err;
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, include_deleted, &err);
+    if (!tablet) {
+        std::stringstream ss;
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", reason=" << err;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+    return tablet;
 }
 
 TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {
@@ -647,7 +669,7 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     size_t size = 0;
     const auto& tablets_shard = _tablets_shards[_cur_shard];
     std::shared_lock rlock(tablets_shard.lock);
-    for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
         if (_shard_visited_tablet_ids.find(tablet_id) == _shard_visited_tablet_ids.end()) {
             tablets->push_back(tablet_ptr);
             _shard_visited_tablet_ids.insert(tablet_id);
@@ -680,7 +702,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     TabletSharedPtr best_tablet;
     for (int32_t i = tablet_shards_range.first; i < tablet_shards_range.second; i++) {
         std::shared_lock rlock(_tablets_shards[i].lock);
-        for (auto [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
+        for (const auto& [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
@@ -835,11 +857,8 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;
     for (const auto& tablets_shard : _tablets_shards) {
-        std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard);
+        std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard, PRIMARY_KEYS);
         for (const auto& tablet_ptr : all_tablets_by_shard) {
-            if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
-                continue;
-            }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
                 continue;
@@ -1167,6 +1186,8 @@ Status TabletManager::start_trash_sweep() {
     for (const auto& info : tablets_redundant_to_check) {
         sweep_shutdown_tablet(info, finished_tablets_redundant);
     }
+
+    TEST_SYNC_POINT("TabletManager::start_trash_sweep:1");
 
     if (!finished_tablets.empty() || !finished_tablets_redundant.empty()) {
         std::unique_lock l(_shutdown_tablets_lock);
@@ -1701,6 +1722,17 @@ std::vector<TabletSharedPtr> TabletManager::_get_all_tablets_from_shard(const Ta
     return all_tablets_by_shard;
 }
 
+std::vector<TabletSharedPtr> TabletManager::_get_all_tablets_from_shard(const TabletsShard& shard, KeysType keys_type) {
+    std::vector<TabletSharedPtr> all_tablets_by_shard;
+    std::shared_lock rlock(shard.lock);
+    for (const auto& [_, tablet] : shard.tablet_map) {
+        if (tablet->keys_type() == keys_type) {
+            all_tablets_by_shard.push_back(tablet);
+        }
+    }
+    return all_tablets_by_shard;
+}
+
 Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                                        const string& schema_hash_path, bool restore,
                                                        bool need_rebuild_pk_index,
@@ -1877,10 +1909,28 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
     auto iter = _shutdown_tablets.find(tablet_id);
     if (iter != _shutdown_tablets.end()) {
         if ((iter->second).tablet != nullptr) {
-            // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
-            auto st = _remove_tablet_meta((iter->second).tablet);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
+            // Re-check the on-disk meta before destructive cleanup. During rapid re-migration
+            // a stale shutdown entry may still exist after ownership has already moved to a
+            // newer tablet instance on the same path. For PK tablets, _remove_tablet_meta()
+            // can clear rowset meta by tablet_id, so running it from the stale entry would
+            // wipe the new tablet's metadata. When uid/state no longer matches, leave this
+            // entry to the normal shutdown queues instead of eagerly clearing meta here.
+            auto& tablet = (iter->second).tablet;
+            TabletMeta tablet_meta;
+            Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(),
+                                                           tablet->schema_hash(), &tablet_meta);
+            if (st.ok() &&
+                (tablet_meta.tablet_uid() != tablet->tablet_uid() || tablet_meta.tablet_state() != TABLET_SHUTDOWN)) {
+                LOG(INFO) << "Skip removing stale shutdown tablet meta due to "
+                          << (tablet_meta.tablet_uid() != tablet->tablet_uid() ? "uid mismatch" : "state mismatch")
+                          << ". tablet_id=" << tablet->tablet_id() << ", path=" << tablet->data_dir()->path()
+                          << ", state=" << tablet_meta.tablet_state();
+            } else {
+                // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
+                st = _remove_tablet_meta(tablet);
+                if (!st.ok()) {
+                    LOG(WARNING) << "Fail to remove previous tablet meta, id: " << tablet_id << " status: " << st;
+                }
             }
         }
         auto drop_info_redundant = iter->second;

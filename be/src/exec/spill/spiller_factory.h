@@ -14,15 +14,9 @@
 
 #pragma once
 
-#include <atomic>
 #include <memory>
-#include <mutex>
 
-#include "exec/sort_exec_exprs.h"
-#include "exec/sorting/sorting.h"
 #include "exec/spill/spill_fwd.h"
-#include "exprs/expr_context.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
 
@@ -33,13 +27,6 @@ public:
 
     // create a spiller
     std::shared_ptr<Spiller> create(const SpilledOptions& options);
-
-    // release some resource in advance
-    void close();
-
-private:
-    std::mutex _mutex;
-    std::vector<std::shared_ptr<Spiller>> _spillers;
 };
 
 using SpillerFactoryPtr = std::shared_ptr<SpillerFactory>;

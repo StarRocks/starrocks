@@ -1,0 +1,55 @@
+-- name: test_hive_truncate
+
+create external catalog hive_truncate_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database hive_truncate_${uuid0}.hive_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/hive_truncate_${uuid0}/hive_db/${uuid0}"
+);
+
+-- test truncate unpartitioned table
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int);
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1),(2),(3);
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+
+-- test truncate single partitioned table and truncate all partitions
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int, k2 date) partition by (k2);
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,'2020-01-01'),(2,'2020-01-01'),(3,'2020-01-02');
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+
+-- test truncate multi-partitioned table and truncate all partitions
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int, k2 date, k3 string) partition by (k2,k3);
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,'2020-01-01','a'),(2,'2020-01-01','b'),(3,'2020-01-02','a');
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+
+-- test truncate partitioned table and truncate specify partition
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} (k1 int, k2 date, k3 string) partition by (k2,k3);
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} values (1,'2020-01-01','a'),(2,'2020-01-01','b'),(3,'2020-01-02','a');
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} partition (k2='2020-01-01');
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} values (4,'2020-01-02','b'),(5,'2020-01-02','c'),(6,'2020-01-02','d');
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} partition (k2='2020-01-02',k3='b');
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} partition (k3='c');
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} force;
+
+drop database hive_truncate_${uuid0}.hive_db_${uuid0};
+drop catalog hive_truncate_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/hive_truncate_${uuid0}/hive_db/${uuid0} > /dev/null || echo "exit 0" >/dev/null

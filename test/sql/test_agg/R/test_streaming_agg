@@ -58,3 +58,6 @@ select c0, sum(c1) from t1 group by c0 order by 2 desc limit 10;
 9	4087
 10	4086
 -- !result
+CLEANUP {
+    admin disable failpoint 'force_reset_aggregator_after_agg_streaming_sink_finish';
+} END CLEANUP

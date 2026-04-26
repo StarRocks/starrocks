@@ -23,9 +23,9 @@
 #include <thread>
 #include <vector>
 
+#include "base/path/path_trie.hpp"
 #include "common/status.h"
 #include "http/http_method.h"
-#include "util/path_trie.hpp"
 
 namespace starrocks {
 

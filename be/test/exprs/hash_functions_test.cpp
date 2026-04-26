@@ -39,7 +39,7 @@ TEST_F(HashFunctionsTest, hashTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        ASSERT_EQ(-1948194659, v->get_data()[0]);
+        ASSERT_EQ(-1948194659, v->immutable_data()[0]);
     }
 
     {
@@ -58,7 +58,7 @@ TEST_F(HashFunctionsTest, hashTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        ASSERT_EQ(-500290079, v->get_data()[0]);
+        ASSERT_EQ(-500290079, v->immutable_data()[0]);
     }
 
     {
@@ -94,8 +94,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
         ColumnPtr result = HashFunctions::xx_hash3_64(ctx.get(), columns).value();
 
         auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
-        ASSERT_EQ(-7685981735718036227, v->get_data()[0]);
-        ASSERT_EQ(6573472450560322992, v->get_data()[1]);
+        ASSERT_EQ(-7685981735718036227, v->immutable_data()[0]);
+        ASSERT_EQ(6573472450560322992, v->immutable_data()[1]);
     }
 
     {
@@ -115,8 +115,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
         ColumnPtr result = HashFunctions::xx_hash3_64(ctx.get(), columns).value();
 
         auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
-        ASSERT_EQ(7001965798170371843, v->get_data()[0]);
-        ASSERT_EQ(2803320466222626098, v->get_data()[1]);
+        ASSERT_EQ(7001965798170371843, v->immutable_data()[0]);
+        ASSERT_EQ(2803320466222626098, v->immutable_data()[1]);
     }
 
     {
@@ -154,8 +154,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_128) {
         ColumnPtr result = HashFunctions::xx_hash3_128(ctx.get(), columns).value();
 
         auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
-        ASSERT_EQ(INT128_LITERAL(-5338522934378283393, -4072996057346066408), v->get_data()[0]);
-        ASSERT_EQ(INT128_LITERAL(3846997910503780466, 1697546255957561686), v->get_data()[1]);
+        ASSERT_EQ(INT128_LITERAL(-5338522934378283393, -4072996057346066408), v->immutable_data()[0]);
+        ASSERT_EQ(INT128_LITERAL(3846997910503780466, 1697546255957561686), v->immutable_data()[1]);
     }
 
     {
@@ -175,8 +175,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_128) {
         ColumnPtr result = HashFunctions::xx_hash3_128(ctx.get(), columns).value();
 
         auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
-        ASSERT_EQ(INT128_LITERAL(-2452210651042717451, 1087493910761260911), v->get_data()[0]);
-        ASSERT_EQ(INT128_LITERAL(1559307639436096304, 8859976453967563600), v->get_data()[1]);
+        ASSERT_EQ(INT128_LITERAL(-2452210651042717451, 1087493910761260911), v->immutable_data()[0]);
+        ASSERT_EQ(INT128_LITERAL(1559307639436096304, 8859976453967563600), v->immutable_data()[1]);
     }
 
     {
@@ -213,8 +213,8 @@ TEST_F(HashFunctionsTest, test_crc32_hash_array) {
         Columns columns;
         auto data_column = Int32Column::create();
         auto offsets = UInt32Column::create();
-        NullableColumn::Ptr elements = NullableColumn::create(data_column, NullColumn::create());
-        ArrayColumn::Ptr arr = ArrayColumn::create(elements, offsets);
+        auto elements = NullableColumn::create(data_column, NullColumn::create());
+        auto arr = ArrayColumn::create(elements, offsets);
 
         data_column->append(1);
         data_column->append(2);
@@ -232,8 +232,8 @@ TEST_F(HashFunctionsTest, test_crc32_hash_array) {
         ColumnPtr result = HashFunctions::crc32_hash(ctx.get(), columns).value();
         auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
         ASSERT_EQ(2, result->size());
-        ASSERT_EQ(1799959227, v->get_data()[0]);
-        ASSERT_EQ(3471948928, v->get_data()[1]);
+        ASSERT_EQ(1799959227, v->immutable_data()[0]);
+        ASSERT_EQ(3471948928, v->immutable_data()[1]);
     }
 
     {

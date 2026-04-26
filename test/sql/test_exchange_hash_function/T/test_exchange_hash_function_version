@@ -1,0 +1,46 @@
+-- name: test_exchange_hash_function_version
+-- Test exchange_hash_function_version session variable
+
+-- Create test table
+CREATE TABLE `t_hash_test` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- Insert test data
+insert into t_hash_test SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 1000));
+
+-- Test with default fnv_hash (version 0)
+set exchange_hash_function_version = 0;
+select count(*) from (select c0, c1 from t_hash_test group by c0, c1) t;
+select sum(c0), sum(c1) from (select c0, c1 from t_hash_test order by c0 limit 100) t;
+
+-- Test with xxh3_hash (version 1)
+set exchange_hash_function_version = 1;
+select count(*) from (select c0, c1 from t_hash_test group by c0, c1) t;
+select sum(c0), sum(c1) from (select c0, c1 from t_hash_test order by c0 limit 100) t;
+
+-- Test shuffle join with different hash versions
+set exchange_hash_function_version = 0;
+select count(*) from t_hash_test a join [shuffle] t_hash_test b on a.c0 = b.c0;
+
+set exchange_hash_function_version = 1;
+select count(*) from t_hash_test a join [shuffle] t_hash_test b on a.c0 = b.c0;
+
+-- Test aggregate with different hash versions
+set exchange_hash_function_version = 0;
+select c0 % 10 as bucket, count(*), sum(c1) from t_hash_test group by c0 % 10 order by bucket;
+
+set exchange_hash_function_version = 1;
+select c0 % 10 as bucket, count(*), sum(c1) from t_hash_test group by c0 % 10 order by bucket;
+
+-- Clean up
+DROP TABLE t_hash_test;
+

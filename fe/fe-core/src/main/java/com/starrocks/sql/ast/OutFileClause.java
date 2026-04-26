@@ -37,12 +37,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -59,6 +53,12 @@ import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -428,7 +428,7 @@ public class OutFileClause implements ParseNode {
                 sinkOptions.setHdfs_write_buffer_size_kb(Config.hdfs_write_buffer_size_kb);
                 THdfsProperties hdfsProperties = new THdfsProperties();
                 try {
-                    HdfsUtil.getTProperties(filePath, brokerDesc, hdfsProperties);
+                    HdfsUtil.getTProperties(filePath, brokerDesc.getProperties(), hdfsProperties);
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }

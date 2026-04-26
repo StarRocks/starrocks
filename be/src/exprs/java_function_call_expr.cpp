@@ -20,6 +20,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -27,15 +28,15 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"
-#include "runtime/types.h"
 #include "runtime/user_function_cache.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -126,6 +127,7 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
     FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
 
+    args_types.reserve(_children.size());
     for (Expr* child : _children) {
         args_types.push_back(child->type());
     }
@@ -152,7 +154,7 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
         FunctionContext::FunctionStateScope scope, const std::string& libpath) {
     auto desc = std::make_shared<JavaUDFContext>();
     // init class loader and analyzer
-    desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
+    desc->udf_classloader = std::make_unique<ClassLoader>(libpath);
     RETURN_IF_ERROR(desc->udf_classloader->init());
     desc->analyzer = std::make_unique<ClassAnalyzer>();
 
@@ -189,11 +191,20 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
     auto udf_clazz = desc->udf_class.clazz();
     auto update_method = desc->evaluate->method.handle();
 
-    ASSIGN_OR_RETURN(auto update_stub_clazz, desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
-                                                                                ClassLoader::BATCH_EVALUATE));
+    // For varargs UDFs, pass the actual number of varargs input columns (excluding fixed params)
+    // so that the stub generator produces the correct signature.
+    // method_desc layout: [return, fixedParam1, ..., fixedParamF, varargs_elem] → size = F + 2
+    // so numFixedParams = method_desc.size() - 2.
+    int num_fixed_params = (_fn.has_var_args && desc->evaluate)
+                                   ? std::max(0, static_cast<int>(desc->evaluate->method_desc.size()) - 2)
+                                   : 0;
+    int num_actual_var_args = _fn.has_var_args ? std::max(0, static_cast<int>(_children.size()) - num_fixed_params) : 0;
+    ASSIGN_OR_RETURN(auto update_stub_clazz,
+                     desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
+                                                        ClassLoader::BATCH_EVALUATE, num_actual_var_args));
     ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
-                                                          JavaGlobalRef(std::move(method)));
+                                                          JavaGlobalRef(method));
 
     if (desc->prepare != nullptr) {
         // we only support fragment local scope to call prepare
@@ -221,7 +232,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
 
     UserFunctionCache::FunctionCacheDesc func_cache_desc(_fn.fid, _fn.hdfs_location, _fn.checksum,
-                                                         TFunctionBinaryType::SRJAR);
+                                                         TFunctionBinaryType::SRJAR, _fn.cloud_configuration);
     // cacheable
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
@@ -237,7 +248,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         auto function_cache = UserFunctionCache::instance();
         if (_fn.__isset.isolated && !_fn.isolated) {
             ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(func_cache_desc, get_func_desc));
-            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc.second);
         } else {
             std::string libpath;
             RETURN_IF_ERROR(function_cache->get_libpath(func_cache_desc, &libpath));

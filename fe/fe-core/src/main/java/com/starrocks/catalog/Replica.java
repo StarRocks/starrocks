@@ -36,6 +36,10 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.estimate.ShallowMemory;
+import com.starrocks.sql.ast.ReplicaStatus;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,6 +48,7 @@ import java.util.Comparator;
 /**
  * This class represents the olap replica related metadata.
  */
+@ShallowMemory
 public class Replica implements Writable {
     private static final Logger LOG = LogManager.getLogger(Replica.class);
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
@@ -68,15 +73,6 @@ public class Replica implements Writable {
         public boolean canQuery() {
             return this == NORMAL || this == SCHEMA_CHANGE;
         }
-    }
-
-    public enum ReplicaStatus {
-        OK, // health
-        DEAD, // backend is not available
-        VERSION_ERROR, // missing version
-        MISSING, // replica does not exist
-        SCHEMA_ERROR, // replica's schema hash does not equal to index's schema hash
-        BAD // replica is broken.
     }
 
     @SerializedName(value = "id")
@@ -625,6 +621,19 @@ public class Replica implements Writable {
                 && (lastFailedVersion == replica.lastFailedVersion)
                 && (lastSuccessVersion == replica.lastSuccessVersion)
                 && (minReadableVersion == replica.minReadableVersion);
+    }
+
+    public ReplicaStatus computeReplicaStatus(SystemInfoService infoService, long visibleVersion, int schemaHash) {
+        ReplicaStatus status = ReplicaStatus.OK;
+        Backend be = infoService.getBackend(this.backendId);
+        if (be == null || !be.isAvailable() || this.bad) {
+            status = ReplicaStatus.DEAD;
+        } else if (this.version < visibleVersion || this.lastFailedVersion > 0) {
+            status = ReplicaStatus.VERSION_ERROR;
+        } else if (this.schemaHash != -1 && this.schemaHash != schemaHash) {
+            status = ReplicaStatus.SCHEMA_ERROR;
+        }
+        return status;
     }
 
     private static class VersionComparator<T extends Replica> implements Comparator<T> {

@@ -1,0 +1,67 @@
+-- name: test_window_function_with_join
+
+CREATE TABLE `nt0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "nt0",
+"replication_num" = "1"
+);
+
+insert into nt0 SELECT generate_series %4096, 4096 - generate_series, generate_series %4096 FROM TABLE(generate_series(1,  40960));
+insert into nt0 select * from nt0;
+
+create table nt1 as select * from nt0;
+create table nt2 as select * from nt0;
+
+CREATE TABLE `nt3` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "nt0",
+"replication_num" = "1"
+);
+
+insert into nt3 select * from nt0;
+
+with cte0 as (
+    select max(c1) over (partition by c0 order by c2) mx, c0, c1, c2 from nt0
+),
+cte1 as (
+    select l.mx g1, l.c0 g2, l.c1 g3, l.c2 g4, max(r.c1) over (partition by l.c0 order by l.c2) g5, r.c0 g6, r.c1 g7, r.c2 g8 from cte0 l join [bucket] nt1 r on l.c0 = r.c0
+)
+select sum(g1),sum(g2), sum(g3), sum(g4), sum(g5), sum(g6), sum(g7), sum(g8) from cte1;
+
+with cte0 as (
+    select max(c1) over (partition by c0 order by c2) mx, c0, c1, c2 from nt0
+),
+cte1 as (
+    select l.mx g1, l.c0 g2, l.c1 g3, l.c2 g4, max(r.c1) over (partition by l.c0 order by l.c2) g5, r.c0 g6, r.c1 g7, r.c2 g8 from cte0 l join [broadcast] nt1 r on l.c0 = r.c0
+)
+select sum(g1),sum(g2), sum(g3), sum(g4), sum(g5), sum(g6), sum(g7), sum(g8) from cte1;
+
+with cte0 as (
+    select max(c1) over (partition by c0 order by c2) mx, c0, c1, c2 from nt0
+),
+cte1 as (
+    select l.mx g1, l.c0 g2, l.c1 g3, l.c2 g4, max(r.c1) over (partition by l.c0 order by l.c2) g5, r.c0 g6, r.c1 g7, r.c2 g8 from cte0 l join [shuffle] nt1 r on l.c0 = r.c0
+)
+select sum(g1),sum(g2), sum(g3), sum(g4), sum(g5), sum(g6), sum(g7), sum(g8) from cte1;
+
+with cte0 as (
+    select max(c1) over (partition by c0 order by c2) mx, c0, c1, c2 from nt0
+),
+cte1 as (
+    select l.mx g1, l.c0 g2, l.c1 g3, l.c2 g4, max(r.c1) over (partition by l.c0 order by l.c2) g5, r.c0 g6, r.c1 g7, r.c2 g8 from cte0 l join [colocate] nt3 r on l.c0 = r.c0
+)
+select sum(g1),sum(g2), sum(g3), sum(g4), sum(g5), sum(g6), sum(g7), sum(g8) from cte1;

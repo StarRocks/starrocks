@@ -20,13 +20,15 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "butil/time.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/json_functions.h"
@@ -34,10 +36,8 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
-#include "testutil/assert.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
-#include "util/json.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {
@@ -45,7 +45,10 @@ namespace starrocks {
 class FlatJsonQueryTestFixture2
         : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>,
                                                      std::string, std::string>> {
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
     void TearDown() override { config::enable_json_flat_complex_type = false; }
 };
 
@@ -425,13 +428,15 @@ INSTANTIATE_TEST_SUITE_P(JsonKeysTest, FlatJsonKeysTestFixture2,
 // 5. get_json_int execpted result
 // 6. get_json_string expected result
 // 7. get_json_double expected result
+// 8. get_json_scalar expected result
 using GetJsonXXXParam = std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>, int,
-                                   int, std::string, double>;
+                                   int, std::string, double, std::string>;
 
 class FlatGetJsonXXXTestFixture2 : public ::testing::TestWithParam<GetJsonXXXParam> {
 public:
     StatusOr<Columns> setup() {
         config::enable_json_flat_complex_type = true;
+        config::enable_lazy_dynamic_flat_json = true; // Enable hyper extraction path to test _extract_with_hyper
         _ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context());
         auto ints = JsonColumn::create();
         ColumnBuilder<TYPE_VARCHAR> builder(1);
@@ -569,29 +574,55 @@ TEST_P(FlatGetJsonXXXTestFixture2, get_json_double) {
     }
 }
 
+TEST_P(FlatGetJsonXXXTestFixture2, get_json_scalar) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    std::string param_result = std::get<8>(GetParam());
+
+    ColumnPtr result = JsonFunctions::get_native_json_scalar_string(_ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+
+    ASSERT_EQ(1, result->size());
+    Datum datum = result->get(0);
+    if (param_result == "NULL") {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        auto value = datum.get_slice();
+        std::string value_str(value);
+        ASSERT_EQ(param_result, value_str);
+    }
+}
+
 // clang-format off
 INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, FlatGetJsonXXXTestFixture2,
     ::testing::Values(
-        std::make_tuple(R"( {"k1":1} )", "NULL", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1),
-        std::make_tuple(R"( {"k0": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1),
-        std::make_tuple(R"( {"k1": 1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0),
-        std::make_tuple(R"( {"k1": -10} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -10, R"( -10 )", -10),
-        std::make_tuple(R"( {"k1": 1.1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, R"( 1.1 )", 1.1),
-        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 3, R"( 3 )", 3.0),
-        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 3, R"( 3.14 )", 3.14),
-        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, R"( 0 )", 0.0),
-        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 0, R"( 0.14 )", 0.14),
-        std::make_tuple(R"( {"k1": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( NULL )", -1),
-        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, R"( NULL )", -1),
-        std::make_tuple(R"( {"k1": {"k2": 1}} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( {"k2": 1} )", -1),
-        std::make_tuple(R"( {"k1": [1,2,3] } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( [1, 2, 3] )", -1),
-        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0),
-        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, "0", 0.0),
-        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, "true", 1.0),
-        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 0, 0, "false", 0.0),
-        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -1, "true", -1),
-        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 0, -1, "false", -1),
-        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1)
+        std::make_tuple(R"( {"k1":1} )", "NULL", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1, "NULL"),
+        std::make_tuple(R"( {"k0": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1, "NULL"),
+        std::make_tuple(R"( {"k1": 1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0, "1"),
+        std::make_tuple(R"( {"k1": -10} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -10, R"( -10 )", -10, "-10"),
+        std::make_tuple(R"( {"k1": 1.1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, R"( 1.1 )", 1.1, "NULL"),
+        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 3, R"( 3 )", 3.0, "3"),
+        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 3, R"( 3.14 )", 3.14, "3.14"),
+        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, R"( 0 )", 0.0, "0"),
+        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 0, R"( 0.14 )", 0.14, "0.14"),
+        std::make_tuple(R"( {"k1": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( NULL )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, R"( NULL )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": {"k2": 1}} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( {"k2": 1} )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": [1,2,3] } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( [1, 2, 3] )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0, "1"),
+        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, "0", 0.0, "0"),
+        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, "true", 1.0, "NULL"),
+        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 0, 0, "false", 0.0, "NULL"),
+        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -1, "true", -1,  "true"),
+        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 0, -1, "false", -1, "false"),
+        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1, "value"),
+        // Test case to cover the bug fix: empty flat_path should not cause crash when calling substr(1)
+        // When path is "$", flat_path will be empty, and calling substr(1) on empty string would throw std::out_of_range
+        std::make_tuple(R"( {"k1": 1} )", "$", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1, "NULL")
     ));
 // clang-format on
 
@@ -599,7 +630,10 @@ class FlatJsonDeriverPaths
         : public ::testing::TestWithParam<
                   std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>>> {
 public:
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
     void TearDown() override { config::enable_json_flat_complex_type = false; }
 };
 

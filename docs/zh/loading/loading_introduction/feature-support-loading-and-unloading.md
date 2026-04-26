@@ -122,8 +122,8 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>Debezium</td>
-        <td>将在 v3.4 版本中支持</td>
-        <td>将在 v3.4 版本中支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
         <td>待支持</td>
         <td>待支持</td>
         <td>Yes (v3.0+) [1]</td>
@@ -308,13 +308,28 @@ sidebar_label: "能力边界"
         <th>EXPORT</th>
     </tr>
     <tr>
-        <td rowspan="2">CSV</td>
+        <td rowspan="5">CSV</td>
         <td>column_separator</td>
         <td rowspan="2">Yes (v3.3+)</td>
         <td rowspan="2">Yes</td>
     </tr>
     <tr>
         <td>line_delimiter [1]</td>
+    </tr>
+    <tr>
+        <td>enclose</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>escape</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>include_header</td>
+        <td>Yes</td>
+        <td>No</td>
     </tr>
 </table>
 

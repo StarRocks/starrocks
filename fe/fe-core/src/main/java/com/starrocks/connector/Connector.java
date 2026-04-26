@@ -14,13 +14,10 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.Pair;
 import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.memory.MemoryTrackable;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public interface Connector extends MemoryTrackable {
@@ -53,9 +50,5 @@ public interface Connector extends MemoryTrackable {
 
     default Map<String, Long> estimateCount() {
         return new HashMap<>();
-    }
-
-    default List<Pair<List<Object>, Long>> getSamples() {
-        return new ArrayList<>();
     }
 }

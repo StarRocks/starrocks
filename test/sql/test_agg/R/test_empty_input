@@ -1,4 +1,4 @@
--- name: test_empty_input
+-- name: test_empty_input @mac
 CREATE TABLE `t0` (
   `v1` bigint(20) COMMENT "",
   `v2` bigint(20) COMMENT "",
@@ -46,4 +46,33 @@ select count(*) from t0;
 select count(distinct v1) from t0;
 -- result:
 0
+-- !result
+-- name: test_empty_input_not_null_string
+CREATE TABLE `tt0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) not NULL COMMENT "",
+  `c2` varchar(200) not NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 4
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tt0 values (1,"test","test",1);
+-- result:
+-- !result
+select max(c2) from tt0 where 1=0;
+-- result:
+None
+-- !result
+select min(c2) from tt0 where 1=0;
+-- result:
+None
 -- !result

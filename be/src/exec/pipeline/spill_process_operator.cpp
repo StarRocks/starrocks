@@ -19,18 +19,25 @@
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.hpp"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
 bool SpillProcessOperator::has_output() const {
-    return _channel->has_output();
+    return !_is_finished && _channel->has_output();
 }
 
 bool SpillProcessOperator::is_finished() const {
-    return _channel->is_finished();
+    return _is_finished || _channel->is_finished();
+}
+
+Status SpillProcessOperator::set_finished(RuntimeState* state) {
+    _is_finished = true;
+    return Status::OK();
 }
 
 void SpillProcessOperator::close(RuntimeState* state) {
+    _channel->close();
     SourceOperator::close(state);
 }
 
@@ -45,11 +52,10 @@ StatusOr<ChunkPtr> SpillProcessOperator::pull_chunk(RuntimeState* state) {
 
     auto chunk_st = _channel->current_task()();
     if (chunk_st.status().ok() && !state->is_cancelled()) {
-        auto chunk = chunk_st.value();
+        const auto& chunk = chunk_st.value();
         if (chunk != nullptr && !chunk->is_empty()) {
             auto& spiller = _channel->spiller();
-            RETURN_IF_ERROR(
-                    spiller->spill(state, std::move(chunk_st.value()), TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+            RETURN_IF_ERROR(spiller->spill(state, chunk_st.value(), TRACKER_WITH_SPILLER_GUARD(state, spiller)));
         }
     } else if (chunk_st.status().is_end_of_file()) {
         _channel->current_task().reset();

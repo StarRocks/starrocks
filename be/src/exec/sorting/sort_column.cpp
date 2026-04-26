@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/orlp/pdqsort.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -30,7 +32,6 @@
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -189,7 +190,7 @@ public:
                 return lhs.inline_value.compare(rhs.inline_value);
             };
 
-            auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
+            auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.immutable_data());
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                                 _range_or_ranges, _build_tie));
             restore_inline_permutation(inlined, _permutation);
@@ -221,6 +222,11 @@ public:
         DCHECK(false) << "not support object column sort_and_tie";
 
         return Status::NotSupported("not support object column sort_and_tie");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("not support AdaptiveNullableColumn sort_and_tie");
     }
 
     Status do_visit(const JsonColumn& column) {
@@ -301,16 +307,16 @@ public:
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
+            using ImmContainer = typename BinaryColumnBase<T>::ImmContainer;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);
             };
 
-            std::vector<Container> containers;
+            std::vector<ImmContainer> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(real->get_proxy_data());
+                containers.push_back(real->immutable_data());
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
@@ -401,8 +407,16 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        // TODO(SmithCruise)
-        return Status::NotSupported("Not support");
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+        };
+
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                            _build_tie, _limit, &_pruned_limit));
+        _prune_limit();
+        return Status::OK();
     }
 
     template <typename T>
@@ -457,7 +471,7 @@ private:
     }
 
     template <class T>
-    void _restore_inlined_permutation(const CompactChunkPermutation<T> inlined) {
+    void _restore_inlined_permutation(const CompactChunkPermutation<T>& inlined) {
         size_t n = std::min(inlined.size(), _pruned_limit);
         for (size_t i = 0; i < n; i++) {
             _permutation[i].chunk_index = inlined[i].chunk_index;
@@ -501,7 +515,7 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     if (sort_descs != nullptr) {
@@ -516,8 +530,7 @@ static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column*
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        auto* mutable_col = const_cast<Column*>(column);
-        down_cast<NullableColumn*>(mutable_col)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
     if (sort_descs != nullptr) {
@@ -659,7 +672,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& col
 
     for (auto& col : columns) {
         if (col->is_nullable() && !col->is_constant()) {
-            ColumnHelper::as_column<NullableColumn>(col)->fill_null_with_default();
+            ColumnHelper::as_raw_column<NullableColumn>(col->as_mutable_raw_ptr())->fill_null_with_default();
         }
     }
 

@@ -2,9 +2,8 @@
 
 #include "gutil/once.h"
 
-#include <common/logging.h>
-
 #include "gutil/dynamic_annotations.h"
+#include "gutil/logging.h"
 #include "gutil/spinlock_internal.h"
 
 // All modifications to a GoogleOnceType occur inside GoogleOnceInternalInit.

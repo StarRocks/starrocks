@@ -52,13 +52,13 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.routineload.TxnStatusChangeReason;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
@@ -81,7 +81,7 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // input params
     @SerializedName("bds")
-    protected BrokerDesc brokerDesc;
+    protected BrokerPropertiesPersistInfo brokerPersistInfo;
     // this param is used to persist the expr of columns
     // the origin stmt is persisted instead of columns expr
     // the expr of columns will be reanalyze when the log is replayed
@@ -292,8 +292,7 @@ public abstract class BulkLoadJob extends LoadJob {
             boolean needRetry = isRetryable(failMsg);
             if (!needRetry) {
                 // For not retryable failure, cancel job and return
-                unprotectedExecuteCancel(failMsg, true);
-                logFinalOperation();
+                unprotectedExecuteCancel(failMsg, true, true);
                 return;
             }
         } finally {
@@ -341,7 +340,7 @@ public abstract class BulkLoadJob extends LoadJob {
                     .add("msg", "The failure happens in analyze, the load job will be cancelled with error:"
                             + e.getMessage())
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), false, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), false);
         }
     }
 

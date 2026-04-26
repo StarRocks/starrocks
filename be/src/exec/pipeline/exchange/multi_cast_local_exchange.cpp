@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "runtime/runtime_state.h"
 #include "util/logging.h"
 
 namespace starrocks::pipeline {
@@ -168,6 +169,11 @@ void InMemoryMultiCastLocalExchanger::open_sink_operator() {
 void InMemoryMultiCastLocalExchanger::close_sink_operator() {
     std::unique_lock l(_mutex);
     _opened_sink_number--;
+}
+
+bool InMemoryMultiCastLocalExchanger::is_all_sources_finished() const {
+    std::unique_lock l(_mutex);
+    return _opened_source_number == 0;
 }
 
 void InMemoryMultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {

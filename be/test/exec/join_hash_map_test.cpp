@@ -16,10 +16,17 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "common/config_exec_fwd.h"
+#include "exec/join/join_hash_map.hpp"
+#include "exec/join/join_hash_map_helper.h"
+#include "exec/join/join_hash_map_method.h"
+#include "exec/join/join_hash_map_method.hpp"
+#include "exec/join/join_hash_table.h"
+#include "exec/join/join_key_constructor.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -95,18 +102,18 @@ protected:
 
     // flag: 0(all 0), 1(all 1), 2(half 0), 3(one third 0)
     static Buffer<uint8_t> create_bools(uint32_t count, int32_t flag);
-    static ColumnPtr create_column(LogicalType LT);
-    static ColumnPtr create_column(LogicalType LT, uint32_t start, uint32_t count);
-    static ColumnPtr create_nullable_column(LogicalType LT);
-    static ColumnPtr create_nullable_column(LogicalType LT, const Buffer<uint8_t>& nulls, uint32_t start,
-                                            uint32_t count);
+    static MutableColumnPtr create_column(LogicalType LT);
+    static MutableColumnPtr create_column(LogicalType LT, uint32_t start, uint32_t count);
+    static MutableColumnPtr create_nullable_column(LogicalType LT);
+    static MutableColumnPtr create_nullable_column(LogicalType LT, const Buffer<uint8_t>& nulls, uint32_t start,
+                                                   uint32_t count);
     void check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
                               int32_t expect_num_colums);
 
     void sort_results_from_coroutine(Buffer<uint32_t>& pid, Buffer<uint32_t>& bid, int size) {
         std::vector<std::pair<int, int>> zipped;
         for (auto i = 0; i < size; i++) {
-            zipped.push_back(std::make_pair(pid[i], bid[i]));
+            zipped.emplace_back(pid[i], bid[i]);
         }
         std::sort(std::begin(zipped), std::end(zipped), [&](const auto& a, const auto& b) {
             if (a.first == b.first) return a.second > b.second;
@@ -292,7 +299,7 @@ Buffer<uint8_t> JoinHashMapTest::create_bools(uint32_t count, int32_t flag) {
     return nulls;
 }
 
-ColumnPtr JoinHashMapTest::create_column(LogicalType LT) {
+MutableColumnPtr JoinHashMapTest::create_column(LogicalType LT) {
     if (LT == LogicalType::TYPE_INT) {
         return FixedLengthColumn<int32_t>::create();
     }
@@ -304,7 +311,7 @@ ColumnPtr JoinHashMapTest::create_column(LogicalType LT) {
     return nullptr;
 }
 
-ColumnPtr JoinHashMapTest::create_column(LogicalType LT, uint32_t start, uint32_t count) {
+MutableColumnPtr JoinHashMapTest::create_column(LogicalType LT, uint32_t start, uint32_t count) {
     if (LT == LogicalType::TYPE_INT) {
         auto column = FixedLengthColumn<int32_t>::create();
         for (auto i = 0; i < count; i++) {
@@ -324,7 +331,7 @@ ColumnPtr JoinHashMapTest::create_column(LogicalType LT, uint32_t start, uint32_
     return nullptr;
 }
 
-ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT) {
+MutableColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT) {
     if (LT == LogicalType::TYPE_INT) {
         auto data_column = FixedLengthColumn<int32_t>::create();
         auto null_column = FixedLengthColumn<uint8_t>::create();
@@ -340,8 +347,8 @@ ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT) {
     return nullptr;
 }
 
-ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const Buffer<uint8_t>& nulls, uint32_t start,
-                                                  uint32_t count) {
+MutableColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const Buffer<uint8_t>& nulls, uint32_t start,
+                                                         uint32_t count) {
     if (LT == LogicalType::TYPE_INT) {
         auto data_column = FixedLengthColumn<int32_t>::create();
         auto null_column = FixedLengthColumn<uint8_t>::create();
@@ -703,7 +710,7 @@ ColumnPtr JoinHashMapTest::create_int32_nullable_column(uint32_t row_count, uint
 
 void JoinHashMapTest::check_binary_column(const ColumnPtr& column, uint32_t row_count, uint32_t start_value) {
     auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column);
-    auto& data = binary_column->get_data();
+    auto data = binary_column->immutable_data();
 
     for (uint32_t i = 0; i < row_count; i++) {
         std::string str = std::to_string(start_value + i);
@@ -828,7 +835,7 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
                 check_int32_column(*ColumnHelper::get_data_column(result_chunk->columns()[i].get()), num_probe_rows,
                                    i * 10 + 1);
             } else {
-                check_int32_column(*result_chunk->columns()[i], num_probe_rows, i * 10 + 1);
+                check_int32_column(*result_chunk->mutable_columns()[i], num_probe_rows, i * 10 + 1);
             }
         }
         if (expect_num_colums > 3) {
@@ -1050,7 +1057,9 @@ TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
     auto c2 = JoinHashMapTest::create_int32_column(2, 2);
     Columns columns{c1, c2};
 
-    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(), 0, 2);
+    std::vector<uint32_t> serialized_fixed_size_key_bytes{4, 4};
+    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(),
+                                                                                 serialized_fixed_size_key_bytes, 0, 2);
 
     auto* c3 = ColumnHelper::as_raw_column<Int64Column>(data_column);
     ASSERT_EQ(c3->get_data()[0], 8589934592l);
@@ -1084,9 +1093,9 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
-            ASSERT_EQ(null_column->get_data()[j], 1);
+            ASSERT_EQ(null_column->immutable_data()[j], 1);
         }
     }
 }
@@ -1118,9 +1127,9 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
-            ASSERT_EQ(null_column->get_data()[j], 1);
+            ASSERT_EQ(null_column->immutable_data()[j], 1);
         }
     }
 }
@@ -1272,7 +1281,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
 
     // check
     ASSERT_EQ(result_chunk->columns().size(), 2);
-    auto result_data = down_cast<Int8Column*>(result_chunk->get_column_by_slot_id(1).get())->get_data();
+    auto* result_column = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    auto result_data = down_cast<Int8Column*>(result_column)->get_data();
     std::sort(result_data.begin(), result_data.end());
     Buffer<int8_t> check_data = {-5, 0, 1, 3, 5};
     ASSERT_TRUE(result_data == check_data);
@@ -1326,9 +1336,10 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
 
     // check
     ASSERT_EQ(result_chunk->columns().size(), 2);
-    auto* result_column = down_cast<NullableColumn*>(result_chunk->get_column_by_slot_id(1).get());
-    auto* result_data_column = down_cast<Int8Column*>(result_column->data_column().get());
-    auto* result_null_column = down_cast<UInt8Column*>(result_column->null_column().get());
+    auto* result_column = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    auto* result_data_column = down_cast<Int8Column*>(down_cast<NullableColumn*>(result_column)->data_column_raw_ptr());
+    auto* result_null_column =
+            down_cast<UInt8Column*>(down_cast<NullableColumn*>(result_column)->null_column_raw_ptr());
     auto result_data = result_data_column->get_data();
     auto result_null = result_null_column->get_data();
     std::sort(result_data.begin(), result_data.end());
@@ -1368,6 +1379,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     probe_state.next.resize(config::vector_chunk_size, 0);
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
     using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
@@ -1428,6 +1441,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     probe_state.next.resize(config::vector_chunk_size, 0);
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
     using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
@@ -1770,7 +1785,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     }
     ASSERT_EQ(probe_state.count, 4096);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
-        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
     }
 
     DO_TEST_PROBE_MID(_probe_from_ht)
@@ -1780,7 +1795,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     ASSERT_EQ(probe_state.count, 1904);
     ASSERT_EQ(probe_state.cur_row_match_count, 0);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
-        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
     }
     std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
         if (a.first == b.first) return a.second > b.second;
@@ -1838,7 +1853,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     }
     ASSERT_EQ(probe_state.count, 4096);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
-        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
     }
 
     DO_TEST_PROBE_MID(_probe_from_ht_for_left_outer_join)
@@ -1848,7 +1863,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     ASSERT_EQ(probe_state.count, 1904);
     ASSERT_EQ(probe_state.cur_row_match_count, 0);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
-        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
     }
     std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
         if (a.first == b.first) return a.second > b.second;
@@ -1908,7 +1923,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_EQ(probe_state.count, 4096);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
-        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
     }
 
     join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<false, false>(
@@ -1917,7 +1932,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.count, 1904);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
-        results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+        results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
     }
     std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
         if (a.first == b.first) return a.second > b.second;
@@ -1994,7 +2009,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
         ASSERT_EQ(probe_state.count, 4096);
         for (uint32_t i = 0; i < probe_state.count; i += 1) {
-            results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+            results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
         }
 
         join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false, false>(
@@ -2003,7 +2018,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
         ASSERT_FALSE(probe_state.has_remain);
         ASSERT_EQ(probe_state.count, 1904);
         for (uint32_t i = 0; i < probe_state.count; i += 1) {
-            results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
+            results.emplace_back(probe_state.probe_index[i], probe_state.build_index[i]);
         }
         std::sort(results.begin(), results.end(), [&](auto& a, auto& b) {
             if (a.first == b.first) return a.second > b.second;
@@ -2045,7 +2060,7 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     Columns probe_key_columns;
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
 
-    Columns build_keys_column{build_chunk->columns()[0]};
+    Columns build_keys_column{build_chunk->mutable_columns()[0]};
     hash_table.append_chunk(build_chunk, build_keys_column);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2056,17 +2071,17 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
-    ColumnPtr column1 = result_chunk->get_column_by_slot_id(0);
+    auto* column1 = result_chunk->get_column_raw_ptr_by_slot_id(0);
     check_int32_column(*column1, 5, 1);
-    ColumnPtr column2 = result_chunk->get_column_by_slot_id(1);
+    auto* column2 = result_chunk->get_column_raw_ptr_by_slot_id(1);
     check_int32_column(*column2, 5, 11);
-    ColumnPtr column3 = result_chunk->get_column_by_slot_id(2);
+    auto* column3 = result_chunk->get_column_raw_ptr_by_slot_id(2);
     check_int32_column(*column3, 5, 21);
-    ColumnPtr column4 = result_chunk->get_column_by_slot_id(3);
+    auto* column4 = result_chunk->get_column_raw_ptr_by_slot_id(3);
     check_int32_column(*column4, 5, 1);
-    ColumnPtr column5 = result_chunk->get_column_by_slot_id(4);
+    auto* column5 = result_chunk->get_column_raw_ptr_by_slot_id(4);
     check_int32_column(*column5, 5, 11);
-    ColumnPtr column6 = result_chunk->get_column_by_slot_id(5);
+    auto* column6 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     check_int32_column(*column6, 5, 21);
 
     hash_table.close();
@@ -2097,7 +2112,7 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
 
     Columns build_key_columns;
-    build_key_columns.emplace_back(build_chunk->columns()[0]);
+    build_key_columns.emplace_back(build_chunk->mutable_columns()[0]);
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2108,17 +2123,17 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
-    ColumnPtr column1 = result_chunk->get_column_by_slot_id(0);
+    auto* column1 = result_chunk->get_column_raw_ptr_by_slot_id(0);
     check_int32_nullable_column(*column1, 5, 1);
-    ColumnPtr column2 = result_chunk->get_column_by_slot_id(1);
+    auto* column2 = result_chunk->get_column_raw_ptr_by_slot_id(1);
     check_int32_nullable_column(*column2, 5, 11);
-    ColumnPtr column3 = result_chunk->get_column_by_slot_id(2);
+    auto* column3 = result_chunk->get_column_raw_ptr_by_slot_id(2);
     check_int32_nullable_column(*column3, 5, 21);
-    ColumnPtr column4 = result_chunk->get_column_by_slot_id(3);
+    auto* column4 = result_chunk->get_column_raw_ptr_by_slot_id(3);
     check_int32_nullable_column(*column4, 5, 1);
-    ColumnPtr column5 = result_chunk->get_column_by_slot_id(4);
+    auto* column5 = result_chunk->get_column_raw_ptr_by_slot_id(4);
     check_int32_nullable_column(*column5, 5, 11);
-    ColumnPtr column6 = result_chunk->get_column_by_slot_id(5);
+    auto* column6 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     check_int32_nullable_column(*column6, 5, 21);
 
     hash_table.close();
@@ -2150,7 +2165,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
-    Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
+    Columns build_key_columns{build_chunk->mutable_columns()[0], build_chunk->mutable_columns()[1]};
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2161,17 +2176,17 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
-    ColumnPtr column1 = result_chunk->get_column_by_slot_id(0);
+    auto* column1 = result_chunk->get_column_raw_ptr_by_slot_id(0);
     check_int32_column(*column1, 5, 1);
-    ColumnPtr column2 = result_chunk->get_column_by_slot_id(1);
+    auto* column2 = result_chunk->get_column_raw_ptr_by_slot_id(1);
     check_int32_column(*column2, 5, 11);
-    ColumnPtr column3 = result_chunk->get_column_by_slot_id(2);
+    auto* column3 = result_chunk->get_column_raw_ptr_by_slot_id(2);
     check_int32_column(*column3, 5, 21);
-    ColumnPtr column4 = result_chunk->get_column_by_slot_id(3);
+    auto* column4 = result_chunk->get_column_raw_ptr_by_slot_id(3);
     check_int32_column(*column4, 5, 1);
-    ColumnPtr column5 = result_chunk->get_column_by_slot_id(4);
+    auto* column5 = result_chunk->get_column_raw_ptr_by_slot_id(4);
     check_int32_column(*column5, 5, 11);
-    ColumnPtr column6 = result_chunk->get_column_by_slot_id(5);
+    auto* column6 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     check_int32_column(*column6, 5, 21);
 
     hash_table.close();
@@ -2201,7 +2216,7 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
-    Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
+    Columns build_key_columns{build_chunk->mutable_columns()[0], build_chunk->mutable_columns()[1]};
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2212,17 +2227,17 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
-    ColumnPtr column1 = result_chunk->get_column_by_slot_id(0);
+    auto* column1 = result_chunk->get_column_raw_ptr_by_slot_id(0);
     check_binary_column(column1, 5, 1);
-    ColumnPtr column2 = result_chunk->get_column_by_slot_id(1);
+    auto* column2 = result_chunk->get_column_raw_ptr_by_slot_id(1);
     check_binary_column(column2, 5, 11);
-    ColumnPtr column3 = result_chunk->get_column_by_slot_id(2);
+    auto* column3 = result_chunk->get_column_raw_ptr_by_slot_id(2);
     check_binary_column(column3, 5, 21);
-    ColumnPtr column4 = result_chunk->get_column_by_slot_id(3);
+    auto* column4 = result_chunk->get_column_raw_ptr_by_slot_id(3);
     check_binary_column(column4, 5, 1);
-    ColumnPtr column5 = result_chunk->get_column_by_slot_id(4);
+    auto* column5 = result_chunk->get_column_raw_ptr_by_slot_id(4);
     check_binary_column(column5, 5, 11);
-    ColumnPtr column6 = result_chunk->get_column_by_slot_id(5);
+    auto* column6 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     check_binary_column(column6, 5, 21);
 
     hash_table.close();
@@ -2244,6 +2259,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNotNullableC
     column_1->append(*create_column(TYPE_INT, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto column_2 = create_column(TYPE_INT);
@@ -2284,6 +2301,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNullableColu
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto nulls_2 = create_bools(build_row_count, 0);
@@ -2325,6 +2344,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForPartialNulla
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto nulls_2 = create_bools(build_row_count, 2);
@@ -2516,11 +2537,11 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
     bool eos = false;
     ASSERT_TRUE(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
     ASSERT_EQ(result_chunk->num_columns(), 3);
-    auto c2 = result_chunk->get_column_by_slot_id(2);
+    auto* c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
     check_int32_column(*c2, 5, 21);
-    auto c5 = result_chunk->get_column_by_slot_id(5);
+    auto* c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     check_null_column(c5, 5);
-    auto probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    auto* probe_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
     check_probe_index_column(*probe_index_col, {0, 1, 2, 3, 4});
 
     ASSERT_EQ(result_chunk->filter({1, 0, 1, 0, 1}, true), 3);
@@ -2528,10 +2549,10 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 3);
 
-    auto c1 = result_chunk->get_column_by_slot_id(1);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    auto c4 = result_chunk->get_column_by_slot_id(4);
-    c5 = result_chunk->get_column_by_slot_id(5);
+    auto* c1 = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    auto* c4 = result_chunk->get_column_raw_ptr_by_slot_id(4);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
 
     for (size_t i = 0; i < 3; i++) {
         ASSERT_EQ(c1->get(i).get_int32(), 10 + i * 2 + 1);
@@ -2571,11 +2592,11 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
     bool eos = false;
     ASSERT_TRUE(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
     ASSERT_EQ(result_chunk->num_columns(), 3);
-    auto c2 = result_chunk->get_column_by_slot_id(2);
+    auto* c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
     check_int32_column(*c2, 5, 21);
-    auto c5 = result_chunk->get_column_by_slot_id(5);
+    auto* c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     check_null_column(c5, 5);
-    auto probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    auto* probe_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
     check_probe_index_column(*probe_index_col, {0, 1, 2, 3, 4});
 
     ASSERT_EQ(result_chunk->filter({1, 1, 1, 1, 1}, true), 5);
@@ -2583,10 +2604,10 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 5);
 
-    auto c1 = result_chunk->get_column_by_slot_id(1);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    auto c4 = result_chunk->get_column_by_slot_id(4);
-    c5 = result_chunk->get_column_by_slot_id(5);
+    auto* c1 = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    auto* c4 = result_chunk->get_column_raw_ptr_by_slot_id(4);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
 
     for (size_t i = 0; i < 5; i++) {
         ASSERT_EQ(c1->get(i).get_int32(), 10 + i + 1);
@@ -2615,13 +2636,13 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputAll) {
     size_t num_probe_rows = 5;
     size_t num_build_rows = 5;
     bool eos = false;
-    ColumnPtr c1, c2, c4, c5, probe_index_col, build_index_col;
+    Column *c1, *c2, *c4, *c5, *probe_index_col, *build_index_col;
 
     // prepare data
     auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
-    Columns build_key_columns{build_chunk->columns()[0]};
+    Columns build_key_columns{build_chunk->mutable_columns()[0]};
     auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
-    Columns probe_key_columns = {probe_chunk->columns()[0]};
+    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
     ChunkPtr result_chunk = std::make_shared<Chunk>();
 
     // create param
@@ -2640,10 +2661,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputAll) {
     ASSERT_OK(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
 
     ASSERT_EQ(result_chunk->num_columns(), 4);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c5 = result_chunk->get_column_by_slot_id(5);
-    probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
-    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
+    probe_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    build_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
     ASSERT_EQ(c2->debug_string(), "[20, 21, 22, 23, 24]");
     ASSERT_EQ(c5->debug_string(), "[20, 21, 22, 23, 24]");
     ASSERT_EQ(probe_index_col->debug_string(), "[0, 1, 2, 3, 4]");
@@ -2657,10 +2678,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputAll) {
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 5);
 
-    c1 = result_chunk->get_column_by_slot_id(1);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c4 = result_chunk->get_column_by_slot_id(4);
-    c5 = result_chunk->get_column_by_slot_id(5);
+    c1 = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c4 = result_chunk->get_column_raw_ptr_by_slot_id(4);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
 
     ASSERT_EQ(c1->debug_string(), "[10, 11, 12, 13, 14]");
     ASSERT_EQ(c2->debug_string(), "[20, 21, 22, 23, 24]");
@@ -2687,13 +2708,13 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPart) {
     size_t num_probe_rows = 4;
     size_t num_build_rows = 5;
     bool eos = false;
-    ColumnPtr c1, c2, c4, c5, probe_index_col, build_index_col;
+    Column *c1, *c2, *c4, *c5, *probe_index_col, *build_index_col;
 
     // prepare data
     auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
-    Columns key_columns{build_chunk->columns()[0]};
+    Columns key_columns{build_chunk->mutable_columns()[0]};
     auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
-    Columns probe_key_columns = {probe_chunk->columns()[0]};
+    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
     ChunkPtr result_chunk = std::make_shared<Chunk>();
 
     // create param
@@ -2714,10 +2735,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPart) {
     ASSERT_OK(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
 
     ASSERT_EQ(result_chunk->num_columns(), 4);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c5 = result_chunk->get_column_by_slot_id(5);
-    probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
-    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
+    probe_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    build_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
     ASSERT_EQ(c2->debug_string(), "[20, 21, 22, 23]");
     ASSERT_EQ(c5->debug_string(), "[20, 21, 22, 23]");
     ASSERT_EQ(probe_index_col->debug_string(), "[0, 1, 2, 3]");
@@ -2731,10 +2752,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPart) {
 
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 2);
-    c1 = result_chunk->get_column_by_slot_id(1);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c4 = result_chunk->get_column_by_slot_id(4);
-    c5 = result_chunk->get_column_by_slot_id(5);
+    c1 = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c4 = result_chunk->get_column_raw_ptr_by_slot_id(4);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     ASSERT_EQ(c1->debug_string(), "[10, 12]");
     ASSERT_EQ(c2->debug_string(), "[20, 22]");
     ASSERT_EQ(c4->debug_string(), "[10, 12]");
@@ -2759,14 +2780,14 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
     size_t num_probe_rows = 4;
     size_t num_build_rows = 5;
     bool eos = false;
-    ColumnPtr c1, c2, c4, c5, probe_index_col, build_index_col;
+    Column *c1, *c2, *c4, *c5, *probe_index_col, *build_index_col;
 
     // prepare data
     ChunkPtr build_chunk = create_int32_build_chunk(num_build_rows, 1, false);
-    Columns build_key_columns = {build_chunk->columns()[0]};
+    Columns build_key_columns = {build_chunk->mutable_columns()[0]};
     ChunkPtr probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
     ChunkPtr result_chunk = std::make_shared<Chunk>();
-    Columns probe_key_columns = {probe_chunk->columns()[0]};
+    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
 
     // create param
     auto param = create_table_param_int(TJoinOp::RIGHT_OUTER_JOIN, 3);
@@ -2787,10 +2808,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
 
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 3);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c5 = result_chunk->get_column_by_slot_id(5);
-    probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
-    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
+    probe_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    build_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
     ASSERT_EQ(c2->debug_string(), "[21, 22, 23]");
     ASSERT_EQ(c5->debug_string(), "[21, 22, 23]");
     ASSERT_EQ(probe_index_col->debug_string(), "[1, 2, 3]");
@@ -2804,10 +2825,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 2);
 
-    c1 = result_chunk->get_column_by_slot_id(1);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c4 = result_chunk->get_column_by_slot_id(4);
-    c5 = result_chunk->get_column_by_slot_id(5);
+    c1 = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c4 = result_chunk->get_column_raw_ptr_by_slot_id(4);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     ASSERT_EQ(c1->debug_string(), "[11, 13]");
     ASSERT_EQ(c2->debug_string(), "[21, 23]");
     ASSERT_EQ(c4->debug_string(), "[11, 13]");
@@ -2819,9 +2840,9 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
 
     ASSERT_EQ(result_chunk->num_columns(), 3);
     ASSERT_EQ(result_chunk->num_rows(), 2);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c5 = result_chunk->get_column_by_slot_id(5);
-    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
+    build_index_col = result_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
     ASSERT_EQ(c2->debug_string(), "[NULL, NULL]");
     ASSERT_EQ(c5->debug_string(), "[24, 25]");
     ASSERT_EQ(build_index_col->debug_string(), "[4, 5]");
@@ -2834,10 +2855,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
 
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 1);
-    c1 = result_chunk->get_column_by_slot_id(1);
-    c2 = result_chunk->get_column_by_slot_id(2);
-    c4 = result_chunk->get_column_by_slot_id(4);
-    c5 = result_chunk->get_column_by_slot_id(5);
+    c1 = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    c2 = result_chunk->get_column_raw_ptr_by_slot_id(2);
+    c4 = result_chunk->get_column_raw_ptr_by_slot_id(4);
+    c5 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     ASSERT_EQ(c1->debug_string(), "[NULL]");
     ASSERT_EQ(c2->debug_string(), "[NULL]");
     ASSERT_EQ(c4->debug_string(), "[14]");
@@ -3119,6 +3140,8 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable
     build_column2->append_datum(Datum(0));
     build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
     table_items.key_columns.emplace_back(build_column2);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     BuildKeyBuilder::prepare(nullptr, &table_items);
     BuildKeyBuilder::build_key(nullptr, &table_items);
@@ -3150,6 +3173,8 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
     build_column2->append_datum(Datum(0));
     build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
     table_items.key_columns.emplace_back(build_column2);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     {
         table_items.row_count = 10;
@@ -3195,6 +3220,8 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     HashTableProbeState probe_state;
 

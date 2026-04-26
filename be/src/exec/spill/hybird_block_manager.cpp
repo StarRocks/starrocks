@@ -14,7 +14,7 @@
 
 #include "exec/spill/hybird_block_manager.h"
 
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks::spill {
 

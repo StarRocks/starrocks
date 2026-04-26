@@ -14,9 +14,11 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
@@ -37,6 +39,7 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -50,6 +53,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -57,7 +61,7 @@ import java.util.concurrent.Future;
 public class CatalogRecycleBinLakeTableTest {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBinLakeTableTest.class);
 
-    private String currentCaseName = "";
+    protected String currentCaseName = "";
 
     @BeforeAll
     public static void beforeClass() {
@@ -69,36 +73,38 @@ public class CatalogRecycleBinLakeTableTest {
     @BeforeEach
     void setUp(TestInfo testInfo) {
         currentCaseName = testInfo.getDisplayName();
+        // Clear recycle bin before each test to ensure test isolation
+        GlobalStateMgr.getCurrentState().getRecycleBin().clear();
     }
 
-    private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
+    protected static Table createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
-    private static void dropTable(ConnectContext connectContext, String sql) throws Exception {
+    protected static void dropTable(ConnectContext connectContext, String sql) throws Exception {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
-    private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
+    protected static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         DDLStmtExecutor.execute(stmt, connectContext);
     }
 
-    private static void recoverDatabase(ConnectContext connectContext, String sql) throws Exception {
+    protected static void recoverDatabase(ConnectContext connectContext, String sql) throws Exception {
         RecoverDbStmt stmt = (RecoverDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().recoverDatabase(stmt);
     }
 
-    private static void recoverPartition(ConnectContext connectContext, String sql) throws Exception {
+    protected static void recoverPartition(ConnectContext connectContext, String sql) throws Exception {
         RecoverPartitionStmt stmt = (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(stmt);
     }
 
-    private static Future<DropTableResponse> buildDropTableResponse(int errCode, String msg) {
+    protected static Future<DropTableResponse> buildDropTableResponse(int errCode, String msg) {
         DropTableResponse response = new DropTableResponse();
         response.status = new StatusPB();
         response.status.statusCode = errCode;
@@ -106,16 +112,16 @@ public class CatalogRecycleBinLakeTableTest {
         return CompletableFuture.completedFuture(response);
     }
 
-    private static void checkTableTablet(Table table, boolean expectExist) {
+    protected static void checkTableTablet(Table table, boolean expectExist) {
         for (Partition partition : table.getPartitions()) {
             checkPartitionTablet(partition, expectExist);
         }
     }
 
-    private static void checkPartitionTablet(Partition partition, boolean expectExist) {
+    protected static void checkPartitionTablet(Partition partition, boolean expectExist) {
         TabletInvertedIndex tabletIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (MaterializedIndex index :
-                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 TabletMeta meta = tabletIndex.getTabletMeta(tablet.getId());
                 if (expectExist) {
@@ -127,13 +133,15 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
-    private static String getStorageVolumeIdOfTable(long tableId) {
+    protected static String getStorageVolumeIdOfTable(long tableId) {
         return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfTable(tableId);
     }
 
-    private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
+    protected static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
                                                long time) {
         while (recycleBin.getRecycleTableInfo(id) != null) {
+            // For Lake Tables, partitions are processed by erasePartition()
+            recycleBin.erasePartition(time);
             recycleBin.eraseTable(time);
             try {
                 Thread.sleep(100);
@@ -142,7 +150,7 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
-    private static void waitPartitionClearFinished(CatalogRecycleBin recycleBin, long id,
+    protected static void waitPartitionClearFinished(CatalogRecycleBin recycleBin, long id,
                                                    long time) {
         while (recycleBin.getRecyclePartitionInfo(id) != null) {
             recycleBin.erasePartition(time);
@@ -153,9 +161,32 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
-    private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
-        while (recycleBin.isDeletingTable(id)) {
-            recycleBin.eraseTable(time);
+    private static final long WAIT_TIMEOUT_MS = 10_000;
+
+    protected static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        // The deletion flow is:
+        // 1. eraseTable() adds partitions to idToPartition, lakeTableToPartitions tracks them
+        // 2. erasePartition() processes partitions asynchronously
+        // 3. eraseTable() checks if all partitions are deleted and cleans up lakeTableToPartitions
+        //
+        // This method waits for the current round of deletion attempts to complete (success or failure),
+        // NOT for all partitions to be successfully deleted.
+        long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
+        while (recycleBin.isLakeTableDeletingInProgress(id)) {
+            recycleBin.erasePartition(time);
+            // Check if any partition is still being deleted asynchronously
+            if (!recycleBin.isAnyLakeTablePartitionDeleting(id)) {
+                // All async tasks completed (success or failure)
+                // If all partitions deleted, clean up via eraseTable
+                if (recycleBin.getLakeTablePendingPartitionCount(id) == 0) {
+                    recycleBin.eraseTable(time);
+                }
+                break;
+            }
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    String.format("waitTableToBeDone timed out for tableId=%d, pendingPartitions=%d, anyDeleting=%s",
+                            id, recycleBin.getLakeTablePendingPartitionCount(id),
+                            recycleBin.isAnyLakeTablePartitionDeleting(id)));
             try {
                 Thread.sleep(100);
             } catch (Exception ignore) {
@@ -163,9 +194,49 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
-    private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+    protected static void waitAllTablesToBeDone(CatalogRecycleBin recycleBin, List<Long> ids, long time) {
+        ids.forEach(x -> Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(x)));
+
+        // Note that the eraseTable() will add new async delete tasks if the deletion failed but retryable.
+        // In case of multiple tables in the recycle bin, we must wait until all tables are done before calling
+        // the eraseTable(). Otherwise the completed retryable tables will be added into the async delete tasks again.
+        //
+        // This method waits for the current round of deletion attempts to complete (success or failure),
+        // NOT for all partitions to be successfully deleted.
+        long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
+        while (true) {
+            // Process partitions for Lake Tables
+            recycleBin.erasePartition(time);
+
+            // Count tables that still have active async deletion tasks
+            long activeCount = ids.stream().filter(x -> {
+                if (recycleBin.isLakeTableDeletingInProgress(x)) {
+                    return recycleBin.isAnyLakeTablePartitionDeleting(x);
+                }
+                return false;
+            }).count();
+
+            if (activeCount == 0) {
+                break;
+            }
+
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    String.format("waitAllTablesToBeDone timed out, activeCount=%d, tableIds=%s", activeCount, ids));
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+                // nothing to do
+            }
+        }
+        recycleBin.eraseTable(time);
+    }
+
+    protected static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
         while (recycleBin.isDeletingPartition(id)) {
             recycleBin.erasePartition(time);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    String.format("waitPartitionToBeDone timed out for partitionId=%d", id));
             try {
                 Thread.sleep(100);
             } catch (Exception ignore) {
@@ -173,15 +244,25 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
-    private static boolean containsAsyncDeleteTable(Object recycleBin, long id) {
-        Map<?, CompletableFuture<Boolean>> asyncDeleteForTables =
-                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
-
-        return asyncDeleteForTables.entrySet().stream()
-                .anyMatch(e -> ((CatalogRecycleBin.RecycleTableInfo) e.getKey()).getTable().getId() == id);
+    /**
+     * Wait until no partition of the given table has an active async deletion task.
+     * Unlike waitTableToBeDone, this does NOT call eraseTable() — use this when the test
+     * needs to inspect the state between partition completion and table finalization.
+     */
+    protected static void waitUntilNoAsyncDeletion(CatalogRecycleBin recycleBin, long tableId, long time) {
+        // Submit async tasks if not yet started, then poll until all complete.
+        recycleBin.erasePartition(time);
+        long deadline = System.currentTimeMillis() + 5000;
+        while (recycleBin.isAnyLakeTablePartitionDeleting(tableId) && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(10);
+            } catch (Exception ignore) {
+            }
+            recycleBin.erasePartition(time);
+        }
     }
 
-    private static boolean containsAsyncDeletePartition(Object recycleBin, long id) {
+    protected static boolean containsAsyncDeletePartition(Object recycleBin, long id) {
         Map<?, CompletableFuture<Boolean>> asyncDeleteForPartitions =
                 Deencapsulation.getField(recycleBin, "asyncDeleteForPartitions");
 
@@ -234,6 +315,12 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public LakeService getLakeService(TNetworkAddress address) throws RpcException {
                 return lakeService;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
         new Expectations() {
@@ -331,7 +418,6 @@ public class CatalogRecycleBinLakeTableTest {
 
         recycleBin.replayEraseTable(Lists.newArrayList(table1.getId()));
         Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
-        Assertions.assertFalse(containsAsyncDeleteTable(recycleBin, table1.getId()));
     }
 
     @Test
@@ -392,11 +478,22 @@ public class CatalogRecycleBinLakeTableTest {
         // Now the retry interval has reached
         long delay = Math.max(Config.catalog_trash_expire_second * 1000, CatalogRecycleBin.getMinEraseLatency()) + 1;
         recycleBin.eraseTable(System.currentTimeMillis() + delay);
-        waitTableToBeDone(recycleBin, table1.getId(), System.currentTimeMillis() + delay);
-        waitTableToBeDone(recycleBin, table2.getId(), System.currentTimeMillis() + delay);
+
+        List<Long> tableIds = ImmutableList.of(table1.getId(), table2.getId());
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table1.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table2.getId()));
+        // must wait all tables done and then do the cleanup with eraseTable()
+        waitAllTablesToBeDone(recycleBin, tableIds, System.currentTimeMillis() + delay);
+
         Assertions.assertThrows(DdlException.class, () -> recoverDatabase(connectContext, recoverDbSql));
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
+
+        // NOTE: the tables are still in recycle bin because the deletion failed, may affect other cases running
+        // after this one, so here we clear them directly from RecycleBin.
+        recycleBin.removeTableFromRecycleBin(tableIds);
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
     }
 
     @Test
@@ -634,5 +731,419 @@ public class CatalogRecycleBinLakeTableTest {
         Assertions.assertNull(recycleBin.getPartition(p2.getId()));
         checkPartitionTablet(p1, false);
         checkPartitionTablet(p2, false);
+    }
+
+    @Test
+    public void testEraseLakeTableByPartitions(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "erase_lake_table_by_partitions_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        // Create a table with multiple partitions
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t1" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')," +
+                        "  PARTITION p3 VALUES LESS THAN('2024-03-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        Partition p1 = table.getPartition("p1");
+        Partition p2 = table.getPartition("p2");
+        Partition p3 = table.getPartition("p3");
+        Assertions.assertNotNull(p1);
+        Assertions.assertNotNull(p2);
+        Assertions.assertNotNull(p3);
+        checkTableTablet(table, true);
+
+        // Drop table with FORCE to make it non-recoverable
+        dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
+        Assertions.assertNotNull(recycleBin.getTable(db.getId(), table.getId()));
+        Assertions.assertFalse(recycleBin.isTableRecoverable(db.getId(), table.getId()));
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress address) throws RpcException {
+                return lakeService;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+
+        // All partitions should be deleted successfully
+        new Expectations() {
+            {
+                lakeService.dropTable((DropTableRequest) any);
+                minTimes = 3;
+                maxTimes = 3;
+                result = buildDropTableResponse(0, "");
+            }
+        };
+
+        long delay = Math.max(Config.catalog_trash_expire_second * 1000, CatalogRecycleBin.getMinEraseLatency()) + 1;
+        long futureTime = System.currentTimeMillis() + delay;
+
+        // First eraseTable call: adds partitions to idToPartition
+        recycleBin.eraseTable(futureTime);
+
+        // Verify partitions are added and tracked
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
+        Assertions.assertEquals(3, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+        // Verify partitions are marked as from table deletion
+        Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p1.getId()));
+        Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p2.getId()));
+        Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p3.getId()));
+
+        // Process partitions, waiting for async deletion to complete
+        waitTableToBeDone(recycleBin, table.getId(), futureTime);
+
+        // Verify partitions are deleted
+        Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+        // Second eraseTable call: checks if all partitions are deleted and cleans up table
+        recycleBin.eraseTable(futureTime);
+
+        // Table should be erased
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
+        checkTableTablet(table, false);
+    }
+
+    @Test
+    public void testEraseLakeTableByPartitionsWithPartialFailure(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "erase_lake_table_partial_failure_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        // Create a table with multiple partitions
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t1" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        Partition p1 = table.getPartition("p1");
+        Partition p2 = table.getPartition("p2");
+        Assertions.assertNotNull(p1);
+        Assertions.assertNotNull(p2);
+
+        // Drop table with FORCE
+        dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
+        Assertions.assertNotNull(recycleBin.getTable(db.getId(), table.getId()));
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress address) throws RpcException {
+                return lakeService;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+
+        // First partition succeeds, second fails, then second succeeds on retry
+        new Expectations() {
+            {
+                lakeService.dropTable((DropTableRequest) any);
+                minTimes = 3;
+                maxTimes = 3;
+                result = buildDropTableResponse(0, "");  // p1 succeeds
+                result = buildDropTableResponse(1, "mocked error");  // p2 fails
+                result = buildDropTableResponse(0, "");  // p2 succeeds on retry
+            }
+        };
+
+        long delay = Math.max(Config.catalog_trash_expire_second * 1000, CatalogRecycleBin.getMinEraseLatency()) + 1;
+        long futureTime = System.currentTimeMillis() + delay;
+
+        // First eraseTable call: adds partitions to idToPartition
+        recycleBin.eraseTable(futureTime);
+
+        // Verify partitions are added
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
+        Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+        // Submit async delete tasks and wait for first round: p1 succeeds, p2 fails
+        waitTableToBeDone(recycleBin, table.getId(), futureTime);
+
+        // One partition should still be pending
+        Assertions.assertNotNull(recycleBin.getTable(db.getId(), table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
+        Assertions.assertEquals(1, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+        // Retry the failed partition and wait for success
+        waitTableToBeDone(recycleBin, table.getId(), futureTime);
+
+        // All partitions should be deleted now
+        Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+        // eraseTable should clean up and finish
+        recycleBin.eraseTable(futureTime);
+
+        // Table should be erased now
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
+    }
+
+    /**
+     * Test corner case: user drops partition (non-force), then changes table's datacache.enable,
+     * then recovers the partition. The recovered partition should have the table's current
+     * datacache.enable value, not the stale value from before the drop.
+     */
+    @Test
+    public void testRecoverPartitionSyncsDataCacheWithTableProperty(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "recover_partition_datacache_sync_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create a range partitioned cloud native table (datacache.enable defaults to true)
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t_datacache" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')," +
+                        "  PARTITION p3 VALUES LESS THAN('2024-03-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        OlapTable olapTable = (OlapTable) table;
+
+        Partition p1 = table.getPartition("p1");
+        Assertions.assertNotNull(p1);
+
+        // Verify initial datacache is enabled for p1
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        DataCacheInfo initialDataCacheInfo = partitionInfo.getDataCacheInfo(p1.getId());
+        Assertions.assertNotNull(initialDataCacheInfo);
+        Assertions.assertTrue(initialDataCacheInfo.isEnabled(),
+                "DataCache should be enabled initially for cloud native table partition");
+
+        // Step 1: Drop partition p1 (non-force, goes to recycle bin)
+        alterTable(connectContext, String.format("ALTER TABLE %s.t_datacache DROP PARTITION p1", dbName));
+        Assertions.assertNull(table.getPartition("p1"));
+        Assertions.assertNotNull(recycleBin.getPartition(p1.getId()));
+
+        // Step 2: Change table's datacache.enable to false
+        // We directly set the table property to avoid StarOS RPC calls in the test environment
+        olapTable.setDataCacheEnable(false);
+
+        // Also update all existing partitions' DataCacheInfo to match (simulating what
+        // alterDataCacheEnable does for existing partitions)
+        for (Partition partition : olapTable.getPartitions()) {
+            DataCacheInfo dci = partitionInfo.getDataCacheInfo(partition.getId());
+            boolean asyncWriteBack = dci != null && dci.isAsyncWriteBack();
+            partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(false, asyncWriteBack));
+        }
+
+        // Verify table's datacache.enable is now false
+        Assertions.assertFalse(olapTable.getTableProperty().getStorageInfo().isEnableDataCache(),
+                "Table datacache.enable should be false after change");
+
+        // Step 3: Recover partition p1
+        recoverPartition(connectContext, String.format("RECOVER PARTITION p1 FROM %s.t_datacache", dbName));
+        Assertions.assertSame(p1, table.getPartition("p1"));
+
+        // Step 4: Verify recovered partition's DataCacheInfo matches table's current setting (false)
+        DataCacheInfo recoveredDataCacheInfo = partitionInfo.getDataCacheInfo(p1.getId());
+        Assertions.assertNotNull(recoveredDataCacheInfo,
+                "Recovered partition should have DataCacheInfo");
+        Assertions.assertFalse(recoveredDataCacheInfo.isEnabled(),
+                "Recovered partition's datacache should match table's current datacache.enable=false");
+
+        // Verify other partitions still have datacache disabled
+        DataCacheInfo p2DataCacheInfo = partitionInfo.getDataCacheInfo(table.getPartition("p2").getId());
+        Assertions.assertNotNull(p2DataCacheInfo);
+        Assertions.assertFalse(p2DataCacheInfo.isEnabled(),
+                "Existing partition p2 should still have datacache disabled");
+    }
+
+    /**
+     * Test corner case: replayRecoverPartition also syncs DataCacheInfo with the table's
+     * current datacache.enable property. This simulates the follower replay path.
+     */
+    @Test
+    public void testReplayRecoverPartitionSyncsDataCacheWithTableProperty(@Mocked LakeService lakeService)
+            throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "replay_recover_datacache_sync_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create a range partitioned cloud native table
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t_replay_datacache" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        OlapTable olapTable = (OlapTable) table;
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+
+        Partition p1 = table.getPartition("p1");
+        Assertions.assertNotNull(p1);
+        long p1Id = p1.getId();
+
+        // Get the range and datacache info before dropping
+        com.google.common.collect.Range<PartitionKey> p1Range = rangePartitionInfo.getRange(p1Id);
+        DataCacheInfo p1DataCacheInfo = rangePartitionInfo.getDataCacheInfo(p1Id);
+        Assertions.assertNotNull(p1DataCacheInfo);
+        Assertions.assertTrue(p1DataCacheInfo.isEnabled());
+
+        // Step 1: Drop partition p1 (non-force)
+        alterTable(connectContext, String.format("ALTER TABLE %s.t_replay_datacache DROP PARTITION p1", dbName));
+        Assertions.assertNull(table.getPartition("p1"));
+
+        // Step 2: Change table's datacache.enable to false (simulate what happens on leader)
+        olapTable.setDataCacheEnable(false);
+
+        // Step 3: Simulate follower replay of partition recovery
+        // Create a new RecycleBin (as follower would have) and put the partition info back
+        CatalogRecycleBin followerRecycleBin = new CatalogRecycleBin();
+        RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(
+                db.getId(), olapTable.getId(), p1, p1Range,
+                DataProperty.DEFAULT_DATA_PROPERTY, (short) 1,
+                new DataCacheInfo(true, false)); // Old datacache was enabled
+        followerRecycleBin.recyclePartition(recyclePartitionInfo);
+        Assertions.assertNotNull(followerRecycleBin.getPartition(p1Id));
+
+        // Remove p1 from the table (it was already dropped in step 1)
+        // But we already dropped it above, so the table doesn't have p1 anymore
+
+        // Replay recover partition
+        followerRecycleBin.replayRecoverPartition(olapTable, p1Id);
+
+        // Step 4: Verify the replayed partition has datacache=false (matching table's current property)
+        Assertions.assertNull(followerRecycleBin.getPartition(p1Id));
+        Partition recoveredP1 = olapTable.getPartition("p1");
+        Assertions.assertNotNull(recoveredP1);
+
+        DataCacheInfo replayedDataCacheInfo = rangePartitionInfo.getDataCacheInfo(p1Id);
+        Assertions.assertNotNull(replayedDataCacheInfo,
+                "Replayed recovered partition should have DataCacheInfo");
+        Assertions.assertFalse(replayedDataCacheInfo.isEnabled(),
+                "Replayed recovered partition's datacache should match table's current datacache.enable=false");
+    }
+
+    /**
+     * Test that syncDataCacheInfoWithTable does NOT change DataCacheInfo when table's
+     * datacache.enable matches the partition's current setting.
+     */
+    @Test
+    public void testRecoverPartitionDataCacheAlreadyInSync(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "recover_partition_datacache_in_sync_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create table with datacache enabled (default)
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t_datacache_sync" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        OlapTable olapTable = (OlapTable) table;
+
+        Partition p1 = table.getPartition("p1");
+        Assertions.assertNotNull(p1);
+
+        // Step 1: Drop partition p1 (non-force)
+        alterTable(connectContext, String.format("ALTER TABLE %s.t_datacache_sync DROP PARTITION p1", dbName));
+        Assertions.assertNull(table.getPartition("p1"));
+        Assertions.assertNotNull(recycleBin.getPartition(p1.getId()));
+
+        // Step 2: DO NOT change table's datacache.enable (keep it as default true)
+        // Table's datacache.enable is still true, matching the dropped partition's setting.
+
+        // Step 3: Recover partition p1
+        recoverPartition(connectContext, String.format("RECOVER PARTITION p1 FROM %s.t_datacache_sync", dbName));
+        Assertions.assertSame(p1, table.getPartition("p1"));
+
+        // Step 4: Verify recovered partition's DataCacheInfo is still enabled (no change needed)
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        DataCacheInfo recoveredDataCacheInfo = partitionInfo.getDataCacheInfo(p1.getId());
+        Assertions.assertNotNull(recoveredDataCacheInfo);
+        Assertions.assertTrue(recoveredDataCacheInfo.isEnabled(),
+                "Recovered partition should still have datacache enabled since table property didn't change");
     }
 }

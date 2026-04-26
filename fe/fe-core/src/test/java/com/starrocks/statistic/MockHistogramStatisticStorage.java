@@ -23,7 +23,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,6 +30,11 @@ import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.junit.jupiter.api.Assertions;
 
@@ -265,23 +269,23 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
     }
 
     private void mockTpchHistogramStatistics() {
-        addHistogramStatistis("c_mktsegment", Type.STRING, tpchScala);
-        addHistogramStatistis("c_acctbal", Type.STRING, tpchScala);
-        addHistogramStatistis("l_discount", Type.DECIMAL32, tpchScala);
-        addHistogramStatistis("l_quantity", Type.DECIMAL32, tpchScala);
-        addHistogramStatistis("l_receiptdate", Type.DATE, tpchScala);
-        addHistogramStatistis("l_shipdate", Type.DATE, tpchScala);
-        addHistogramStatistis("l_returnflag", Type.STRING, tpchScala);
-        addHistogramStatistis("l_shipinstruct", Type.STRING, tpchScala);
-        addHistogramStatistis("o_orderdate", Type.DATE, tpchScala);
-        addHistogramStatistis("o_orderstatus", Type.STRING, tpchScala);
-        addHistogramStatistis("p_type", Type.STRING, tpchScala);
-        addHistogramStatistis("p_size", Type.INT, tpchScala);
-        addHistogramStatistis("p_brand", Type.STRING, tpchScala);
-        addHistogramStatistis("p_container", Type.STRING, tpchScala);
-        addHistogramStatistis("r_name", Type.STRING, 1);
-        addHistogramStatistis("n_nationkey", Type.INT, 1);
-        addHistogramStatistis("n_name", Type.STRING, 1);
+        addHistogramStatistis("c_mktsegment", StringType.STRING, tpchScala);
+        addHistogramStatistis("c_acctbal", StringType.STRING, tpchScala);
+        addHistogramStatistis("l_discount", DecimalType.DECIMAL32, tpchScala);
+        addHistogramStatistis("l_quantity", DecimalType.DECIMAL32, tpchScala);
+        addHistogramStatistis("l_receiptdate", DateType.DATE, tpchScala);
+        addHistogramStatistis("l_shipdate", DateType.DATE, tpchScala);
+        addHistogramStatistis("l_returnflag", StringType.STRING, tpchScala);
+        addHistogramStatistis("l_shipinstruct", StringType.STRING, tpchScala);
+        addHistogramStatistis("o_orderdate", DateType.DATE, tpchScala);
+        addHistogramStatistis("o_orderstatus", StringType.STRING, tpchScala);
+        addHistogramStatistis("p_type", StringType.STRING, tpchScala);
+        addHistogramStatistis("p_size", IntegerType.INT, tpchScala);
+        addHistogramStatistis("p_brand", StringType.STRING, tpchScala);
+        addHistogramStatistis("p_container", StringType.STRING, tpchScala);
+        addHistogramStatistis("r_name", StringType.STRING, 1);
+        addHistogramStatistis("n_nationkey", IntegerType.INT, 1);
+        addHistogramStatistis("n_name", StringType.STRING, 1);
     }
 
     private void mockSubfieldStatistics() {

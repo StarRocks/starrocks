@@ -87,11 +87,9 @@ INSERT INTO decimal_test_p76_s40_fe_null SELECT -1234567890123456789012345678901
 -- !result
 INSERT INTO decimal_test_p76_s40_fe_null SELECT 1234567890123456789012345678901234567.1234567890123456789012345678901234567890;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p76_s40_fe_null SELECT -1234567890123456789012345678901234567.1234567890123456789012345678901234567890;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p76_s40_fe_null ORDER BY d1;
 -- result:
@@ -109,11 +107,9 @@ INSERT INTO decimal_test_p76_s50_fe_null SELECT -1234567890123456789012345678.12
 -- !result
 INSERT INTO decimal_test_p76_s50_fe_null SELECT 123456789012345678901234567.12345678901234567890123456789012345678901234567890;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p76_s50_fe_null SELECT -123456789012345678901234567.12345678901234567890123456789012345678901234567890;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p76_s50_fe_null SELECT -12345678901234567890123456.12345678901234567890123456789012345678901234567890;
 -- result:
@@ -132,7 +128,6 @@ INSERT INTO decimal_test_p40_s35 SELECT 12345.1234567890123456789012345678901234
 INSERT INTO decimal_test_p40_s35 SELECT 1234567.12345678901234567890123456789012345; -- 7+35=42 > 40, should cause BE exception
 SELECT * FROM decimal_test_p40_s35 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p50_s45 (d1 decimal(50, 45)) PROPERTIES("replication_num"="1");
 -- result:
@@ -142,7 +137,6 @@ INSERT INTO decimal_test_p50_s45 SELECT 12345.1234567890123456789012345678901234
 INSERT INTO decimal_test_p50_s45 SELECT 1234567.123456789012345678901234567890123456789012345; -- 7+45=52 > 50, should cause BE exception
 SELECT * FROM decimal_test_p50_s45 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p55_s50 (d1 decimal(55, 50)) PROPERTIES("replication_num"="1");
 -- result:
@@ -151,7 +145,6 @@ INSERT INTO decimal_test_p55_s50 SELECT 123456.123456789012345678901234567890123
 INSERT INTO decimal_test_p55_s50 SELECT 12345.12345678901234567890123456789012345678901234567890;  -- 5+50=55, exactly fits
 SELECT * FROM decimal_test_p55_s50 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p76_s0 (d1 decimal(76, 0)) PROPERTIES("replication_num"="1");
 -- result:
@@ -246,11 +239,9 @@ CREATE TABLE decimal_test_p41_s8 (d1 decimal(41, 8)) PROPERTIES("replication_num
 -- !result
 INSERT INTO decimal_test_p41_s8 SELECT 12345678901234567890123456789012345.12345678;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p41_s8 SELECT -12345678901234567890123456789012345.12345678;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p41_s8 ORDER BY d1;
 -- result:
@@ -522,11 +513,9 @@ INSERT INTO decimal_test_p70_s45_fe_null SELECT -1234567890123456789012345678901
 -- !result
 INSERT INTO decimal_test_p70_s45_fe_null SELECT 12345678901234567890123456789012.123456789012345678901234567890123456789012345;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p70_s45_fe_null SELECT -12345678901234567890123456789012.123456789012345678901234567890123456789012345;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p70_s45_fe_null ORDER BY d1;
 -- result:
@@ -544,11 +533,9 @@ INSERT INTO decimal_test_p65_s55_fe_null SELECT -12345678901234567890123.1234567
 -- !result
 INSERT INTO decimal_test_p65_s55_fe_null SELECT 1234567890123456789012.1234567890123456789012345678901234567890123456789012345;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p65_s55_fe_null SELECT -1234567890123456789012.1234567890123456789012345678901234567890123456789012345;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p65_s55_fe_null ORDER BY d1;
 -- result:
@@ -566,19 +553,15 @@ INSERT INTO decimal_test_p60_s60_fe_null SELECT -123456789012345678.123456789012
 -- !result
 INSERT INTO decimal_test_p60_s60_fe_null SELECT 12345678901234567.123456789012345678901234567890123456789012345678901234567890;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p60_s60_fe_null SELECT -12345678901234567.123456789012345678901234567890123456789012345678901234567890;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p60_s60_fe_null SELECT 1;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p60_s60_fe_null SELECT -1;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p60_s60_fe_null SELECT 0.1;
 -- result:
@@ -601,7 +584,6 @@ INSERT INTO decimal_test_p41_s38 SELECT 123.123456789012345678901234567890123456
 INSERT INTO decimal_test_p41_s38 SELECT 12345.12345678901234567890123456789012345678; -- 5+38=43 > 41, should BE exception
 SELECT * FROM decimal_test_p41_s38 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p46_s42 (d1 decimal(46, 42)) PROPERTIES("replication_num"="1");
 -- result:
@@ -611,7 +593,6 @@ INSERT INTO decimal_test_p46_s42 SELECT 1234.12345678901234567890123456789012345
 INSERT INTO decimal_test_p46_s42 SELECT 123456.123456789012345678901234567890123456789012; -- 6+42=48 > 46, should BE exception
 SELECT * FROM decimal_test_p46_s42 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p56_s52 (d1 decimal(56, 52)) PROPERTIES("replication_num"="1");
 -- result:
@@ -621,7 +602,6 @@ INSERT INTO decimal_test_p56_s52 SELECT 1234.12345678901234567890123456789012345
 INSERT INTO decimal_test_p56_s52 SELECT 123456.1234567890123456789012345678901234567890123456789012; -- 6+52=58 > 56, should BE exception
 SELECT * FROM decimal_test_p56_s52 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p61_s58 (d1 decimal(61, 58)) PROPERTIES("replication_num"="1");
 -- result:
@@ -631,7 +611,6 @@ INSERT INTO decimal_test_p61_s58 SELECT 123.123456789012345678901234567890123456
 INSERT INTO decimal_test_p61_s58 SELECT 12345.1234567890123456789012345678901234567890123456789012345678; -- 5+58=63 > 61, should BE exception
 SELECT * FROM decimal_test_p61_s58 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p67_s63 (d1 decimal(67, 63)) PROPERTIES("replication_num"="1");
 -- result:
@@ -641,7 +620,6 @@ INSERT INTO decimal_test_p67_s63 SELECT 1234.12345678901234567890123456789012345
 INSERT INTO decimal_test_p67_s63 SELECT 123456.123456789012345678901234567890123456789012345678901234567890123; -- 6+63=69 > 67, should BE exception
 SELECT * FROM decimal_test_p67_s63 ORDER BY d1;
 -- result:
-[REGEX]E*
 -- !result
 CREATE TABLE decimal_test_p40_s20 (d1 decimal(40, 20)) PROPERTIES("replication_num"="1");
 -- result:
@@ -968,11 +946,9 @@ CREATE TABLE decimal_test_simple_p76_s76 (d1 decimal(76, 76)) PROPERTIES("replic
 -- !result
 INSERT INTO decimal_test_simple_p76_s76 SELECT 1;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_simple_p76_s76 SELECT -1;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_simple_p76_s76 SELECT 0;
 -- result:
@@ -1190,11 +1166,9 @@ INSERT INTO decimal_test_p76_s76_fe_null SELECT -12.1234567890123456789012345678
 -- !result
 INSERT INTO decimal_test_p76_s76_fe_null SELECT 1.1234567890123456789012345678901234567890123456789012345678901234567890123456;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p76_s76_fe_null SELECT -1.1234567890123456789012345678901234567890123456789012345678901234567890123456;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p76_s76_fe_null SELECT 0.1234567890123456789012345678901234567890123456789012345678901234567890123456;
 -- result:
@@ -1220,7 +1194,6 @@ INSERT INTO decimal_test_p50_s30_fe_null SELECT -1234567890123456789012345678901
 -- !result
 INSERT INTO decimal_test_p50_s30_fe_null SELECT -12345678901234567890123456789012345678901234567.123456789012345678901234567890;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p50_s30_fe_null ORDER BY d1;
 -- result:
@@ -1238,11 +1211,9 @@ INSERT INTO decimal_test_p40_s35_fe_null SELECT -1234567890123456789012345678901
 -- !result
 INSERT INTO decimal_test_p40_s35_fe_null SELECT 123456789012345678901234567890123456789012.12345678901234567890123456789012345;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p40_s35_fe_null SELECT -123456789012345678901234567890123456789012.12345678901234567890123456789012345;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p40_s35_fe_null ORDER BY d1;
 -- result:
@@ -1282,11 +1253,9 @@ CREATE TABLE decimal_test_p60_s58_default_scale (d1 decimal(60, 58)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p60_s58_default_scale SELECT 555;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p60_s58_default_scale SELECT -555;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p60_s58_default_scale SELECT 55;
 -- result:
@@ -1296,7 +1265,6 @@ INSERT INTO decimal_test_p60_s58_default_scale SELECT -55;
 -- !result
 INSERT INTO decimal_test_p60_s58_default_scale SELECT 5555;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p60_s58_default_scale ORDER BY d1;
 -- result:
@@ -1308,11 +1276,9 @@ CREATE TABLE decimal_test_p50_s48_default_scale (d1 decimal(50, 48)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p50_s48_default_scale SELECT 123;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p50_s48_default_scale SELECT -123;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p50_s48_default_scale SELECT 12;
 -- result:
@@ -1322,7 +1288,6 @@ INSERT INTO decimal_test_p50_s48_default_scale SELECT -12;
 -- !result
 INSERT INTO decimal_test_p50_s48_default_scale SELECT 1234;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p50_s48_default_scale ORDER BY d1;
 -- result:
@@ -1334,11 +1299,9 @@ CREATE TABLE decimal_test_p45_s43_default_scale (d1 decimal(45, 43)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p45_s43_default_scale SELECT 789;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p45_s43_default_scale SELECT -789;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p45_s43_default_scale SELECT 78;
 -- result:
@@ -1348,7 +1311,6 @@ INSERT INTO decimal_test_p45_s43_default_scale SELECT -78;
 -- !result
 INSERT INTO decimal_test_p45_s43_default_scale SELECT 7890;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p45_s43_default_scale ORDER BY d1;
 -- result:
@@ -1360,11 +1322,9 @@ CREATE TABLE decimal_test_p40_s38_default_scale (d1 decimal(40, 38)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p40_s38_default_scale SELECT 999;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p40_s38_default_scale SELECT -999;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p40_s38_default_scale SELECT 99;
 -- result:
@@ -1374,7 +1334,6 @@ INSERT INTO decimal_test_p40_s38_default_scale SELECT -99;
 -- !result
 INSERT INTO decimal_test_p40_s38_default_scale SELECT 9999;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p40_s38_default_scale ORDER BY d1;
 -- result:
@@ -1386,11 +1345,9 @@ CREATE TABLE decimal_test_p35_s33_default_scale (d1 decimal(35, 33)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p35_s33_default_scale SELECT 111;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p35_s33_default_scale SELECT -111;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p35_s33_default_scale SELECT 11;
 -- result:
@@ -1400,7 +1357,6 @@ INSERT INTO decimal_test_p35_s33_default_scale SELECT -11;
 -- !result
 INSERT INTO decimal_test_p35_s33_default_scale SELECT 1111;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p35_s33_default_scale ORDER BY d1;
 -- result:
@@ -1412,11 +1368,9 @@ CREATE TABLE decimal_test_p76_s75_default_scale (d1 decimal(76, 75)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p76_s75_default_scale SELECT 12;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p76_s75_default_scale SELECT -12;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p76_s75_default_scale SELECT 1;
 -- result:
@@ -1438,11 +1392,9 @@ CREATE TABLE decimal_test_p70_s68_default_scale (d1 decimal(70, 68)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p70_s68_default_scale SELECT 333;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p70_s68_default_scale SELECT -333;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p70_s68_default_scale SELECT 33;
 -- result:
@@ -1452,7 +1404,6 @@ INSERT INTO decimal_test_p70_s68_default_scale SELECT -33;
 -- !result
 INSERT INTO decimal_test_p70_s68_default_scale SELECT 3333;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p70_s68_default_scale ORDER BY d1;
 -- result:
@@ -1464,11 +1415,9 @@ CREATE TABLE decimal_test_p55_s53_default_scale (d1 decimal(55, 53)) PROPERTIES(
 -- !result
 INSERT INTO decimal_test_p55_s53_default_scale SELECT 777;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p55_s53_default_scale SELECT -777;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p55_s53_default_scale SELECT 77;
 -- result:
@@ -1478,7 +1427,6 @@ INSERT INTO decimal_test_p55_s53_default_scale SELECT -77;
 -- !result
 INSERT INTO decimal_test_p55_s53_default_scale SELECT 7777;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p55_s53_default_scale ORDER BY d1;
 -- result:
@@ -1506,11 +1454,9 @@ INSERT INTO decimal_test_p65_s64_single_digit SELECT -2;
 -- !result
 INSERT INTO decimal_test_p65_s64_single_digit SELECT 22;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p65_s64_single_digit SELECT -22;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p65_s64_single_digit ORDER BY d1;
 -- result:
@@ -1522,11 +1468,9 @@ CREATE TABLE decimal_test_p42_s40_boundary_default (d1 decimal(42, 40)) PROPERTI
 -- !result
 INSERT INTO decimal_test_p42_s40_boundary_default SELECT 123;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p42_s40_boundary_default SELECT -123;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p42_s40_boundary_default SELECT 12;
 -- result:
@@ -1536,7 +1480,6 @@ INSERT INTO decimal_test_p42_s40_boundary_default SELECT -12;
 -- !result
 INSERT INTO decimal_test_p42_s40_boundary_default SELECT 1234;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p42_s40_boundary_default ORDER BY d1;
 -- result:
@@ -1586,15 +1529,12 @@ CREATE TABLE decimal_test_p50_s10_overflow (d1 decimal(50, 10)) PROPERTIES("repl
 -- !result
 INSERT INTO decimal_test_p50_s10_overflow SELECT 12345678901234567890123456789012345678901.12345;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p50_s10_overflow SELECT -12345678901234567890123456789012345678901.12345;
 -- result:
-[REGEX]E*
 -- !result
 INSERT INTO decimal_test_p50_s10_overflow SELECT 123456789012345678901234567890123456789012345678901.12345;
 -- result:
-[REGEX]E*
 -- !result
 SELECT * FROM decimal_test_p50_s10_overflow ORDER BY d1;
 -- result:
@@ -1616,4 +1556,105 @@ SELECT * FROM decimal_test_p50_s10_both_overflow ORDER BY d1;
 -1234567890123456789012345678.1234567896
 1234567890123456789012345678.1234567895
 1234567890123456789012345678.1234567896
+-- !result
+CREATE TABLE decimal_pk_test_p39_s0 (
+    user_id varchar(42) NOT NULL,
+    asset_id varchar(42) NOT NULL,
+    timestamp datetime NOT NULL,
+    shop_id int NOT NULL,
+    day_bucket DATE NOT NULL,
+    value DECIMAL(39, 0) NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(user_id, asset_id, timestamp, shop_id, day_bucket)
+PARTITION BY (day_bucket) 
+DISTRIBUTED BY HASH(user_id)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user001', 'asset001', '2024-01-01 10:00:00', 1, '2024-01-01', 123456789012345678901234567890123456789);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user001', 'asset001', '2024-01-01 10:00:00', 1, '2024-01-01', 987654321098765432109876543210987654321);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user002', 'asset002', '2024-01-02 15:30:00', 2, '2024-01-02', -123456789012345678901234567890123456789);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user003', 'asset003', '2024-01-03 20:45:00', 3, '2024-01-03', 999999999999999999999999999999999999999);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user002', 'asset002', '2024-01-02 15:30:00', 2, '2024-01-02', 111111111111111111111111111111111111111);
+-- result:
+-- !result
+SELECT user_id, asset_id, shop_id, value FROM decimal_pk_test_p39_s0 ORDER BY user_id, asset_id, shop_id;
+-- result:
+user001	asset001	1	987654321098765432109876543210987654321
+user002	asset002	2	111111111111111111111111111111111111111
+user003	asset003	3	999999999999999999999999999999999999999
+-- !result
+CREATE TABLE decimal_pk_test_p50_s10 (
+    id1 bigint NOT NULL,
+    id2 varchar(50) NOT NULL,
+    id3 int NOT NULL,
+    decimal_value DECIMAL(50, 10) NOT NULL,
+    decimal_nullable DECIMAL(65, 15),
+    regular_value bigint
+) ENGINE=OLAP 
+PRIMARY KEY(id1, id2, id3)
+DISTRIBUTED BY HASH(id1)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(1, 'key001', 100, 1234567890123456789012345678901234567890.1234567890, 12345678901234567890123456789012345678901234567890.123456789012345, 1000);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(2, 'key002', 200, -9876543210987654321098765432109876543210.9876543210, -98765432109876543210987654321098765432109876543210.987654321098765, 2000);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(3, 'key003', 300, 5555555555555555555555555555555555555555.5555555555, 55555555555555555555555555555555555555555555555555.555555555555555, 3000);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(4, 'key004', 400, 1111111111111111111111111111111111111111.1111111111, NULL, NULL);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(1, 'key001', 100, 9999999999999999999999999999999999999999.9999999999, 99999999999999999999999999999999999999999999999999.999999999999999, 9999);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(5, 'key005', 500, 0.0000000001, 0.000000000000001, 0);
+-- result:
+-- !result
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(6, 'key006', 600, -0.0000000001, -0.000000000000001, -1);
+-- result:
+-- !result
+SELECT id1, id2, id3, decimal_value, decimal_nullable, regular_value 
+FROM decimal_pk_test_p50_s10 
+ORDER BY id1, id2, id3;
+-- result:
+1	key001	100	9999999999999999999999999999999999999999.9999999999	99999999999999999999999999999999999999999999999999.999999999999999	9999
+2	key002	200	-9876543210987654321098765432109876543210.9876543210	-98765432109876543210987654321098765432109876543210.987654321098765	2000
+3	key003	300	5555555555555555555555555555555555555555.5555555555	55555555555555555555555555555555555555555555555555.555555555555555	3000
+4	key004	400	1111111111111111111111111111111111111111.1111111111	None	None
+5	key005	500	1E-10	1E-15	0
+6	key006	600	-1E-10	-1E-15	-1
+-- !result
+SELECT decimal_value FROM decimal_pk_test_p50_s10 WHERE id1 = 2 AND id2 = 'key002' AND id3 = 200;
+-- result:
+-9876543210987654321098765432109876543210.9876543210
+-- !result
+SELECT COUNT(*), SUM(regular_value), MIN(decimal_value), MAX(decimal_value) 
+FROM decimal_pk_test_p50_s10;
+-- result:
+6	14998	-9876543210987654321098765432109876543210.9876543210	9999999999999999999999999999999999999999.9999999999
 -- !result

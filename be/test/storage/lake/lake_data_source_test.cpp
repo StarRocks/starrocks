@@ -14,29 +14,53 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <atomic>
+#include <vector>
+
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/scan/morsel.h"
+#include "fs/fs_util.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/update_manager.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
 using namespace starrocks;
 
-class LakeDataSourceTest : public TestBase {
+class LakeDataSourceTest : public ::testing::Test {
 public:
-    LakeDataSourceTest() : TestBase(kTestDirectory) {
+    LakeDataSourceTest()
+            : _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
+              _location_provider(std::make_shared<FixedLocationProvider>(kRootLocation)) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -72,12 +96,21 @@ public:
     }
 
     void SetUp() override {
-        clear_and_init_test_dir();
+        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
+        (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
+        (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
+        (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        CHECK_OK(fs::remove_all(kRootLocation));
+        if (_backup_location_provider != nullptr) {
+            (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
+        }
+    }
 
+protected:
     void create_rowsets_for_testing(TabletMetadata* tablet_metadata, int64_t version) {
         std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}; // 23 rows
         std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
@@ -116,7 +149,7 @@ public:
             ASSERT_OK(writer->write(chunk1));
             ASSERT_OK(writer->finish());
 
-            auto files = writer->files();
+            const auto& files = writer->segments();
             ASSERT_EQ(2, files.size());
 
             // add rowset metadata
@@ -125,8 +158,8 @@ public:
             rowset->set_id(1);
             rowset->set_num_rows(k0.size() + k1.size());
             auto* segs = rowset->mutable_segments();
-            for (auto& file : writer->files()) {
-                segs->Add(std::move(file.path));
+            for (const auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
             }
 
             writer->close();
@@ -137,8 +170,18 @@ public:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*tablet_metadata));
     }
 
-protected:
-    constexpr static const char* const kTestDirectory = "test_lake_data_source_test";
+    static void set_status(TStatus* status, TStatusCode::type code, std::string msg = "") {
+        status->__set_status_code(code);
+        if (!msg.empty()) {
+            status->__set_error_msgs(std::vector<std::string>{std::move(msg)});
+        }
+    }
+
+    constexpr static const char* const kRootLocation = "test_lake_data_source_test";
+
+    TabletManager* _tablet_mgr = nullptr;
+    std::shared_ptr<LocationProvider> _location_provider;
+    std::shared_ptr<LocationProvider> _backup_location_provider;
 
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -161,9 +204,9 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
 
     auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
-    data_source_provider->set_lake_tablet_manager(_tablet_mgr.get());
+    data_source_provider->set_lake_tablet_manager(_tablet_mgr);
 
-    ASSERT_TRUE(data_source_provider->always_shared_scan());
+    ASSERT_FALSE(data_source_provider->always_shared_scan());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
@@ -182,9 +225,377 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());
 
-    ASSERT_TRUE(morsel_queue_factory->is_shared());
-    auto morsel_queue = morsel_queue_factory->create(1);
-    ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() > 1);
+    ASSERT_FALSE(morsel_queue_factory->is_shared());
+    auto morsel_queue = morsel_queue_factory->create(0);
+    ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() == 1);
+}
+
+TEST_F(LakeDataSourceTest, get_tablet_schema) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    // 1) Build a TLakeScanNode with schema_key.
+    int64_t schema_id = next_id(); // Ensure schema_id misses local schema and triggers RPC fetch.
+    if (schema_id == _tablet_metadata->schema().id()) {
+        schema_id = next_id();
+    }
+    const int64_t db_id = 100;
+    const int64_t table_id = 101;
+
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    TTableSchemaKey schema_key;
+    schema_key.__set_schema_id(schema_id);
+    schema_key.__set_db_id(db_id);
+    schema_key.__set_table_id(table_id);
+    lake_scan_node.__set_schema_key(schema_key);
+
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+
+    // 2) Prepare runtime state: descriptor table + fragment ctx (fe_addr for schema RPC).
+    auto runtime_state = create_runtime_state();
+    pipeline::FragmentContext fragment_ctx;
+    TNetworkAddress fe;
+    fe.hostname = "127.0.0.1";
+    fe.port = 9020;
+    fragment_ctx.set_fe_addr(fe);
+    runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
+
+    // Build a minimal descriptor table with required column names.
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot0 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot0);
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                config::vector_chunk_size)
+                  .ok());
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    // Connector scan open path needs tuple->table_desc() to be non-null for profile strings.
+    TTableDescriptor tdesc;
+    tdesc.__set_id(0);
+    tdesc.__set_tableType(TTableType::OLAP_TABLE);
+    tdesc.__set_tableName("test_table");
+    tdesc.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(tdesc));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    // 4) Install schema RPC hook: validate request fields and return a schema.
+    std::atomic<bool> invoked{false};
+    SyncPoint::GetInstance()->SetCallBack("TableSchemaService::_fetch_schema_via_rpc::test_hook", [&](void* arg) {
+        invoked.store(true);
+        auto* arr = static_cast<std::array<void*, 4>*>(arg);
+        auto* request_ptr = static_cast<const TGetTableSchemaRequest*>((*arr)[0]);
+        auto* response_batch = static_cast<TBatchGetTableSchemaResponse*>((*arr)[1]);
+        auto* status = static_cast<Status*>((*arr)[2]);
+        auto* mock_thrift_rpc = static_cast<bool*>((*arr)[3]);
+
+        ASSERT_EQ(request_ptr->source, TTableSchemaRequestSource::SCAN);
+        ASSERT_EQ(request_ptr->tablet_id, _tablet_metadata->id());
+        ASSERT_EQ(request_ptr->query_id, runtime_state->query_id());
+        ASSERT_EQ(request_ptr->schema_key.schema_id, schema_id);
+        ASSERT_EQ(request_ptr->schema_key.db_id, db_id);
+        ASSERT_EQ(request_ptr->schema_key.table_id, table_id);
+
+        *mock_thrift_rpc = true;
+        *status = Status::OK();
+        set_status(&response_batch->status, TStatusCode::OK);
+        response_batch->__set_responses(std::vector<TGetTableSchemaResponse>{});
+        auto& resp = response_batch->responses.emplace_back();
+        set_status(&resp.status, TStatusCode::OK);
+
+        // Minimal schema payload; LakeDataSource::get_tablet only needs schema fetch to succeed.
+        TTabletSchema t_schema;
+        t_schema.__set_id(schema_id);
+        t_schema.__set_keys_type(TKeysType::DUP_KEYS);
+        t_schema.__set_short_key_column_count(1);
+
+        TColumn c0;
+        c0.__set_column_name("c0");
+        c0.column_type.__set_type(TPrimitiveType::INT);
+        c0.__set_is_key(true);
+        c0.__set_is_allow_null(false);
+        t_schema.columns.push_back(c0);
+
+        TColumn c1;
+        c1.__set_column_name("c1");
+        c1.column_type.__set_type(TPrimitiveType::INT);
+        c1.__set_is_key(false);
+        c1.__set_is_allow_null(false);
+        t_schema.columns.push_back(c1);
+
+        resp.__set_schema(t_schema);
+    });
+
+    // 5) Explicitly construct a LakeDataSource and call open().
+    starrocks::connector::LakeDataSourceProvider provider(/*scan_node=*/nullptr, plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    // Prepare morsel with rowsets so LakeDataSource can initialize safely.
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id(), _tablet_metadata->version()));
+    auto lake_rowsets = tablet.get_rowsets();
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    base_rowsets.reserve(lake_rowsets.size());
+    for (auto& rs : lake_rowsets) {
+        base_rowsets.emplace_back(rs);
+    }
+
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    morsel.set_rowsets(base_rowsets);
+
+    starrocks::connector::LakeDataSource ds(&provider, scan_range);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+    ds.set_runtime_profile(&parent_profile);
+    ds.set_morsel(&morsel);
+    DeferOp close_guard([&] { ds.close(runtime_state.get()); });
+    ASSERT_OK(ds.open(runtime_state.get()));
+    ASSERT_TRUE(invoked.load());
+
+    auto tablet_schema = ds.TEST_tablet_schema();
+    ASSERT_TRUE(tablet_schema != nullptr);
+    ASSERT_EQ(schema_id, tablet_schema->id());
+}
+
+TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
+    // Build a PK tablet schema: c0 (key), c1 (key), c2 (value)
+    TabletSchemaPB pk_schema_pb;
+    pk_schema_pb.set_id(next_id());
+    pk_schema_pb.set_num_short_key_columns(2);
+    pk_schema_pb.set_keys_type(PRIMARY_KEYS);
+    pk_schema_pb.set_num_rows_per_row_block(65535);
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c0");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(false);
+    }
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c1");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(false);
+    }
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c2");
+        c->set_type("INT");
+        c->set_is_key(false);
+        c->set_is_nullable(false);
+    }
+    auto pk_tablet_schema = TabletSchema::create(pk_schema_pb);
+
+    auto runtime_state = create_runtime_state();
+    TSlotDescriptorBuilder slot_desc_builder;
+
+    // Case 1: Select all PK columns (c0, c1) → true
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_TRUE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 2: Select only one PK column (c0) → false (c1 missing)
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_FALSE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 3: Select only value column (c2) → false
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c2").column_pos(2).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_FALSE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 4: Select all columns (c0, c1, c2) → true (superset of PK)
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c2").column_pos(2).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_TRUE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 5: DUP_KEYS table → false
+    ASSERT_FALSE(connector::has_all_pk_columns_selected(_tablet_schema.get(), {}));
+
+    // Case 6: nullptr schema → false
+    ASSERT_FALSE(connector::has_all_pk_columns_selected(nullptr, {}));
+}
+
+TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
+    // Case 1: Non-PK table → skip warmup
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(_tablet_metadata.get(), _tablet_mgr)); }
+
+    // Case 2: nullptr metadata → skip warmup
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(nullptr, _tablet_mgr)); }
+
+    // Case 3: PK table with cloud-native persistent index but no SST files → skip
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 4: PK table with LOCAL persistent index → skip
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("dummy.sst");
+        sst->set_filesize(100);
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 5: PK table with cloud-native persistent index and SST file that exists
+    {
+        // Create a fake SST file on disk
+        std::string sst_filename = "test_warmup.sst";
+        std::string sst_path = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_filename);
+        {
+            ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(sst_path));
+            std::string sst_content(4096, 'x');
+            ASSERT_OK(wf->append(sst_content));
+            ASSERT_OK(wf->close());
+        }
+
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename(sst_filename);
+        sst->set_filesize(4096);
+
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 6: SST file exists but filesize not set in pb → fallback to get_size()
+    {
+        std::string sst_filename = "test_warmup_nosize.sst";
+        std::string sst_path = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_filename);
+        {
+            ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(sst_path));
+            std::string sst_content(2048, 'y');
+            ASSERT_OK(wf->append(sst_content));
+            ASSERT_OK(wf->close());
+        }
+
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename(sst_filename);
+        // filesize not set (defaults to 0), should fallback to get_size()
+
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 7: SST file does not exist → should return error
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("nonexistent.sst");
+        sst->set_filesize(100);
+
+        ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+    }
+
+    // Case 8: SST with invalid encryption_meta → should return error
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("dummy_enc.sst");
+        sst->set_filesize(1024);
+        sst->set_encryption_meta("invalid_encryption_meta");
+
+        ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+    }
 }
 
 } // namespace starrocks::lake

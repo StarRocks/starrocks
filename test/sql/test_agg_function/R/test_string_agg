@@ -1,0 +1,119 @@
+-- name: testStringAgg
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+SELECT STRING_AGG(lo_shipmode, ',') orgs FROM lineorder WHERE 1 = 2;
+-- result:
+None
+-- !result
+CREATE TABLE `ss` (
+  `id` int(11) NULL COMMENT "",
+  `name` varchar(255) NULL COMMENT "",
+  `subject` varchar(255) NULL COMMENT "",
+  `score` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into ss values (1,"Tom","English",90);
+-- result:
+-- !result
+insert into ss values (1,"Tom","Math",80);
+-- result:
+-- !result
+insert into ss values (2,"Tom","English",NULL);
+-- result:
+-- !result
+insert into ss values (2,"Tom",NULL,NULL);
+-- result:
+-- !result
+insert into ss values (3,"May",NULL,NULL);
+-- result:
+-- !result
+insert into ss values (3,"Ti","English",98);
+-- result:
+-- !result
+insert into ss values (4,NULL,NULL,NULL);
+-- result:
+-- !result
+insert into ss values (NULL,NULL,NULL,NULL);
+-- result:
+-- !result
+insert into ss values (NULL,"Ti","物理Phy",99);
+-- result:
+-- !result
+insert into ss values (11,"张三此地无银三百两","英文English",98);
+-- result:
+-- !result
+insert into ss values (11,"张三掩耳盗铃","Math数学欧拉方程",78);
+-- result:
+-- !result
+insert into ss values (12,"李四大闹天空","英语外语美誉",NULL);
+-- result:
+-- !result
+insert into ss values (2,"王武程咬金","语文北京上海",22);
+-- result:
+-- !result
+insert into ss values (3,"欧阳诸葛方程","数学大不列颠",NULL);
+-- result:
+-- !result
+select string_agg(distinct score, ',' order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select string_agg(distinct score, ',' order by 1,name) from ss group by id order by 1;
+-- result:
+None
+None
+22
+78,98
+80,90
+98
+99
+-- !result
+select string_agg(score, ',' order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 41. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select string_agg(score, ',' order by 1,name) from ss group by id order by 1;
+-- result:
+None
+None
+22
+78,98
+80,90
+98
+99
+-- !result
+select string_agg(score, ',' order by 1,name) from ss order by 1;
+-- result:
+22,78,80,90,98,98,99
+-- !result
+select string_agg(name, ',') from ss where id = 1;
+-- result:
+Tom,Tom
+-- !result
+select string_agg(distinct name, ',') from ss where id = 1;
+-- result:
+Tom
+-- !result
+select string_agg(concat(name, ':', score), ',') from ss where id = 1;
+-- result:
+Tom:90,Tom:80
+-- !result

@@ -19,6 +19,7 @@
 
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
@@ -64,10 +65,19 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
             continue;
         }
         const string path = join_path(metadata_root_location, name);
-        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, version, false));
-        if ((metadata->has_commit_time() && metadata->commit_time() < grace_timestamp) ||
-            /* init version does not has commit time, delete it if there is any meta has been expired. */
-            (has_expired && !metadata->has_commit_time())) {
+        bool need_clear = false;
+        if (has_expired && tablet_id == 0 && version == kInitialVersion) {
+            // No need to get metadata for this case, just delete it if has_expired = true.
+            need_clear = true;
+        } else if (tablet_id != 0) {
+            ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, version, false));
+            if ((metadata->has_commit_time() && metadata->commit_time() < grace_timestamp) ||
+                (has_expired && !metadata->has_commit_time())) {
+                need_clear = true;
+            }
+        }
+
+        if (need_clear) {
             LOG(INFO) << "Try delete for full vacuum: " << path;
             RETURN_IF_ERROR(metafile_deleter.delete_file(path));
             expired_metas.push_back(name);
@@ -78,7 +88,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         meta_files->remove(expired_meta);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
     for (const auto& name : *bundle_meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         if (!meta_ver_checker(version)) {
@@ -117,7 +127,7 @@ static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
         const std::list<std::string>& meta_files, const std::list<std::string>& bundle_meta_files) {
     DCHECK(tablet_mgr != nullptr);
     const auto segment_root_location = join_path(root_loc, kSegmentDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
     ASSIGN_OR_RETURN(auto data_files_to_vacuum,
                      find_orphan_data_files(fs.get(), root_loc, 0, meta_files, bundle_meta_files, nullptr));
     const auto original_size = data_files_to_vacuum.size();
@@ -183,7 +193,7 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
 
     const std::string root_loc = tablet_mgr->tablet_root_location(request.tablet_id());
     const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
     ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs.get(), metadata_root_location));
     auto& meta_files = meta_files_and_bundle_files.first;
     auto& bundle_meta_files = meta_files_and_bundle_files.second;

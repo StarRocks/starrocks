@@ -1,0 +1,138 @@
+-- name: test_merge_commit_observability
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1`
+(
+    `id` int NOT NULL,
+    `name` varchar(65533),
+    `score` int NOT NULL
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+alter table t1 set('enable_load_profile'='true');
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("stream_load_profile_collect_threshold_second" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -d '{"id":1,"name":"test1","score":100}' ${url}/api/db_${uuid0}/t1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t1 order by id;
+-- result:
+1	test1	100
+-- !result
+select STATE, TYPE, (DB_NAME = 'db_${uuid0}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, SINK_ROWS, FILTERED_ROWS, UNSELECTED_ROWS, PROGRESS, ERROR_MSG, TRACKING_SQL, (PROFILE_ID IS NOT NULL) from information_schema.loads where DB_NAME='db_${uuid0}' and TABLE_NAME='t1';
+-- result:
+FINISHED	MERGE_COMMIT	1	t1	1	default_warehouse	1	70	1	0	0	Merge Window 100.00%		None	1
+-- !result
+SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid0}' and TABLE_NAME='t1' ORDER BY j.`key`;
+-- result:
+enable_merge_commit	"true"
+format	"json"
+merge_commit_interval_ms	"3000"
+merge_commit_parallel	"4"
+-- !result
+SELECT j.`key` FROM information_schema.loads, LATERAL json_each(RUNTIME_DETAILS) AS j WHERE DB_NAME='db_${uuid0}' and TABLE_NAME='t1' ORDER BY j.`key`;
+-- result:
+backends
+commit_time_ms
+load_id
+pending_time_ms
+publish_time_ms
+task_state
+txn_id
+-- !result
+create database db_${uuid1};
+-- result:
+-- !result
+use db_${uuid1};
+-- result:
+-- !result
+CREATE TABLE `t2`
+(
+    `id` int(11) NOT NULL,
+    `name` varchar(65533) NOT NULL,
+    `score` int(11) NOT NULL
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -H "max_filter_ratio:0" -d '{"id":1,"name":null,"score":100}' ${url}/api/db_${uuid1}/t2/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "Load is aborted, reason: There is a data quality issue. Please check the tracking URL or SQL for details. Tracking URL: http://172.26.200.160:8040/api/_load_error_log?file=error_log_19bc4b6da1278e8_ae96ce10f5c40b0b. Tracking SQL: SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=10806"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select count(*) from t2;
+-- result:
+0
+-- !result
+select STATE, TYPE, (DB_NAME = 'db_${uuid1}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, FILTERED_ROWS, SINK_ROWS, UNSELECTED_ROWS, PROGRESS from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+-- result:
+CANCELLED	MERGE_COMMIT	1	t2	1	default_warehouse	1	65	1	0	0	Merge Window 100.00%
+-- !result
+SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid1}' and TABLE_NAME='t2' ORDER BY j.`key`;
+-- result:
+enable_merge_commit	"true"
+format	"json"
+max_filter_ratio	"0"
+merge_commit_interval_ms	"3000"
+merge_commit_parallel	"4"
+-- !result
+SELECT j.`key` FROM information_schema.loads, LATERAL json_each(RUNTIME_DETAILS) AS j WHERE DB_NAME='db_${uuid1}' and TABLE_NAME='t2' ORDER BY j.`key`;
+-- result:
+backends
+load_id
+pending_time_ms
+task_state
+txn_id
+-- !result
+select like(ERROR_MSG, 'There is a data quality issue. Please check the tracking URL or SQL for details. Tracking URL: %. Tracking SQL: %') as MATCHES_PATTERN from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+-- result:
+1
+-- !result
+select (TRACKING_SQL = concat('SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=', ID)) as MATCHES_PATTERN from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+-- result:
+1
+-- !result
+[UC]JOB_ID=select JOB_ID from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+-- result:
+10806
+-- !result
+SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID = ${JOB_ID};
+-- result:
+Error: NULL value in non-nullable column 'name'. Row: [1, NULL, 100, 0]
+
+-- !result
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("stream_load_profile_collect_threshold_second" = "0");
+} END CLEANUP

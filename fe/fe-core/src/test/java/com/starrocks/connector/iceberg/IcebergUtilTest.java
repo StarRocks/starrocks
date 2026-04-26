@@ -15,10 +15,18 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TExprMinMaxValue;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
@@ -26,9 +34,11 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergUtilTest {
 
@@ -46,11 +56,11 @@ public class IcebergUtilTest {
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(5, "date", Types.StringType.get()));
         List<SlotDescriptor> slots = List.of(
-                new SlotDescriptor(new SlotId(3), "id", Type.INT, true),
-                new SlotDescriptor(new SlotId(5), "date", Type.STRING, true)
+                new SlotDescriptor(new SlotId(3), "id", IntegerType.INT, true),
+                new SlotDescriptor(new SlotId(5), "date", StringType.STRING, true)
         );
-        slots.get(0).setColumn(new Column("id", Type.INT, true));
-        slots.get(1).setColumn(new Column("date", Type.STRING, true));
+        slots.get(0).setColumn(new Column("id", IntegerType.INT, true));
+        slots.get(1).setColumn(new Column("date", StringType.STRING, true));
         var lowerBounds = Map.of(3, ByteBuffer.wrap(new byte[] {1, 0, 0, 0}),
                 5, ByteBuffer.wrap("2023-01-01".getBytes()));
         var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
@@ -93,5 +103,168 @@ public class IcebergUtilTest {
             assertEquals(1, result.get(3).nullValueCount);
             assertEquals(10, result.get(3).valueCount);
         }
+    }
+
+    @Test
+    public void testTableDataLocationDefaultAndCustom() {
+        org.apache.iceberg.Table table = org.mockito.Mockito.mock(org.apache.iceberg.Table.class);
+
+        org.mockito.Mockito.when(table.location()).thenReturn("s3://bucket/path/");
+        Map<String, String> properties = new HashMap<>();
+        org.mockito.Mockito.when(table.properties()).thenReturn(properties);
+
+        String defaultLocation = IcebergUtil.tableDataLocation(table);
+        assertEquals("s3://bucket/path/data", defaultLocation);
+
+        properties.put(TableProperties.WRITE_DATA_LOCATION, "s3://bucket/custom_data");
+        String customLocation = IcebergUtil.tableDataLocation(table);
+        assertEquals("s3://bucket/custom_data", customLocation);
+    }
+
+    @Test
+    public void testParseMinMaxValuesFromDisorderedSlots() {
+        Schema schema =
+                new Schema(required(3, "id", Types.IntegerType.get()),
+                        required(5, "date", Types.StringType.get()));
+        List<SlotDescriptor> slots = List.of(
+                new SlotDescriptor(new SlotId(5), "id", IntegerType.INT, true),
+                new SlotDescriptor(new SlotId(3), "date", StringType.STRING, true)
+        );
+        slots.get(0).setColumn(new Column("id", IntegerType.INT, true));
+        slots.get(1).setColumn(new Column("date", StringType.STRING, true));
+        var lowerBounds = Map.of(3, ByteBuffer.wrap(new byte[] {1, 0, 0, 0}),
+                5, ByteBuffer.wrap("2023-01-01".getBytes()));
+        var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
+                5, ByteBuffer.wrap("2023-01-10".getBytes()));
+        var valueCounts = Map.of(3, (long) 10, 5, (long) 10);
+
+        {
+            var nullValueCounts = Map.of(3, (long) 0, 5, (long) 0);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(1, result.size());
+            assertEquals(1, result.get(3).minValue);
+            assertEquals(10, result.get(3).maxValue);
+            assertEquals(0, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 0);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(1, result.size());
+            assertEquals(1, result.get(3).minValue);
+            assertEquals(10, result.get(3).maxValue);
+            assertEquals(0, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = new HashMap<Integer, Long>();
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(0, result.size());
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 1, 5, (long) 0);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(1, result.size());
+            assertEquals(1, result.get(3).minValue);
+            assertEquals(10, result.get(3).maxValue);
+            assertEquals(1, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 1, 5, (long) 0);
+            Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds,
+                    nullValueCounts, valueCounts, slots);
+            assertEquals(1, tExprMinMaxValueMap.size());
+            assertEquals(1, tExprMinMaxValueMap.get(5).min_int_value);
+            assertEquals(10, tExprMinMaxValueMap.get(5).max_int_value);
+        }
+    }
+
+    @Test
+    public void testCheckFileFormatSupportedDelete() {
+        FileScanTask parquetFileScanTask = createMockFileScanTask(FileFormat.PARQUET);
+        FileScanTask orcFileScanTask = createMockFileScanTask(FileFormat.ORC);
+        FileScanTask avroFileScanTask = createMockFileScanTask(FileFormat.AVRO);
+
+        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, true);
+
+        StarRocksConnectorException orcException = assertThrows(StarRocksConnectorException.class,
+                () -> IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true));
+        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
+                "Found ORC format file: /test/orc/file.orc", orcException.getMessage());
+
+        StarRocksConnectorException avroException = assertThrows(StarRocksConnectorException.class,
+                () -> IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, true));
+        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
+                "Found AVRO format file: /test/avro/file.avro", avroException.getMessage());
+
+        IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, false);
+        IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false);
+        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, false);
+    }
+
+    @Test
+    public void testParseMinMaxValueBySlotsWithIcebergTimestampTypes() {
+        Schema schema = new Schema(
+                required(3, "ts_ntz", Types.TimestampType.withoutZone()),
+                required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(
+                new SlotDescriptor(new SlotId(3), "ts_ntz", DateType.DATETIME, true),
+                new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true)
+        );
+        slots.get(0).setColumn(new Column("ts_ntz", DateType.DATETIME, true));
+        slots.get(1).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+
+        long minMicros = 0L;
+        long maxMicros = 1_000_000L;
+        Map<Integer, ByteBuffer> lowerBounds = Map.of(
+                3, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withoutZone(), minMicros),
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), minMicros));
+        Map<Integer, ByteBuffer> upperBounds = Map.of(
+                3, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withoutZone(), maxMicros),
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), maxMicros));
+        Map<Integer, Long> nullValueCounts = Map.of(3, 0L, 5, 0L);
+        Map<Integer, Long> valueCounts = Map.of(3, 2L, 5, 2L);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("Asia/Shanghai");
+        ctx.setThreadLocalInfo();
+        try {
+            Map<Integer, IcebergUtil.MinMaxValue> result = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(2, result.size());
+            assertEquals(minMicros, result.get(3).minValue);
+            assertEquals(maxMicros, result.get(3).maxValue);
+            assertEquals(minMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(0) * 1000L, result.get(5).minValue);
+            assertEquals(maxMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(1000L) * 1000L,
+                    result.get(5).maxValue);
+
+            Map<Integer, TExprMinMaxValue> thriftValues = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(minMicros, thriftValues.get(3).min_int_value);
+            assertEquals(maxMicros, thriftValues.get(3).max_int_value);
+            assertEquals(minMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(0) * 1000L,
+                    thriftValues.get(5).min_int_value);
+            assertEquals(maxMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(1000L) * 1000L,
+                    thriftValues.get(5).max_int_value);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    private FileScanTask createMockFileScanTask(FileFormat fileFormat) {
+        FileScanTask mockTask = org.mockito.Mockito.mock(FileScanTask.class);
+        org.apache.iceberg.DataFile mockFile = org.mockito.Mockito.mock(org.apache.iceberg.DataFile.class);
+        org.mockito.Mockito.when(mockTask.file()).thenReturn(mockFile);
+        org.mockito.Mockito.when(mockFile.format()).thenReturn(fileFormat);
+        String location = "/test/" + fileFormat.name().toLowerCase() + "/file." +
+                fileFormat.name().toLowerCase();
+        org.mockito.Mockito.when(mockFile.location()).thenReturn(location);
+        return mockTask;
     }
 }

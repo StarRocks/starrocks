@@ -14,6 +14,8 @@
 
 #include "blackhole_table_sink.h"
 
+#include "runtime/runtime_state.h"
+
 namespace starrocks {
 
 Status BlackHoleTableSink::prepare(RuntimeState* state) {

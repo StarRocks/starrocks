@@ -86,7 +86,7 @@ public class AdminStmtTest {
         List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();
         for (Partition partition : tbl.getPartitions()) {
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         tabletToBackendList.add(Pair.create(tablet.getId(), replica.getBackendId()));

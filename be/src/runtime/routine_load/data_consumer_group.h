@@ -34,8 +34,8 @@
 
 #pragma once
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "runtime/routine_load/data_consumer.h"
-#include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {

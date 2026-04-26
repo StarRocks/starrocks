@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/series_column_iterator.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -104,9 +104,9 @@ TEST_P(CastColumnIteratorWithNumericTypeTest, test) {
     DeferOp defer([&]() { delete cast_iter; });
     auto opts = ColumnIteratorOptions{};
     ASSERT_OK(cast_iter->init(opts));
-    auto column = (GetParam().nullable_target)
-                          ? (ColumnPtr)NullableColumn::create(Int64Column::create(), NullColumn::create())
-                          : (ColumnPtr)Int64Column::create();
+    MutableColumnPtr column = (GetParam().nullable_target) ? (MutableColumnPtr)NullableColumn::create(
+                                                                     Int64Column::create(), NullColumn::create())
+                                                           : (MutableColumnPtr)Int64Column::create();
     auto n = size_t{10};
     ASSERT_OK(cast_iter->next_batch(&n, column.get()));
     ASSERT_EQ(10, n);

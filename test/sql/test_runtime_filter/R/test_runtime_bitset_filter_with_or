@@ -1,0 +1,69 @@
+-- name: test_runtime_bitset_filter_with_or
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c_str_1 STRING NULL,
+  c_str_2 STRING NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1
+SELECT
+    idx,
+    concat('str-abc-', idx),
+    concat('str-abc-', idx)
+FROM __row_util;
+-- result:
+-- !result
+with w1 as (
+  select * from t1 where k1 = 1 and (c_str_1 like 'non-exist%' or c_str_2 like 'non-exist%')
+), w2 as (
+  select * from t1 where k1 = 1
+)
+select count(1) from w1 join [broadcast]  w2 on w1.k1 = w2.k1;
+-- result:
+0
+-- !result
+with w1 as (
+  select * from t1 where k1 = 1 and (c_str_1 like 'str-abc%' or c_str_2 like 'str-abc%')
+), w2 as (
+  select * from t1 where k1 = 1
+)
+select count(1) from w1 join [broadcast]  w2 on w1.k1 = w2.k1;
+-- result:
+1
+-- !result

@@ -14,9 +14,10 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -24,16 +25,16 @@ public class DateLiteralNewTest {
 
     @Test
     public void testFromString() throws AnalysisException {
-        DateLiteral dateLiteral = new DateLiteral("2022-12-12 16:20:17.123456", Type.DATETIME);
+        DateLiteral dateLiteral = createDateLiteral("2022-12-12 16:20:17.123456", DateType.DATETIME);
         Assertions.assertEquals("2022-12-12 16:20:17.123456", dateLiteral.getStringValue());
         Assertions.assertEquals(123456, dateLiteral.getMicrosecond());
         Assertions.assertEquals(20221212162017.123456, dateLiteral.getDoubleValue(), 0.000001);
 
-        dateLiteral = new DateLiteral("2023-03-29 01:01:01.12", Type.DATETIME);
+        dateLiteral = createDateLiteral("2023-03-29 01:01:01.12", DateType.DATETIME);
         Assertions.assertEquals("2023-03-29 01:01:01.120000", dateLiteral.getStringValue());
         Assertions.assertEquals(120000, dateLiteral.getMicrosecond());
 
-        dateLiteral = new DateLiteral("2023-03-29 01:01:01.1234", Type.DATETIME);
+        dateLiteral = createDateLiteral("2023-03-29 01:01:01.1234", DateType.DATETIME);
         Assertions.assertEquals("2023-03-29 01:01:01.123400", dateLiteral.getStringValue());
         Assertions.assertEquals(123400, dateLiteral.getMicrosecond());
     }
@@ -64,7 +65,8 @@ public class DateLiteralNewTest {
                 "not-date",
         };
         for (String c : testDateCases) {
-            Assertions.assertThrows(AnalysisException.class, () -> new DateLiteral(c, Type.DATE));
+            String literal = c;
+            Assertions.assertThrows(AnalysisException.class, () -> createDateLiteral(literal, DateType.DATE));
         }
 
         String[] testDatetimeCases = {
@@ -99,8 +101,16 @@ public class DateLiteralNewTest {
                 "not-date",
         };
         for (String c : testDatetimeCases) {
-            Assertions.assertThrows(AnalysisException.class, () -> new DateLiteral(c, Type.DATETIME));
+            String literal = c;
+            Assertions.assertThrows(AnalysisException.class, () -> createDateLiteral(literal, DateType.DATETIME));
         }
     }
 
+    private DateLiteral createDateLiteral(String value, DateType type) throws AnalysisException {
+        try {
+            return new DateLiteral(DateUtils.parseStrictDateTime(value), type);
+        } catch (RuntimeException e) {
+            throw new AnalysisException("Invalid date literal: " + value, e);
+        }
+    }
 }

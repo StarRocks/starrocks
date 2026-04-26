@@ -14,11 +14,18 @@
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
+#include "common/config_scan_io_fwd.h"
+#include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exprs/expr_executor.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::pipeline {
 
@@ -64,7 +71,7 @@ public:
         int64_t running_chunk_source_count_value = running_chunk_source_count.load(std::memory_order_relaxed);
         int64_t chunk_source_mem_bytes_value = get_chunk_source_mem_bytes();
 
-        int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
+        int64_t max_count = std::max<int64_t>(1, scan_mem_limit_value / chunk_source_mem_bytes_value);
         int64_t avail_count = max_count;
         int64_t per_count = avail_count / dop;
         if (shared_scan) {
@@ -139,14 +146,14 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
     return Status::OK();
 }
 
 void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
+    ExprExecutor::close(conjunct_ctxs, state);
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
@@ -198,6 +205,10 @@ void ConnectorScanOperatorFactory::detach_shared_input(int32_t operator_seq, int
     if (erased && _num_active_inputs.fetch_sub(1) == 1) {
         _active_inputs_empty = true;
     }
+}
+
+Status ConnectorScanOperatorFactory::mark_split_source_morsel_finished() {
+    return morsel_queue_factory()->mark_split_source_morsel_finished();
 }
 
 // ===============================================================
@@ -553,10 +564,9 @@ std::string ConnectorScanOperator::get_name() const {
     bool has_active = has_shared_chunk_source();
     std::string morsel_queue_name = _morsel_queue->name();
     bool morsel_queue_empty = _morsel_queue->empty();
-    return fmt::format(
-            "{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{} has_output:{}}}", _name,
-            _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(), morsel_queue_name,
-            morsel_queue_empty, has_output());
+    return fmt::format("{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{}}}", _name,
+                       _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(),
+                       morsel_queue_name, morsel_queue_empty);
 }
 
 bool ConnectorScanOperator::need_notify_all() {
@@ -577,8 +587,48 @@ Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
             }
         }
     }
+
+    auto* morsel_queue_factory = _source_factory()->morsel_queue_factory();
+    if (morsel_queue_factory != nullptr && morsel_queue_factory->size() > 1 &&
+        morsel_queue_factory->enable_random_append_split_morsel()) {
+        auto notify = defer_notify([&]() { return true; });
+        for (auto& morsel : morsels) {
+            Morsels one;
+            one.emplace_back(std::move(morsel));
+            ASSIGN_OR_RETURN(int driver_seq, morsel_queue_factory->next_driver_seq());
+            RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(one)));
+        }
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(_morsel_queue->append_morsels(std::move(morsels)));
     return Status::OK();
+}
+
+Status ConnectorScanOperator::mark_split_source_morsel_finished() {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    return factory->mark_split_source_morsel_finished();
+}
+
+int64_t ConnectorScanOperator::get_scan_table_id() const {
+    auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+
+    if (scan_node->connector_type() != connector::ConnectorType::LAKE) {
+        return -1;
+    }
+
+    const auto& tuple_ids = scan_node->get_tuple_ids();
+    if (tuple_ids.empty()) {
+        return -1;
+    }
+
+    TupleId tuple_id = tuple_ids[0];
+    const TupleDescriptor* tuple_desc = get_factory()->runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
+    if (tuple_desc != nullptr && tuple_desc->table_desc() != nullptr) {
+        return tuple_desc->table_desc()->table_id();
+    }
+
+    return -1;
 }
 
 // ==================== ConnectorChunkSource ====================
@@ -589,13 +639,18 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _runtime_bloom_filters(op->get_factory()->get_runtime_bloom_filters()),
           _enable_adaptive_io_tasks(enable_adaptive_io_tasks) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     auto* scan_morsel = (ScanMorsel*)_morsel.get();
     TScanRange* scan_range = scan_morsel->get_scan_range();
     ScanSplitContext* split_context = scan_morsel->get_split_context();
+    // A split source morsel means this morsel can potentially produce split tasks.
+    // `split_context == nullptr` identifies root morsels, and `has_more_from_split()`
+    // indicates split mode is enabled for this scan node.
+    _is_split_source_morsel =
+            (split_context == nullptr) && (op->morsel_queue() != nullptr) && op->morsel_queue()->has_more_from_split();
 
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_driver_sequence(op->get_driver_sequence());
@@ -631,8 +686,28 @@ ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_
     return f->_io_tasks_mem_limiter;
 }
 
+Status ConnectorChunkSource::_report_split_source_morsel_finished_once() {
+    if (!_is_split_source_morsel || _split_source_morsel_reported) {
+        return Status::OK();
+    }
+
+    auto* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
+    RETURN_IF_ERROR(scan_op->mark_split_source_morsel_finished());
+    _split_source_morsel_reported = true;
+    return Status::OK();
+}
+
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
+
+    _update_catalog_metrics();
+
+    // Ensure split-source completion is reported even when this chunk source
+    // exits through non-EOF paths (cancel/close/error/limit reach).
+    Status report_status = _report_split_source_morsel_finished_once();
+    LOG_IF(WARNING, !report_status.ok()) << "mark split source morsel finished failed, fragment_instance_id="
+                                         << print_id(state->fragment_instance_id())
+                                         << ", error=" << report_status.to_string();
 
     if (_enable_adaptive_io_tasks) {
         MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
@@ -750,84 +825,87 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->adaptive_processor());
 
     DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
+    auto is_terminal_status = [](const Status& st) {
+        return st.is_end_of_file() || st.is_cancelled() || (!st.ok() && !st.is_time_out() && !st.is_eagain());
+    };
 
-    int64_t total_time_ns = 0;
-    int64_t delta_io_time_ns = 0;
-    int64_t delta_scan_bytes = 0;
-    {
-        SCOPED_RAW_TIMER(&total_time_ns);
-        int64_t prev_io_time_ns = get_io_time_spent();
-        int64_t prev_scan_bytes = get_scan_bytes();
+    Status ret = [&]() -> Status {
+        int64_t total_time_ns = 0;
+        int64_t delta_io_time_ns = 0;
+        int64_t delta_scan_bytes = 0;
+        {
+            SCOPED_RAW_TIMER(&total_time_ns);
+            int64_t prev_io_time_ns = get_io_time_spent();
+            int64_t prev_scan_bytes = get_scan_bytes();
 
-        bool mem_alloc_failed = false;
-        RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
-        if (mem_alloc_failed) {
-            _mem_alloc_failed_count += 1;
-            return Status::TimedOut("");
-        }
-        if (state->is_cancelled()) {
-            return Status::Cancelled("canceled state");
-        }
-
-        // Improve for select * from table limit x, x is small
-        if (_reach_eof()) {
-            _reach_limit.store(true);
-            return Status::EndOfFile("limit reach");
-        }
-
-        while (_status.ok()) {
-            ChunkPtr tmp;
-            _status = _data_source->get_next(state, &tmp);
-            if (_status.ok()) {
-                if (tmp->num_rows() == 0) continue;
-                _ck_acc.push(tmp);
-                if (_ck_acc.has_output()) break;
-            } else if (!_status.is_end_of_file()) {
-                if (_status.is_time_out()) {
-                    Status t = _status;
-                    _status = Status::OK();
-                    return t;
-                } else {
-                    return _status;
-                }
-            } else {
-                _ck_acc.finalize();
-                DCHECK(_status.is_end_of_file());
+            bool mem_alloc_failed = false;
+            RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
+            if (mem_alloc_failed) {
+                _mem_alloc_failed_count += 1;
+                return Status::EAgain("");
             }
+            if (state->is_cancelled()) {
+                return Status::Cancelled("canceled state");
+            }
+
+            // Improve for select * from table limit x, x is small
+            if (_reach_eof()) {
+                _reach_limit.store(true);
+                return Status::EndOfFile("limit reach");
+            }
+
+            while (_status.ok()) {
+                ChunkPtr tmp;
+                _status = _data_source->get_next(state, &tmp);
+                if (_status.ok()) {
+                    if (tmp->num_rows() == 0) continue;
+                    _ck_acc.push(tmp);
+                    if (_ck_acc.has_output()) break;
+                } else if (!_status.is_end_of_file()) {
+                    if (_status.is_time_out()) {
+                        Status t = _status;
+                        _status = Status::OK();
+                        return t;
+                    } else {
+                        return _status;
+                    }
+                } else {
+                    _ck_acc.finalize();
+                    DCHECK(_status.is_end_of_file());
+                }
+            }
+
+            DCHECK(_status.ok() || _status.is_end_of_file());
+            _scan_rows_num = _data_source->raw_rows_read();
+            _scan_bytes = _data_source->num_bytes_read();
+            _cpu_time_spent_ns = _data_source->cpu_time_spent();
+            _io_time_spent_ns = _data_source->io_time_spent();
+            delta_io_time_ns = _io_time_spent_ns - prev_io_time_ns;
+            delta_scan_bytes = _scan_bytes - prev_scan_bytes;
         }
 
-        DCHECK(_status.ok() || _status.is_end_of_file());
-        _scan_rows_num = _data_source->raw_rows_read();
-        _scan_bytes = _data_source->num_bytes_read();
-        _cpu_time_spent_ns = _data_source->cpu_time_spent();
-        _io_time_spent_ns = _data_source->io_time_spent();
-        delta_io_time_ns = _io_time_spent_ns - prev_io_time_ns;
-        delta_scan_bytes = _scan_bytes - prev_scan_bytes;
-    }
+        if (_ck_acc.has_output()) {
+            *chunk = std::move(_ck_acc.pull());
+            P.cs_total_running_time += total_time_ns;
+            P.cs_total_io_time += delta_io_time_ns;
+            P.cs_total_scan_bytes += delta_scan_bytes;
+            _chunk_rows_read += (*chunk)->num_rows();
+            _chunk_mem_bytes += (*chunk)->memory_usage();
+            _chunk_buffer.update_limiter(chunk->get());
+            return Status::OK();
+        }
+        _ck_acc.reset();
 
-    if (_ck_acc.has_output()) {
-        *chunk = std::move(_ck_acc.pull());
-        P.cs_total_running_time += total_time_ns;
-        P.cs_total_io_time += delta_io_time_ns;
-        P.cs_total_scan_bytes += delta_scan_bytes;
-        _chunk_rows_read += (*chunk)->num_rows();
-        _chunk_mem_bytes += (*chunk)->memory_usage();
-        _chunk_buffer.update_limiter(chunk->get());
-        return Status::OK();
-    }
-    _ck_acc.reset();
-
-    // before returning eof, we can check if this chunk source generates splits.
-    {
+        // before returning eof, we can check if this chunk source generates splits.
         std::vector<ScanSplitContextPtr> split_tasks;
         _data_source->get_split_tasks(&split_tasks);
+        auto* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
         if (split_tasks.size() != 0) {
             VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
                           << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
                           << ", split_tasks = " << split_tasks.size();
 
             std::vector<MorselPtr> split_morsels;
-            ScanMorsel* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
 
             if (current_morsel->is_last_split()) {
                 split_tasks.back()->set_last_split(true);
@@ -842,13 +920,39 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
             RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
         }
+        return Status::EndOfFile("");
+    }();
+
+    if (is_terminal_status(ret)) {
+        RETURN_IF_ERROR(_report_split_source_morsel_finished_once());
     }
-    return Status::EndOfFile("");
+    return ret;
 }
 
 uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
     if (_chunk_rows_read == 0) return 0;
     return _chunk_mem_bytes / _chunk_rows_read;
+}
+
+void ConnectorChunkSource::_update_catalog_metrics() {
+    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    if (catalog_metrics == nullptr || _scan_node == nullptr) {
+        return;
+    }
+
+    const std::string& catalog_type = _scan_node->catalog_type();
+    if (catalog_type.empty()) {
+        return;
+    }
+
+    catalog_metrics->update_scan_bytes(catalog_type, _scan_bytes);
+    catalog_metrics->update_scan_rows(catalog_type, _scan_rows_num);
+
+    // files_scan metrics from data source
+    if (_data_source != nullptr) {
+        catalog_metrics->update_files_scan_bytes_read(catalog_type, _data_source->num_bytes_read());
+        catalog_metrics->update_files_scan_rows_return(catalog_type, _data_source->num_rows_read());
+    }
 }
 
 } // namespace starrocks::pipeline

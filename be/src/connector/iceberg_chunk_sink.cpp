@@ -16,14 +16,18 @@
 
 #include <future>
 
-#include "column/datum.h"
+#include "base/url_coding.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-#include "util/url_coding.h"
+#include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
+#include "types/datum.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -37,7 +41,7 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, s
           _transform_exprs(std::move(transform_exprs)) {}
 
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
-    _rollback_actions.push_back(std::move(result.rollback_action));
+    push_rollback_action(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
 
@@ -74,6 +78,10 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
         TSinkCommitInfo commit_info;
         commit_info.__set_iceberg_data_file(iceberg_data_file);
         _state->add_sink_commit_info(commit_info);
+
+        COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
     }
 }
 
@@ -81,8 +89,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
-    auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
+    std::shared_ptr<FileSystem> fs =
+            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnEvaluator::clone(ctx->column_evaluators));
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
             boost::to_lower_copy(ctx->format));
@@ -93,19 +103,23 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->parquet_field_ids, ctx->executor, runtime_state);
+                fs, ctx->compression_type, ctx->options, ctx->column_names, column_evaluators, ctx->parquet_field_ids,
+                ctx->executor, runtime_state);
     } else {
         file_writer_factory = std::make_shared<formats::UnknownFileWriterFactory>(ctx->format);
     }
 
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
     if (config::enable_connector_sink_spill) {
+        auto* query_execution_services = runtime_state->query_execution_services();
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
+                        fs,
                         ctx->fragment_context,
+                        query_execution_services->runtime->connector_sink_spill_executor,
                         runtime_state->desc_tbl().get_tuple_descriptor(ctx->tuple_desc_id),
+                        column_evaluators,
                         ctx->sort_ordering});
         partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     } else {
@@ -121,14 +135,14 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
                                                          std::move(partition_chunk_writer_factory), runtime_state);
 }
 
-Status IcebergChunkSink::add(Chunk* chunk) {
+Status IcebergChunkSink::add(const ChunkPtr& chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     std::vector<int8_t> partition_field_null_list;
     if (partitioned) {
         ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
                                             _partition_column_names, _partition_column_evaluators,
-                                            dynamic_cast<IcebergChunkSink*>(this)->transform_expr(), chunk,
+                                            dynamic_cast<IcebergChunkSink*>(this)->transform_expr(), chunk.get(),
                                             _support_null_partition, partition_field_null_list));
     }
 

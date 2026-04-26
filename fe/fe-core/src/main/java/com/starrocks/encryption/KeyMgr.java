@@ -73,10 +73,9 @@ public class KeyMgr {
     }
 
     private void addKey(EncryptionKey key) {
-        idToKey.put(key.id, key);
         EncryptionKeyPB pb = new EncryptionKeyPB();
         key.toPB(pb, this);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddKey(pb);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddKey(pb, wal -> idToKey.put(key.id, key));
     }
 
     public void replayAddKey(EncryptionKeyPB keyPB) {

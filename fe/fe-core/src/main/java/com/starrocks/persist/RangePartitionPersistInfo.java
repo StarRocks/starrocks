@@ -43,10 +43,10 @@ public class RangePartitionPersistInfo extends PartitionPersistInfoV2
 
     public RangePartitionPersistInfo(Long dbId, Long tableId, Partition partition,
                                      DataProperty dataProperty, short replicationNum,
-                                     boolean isInMemory, boolean isTempPartition,
+                                     boolean isTempPartition,
                                      Range<PartitionKey> range,
                                      DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, dataCacheInfo);
+        super(dbId, tableId, partition, dataProperty, replicationNum, isTempPartition, dataCacheInfo);
         this.range = range;
     }
 

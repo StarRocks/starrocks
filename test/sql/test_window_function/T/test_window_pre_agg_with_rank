@@ -87,3 +87,29 @@ FROM (
     FROM t1
 ) as x
 WHERE rn <= 2;
+
+-- name: test_window_pre_agg_with_bitmap_union_count
+DROP TABLE IF EXISTS t_rank_bitmap_crash;
+CREATE TABLE t_rank_bitmap_crash (
+    k INT,
+    ts INT,
+    uid BIGINT NULL
+)
+DUPLICATE KEY(k, ts)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO t_rank_bitmap_crash VALUES
+(1, 100, 1), (1, 90, 2), (1, 80, NULL), (1, 70, 3),
+(2, 100, 4), (2, 90, NULL), (2, 80, 5);
+
+SELECT * FROM (
+    SELECT
+        k,
+        ts,
+        rank() OVER (PARTITION BY k ORDER BY ts DESC) AS rk,
+        bitmap_union_count(to_bitmap(uid)) OVER (PARTITION BY k) AS uv
+    FROM t_rank_bitmap_crash
+) s
+ORDER BY rk,k, ts DESC
+LIMIT 3;

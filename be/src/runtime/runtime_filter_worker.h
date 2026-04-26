@@ -19,27 +19,29 @@
 
 #include <atomic>
 #include <cstdint>
+#include <list>
 #include <map>
 #include <memory>
 #include <thread>
 #include <vector>
 
+#include "base/brpc/ref_count_closure.h"
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/blocking_queue.hpp"
-#include "util/ref_count_closure.h"
-#include "util/uid_util.h"
+#include "runtime/runtime_filter_serde.h"
 namespace starrocks {
 struct TypeDescriptor;
 
-class ExecEnv;
+struct RuntimeServices;
+struct RpcServices;
 class RuntimeState;
 
 class RuntimeFilter;
-class RuntimeFilterProbeDescriptor;
 class RuntimeFilterBuildDescriptor;
 
 using RuntimeFilterRpcClosure = RefCountClosure<PTransmitRuntimeFilterResult>;
@@ -49,10 +51,9 @@ using RuntimeFilterRpcClosures = std::vector<RuntimeFilterRpcClosure*>;
 class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
-    void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
     void publish_runtime_filters(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
 
-    void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs_list,
+    void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs,
                                                          const std::vector<Columns>& keyColumns,
                                                          const std::vector<bool>& null_safe,
                                                          const std::vector<TypeDescriptor>& type_descs);
@@ -65,19 +66,14 @@ public:
     std::string listeners(int32_t filter_id);
 
 private:
-    void publish_skew_boradcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
+    void publish_skew_broadcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
                                                  bool null_safe, const TypeDescriptor& type_desc);
     void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
                                RuntimeFilterBuildDescriptor* rf_desc);
-    std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _listeners;
     RuntimeState* _state;
 };
 
-struct SkewBroadcastRfMaterial {
-    LogicalType build_type;
-    bool eq_null;
-    ColumnPtr key_column;
-};
+using SkewBroadcastRfMaterial = RuntimeFilterSkewMaterial;
 
 class RuntimeFilterMergerStatus {
 public:
@@ -126,7 +122,8 @@ public:
 // and sent merged RF to consumer nodes.
 class RuntimeFilterMerger {
 public:
-    RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
+    RuntimeFilterMerger(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
+                        const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params);
     void store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params);
@@ -136,7 +133,8 @@ private:
     // filter_id -> where this filter should send to
     std::map<int32_t, std::vector<TRuntimeFilterProberParams>> _targets;
     std::map<int32_t, RuntimeFilterMergerStatus> _statuses;
-    ExecEnv* _exec_env;
+    const RuntimeServices* _runtime_services;
+    const RpcServices* _rpc_services;
     UniqueId _query_id;
     TQueryOptions _query_options;
     const bool _is_pipeline;
@@ -187,7 +185,22 @@ inline std::string EventTypeToString(EventType type) {
 // - receive total RF and send it to RuntimeFilterPort
 // - send partitioned RF(for hash join node)
 // - close a query(delete runtime filter merger)
-struct RuntimeFilterWorkerEvent;
+struct RuntimeFilterWorkerEvent {
+    RuntimeFilterWorkerEvent() = default;
+    EventType type;
+    TUniqueId query_id;
+    // For OPEN_QUERY.
+    TQueryOptions query_options;
+    TRuntimeFilterParams create_rf_merger_request;
+    bool is_opened_by_pipeline;
+    // For SEND_PART_RF.
+    std::vector<TNetworkAddress> transmit_addrs;
+    std::vector<TRuntimeFilterDestination> destinations;
+    int transmit_timeout_ms;
+    int64_t transmit_via_http_min_size;
+    // For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
+    PTransmitRuntimeFilterParams transmit_rf_request;
+};
 
 struct RuntimeFilterWorkerMetrics {
     void update_event_nums(EventType event_type, int64_t delta) { event_nums[event_type] += delta; }
@@ -208,7 +221,7 @@ struct RuntimeFilterWorkerMetrics {
 
 class RuntimeFilterWorker {
 public:
-    RuntimeFilterWorker(ExecEnv* env);
+    RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services);
     ~RuntimeFilterWorker();
     void close();
     // open query for creating runtime filter merger.
@@ -228,7 +241,7 @@ public:
     const RuntimeFilterWorkerMetrics* metrics() const { return _metrics; }
 
 private:
-    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);
+    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params, int timeout_ms, int64_t rpc_http_min_size);
     void _process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
                                                       std::vector<TRuntimeFilterDestination>&& destinations,
                                                       int timeout_ms, int64_t rpc_http_min_size);
@@ -239,7 +252,8 @@ private:
                                                  std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms,
                                                  int64_t rpc_http_min_size);
     void _deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& params,
-                                                 const TRuntimeFilterDestination& destinations);
+                                                 const TRuntimeFilterDestination& destinations, int timeout_ms,
+                                                 int64_t rpc_http_min_size);
 
     void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
@@ -249,7 +263,8 @@ private:
 
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
-    ExecEnv* _exec_env;
+    const RuntimeServices* _runtime_services;
+    const RpcServices* _rpc_services;
     std::thread _thread;
     RuntimeFilterWorkerMetrics* _metrics = nullptr;
 };

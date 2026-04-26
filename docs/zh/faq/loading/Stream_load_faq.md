@@ -38,3 +38,21 @@ StarRocks 支持在导入过程中进行数据转换，具体请参见[导入过
 
 - 通过 `seq -w 0 n` 拆分数据文件。
 - 通过 `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` 调整 [BE 配置项](../../administration/management/BE_configuration.md) `streaming_load_max_mb` 的取值来扩大文件大小上限。
+
+## 4. 如何通过Stream Load加载真实的NULL值而不是将“null”写入字符串列？
+
+使用replace函数：
+
+```Bash
+-H "columns: pk, temp, pd_type=replace(temp,'NULL',NULL)"
+```
+
+## 5. 字段名称 “role” 导致Stream Load错误。列名应该如何命名？
+
+`role` 是一个保留关键字。在使用它作为名称时，请使用反引号将其包裹。
+
+示例：
+
+```Bash
+-H $'columns:k1,`role`'
+```

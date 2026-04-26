@@ -14,33 +14,45 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 public class CTERelation extends Relation {
+    public enum CTEMaterializationHint {
+        NONE,
+        MATERIALIZED,
+        NOT_MATERIALIZED
+    }
+
     private final int cteMouldId;
     private final String name;
     private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
+    private final boolean isAnchor;
     private int refs = 0; // consume refs
+    private boolean isRecursive;
+    private final CTEMaterializationHint materializationHint;
 
     public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
-                       QueryStatement cteQueryStatement) {
-        this(cteMouldId, name, columnOutputNames, cteQueryStatement, NodePosition.ZERO);
+                       QueryStatement cteQueryStatement, boolean isRecursive, boolean isAnchor) {
+        this(cteMouldId, name, columnOutputNames, cteQueryStatement, isRecursive, isAnchor, NodePosition.ZERO,
+                CTEMaterializationHint.NONE);
     }
 
-    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
-                       QueryStatement cteQueryStatement, NodePosition pos) {
+    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement,
+                       boolean isRecursive, boolean isAnchor, NodePosition pos,
+                       CTEMaterializationHint materializationHint) {
         super(pos);
         this.cteMouldId = cteMouldId;
-        this.name = normalizeName(name);
+        this.name = name;
         this.explicitColumnNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
         this.refs = 0;
+        this.isRecursive = isRecursive;
+        this.isAnchor = isAnchor;
+        this.materializationHint = materializationHint;
     }
 
     public int getCteMouldId() {
@@ -69,6 +81,22 @@ public class CTERelation extends Relation {
 
     public boolean isResolvedInFromClause() {
         return resolvedInFromClause;
+    }
+
+    public void setRecursive(boolean recursive) {
+        isRecursive = recursive;
+    }
+
+    public boolean isRecursive() {
+        return isRecursive;
+    }
+
+    public boolean isAnchor() {
+        return isAnchor;
+    }
+
+    public CTEMaterializationHint getMaterializationHint() {
+        return materializationHint;
     }
 
     @Override

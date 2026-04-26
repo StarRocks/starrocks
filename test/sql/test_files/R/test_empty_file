@@ -1,0 +1,111 @@
+-- name: test_empty_file
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/empty_file/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type_empty.parquet oss://${oss_bucket}/test_files/empty_file/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 833. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type_empty.orc oss://${oss_bucket}/test_files/empty_file/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 269. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_files/avro_format/primitive_empty.avro oss://${oss_bucket}/test_files/empty_file/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 447. OK num: 1(upload 1 files).
+-- !result
+
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/empty_file/${uuid0}/basic_type_empty.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+k1	boolean	YES
+k2	int	YES
+k3	bigint	YES
+k4	decimal(10,2)	YES
+k5	date	YES
+k6	datetime	YES
+k7	varchar(1048576)	YES
+k8	double	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/empty_file/${uuid0}/basic_type_empty.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/empty_file/${uuid0}/basic_type_empty.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+k1	boolean	YES
+k2	int	YES
+k3	bigint	YES
+k4	decimal(10,2)	YES
+k5	date	YES
+k6	datetime	YES
+k7	varchar(1048576)	YES
+k8	double	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/empty_file/${uuid0}/basic_type_empty.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/empty_file/${uuid0}/primitive_empty.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+null_field	varchar(1048576)	YES
+bool_field	boolean	YES
+int_field	int	YES
+long_field	bigint	YES
+float_field	float	YES
+double_field	double	YES
+bytes_field	varbinary(1048576)	YES
+string_field	varchar(1048576)	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/empty_file/${uuid0}/primitive_empty.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/empty_file/${uuid0}/ > /dev/null

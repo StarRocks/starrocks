@@ -20,13 +20,13 @@
 #include "column/fixed_length_column.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks {
 struct JavaUDAFState {
-    JavaUDAFState(int handle_) : handle(std::move(handle_)) {}
+    JavaUDAFState(int handle_) : handle(handle_) {}
     ~JavaUDAFState() = default;
     // UDAF State
     int handle;

@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
-#include "testutil/sync_point.h"
-#include "util/await.h"
-#include "util/defer_op.h"
+#include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 
 namespace starrocks {
 

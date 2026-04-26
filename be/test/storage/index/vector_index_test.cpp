@@ -14,20 +14,23 @@
 
 #include <gtest/gtest.h>
 
+#include "fs/fs_factory.h"
+
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
 #include <tenann/factory/index_factory.h>
 #endif
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "common/config_vector_index_fwd.h"
 #include "runtime/mem_pool.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -40,7 +43,7 @@ protected:
         srand(GetCurrentTimeMicros());
         CHECK_OK(fs::remove_all(test_vector_index_dir));
         CHECK_OK(fs::create_directories(test_vector_index_dir));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(test_vector_index_dir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(test_vector_index_dir));
     }
 
     void TearDown() override { fs::remove_all(test_vector_index_dir); }
@@ -73,7 +76,7 @@ protected:
         element->append(1);
         element->append(2);
         element->append(3);
-        NullColumnPtr null_column = NullColumn::create(element->size(), 0);
+        auto null_column = NullColumn::create(element->size(), 0);
         auto nullable_column = NullableColumn::create(std::move(element), std::move(null_column));
         auto offsets = UInt32Column::create();
         offsets->append(0);
@@ -87,7 +90,7 @@ protected:
             offsets->append((i + 2) * 3);
         }
 
-        ArrayColumn::Ptr array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
+        auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
 
         CHECK_OK(vector_index_writer->append(*array_column));
 
@@ -128,7 +131,7 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
         auto status = get_vector_meta(tablet_index, empty_meta);
 
         CHECK_OK(status);
-        auto meta = status.value();
+        const auto& meta = status.value();
 
         // read and search index
         tenann::IndexReaderRef index_reader = tenann::IndexFactory::CreateReaderFromMeta(meta);

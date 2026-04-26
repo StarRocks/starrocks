@@ -15,16 +15,15 @@
 package com.starrocks.sql.common;
 
 import com.google.common.collect.Range;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.PartitionUtil;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 
-import java.util.List;
+import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * {@link PartitionDiffer} is used to compare the difference between two partitions which can be range
@@ -34,18 +33,30 @@ public abstract class PartitionDiffer {
     protected final MaterializedView mv;
     // whether it's used for query rewrite or refresh, the difference is that query rewrite will not
     // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
-    protected final boolean isQueryRewrite;
+    protected final MVTimelinessArbiter.QueryRewriteParams queryRewriteParams;
 
-    public PartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
+    // Pinned ranges keyed by Table.getTableIdentifier(). Empty means no pinning.
+    protected Map<String, TvrVersionRange> pinnedRangeByTableIdentifier = Collections.emptyMap();
+
+    public PartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         this.mv = mv;
-        this.isQueryRewrite = isQueryRewrite;
+        this.queryRewriteParams = queryRewriteParams;
+    }
+
+    public void setPinnedRanges(Map<String, TvrVersionRange> pinnedRangeByTableIdentifier) {
+        this.pinnedRangeByTableIdentifier = pinnedRangeByTableIdentifier == null
+                ? Collections.emptyMap() : pinnedRangeByTableIdentifier;
+    }
+
+    protected TvrVersionRange pinnedRangeFor(Table table) {
+        return pinnedRangeByTableIdentifier.get(table.getTableIdentifier());
     }
 
     /**
      * Collect the ref base table's partition range map.
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
      */
-    public abstract Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos();
+    public abstract Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos();
 
     /**
      * Compute the partition difference between materialized view and all ref base tables.
@@ -56,55 +67,30 @@ public abstract class PartitionDiffer {
     public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude);
 
     public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
-                                                             Map<Table, Map<String, PCell>> rBTPartitionMap);
+                                                             Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap);
     /**
      * Generate the reference map between the base table and the mv.
-     * @param baseRangeMap src partition list map of the base table
-     * @param mvRangeMap mv partition name to its list partition cell
+     *
+     * NOTE: the result with base table's partition cell is not the normalized cell by mv's partition exprs, but the exact base
+     * tables' partition cell.
+     *
+     * @param basePartitionMaps src partition sorted set of the base table
+     * @param mvPartitionMap mv partition sorted set
      * @return base table -> <partition name, mv partition names> mapping
      */
-    public abstract Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PCell>> baseRangeMap,
-                                                                            Map<String, PCell> mvRangeMap);
+    public abstract Map<Table, PCellSetMapping> generateBaseRefMap(Map<Table, PCellSortedSet> basePartitionMaps,
+                                                                   PCellSortedSet mvPartitionMap);
 
     /**
      * Generate the mapping from materialized view partition to base table partition.
-     * @param mvRangeMap : materialized view partition range map: <partitionName, partitionRange>
-     * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
+     *
+     * NOTE: the result with base table's partition cell is not the normalized cell by mv's partition exprs, but the exact base
+     * tables' partition cell.
+     *
+     * @param mvPCells : materialized view partition sorted set
+     * @param baseTablePCells: base table partition sorted set map
      * @return mv partition name -> <base table, base partition names> mapping
      */
-    public abstract Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvRangeMap,
-                                                                          Map<Table, Map<String, PCell>> baseRangeMap);
-    /**
-     * To solve multi partition columns' problem of external table, record the mv partition name to all the same
-     * partition names map here.
-     * @param partitionTableAndColumns the partition table and its partition column
-     * @param result the result map
-     */
-    public static void collectExternalPartitionNameMapping(Map<Table, List<Column>> partitionTableAndColumns,
-                                                           Map<Table, Map<String, Set<String>>> result) throws AnalysisException {
-        for (Map.Entry<Table, List<Column>> e : partitionTableAndColumns.entrySet()) {
-            Table refBaseTable = e.getKey();
-            List<Column> refPartitionColumns = e.getValue();
-            collectExternalBaseTablePartitionMapping(refBaseTable, refPartitionColumns, result);
-        }
-    }
-
-    /**
-     * Collect the external base table's partition name to its intersected materialized view names.
-     * @param refBaseTable the base table
-     * @param refTablePartitionColumns the partition column of the base table
-     * @param result the result map
-     * @throws AnalysisException
-     */
-    private static void collectExternalBaseTablePartitionMapping(
-            Table refBaseTable,
-            List<Column> refTablePartitionColumns,
-            Map<Table, Map<String, Set<String>>> result) throws AnalysisException {
-        if (refBaseTable.isNativeTableOrMaterializedView()) {
-            return;
-        }
-        Map<String, Set<String>> mvPartitionNameMap = PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
-                refTablePartitionColumns, PartitionUtil.getPartitionNames(refBaseTable));
-        result.put(refBaseTable, mvPartitionNameMap);
-    }
+    public abstract Map<String, Map<Table, PCellSortedSet>> generateMvRefMap(PCellSortedSet mvPCells,
+                                                                             Map<Table, PCellSortedSet> baseTablePCells);
 }

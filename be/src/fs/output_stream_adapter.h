@@ -15,7 +15,7 @@
 #pragma once
 
 #include "fs/fs.h"
-#include "io/output_stream.h"
+#include "io/core/output_stream.h"
 namespace starrocks {
 // // Wrap a `starrocks::io::OutputStream` into `starrocks::WritableFile`.
 class OutputStreamAdapter : public WritableFile {

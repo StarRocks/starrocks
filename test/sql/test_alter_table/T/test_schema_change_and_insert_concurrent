@@ -1,0 +1,29 @@
+-- name: test_schema_change_and_insert_concurrent
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    c0 int
+) duplicate key (c0)
+distributed by hash (c0) buckets 1
+properties (
+    "replication_num" = "1"
+);
+
+insert into t values (1);
+
+[UC]shell: curl --location-trusted -u root: -H "label:test_txn_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t" -XPOST ${url}/api/transaction/begin
+
+alter table t add column c1 int key NOT NULL default "2";
+
+function: wait_alter_table_waiting_txn()
+
+insert into t values (2);
+
+[UC]shell: curl --location-trusted -u root: -H "label:test_txn_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/rollback
+
+function: wait_alter_table_finish()
+
+select * from t order by c0;
+

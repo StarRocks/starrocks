@@ -18,8 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -76,8 +74,12 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objectsUnResolved.getUserPrivilegeObjectList();
     }
 
-    public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
-        return objectsUnResolved.getFunctions();
+    public List<FunctionRef> getFunctionRefs() {
+        return objectsUnResolved.getFunctionRefs();
+    }
+
+    public List<FunctionArgsDef> getFunctionArgsDefs() {
+        return objectsUnResolved.getFunctionArgsDefs();
     }
 
     public boolean isGrantOnALL() {

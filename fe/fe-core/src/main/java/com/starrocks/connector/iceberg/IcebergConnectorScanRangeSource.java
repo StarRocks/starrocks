@@ -23,7 +23,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
@@ -40,9 +39,11 @@ import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
@@ -53,6 +54,8 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -63,6 +66,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -82,11 +86,16 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
+import static com.starrocks.catalog.IcebergTable.FILE_PATH;
+import static com.starrocks.catalog.IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER;
+import static com.starrocks.catalog.IcebergTable.ROW_ID;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.iceberg.IcebergUtil.checkFileFormatSupportedDelete;
 
 public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
+
     private final IcebergTable table;
     private final TupleDescriptor desc;
     private final IcebergMORParams morParams;
@@ -113,7 +122,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Set<DeleteFile> appliedPosDeleteFiles;
     private final Set<DeleteFile> appliedEqualDeleteFiles;
     private final boolean recordScanFiles;
+    private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
+    private final boolean usedForDelete;
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
@@ -121,7 +132,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                            TupleDescriptor desc,
                                            Optional<List<BucketProperty>> bucketProperties,
                                            PartitionIdGenerator partitionIdGenerator,
-                                           boolean recordScanFiles) {
+                                           boolean recordScanFiles,
+                                           boolean useMinMaxOpt) {
+        this(table, remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, recordScanFiles,
+                useMinMaxOpt, false);
+    }
+
+    public IcebergConnectorScanRangeSource(IcebergTable table,
+                                           RemoteFileInfoSource remoteFileInfoSource,
+                                           IcebergMORParams morParams,
+                                           TupleDescriptor desc,
+                                           Optional<List<BucketProperty>> bucketProperties,
+                                           PartitionIdGenerator partitionIdGenerator,
+                                           boolean recordScanFiles,
+                                           boolean useMinMaxOpt,
+                                           boolean usedForDelete) {
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.morParams = morParams;
@@ -133,15 +158,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.appliedPosDeleteFiles = new HashSet<>();
         this.appliedEqualDeleteFiles = new HashSet<>();
         this.partitionIdGenerator = partitionIdGenerator;
-    }
-
-    public IcebergConnectorScanRangeSource(IcebergTable table,
-                                           RemoteFileInfoSource remoteFileInfoSource,
-                                           IcebergMORParams morParams,
-                                           TupleDescriptor desc,
-                                           Optional<List<BucketProperty>> bucketProperties,
-                                           PartitionIdGenerator partitionIdGenerator) {
-        this(table, remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false);
+        this.useMinMaxOpt = useMinMaxOpt;
+        this.usedForDelete = usedForDelete;
     }
 
     public void clearScannedFiles() {
@@ -158,6 +176,15 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     }
 
     @Override
+    public void close() {
+        try {
+            remoteFileInfoSource.close();
+        } catch (Exception e) {
+            LOG.warn("close RemoteFileInfoSource failed", e);
+        }
+    }
+
+    @Override
     public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             List<TScanRangeLocations> res = new ArrayList<>();
@@ -165,6 +192,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
+                checkFileFormatSupportedDelete(fileScanTask, usedForDelete);
                 res.addAll(toScanRanges(fileScanTask));
                 if (recordScanFiles) {
                     scannedDataFiles.add(fileScanTask.file());
@@ -203,7 +231,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                 res.add(fileScanTask);
                             }
                         } else if (del.content() == FileContent.EQUALITY_DELETES) {
-                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that 
+                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
                             // we can eliminate the equality delete files.
                         }
                     }
@@ -241,6 +269,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             } else {
                 return buildDeleteFileScanRanges(fileScanTask, partitionId);
             }
+        } catch (StarRocksConnectorException e) {
+            throw e;
         } catch (Exception e) {
             LOG.error("build scan range failed", e);
             throw new StarRocksConnectorException("build scan range failed", e);
@@ -255,6 +285,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             FileContent content = deleteFile.content();
             if (content == FileContent.EQUALITY_DELETES) {
                 continue;
+            }
+
+            if (ContentFileUtil.isDV(deleteFile)) {
+                throw new StarRocksConnectorException(
+                        "Iceberg V3 Deletion Vectors are not supported. " +
+                        "Table contains deletion vector file: " + deleteFile.path());
             }
 
             TIcebergDeleteFile target = new TIcebergDeleteFile();
@@ -290,10 +326,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        if (file.path().toString().startsWith(table.getTableLocation())) {
-            hdfsScanRange.setRelative_path(file.path().toString().substring(table.getTableLocation().length()));
+        String filePath = file.path().toString();
+        String tableLocation = table.getTableLocation();
+        if (isFileUnderTableLocation(filePath, tableLocation)) {
+            hdfsScanRange.setRelative_path(buildRelativePath(filePath, tableLocation));
         } else {
-            hdfsScanRange.setFull_path(file.path().toString());
+            hdfsScanRange.setFull_path(filePath);
         }
 
         hdfsScanRange.setOffset(file.content() == FileContent.DATA ? task.start() : 0);
@@ -321,7 +359,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         THdfsPartition tPartition = new THdfsPartition();
         tPartition.setPartition_key_exprs(referencedPartitionInfo.getKey().getKeys().stream()
-                .map(Expr::treeToThrift)
+                .map(ExprToThrift::treeToThrift)
                 .collect(Collectors.toList()));
 
         hdfsScanRange.setPartition_value(tPartition);
@@ -330,20 +368,34 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         // fill extended column value
         List<SlotDescriptor> slots = desc.getSlots();
         Map<Integer, TExpr> extendedColumns = new HashMap<>();
+        Long firstRowId = task.file() == null ? null : task.file().firstRowId();
+        Long dataSequenceNumber = file.dataSequenceNumber();
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
-            if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER) || name.equalsIgnoreCase(SPEC_ID)) {
-                LiteralExpr value;
-                if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
-                    value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), Type.BIGINT);
-                } else {
-                    value = LiteralExpr.create(String.valueOf(file.specId()), Type.INT);
-                }
-
-                extendedColumns.put(slot.getId().asInt(), value.treeToThrift());
-                if (!extendedColumnSlotIds.contains(slot.getId().asInt())) {
-                    extendedColumnSlotIds.add(slot.getId().asInt());
-                }
+            // _row_id is handled as a reserved field in BE (not an extended column).
+            // It is computed as firstRowId + row_position, or read from the physical Parquet column
+            // if present (after compaction).
+            if (name.equalsIgnoreCase(ROW_ID)) {
+                continue;
+            }
+            if (name.equalsIgnoreCase("_row_source_id") || name.equalsIgnoreCase("_scan_range_id")) {
+                continue;
+            }
+            LiteralExpr value;
+            if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
+                value = dataSequenceNumber == null ? new NullLiteral()
+                        : LiteralExprFactory.create(String.valueOf(dataSequenceNumber), IntegerType.BIGINT);
+                setExtendedColumns(slot, extendedColumns, value);
+            } else if (name.equalsIgnoreCase(LAST_UPDATED_SEQUENCE_NUMBER)) {
+                value = dataSequenceNumber == null ? new NullLiteral()
+                        : LiteralExprFactory.create(String.valueOf(dataSequenceNumber), IntegerType.BIGINT);
+                setExtendedColumns(slot, extendedColumns, value, false);
+            } else if (name.equalsIgnoreCase(SPEC_ID)) {
+                value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
+                setExtendedColumns(slot, extendedColumns, value);
+            } else if (name.equalsIgnoreCase(FILE_PATH)) {
+                value = LiteralExprFactory.create(file.location(), StringType.STRING);
+                setExtendedColumns(slot, extendedColumns, value);
             }
         }
 
@@ -355,14 +407,37 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
-        if (file.nullValueCounts() != null && file.valueCounts() != null) {
+        if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
             // fill min/max value
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
                     table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
                     file.nullValueCounts(), file.valueCounts(), slots);
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
+
+        if (firstRowId != null) {
+            hdfsScanRange.setFirst_row_id(firstRowId);
+        }
+
         return hdfsScanRange;
+    }
+
+    private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value) {
+        setExtendedColumns(slot, extendedColumns, value, true);
+    }
+
+    /**
+     * Puts the value into the extended_columns map for BE to access.
+     * When registerExtendedSlot is false, the slot is NOT added to extendedColumnSlotIds,
+     * so BE treats it as a reserved field and can attempt physical column read first
+     * (e.g. _last_updated_sequence_number after compaction), falling back to the extended value.
+     */
+    private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value,
+                                    boolean registerExtendedSlot) {
+        extendedColumns.put(slot.getId().asInt(), ExprToThrift.treeToThrift(value));
+        if (registerExtendedSlot && !extendedColumnSlotIds.contains(slot.getId().asInt())) {
+            extendedColumnSlotIds.add(slot.getId().asInt());
+        }
     }
 
     private int getCurBucketId(FileScanTask task, int i) {
@@ -396,6 +471,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     @VisibleForTesting
     public long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
+
+        if (!partitionSlotIdsCache.containsKey(spec.specId())) {
+            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
+        }
+
         // Make sure the partition data with byte[], decimal value object etc. can get the same hash code.
         StructLike origPartition = task.partition();
         StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
@@ -419,10 +499,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         partitionKeyToId.put(partition, partitionId);
         referencedPartitions.put(partitionId, referencedPartitionInfo);
-        if (!partitionSlotIdsCache.containsKey(spec.specId())) {
-            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
-        }
-
         return partitionId;
     }
 
@@ -483,7 +559,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 partitionValues.add(partitionValue);
             } else {
                 partitionValues.add(null);
-            } 
+            }
             cols.add(table.getColumn(field.name()));
         });
 
@@ -512,5 +588,39 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     public Set<DeleteFile> getEqualAppliedDeleteFiles() {
         return appliedEqualDeleteFiles;
+    }
+
+    private static boolean isFileUnderTableLocation(String filePath, String tableLocation) {
+        if (filePath == null || tableLocation == null || tableLocation.isEmpty()) {
+            LOG.warn("File path or table location is null or empty");
+            return false;
+        }
+        String normalizedTableLocation = normalizeTableLocation(tableLocation);
+        if (normalizedTableLocation.isEmpty()) {
+            LOG.warn("Normalized table location is empty");
+            return false;
+        }
+        String prefixWithSeparator = normalizedTableLocation + "/";
+        return filePath.startsWith(prefixWithSeparator);
+    }
+
+    private static String buildRelativePath(String filePath, String tableLocation) {
+        String normalizedTableLocation = normalizeTableLocation(tableLocation);
+        if (filePath.length() <= normalizedTableLocation.length()) {
+            LOG.warn("File path {} is shorter than table location {}", filePath, tableLocation);
+            return "";
+        }
+        return filePath.substring(normalizedTableLocation.length());
+    }
+
+    private static String normalizeTableLocation(String tableLocation) {
+        if (tableLocation == null || tableLocation.isEmpty()) {
+            LOG.warn("Table location is null or empty");
+            return "";
+        }
+        if (tableLocation.length() > 1 && tableLocation.charAt(tableLocation.length() - 1) == '/') {
+            return tableLocation.substring(0, tableLocation.length() - 1);
+        }
+        return tableLocation;
     }
 }

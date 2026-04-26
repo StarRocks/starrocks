@@ -18,23 +18,30 @@
 #include <ios>
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/function_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#ifndef __APPLE__
+#include "udf/java/java_udf.h"
+#endif
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
 // 1. When set_finishing(), the has_output() may be false, so add the check here.
@@ -49,7 +56,15 @@
 
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context);
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration, bool use_cache,
+                               bool* cache_hit_out = nullptr);
+
+Analytor::~Analytor() {
+    if (_state != nullptr) {
+        close(_state);
+    }
+}
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
@@ -111,6 +126,10 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
     }
 }
 
+bool Analytor::is_chunk_buffer_full() {
+    return _buffer.size() >= config::pipeline_analytic_max_buffer_size;
+}
+
 Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
     _state = state;
 
@@ -161,9 +180,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
             RETURN_IF_ERROR(
-                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+                    ExprFactory::create_expr_from_thrift_nodes(_pool, desc.nodes, &node_idx, &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -208,11 +227,28 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
-
-            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
+            if (fn.name.function_name == "array_agg") {
+                // set order by info
+                std::vector<bool> is_asc_order;
+                std::vector<bool> nulls_first;
+                auto is_distinct = false;
+                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
+                    !fn.aggregate_fn.is_asc_order.empty()) {
+                    is_asc_order = fn.aggregate_fn.is_asc_order;
+                    nulls_first = fn.aggregate_fn.nulls_first;
+                }
+                if (fn.aggregate_fn.__isset.is_distinct) {
+                    is_distinct = fn.aggregate_fn.is_distinct;
+                }
+                _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs,
+                                                                  is_distinct, is_asc_order, nulls_first);
+            } else {
+                _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
+            }
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -278,7 +314,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
         _partition_columns[i] = ColumnHelper::create_column(
@@ -286,7 +322,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 _partition_ctxs[i]->root()->is_constant(), 0);
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
     _order_columns.resize(_order_ctxs.size());
     for (size_t i = 0; i < _order_ctxs.size(); i++) {
         _order_columns[i] = ColumnHelper::create_column(_order_ctxs[i]->root()->type(),
@@ -302,11 +338,14 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
     _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
+    _udaf_load_timer = ADD_TIMER(_runtime_profile, "UdafLoadTime");
+    _udaf_cache_hit_count = ADD_COUNTER(_runtime_profile, "UdafCacheHitCount", TUnit::UNIT);
+    _udaf_cache_populate_count = ADD_COUNTER(_runtime_profile, "UdafCachePopulateCount", TUnit::UNIT);
 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -315,10 +354,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         tuple_ids.push_back(_buffered_tuple_id);
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids);
         if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state));
+            RETURN_IF_ERROR(ExprExecutor::prepare(_partition_ctxs, state));
         }
         if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state));
+            RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
         }
     }
 
@@ -333,10 +372,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 Status Analytor::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(Expr::open(_partition_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_order_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_order_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
 
@@ -344,27 +383,69 @@ Status Analytor::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 
     auto create_fn_states = [this]() {
+#ifndef __APPLE__
+        std::vector<int> attached_udaf_idx;
+        bool init_success = false;
+#endif
+        DeferOp cleanup_on_fail([&]() {
+#ifndef __APPLE__
+            if (init_success) {
+                return;
+            }
+            for (int idx : attached_udaf_idx) {
+                destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+            }
+#endif
+        });
+
         for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+#ifndef __APPLE__
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
-                auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                  _agg_fn_ctxs[i]);
+                auto& opts = _state->query_options();
+                bool use_cache =
+                        opts.__isset.enable_cache_udaf && opts.enable_cache_udaf && fn.__isset.isolated && !fn.isolated;
+                bool cache_hit = false;
+                Status st;
+                {
+                    SCOPED_TIMER(_udaf_load_timer);
+                    st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                 _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                                 use_cache ? &cache_hit : nullptr);
+                }
+                if (use_cache) {
+                    if (cache_hit) {
+                        COUNTER_UPDATE(_udaf_cache_hit_count, 1);
+                    } else {
+                        COUNTER_UPDATE(_udaf_cache_populate_count, 1);
+                    }
+                }
                 RETURN_IF_ERROR(st);
+                attached_udaf_idx.emplace_back(i);
             }
+#endif
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        RETURN_IF_UNLIKELY_NULL(agg_states, Status::MemoryAllocFailed("alloc analytic agg states failed"));
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         _managed_fn_states.emplace_back(
                 std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
+#ifndef __APPLE__
+        init_success = true;
+#endif
         return Status::OK();
     };
 
+#ifdef __APPLE__
+    RETURN_IF_ERROR(create_fn_states());
+#else
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, create_fn_states);
         RETURN_IF_ERROR(promise_st->get_future().get());
     } else {
         RETURN_IF_ERROR(create_fn_states());
     }
+#endif
 
     return Status::OK();
 }
@@ -392,20 +473,33 @@ void Analytor::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
-        Expr::close(_order_ctxs, state);
-        Expr::close(_partition_ctxs, state);
+#ifndef __APPLE__
+        for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+            if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                destroy_java_udaf_context(_agg_fn_ctxs[i]);
+            }
+        }
+#endif
+
+        ExprExecutor::close(_order_ctxs, state);
+        ExprExecutor::close(_partition_ctxs, state);
+
         for (const auto& i : _agg_expr_ctxs) {
-            Expr::close(i, state);
+            ExprExecutor::close(i, state);
         }
         return Status::OK();
     };
 
+#ifdef __APPLE__
+    (void)agg_close();
+#else
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
     }
+#endif
 }
 
 Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
@@ -563,7 +657,7 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-                _agg_intput_columns[i][j]->remove_first_n_values(remove_rows);
+                _agg_intput_columns[i][j]->as_mutable_raw_ptr()->remove_first_n_values(remove_rows);
             }
         }
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
@@ -609,11 +703,19 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+                // https://github.com/StarRocks/starrocks/pull/43065 confirms that _agg_expr_ctxs[i][j]->evaluate
+                // will not generate a single column larger than 4GB.
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
-                // When chunk's column is const, maybe need to unpack it.
-                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+                TRY_CATCH_BAD_ALLOC(
+                        _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
 
+                // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
+                Column* agg_column = _agg_intput_columns[i][j]->as_mutable_raw_ptr();
+                ASSIGN_OR_RETURN(auto upgrade_col, agg_column->upgrade_if_overflow());
+                if (upgrade_col != nullptr) {
+                    _agg_intput_columns[i][j] = std::move(upgrade_col);
+                }
                 RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
         }
@@ -621,12 +723,24 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+
+            // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
+            ASSIGN_OR_RETURN(auto upgrade_col, _partition_columns[i]->upgrade_if_overflow());
+            if (upgrade_col != nullptr) {
+                _partition_columns[i] = std::move(upgrade_col);
+            }
             RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+
+            // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
+            ASSIGN_OR_RETURN(auto order_upgrade_col, _order_columns[i]->upgrade_if_overflow());
+            if (order_upgrade_col != nullptr) {
+                _order_columns[i] = std::move(order_upgrade_col);
+            }
             RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
     }
@@ -646,9 +760,10 @@ void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& 
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
         // Unpack const column, then append it to dst.
-        auto* const_column = down_cast<ConstColumn*>(src_column.get());
-        const_column->data_column()->assign(chunk_size, 0);
-        dst_column->append(*const_column->data_column(), 0, chunk_size);
+        auto* const_column = down_cast<ConstColumn*>(src_column->as_mutable_raw_ptr());
+        auto* data_column = const_column->data_column_raw_ptr();
+        data_column->assign(chunk_size, 0);
+        dst_column->append(*data_column, 0, chunk_size);
     } else {
         // Most cases.
         dst_column->append(*src_column, 0, chunk_size);
@@ -1043,12 +1158,14 @@ void Analytor::_init_window_result_columns() {
                 ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
         // Binary column cound't call resize method like Numeric Column,
         // so we only reserve it.
-        if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+        if (_agg_functions[i]->get_name().ends_with("fused_multi_distinct")) {
+            _result_window_columns[i]->resize(chunk_size);
+        } else if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
             _result_window_columns[i]->reserve(chunk_size);
         } else {
             _result_window_columns[i]->resize(chunk_size);

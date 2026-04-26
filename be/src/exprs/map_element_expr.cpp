@@ -16,6 +16,7 @@
 
 #include <gutil/strings/substitute.h>
 
+#include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -26,7 +27,6 @@
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "types/logical_type.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

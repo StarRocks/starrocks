@@ -41,7 +41,7 @@ public:
 
     Status do_visit(const BinaryColumn& column) {
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_offset().data());
-        _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_bytes().data());
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_immutable_bytes().data());
         return Status::OK();
     }
 
@@ -133,7 +133,8 @@ jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong colum
     auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     BinaryColumn* binary_column = nullptr;
     if (column->is_nullable()) {
-        binary_column = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(down_cast<NullableColumn*>(column)->data_column());
+        binary_column =
+                ColumnHelper::cast_to_raw<TYPE_VARCHAR>(down_cast<NullableColumn*>(column)->data_column_raw_ptr());
     } else {
         binary_column = down_cast<BinaryColumn*>(column);
     }

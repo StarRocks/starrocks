@@ -28,10 +28,10 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -44,17 +44,16 @@ public class IndicesProcDirTest {
     public void testFetchResult() throws AnalysisException {
         Database db = new Database(10000L, "IndicesProcDirTestDB");
 
-        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         long partitionId = 1025;
         listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-        listPartition.setIsInMemory(partitionId, false);
         listPartition.setReplicationNum(partitionId, (short) 1);
         OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
         index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(1L, 2L, 9L, 1L));
-        Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
-        indexNameToId.put("index1", index.getId());
+        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
         TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
         index.addTablet(new LocalTablet(1010L), tabletMeta);
         index.addTablet(new LocalTablet(1011L), tabletMeta);
@@ -76,7 +75,6 @@ public class IndicesProcDirTest {
                 "{\"maxTabletNum\":9,\"minTabletNum\":1,\"maxBeId\":1,\"minBeId\":2," +
                         "\"type\":\"INTER_NODE_TABLET_DISTRIBUTION\",\"balanced\":false}",
                 row.get(4)); // tablet balance stat
-        Assertions.assertEquals("2", row.get(5)); // virtual buckets
-        Assertions.assertEquals("2", row.get(6)); // tablets
+        Assertions.assertEquals("2", row.get(5)); // tablets
     }
 }

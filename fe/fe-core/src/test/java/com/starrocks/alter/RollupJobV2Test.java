@@ -45,6 +45,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
@@ -52,9 +53,12 @@ import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.task.AgentTaskQueue;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -69,6 +73,18 @@ public class RollupJobV2Test extends DDLTestBase {
     private static AddRollupClause clause2;
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeJobV2Test.class);
+
+    @BeforeAll
+    public static void beforeAll() {
+        new MockUp<MaterializedViewHandler>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                // do nothing
+            }
+        };
+
+        DDLTestBase.beforeAll();
+    }
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -102,7 +118,7 @@ public class RollupJobV2Test extends DDLTestBase {
         materializedViewHandler.process(alterClauses, db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
 
-        materializedViewHandler.runAfterCatalogReady();
+        Deencapsulation.invoke(materializedViewHandler, "runAlterJobV2");
 
         assertEquals(Config.max_running_rollup_job_num_per_table,
                     materializedViewHandler.getTableRunningJobMap().get(olapTable.getId()).size());
@@ -146,11 +162,11 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();
@@ -189,7 +205,7 @@ public class RollupJobV2Test extends DDLTestBase {
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(MaterializedIndex.IndexState.NORMAL, baseIndex.getState());
         assertEquals(Partition.PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.ROLLUP, olapTable.getState());
@@ -212,11 +228,11 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();
@@ -226,10 +242,10 @@ public class RollupJobV2Test extends DDLTestBase {
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            rollupJob.runRunningJob();
             if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
                 break;
             }
+            rollupJob.runRunningJob();
             retryCount++;
             LOG.info("rollupJob is waiting for JobState retryCount:" + retryCount);
         }

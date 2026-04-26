@@ -18,9 +18,9 @@
 
 #include <filesystem>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "fs/fs_util.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

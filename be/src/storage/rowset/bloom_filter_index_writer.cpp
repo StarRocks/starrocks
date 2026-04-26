@@ -38,18 +38,19 @@
 #include <memory>
 #include <utility>
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "fs/fs.h"
-#include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
-#include "storage/type_traits.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
+#include "types/storage_type_traits.h"
 #include "util/bloom_filter.h" // for BloomFilterOptions, BloomFilter
-#include "util/slice.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -77,12 +78,12 @@ constexpr bool is_int128() {
 }
 
 template <LogicalType type>
-inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTraits<type>::CppType* v,
-                                                       const TypeInfoPtr& type_info, MemPool* pool) {
-    using CppType = typename CppTypeTraits<type>::CppType;
+inline StorageCppType<type> get_value(const StorageCppType<type>* v, const TypeInfoPtr& type_info,
+                                      const TypeInfoAllocator* allocator) {
+    using CppType = StorageCppType<type>;
     if constexpr (is_slice_type<type>()) {
         CppType new_value;
-        type_info->deep_copy(&new_value, v, pool);
+        type_info->deep_copy(&new_value, v, allocator);
         return new_value;
     } else {
         return unaligned_load<CppType>(v);
@@ -90,8 +91,8 @@ inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTra
 }
 
 template <LogicalType type>
-inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppType& v) {
-    using CppType = typename CppTypeTraits<type>::CppType;
+inline void update_bf(BloomFilter* bf, const StorageCppType<type>& v) {
+    using CppType = StorageCppType<type>;
     if constexpr (is_slice_type<type>()) {
         const auto* s = reinterpret_cast<const Slice*>(&v);
         bf->add_bytes(s->data, s->size);
@@ -104,16 +105,18 @@ inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppTy
 // high cardinality key columns and none-agg value columns for high selectivity and storage
 // efficiency.
 // This builder builds a bloom filter page by every data page, with a page id index.
-// Meanswhile, It adds an ordinal index to load bloom filter index according to requirement.
+// Meanwhile, it adds an ordinal index to load bloom filter index according to requirement.
 //
 template <LogicalType field_type>
 class OriginalBloomFilterIndexWriterImpl : public BloomFilterIndexWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
     explicit OriginalBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : _bf_options(bf_options), _typeinfo(std::move(typeinfo)) {}
+            : _bf_options(bf_options),
+              _typeinfo(std::move(typeinfo)),
+              _type_info_allocator(make_type_info_allocator(&_pool)) {}
 
     ~OriginalBloomFilterIndexWriterImpl() override = default;
 
@@ -121,7 +124,7 @@ public:
         const auto* v = (const CppType*)values;
         for (int i = 0; i < count; ++i) {
             if (_values.find(unaligned_load<CppType>(v)) == _values.end()) {
-                _values.insert(get_value<field_type>(v, _typeinfo, &_pool));
+                _values.insert(get_value<field_type>(v, _typeinfo, &_type_info_allocator));
             }
             ++v;
         }
@@ -179,6 +182,7 @@ protected:
     ValueDict _values;
     TypeInfoPtr _typeinfo;
     MemPool _pool;
+    TypeInfoAllocator _type_info_allocator;
 
 private:
     bool _has_null{false};
@@ -189,11 +193,11 @@ private:
 template <LogicalType field_type, typename Enable = void>
 class NgramBloomFilterIndexWriterImpl : public OriginalBloomFilterIndexWriterImpl<field_type> {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, typeinfo) {}
+            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
 
     void add_values(const void* values, size_t count) override { return; }
 };
@@ -202,7 +206,7 @@ template <LogicalType field_type>
 class NgramBloomFilterIndexWriterImpl<field_type, std::enable_if_t<is_slice_type<field_type>()>>
         : public OriginalBloomFilterIndexWriterImpl<field_type> {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
@@ -224,12 +228,13 @@ public:
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
                     if (this->_bf_options.case_sensitive) {
-                        _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_pool));
+                        _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
                     } else {
                         // todo::exist two copy of ngram, need to optimize
                         std::string lower_ngram;
                         Slice lower_ngram_slice = cur_ngram.tolower(lower_ngram);
-                        _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo, &this->_pool));
+                        _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo,
+                                                             &this->_type_info_allocator));
                     }
                 }
             }

@@ -14,15 +14,23 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <algorithm>
+#include <memory>
 #include <random>
 #include <sstream>
 
+#include "base/failpoint/fail_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
@@ -31,20 +39,51 @@
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
+#include "exec/spill/operator_mem_resource_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/debug/query_trace.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
+DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
+
+PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
+                               Pipeline* pipeline, int32_t driver_id)
+        : _observer(this),
+          _operator_mem_resource_managers(operators.size()),
+          _operators(operators),
+          _query_ctx(query_ctx),
+          _fragment_ctx(fragment_ctx),
+          _pipeline(pipeline),
+          _source_node_id(operators[0]->get_plan_node_id()),
+          _driver_id(driver_id) {
+    _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
+    for (auto& op : _operators) {
+        _operator_stages[op->get_id()] = OperatorStage::INIT;
+    }
+
+    _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
+}
+
+PipelineDriver::PipelineDriver(const PipelineDriver& driver)
+        : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
+                         driver._driver_id) {}
+
+PipelineDriver::PipelineDriver()
+        : _observer(this),
+          _operator_mem_resource_managers(),
+          _operators(),
+          _query_ctx(nullptr),
+          _fragment_ctx(nullptr),
+          _pipeline(nullptr),
+          _source_node_id(0),
+          _driver_id(0) {}
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
@@ -74,18 +113,7 @@ void PipelineDriver::check_operator_close_states(const std::string& func_name) {
     }
 }
 
-Status PipelineDriver::prepare(RuntimeState* runtime_state) {
-    DeferOp defer([&]() {
-        if (this->_state != DriverState::READY) {
-            LOG(WARNING) << to_readable_string() << " prepare failed";
-        }
-    });
-
-    _runtime_state = runtime_state;
-
-    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
-    SCOPED_TIMER(prepare_timer);
-
+void PipelineDriver::prepare_profile() {
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
@@ -113,6 +141,19 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
             "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+}
+
+Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    DeferOp defer([&]() {
+        if (this->_state != DriverState::READY) {
+            LOG(WARNING) << get_raw_string_name() << " prepare failed";
+        }
+    });
+
+    _runtime_state = runtime_state;
+
+    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
+    SCOPED_TIMER(prepare_timer);
 
     DCHECK(_state == DriverState::NOT_READY);
 
@@ -152,14 +193,18 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             _dependencies.push_back(op_with_dep);
         }
 
-        const auto& rf_set = op->rf_waiting_set();
+        const auto& rf_set = op->get_factory()->rf_waiting_set();
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
-        const auto* global_rf_collector = op->runtime_bloom_filters();
+        const auto* global_rf_collector = op->get_factory()->get_runtime_bloom_filters();
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 if (!desc->skip_wait()) {
                     _global_rf_descriptors.emplace_back(desc);
+#ifdef FIU_ENABLE
+                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
+#endif
+                    desc->add_observer(_runtime_state, [observer = &_observer]() { observer->source_trigger(); });
                 }
             }
 
@@ -208,11 +253,19 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         }
     }
 
-    for (auto& op : _operators) {
+    for (size_t i = 0; i < _operators.size(); ++i) {
+        auto& op = _operators[i];
         int64_t time_spent = 0;
+        RETURN_IF_ERROR(_prepare_operator_mem_resource_manager(i, runtime_state));
         {
             SCOPED_RAW_TIMER(&time_spent);
-            RETURN_IF_ERROR(op->prepare(runtime_state));
+            auto st = op->prepare(runtime_state);
+            if (!st.ok()) {
+                for (size_t rollback_idx = 0; rollback_idx <= i; ++rollback_idx) {
+                    _operator_mem_resource_managers[rollback_idx].reset();
+                }
+                return st;
+            }
         }
         op->set_prepare_time(time_spent);
 
@@ -237,6 +290,22 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+Status PipelineDriver::prepare_local_state(RuntimeState* runtime_state) {
+    prepare_profile();
+    for (auto& op : _operators) {
+        int64_t time_spent = 0;
+        {
+            SCOPED_RAW_TIMER(&time_spent);
+            RETURN_IF_ERROR(op->prepare_local_state(runtime_state));
+        }
+        op->set_local_prepare_time(time_spent);
+    }
+
+    _local_prepare_is_done = true;
+
+    return Status::OK();
+}
+
 void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
     if (_peak_driver_queue_size_counter != nullptr) {
         _peak_driver_queue_size_counter->set(new_value);
@@ -247,6 +316,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
     QUERY_TRACE_SCOPED("process", _driver_name);
+    DCHECK(_local_prepare_is_done);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -300,14 +370,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     curr_op->update_exec_stats(runtime_state);
-                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
+                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
                     continue;
                 }
 
-                _try_to_release_buffer(runtime_state, curr_op);
+                _try_to_release_buffer(runtime_state, i, curr_op);
                 // try successive operator pairs
                 if (!curr_op->has_output() || !next_op->need_input()) {
                     continue;
@@ -322,13 +392,15 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
+                    SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
                 return_status = maybe_chunk.status();
                 if (!return_status.ok() && !return_status.is_end_of_file()) {
                     curr_op->common_metrics()->add_info_string("ErrorMsg", std::string(return_status.message()));
-                    LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
+                    LOG_IF(WARNING, !return_status.is_suppressed())
+                            << "pull_chunk returns not ok status " << return_status.to_string();
                     return return_status;
                 }
 
@@ -368,7 +440,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         {
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
-                            _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
+                            SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
+                            _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op,
+                                                 maybe_chunk.value());
                             RELEASE_RESERVED_GUARD();
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
@@ -404,7 +478,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     curr_op->update_exec_stats(runtime_state);
-                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
+                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
@@ -598,18 +672,47 @@ void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
-    for (auto& op : _operators) {
-        WARN_IF_ERROR(_mark_operator_closed(op, runtime_state),
-                      fmt::format("close pipeline driver error [driver={}]", to_readable_string()));
+    for (size_t i = 0; i < _operators.size(); ++i) {
+        auto& op = _operators[i];
+        WARN_IF_ERROR(_mark_operator_closed(i, op, runtime_state),
+                      fmt::format("close pipeline driver error [driver={}]", get_raw_string_name()));
     }
     check_operator_close_states("closing pipeline drivers");
 }
 
-void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
-                                          const ChunkPtr& chunk) {
-    auto& mem_resource_mgr = op->mem_resource_manager();
+Status PipelineDriver::_prepare_operator_mem_resource_manager(size_t operator_idx, RuntimeState* state) {
+    DCHECK_LT(operator_idx, _operators.size());
+    _operator_mem_resource_managers[operator_idx].reset();
 
-    if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
+    auto& op = _operators[operator_idx];
+    if ((!op->spillable() && !op->releaseable()) || state->query_ctx() == nullptr ||
+        state->query_ctx()->spill_manager() == nullptr) {
+        return Status::OK();
+    }
+
+    size_t reserved_bytes = 0;
+    if (op->spillable()) {
+        reserved_bytes = spill::OperatorMemoryResourceManager::compute_available_memory_bytes(*state);
+    } else {
+        reserved_bytes = config::local_exchange_buffer_mem_limit_per_driver;
+    }
+
+    auto manager = std::make_unique<spill::OperatorMemoryResourceManager>();
+    manager->prepare(state->query_ctx()->spill_manager(), op->spillable(), op->releaseable(), reserved_bytes);
+    _operator_mem_resource_managers[operator_idx] = std::move(manager);
+    return Status::OK();
+}
+
+spill::OperatorMemoryResourceManager* PipelineDriver::_operator_mem_resource_manager(size_t operator_idx) {
+    DCHECK_LT(operator_idx, _operator_mem_resource_managers.size());
+    return _operator_mem_resource_managers[operator_idx].get();
+}
+
+void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, size_t operator_idx,
+                                          OperatorPtr& op, const ChunkPtr& chunk) {
+    auto* mem_resource_mgr = _operator_mem_resource_manager(operator_idx);
+
+    if (!state->enable_spill() || mem_resource_mgr == nullptr || !mem_resource_mgr->releaseable()) return;
 
     if (UNLIKELY(state->spill_mode() == TSpillMode::RANDOM)) {
         // random spill mode
@@ -618,22 +721,26 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         static thread_local std::mt19937_64 generator{std::random_device{}()};
         static std::uniform_real_distribution<double> distribution(0.0, 1.0);
         if (distribution(generator) < state->spill_rand_ratio()) {
-            mem_resource_mgr.to_low_memory_mode();
+            if (mem_resource_mgr->enter_low_memory_mode()) {
+                op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+            }
         }
         return;
     }
 
     // try to release buffer if memusage > mid level threhold
-    _try_to_release_buffer(state, op);
+    _try_to_release_buffer(state, operator_idx, op);
 
     // force mark operator to low memory mode
     if (state->spill_revocable_max_bytes() > 0 && op->revocable_mem_bytes() > state->spill_revocable_max_bytes()) {
-        mem_resource_mgr.to_low_memory_mode();
+        if (mem_resource_mgr->enter_low_memory_mode()) {
+            op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+        }
         return;
     }
 
     // convert to low-memory mode if reserve memory failed
-    if (mem_resource_mgr.releaseable() && op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
+    if (mem_resource_mgr->releaseable() && op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
         int64_t request_reserved = 0;
         if (chunk == nullptr) {
             request_reserved = op->estimated_memory_reserved();
@@ -641,14 +748,17 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
             request_reserved = op->estimated_memory_reserved(chunk);
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
+        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
 
         bool need_spill = false;
-        if (!tls_thread_status.try_mem_reserve(request_reserved)) {
+        if (!tls_thread_status.try_mem_reserve(request_reserved, shared_reserved)) {
             need_spill = true;
-            mem_resource_mgr.to_low_memory_mode();
+            if (mem_resource_mgr->enter_low_memory_mode()) {
+                op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+            }
         }
 
-        auto query_mem_tracker = _query_ctx->mem_tracker();
+        const auto& query_mem_tracker = _query_ctx->mem_tracker();
         auto query_consumption = query_mem_tracker->consumption();
         auto limited = query_mem_tracker->limit();
         auto reserved_limit = query_mem_tracker->reserve_limit();
@@ -656,31 +766,34 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         TRACE_SPILL_LOG << "adjust memory spill:" << op->get_name() << " request: " << request_reserved
                         << " revocable: " << op->revocable_mem_bytes() << " set finishing: " << (chunk == nullptr)
                         << " need_spill:" << need_spill << " query_consumption:" << query_consumption
-                        << " limit:" << limited << "query reserved limit:" << reserved_limit;
+                        << " limit:" << limited << " query reserved limit:" << reserved_limit;
     }
 }
 
-const double release_buffer_mem_ratio = 0.8;
+const double release_buffer_mem_ratio = 0.5;
 
-void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
-    if (state->enable_spill() && op->releaseable()) {
-        auto& mem_resource_mgr = op->mem_resource_manager();
-        if (mem_resource_mgr.is_releasing()) {
-            return;
-        }
-        auto query_mem_tracker = _query_ctx->mem_tracker();
+void PipelineDriver::_try_to_release_buffer(RuntimeState* state, size_t operator_idx, OperatorPtr& op) {
+    auto* mem_resource_mgr = _operator_mem_resource_manager(operator_idx);
+    if (state->enable_spill() && mem_resource_mgr != nullptr && mem_resource_mgr->releaseable() && op->releaseable()) {
+        const auto& query_mem_tracker = _query_ctx->mem_tracker();
         auto query_consumption = query_mem_tracker->consumption();
         auto query_mem_limit = query_mem_tracker->lowest_limit();
         DCHECK_GT(query_mem_limit, 0);
         auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
-        if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio) {
+        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
+        auto& current_thread = CurrentThread::current();
+
+        if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio ||
+            !current_thread.has_enough_reserved_memory(shared_reserved)) {
             // if the currently used memory is very close to the threshold that triggers spill,
             // try to release buffer first
             TRACE_SPILL_LOG << "release operator due to mem pressure, consumption: " << query_consumption
                             << ", release buffer threshold: "
                             << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_ratio)
                             << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
-            mem_resource_mgr.to_low_memory_mode();
+            if (mem_resource_mgr->enter_low_memory_mode()) {
+                op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+            }
         }
     }
 }
@@ -723,6 +836,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 }
 
 void PipelineDriver::_update_driver_level_timer() {
+    DCHECK(_local_prepare_is_done) << to_readable_string();
     // Total Time
     COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
 
@@ -754,14 +868,14 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
-    auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx, true);
+    auto timer = std::make_shared<RFScanWaitTimeout>(true);
     timer->add_observer(_runtime_state, &_observer);
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
     WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
-std::string PipelineDriver::to_readable_string() const {
+std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
     std::stringstream ss;
     std::string block_reasons = "";
     if (_state == PRECONDITION_BLOCK) {
@@ -774,13 +888,21 @@ std::string PipelineDriver::to_readable_string() const {
        << block_reasons << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
-            ss << _operators[i]->get_name();
+            ss << (use_raw_name ? _operators[i]->get_raw_name() : _operators[i]->get_name());
         } else {
-            ss << " -> " << _operators[i]->get_name();
+            ss << " -> " << (use_raw_name ? _operators[i]->get_raw_name() : _operators[i]->get_name());
         }
     }
     ss << "]";
     return ss.str();
+}
+
+std::string PipelineDriver::to_readable_string() const {
+    return _build_readable_string(false);
+}
+
+std::string PipelineDriver::get_raw_string_name() const {
+    return _build_readable_string(true);
 }
 
 workgroup::WorkGroup* PipelineDriver::workgroup() {
@@ -870,7 +992,7 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     }
 }
 
-Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+Status PipelineDriver::_mark_operator_closed(size_t operator_idx, OperatorPtr& op, RuntimeState* state) {
     auto msg = strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
                                    op->get_name());
     if (_fragment_ctx->is_canceled()) {
@@ -890,6 +1012,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         op_state = OperatorStage::CLOSED;
         QUERY_TRACE_SCOPED(op->get_name(), "close");
         op->close(state);
+        _operator_mem_resource_managers[operator_idx].reset();
     }
     COUNTER_SET(op->_total_timer, COUNTER_VALUE(op->_pull_timer) + COUNTER_VALUE(op->_push_timer) +
                                           COUNTER_VALUE(op->_finishing_timer) + COUNTER_VALUE(op->_finished_timer) +

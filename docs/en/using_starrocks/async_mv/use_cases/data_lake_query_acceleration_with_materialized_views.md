@@ -89,6 +89,10 @@ In the following scenarios, we recommend prioritizing acceleration through Data 
 
 Creating a materialized view on tables in external catalogs is similar to creating a materialized view on StarRocks native tables. You only need to set a suitable refresh strategy in accordance with the data source you are using, and manually enable query rewrite for external catalog-based materialized views.
 
+:::note
+External table materialized views do not support automatic refresh **triggered by base table data changes**. They only support asynchronous **fixed-interval** refresh and manual refresh.
+:::
+
 ### Choose a suitable refresh strategy
 
 Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs. Therefore, a full-size refresh is performed once the task is triggered.

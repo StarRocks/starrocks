@@ -49,6 +49,9 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.server.RunMode;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlProxyQueryManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlResultDescriptor;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.SetListItem;
@@ -58,6 +61,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -71,6 +75,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 
 public class LeaderOpExecutor {
     private static final Logger LOG = LogManager.getLogger(LeaderOpExecutor.class);
@@ -87,18 +92,27 @@ public class LeaderOpExecutor {
     private int thriftTimeoutMs;
     private final Pair<String, Integer> ipAndPort;
 
+    private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
+
     public LeaderOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status) {
-        this(null, originStmt, ctx, status, false);
+        this(null, originStmt, ctx, status, false, null);
     }
 
     public LeaderOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
-                            ConnectContext ctx, RedirectStatus status, boolean isInternalStmt) {
-        this(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort(), parsedStmt, originStmt, ctx,
-                status, isInternalStmt);
+                            ConnectContext ctx, RedirectStatus status, boolean isInternalStmt,
+                            CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished) {
+        this(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort(), parsedStmt, originStmt, ctx, status,
+                isInternalStmt, deploymentFinished);
     }
 
     public LeaderOpExecutor(Pair<String, Integer> ipAndPort, StatementBase parsedStmt, OriginStatement originStmt,
                             ConnectContext ctx, RedirectStatus status, boolean isInternalStmt) {
+        this(ipAndPort, parsedStmt, originStmt, ctx, status, isInternalStmt, null);
+    }
+
+    public LeaderOpExecutor(Pair<String, Integer> ipAndPort, StatementBase parsedStmt, OriginStatement originStmt,
+                            ConnectContext ctx, RedirectStatus status, boolean isInternalStmt,
+                            CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished) {
         this.ipAndPort = ipAndPort;
         this.originStmt = originStmt;
         this.ctx = ctx;
@@ -115,43 +129,66 @@ public class LeaderOpExecutor {
         }
         this.parsedStmt = parsedStmt;
         this.isInternalStmt = isInternalStmt;
+        this.deploymentFinished = deploymentFinished;
     }
 
     public void execute() throws Exception {
-        forward();
-        if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
-            LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
-            ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        if (ctx.isArrowFlightSql() && deploymentFinished != null) {
+            ArrowFlightSqlProxyQueryManager.getInstance().register(UUIDUtil.toTUniqueId(ctx.getQueryId()), deploymentFinished);
         }
-
-        if (result.state != null) {
-            MysqlStateType state = MysqlStateType.fromString(result.state);
-            if (state != null) {
-                ctx.getState().setStateType(state);
-                if (result.isSetErrorMsg()) {
-                    ctx.getState().setMsg(result.getErrorMsg());
-                }
-                if (state == MysqlStateType.EOF || state == MysqlStateType.OK) {
-                    afterForward();
+        try {
+            forward();
+            if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+                long deadline = System.currentTimeMillis() + waitTimeoutMs;
+                LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
+                ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+                if (RunMode.isSharedDataMode() && result.isSetMaxStarMgrJournalId()) {
+                    // NOTE: It is a known pitfall that when FE journal catch-up consumes the whole waitTimeoutMs,
+                    // remaining becomes 0, and the subsequent StarMgr wait returns immediately because
+                    // JournalObserver.waitForReplay() treats timeoutMs <= 0 as success even if replay is still behind.
+                    int remaining = (int) Math.max(0, deadline - System.currentTimeMillis());
+                    LOG.info("waiting for star mgr journal replay to {}", result.maxStarMgrJournalId);
+                    StarMgrServer.getCurrentState().getStarMgrJournalObservable().waitOn(
+                            result.maxStarMgrJournalId, remaining,
+                            () -> StarMgrServer.getCurrentState().getReplayId());
                 }
             }
-        }
 
-        if (result.isSetResource_group_name()) {
-            ctx.getAuditEventBuilder().setResourceGroup(result.getResource_group_name());
-        }
-        if (result.isSetAudit_statistics()) {
-            TAuditStatistics tAuditStatistics = result.getAudit_statistics();
-            if (ctx.getExecutor() != null) {
-                ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+            if (result.state != null) {
+                MysqlStateType state = MysqlStateType.fromString(result.state);
+                if (state != null) {
+                    ctx.getState().setStateType(state);
+                    if (result.isSetErrorMsg()) {
+                        ctx.getState().setMsg(result.getErrorMsg());
+                    }
+                    if (state == MysqlStateType.EOF || state == MysqlStateType.OK) {
+                        afterForward();
+                    }
+                }
             }
-        }
 
-        // Put the result of leader execution into the connectContext of the current follower
-        // to mark the transaction being executed in the current connection
-        if (parsedStmt instanceof BeginStmt || parsedStmt instanceof CommitStmt || parsedStmt instanceof RollbackStmt) {
-            if (result.isSetTxn_id()) {
-                ctx.setTxnId(result.getTxn_id());
+            if (result.isSetResource_group_name()) {
+                ctx.getAuditEventBuilder().setResourceGroup(result.getResource_group_name());
+            }
+            if (result.isSetAudit_statistics()) {
+                TAuditStatistics tAuditStatistics = result.getAudit_statistics();
+                if (ctx.getExecutor() != null) {
+                    ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+                }
+            }
+
+            // Put the result of leader execution into the connectContext of the current follower
+            // to mark the transaction being executed in the current connection
+            if (parsedStmt instanceof BeginStmt || parsedStmt instanceof CommitStmt || parsedStmt instanceof RollbackStmt) {
+                if (ctx.getSessionVariable().isEnableSqlTransaction()) {
+                    if (result.isSetTxn_id()) {
+                        ctx.setTxnId(result.getTxn_id());
+                    }
+                }
+            }
+        } finally {
+            if (ctx.isArrowFlightSql() && deploymentFinished != null) {
+                ArrowFlightSqlProxyQueryManager.getInstance().deregister(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             }
         }
     }
@@ -244,6 +281,49 @@ public class LeaderOpExecutor {
         this.result = result;
     }
 
+    /**
+     * Makes a lightweight Thrift call to the leader FE to retrieve its current maximum
+     * journal ID. This is used by followers to determine what journal position they need
+     * to wait for before validating metadata that was recently written by the leader.
+     * <p>
+     * A minimal {@code SELECT 1} statement is forwarded; the leader always sets
+     * {@code maxJournalId} in the response regardless of whether the query succeeds.
+     *
+     * @return the leader's current max journal ID, or -1 if the value is unavailable
+     */
+    public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+        try {
+            Pair<String, Integer> leaderAddr =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+            if (leaderAddr == null) {
+                return -1;
+            }
+            TNetworkAddress thriftAddr = new TNetworkAddress(leaderAddr.first, leaderAddr.second);
+
+            TMasterOpRequest params = new TMasterOpRequest();
+            params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+            params.setSql("SELECT 1");
+            params.setStmtIdx(0);
+            params.setUser(ctx.getQualifiedUser() != null ? ctx.getQualifiedUser() : "");
+            params.setCatalog(ctx.getCurrentCatalog());
+            params.setDb(ctx.getDatabase() != null ? ctx.getDatabase() : "");
+            params.setStmt_id(ctx.getStmtId());
+            params.setForward_times(1);
+            params.setConnectionId(ctx.getConnectionId());
+
+            int timeoutMs = ctx.getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+            TMasterOpResult leaderResult = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    thriftAddr,
+                    timeoutMs,
+                    client -> client.forward(params));
+            return leaderResult != null && leaderResult.isSetMaxJournalId() ? leaderResult.maxJournalId : -1;
+        } catch (Exception e) {
+            LOG.warn("Failed to fetch leader max journal id: {}", e.getMessage());
+            return -1;
+        }
+    }
+
     public TMasterOpRequest createTMasterOpRequest(ConnectContext ctx, int forwardTimes) {
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
@@ -261,6 +341,8 @@ public class LeaderOpExecutor {
         params.setForward_times(forwardTimes);
         params.setSession_id(ctx.getSessionId().toString());
         params.setConnectionId(ctx.getConnectionId());
+
+        params.setUser_groups(new ArrayList<>(ctx.getGroups()));
 
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);
@@ -287,6 +369,9 @@ public class LeaderOpExecutor {
         params.setWarehouse_id(ctx.getCurrentWarehouseId());
 
         params.setIsInternalStmt(isInternalStmt);
+
+        params.setIs_arrow_flight_sql(ctx.isArrowFlightSql());
+
         return params;
     }
 }

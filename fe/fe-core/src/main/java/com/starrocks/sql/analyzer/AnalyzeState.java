@@ -94,7 +94,7 @@ public class AnalyzeState {
     }
 
     public void addColumnReference(Expr e, FieldId fieldId) {
-        this.columnReferences.put(e, fieldId);
+        this.columnReferences.computeIfAbsent(e, k -> fieldId);
     }
 
     public Map<Expr, FieldId> getColumnReferences() {

@@ -1,0 +1,85 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+package com.starrocks.sql.ast;
+
+import com.starrocks.sql.parser.NodePosition;
+
+/**
+ * DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name [FORCE]
+ * <p>
+ * Parameters:
+ * <ul>
+ *   <li>IF EXISTS: Do not throw an error if the materialized view does not exist. A notice is issued in this case.</li>
+ *   <li>database: Optional database name that qualifies the materialized view.</li>
+ *   <li>mv_name: The name of the materialized view to remove, optionally qualified by database.</li>
+ *   <li>FORCE: Optional keyword to cancel stuck sync MV build jobs and restore table state so the MV can be dropped.</li>
+ * </ul>
+ */
+public class DropMaterializedViewStmt extends DdlStmt {
+
+    private final boolean ifExists;
+    /** True when FORCE is specified; used only for sync MVs. */
+    private final boolean forceDrop;
+    private TableRef tableRef;
+
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef) {
+        this(ifExists, false, tableRef, NodePosition.ZERO);
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef, NodePosition pos) {
+        this(ifExists, false, tableRef, pos);
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, boolean forceDrop, TableRef tableRef, NodePosition pos) {
+        super(pos);
+        this.ifExists = ifExists;
+        this.forceDrop = forceDrop;
+        this.tableRef = tableRef;
+    }
+
+    public boolean isSetIfExists() {
+        return ifExists;
+    }
+
+    public boolean isForceDrop() {
+        return forceDrop;
+    }
+
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getMvName() {
+        return tableRef == null ? null : tableRef.getTableName();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropMaterializedViewStatement(this, context);
+    }
+}

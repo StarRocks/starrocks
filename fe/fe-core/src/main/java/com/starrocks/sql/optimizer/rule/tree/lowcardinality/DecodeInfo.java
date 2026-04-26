@@ -20,8 +20,18 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 /*
  * For record the string columns on operator
  */
-class DecodeInfo {
-    public static final DecodeInfo EMPTY = new DecodeInfo();
+public class DecodeInfo {
+    private DecodeInfo() {
+    }
+
+    public static DecodeInfo create() {
+        return new DecodeInfo();
+    }
+
+    public static DecodeInfo empty() {
+        return new DecodeInfo();
+    }
+
     OptExpression parent = null;
 
     // operator's input string columns
@@ -36,12 +46,24 @@ class DecodeInfo {
     // operator used string column but not output to downstream operator
     ColumnRefSet usedStringColumns = new ColumnRefSet();
 
+    public ColumnRefSet getInputStringColumns() {
+        return inputStringColumns;
+    }
+
+    public ColumnRefSet getDecodeStringColumns() {
+        return decodeStringColumns;
+    }
+
+    public ColumnRefSet getOutputStringColumns() {
+        return outputStringColumns;
+    }
+
     public DecodeInfo createOutputInfo() {
         if (this.outputStringColumns.isEmpty()) {
-            return EMPTY;
+            return DecodeInfo.empty();
         }
 
-        DecodeInfo info = new DecodeInfo();
+        DecodeInfo info = DecodeInfo.create();
         info.inputStringColumns.union(this.outputStringColumns);
         info.outputStringColumns.union(this.outputStringColumns);
         return info;
@@ -49,10 +71,10 @@ class DecodeInfo {
 
     public DecodeInfo createDecodeInfo() {
         if (this.outputStringColumns.isEmpty()) {
-            return EMPTY;
+            return DecodeInfo.empty();
         }
 
-        DecodeInfo info = new DecodeInfo();
+        DecodeInfo info = DecodeInfo.create();
         info.decodeStringColumns.union(this.outputStringColumns);
         return info;
     }

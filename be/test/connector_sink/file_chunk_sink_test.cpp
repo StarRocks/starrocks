@@ -21,13 +21,14 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
@@ -44,6 +45,9 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
     }
 
     void TearDown() override {}
@@ -59,6 +63,46 @@ public:
     MOCK_METHOD(StatusOr<formats::WriterAndStream>, create, (const std::string&), (const override));
 };
 
+struct FileSuffixTestCase {
+    std::string format;
+    TCompressionType::type compression;
+    std::string expected_suffix;
+};
+
+class FileSuffixBuilderTest : public ::testing::TestWithParam<FileSuffixTestCase> {};
+
+TEST_P(FileSuffixBuilderTest, test_build_canonical_file_suffix) {
+    auto test_case = GetParam();
+    auto normalized = normalize_format_name(test_case.format);
+    ASSIGN_OR_ABORT(auto suffix, build_canonical_file_suffix(normalized, test_case.compression));
+    ASSERT_EQ(test_case.expected_suffix, suffix);
+    ASSERT_EQ(std::string::npos, suffix.find(".csv.csv"));
+}
+
+INSTANTIATE_TEST_SUITE_P(FileChunkSinkSuffix, FileSuffixBuilderTest,
+                         ::testing::Values(FileSuffixTestCase{formats::CSV, TCompressionType::NO_COMPRESSION, "csv"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::GZIP, "csv.gz"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::ZSTD, "csv.zst"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::LZ4, "csv.lz4"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::LZ4_FRAME, "csv.lz4"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::SNAPPY, "csv.snappy"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::DEFLATE, "csv.deflate"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::ZLIB, "csv.zlib"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::BZIP2, "csv.bz2"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::DEFAULT_COMPRESSION,
+                                                              "csv"},
+                                           FileSuffixTestCase{formats::PARQUET, TCompressionType::GZIP, "parquet"},
+                                           FileSuffixTestCase{formats::ORC, TCompressionType::ZSTD, "orc"},
+                                           FileSuffixTestCase{"csv.gz.csv", TCompressionType::GZIP, "csv.gz"},
+                                           FileSuffixTestCase{"CSV.LZ4.CSV", TCompressionType::LZ4, "csv.lz4"},
+                                           FileSuffixTestCase{"  .Csv.zst.csv  ", TCompressionType::ZSTD, "csv.zst"}));
+
+TEST(FileSuffixBuilder, test_invalid_empty_format) {
+    auto normalized = normalize_format_name("   ");
+    auto st = build_canonical_file_suffix(normalized, TCompressionType::GZIP);
+    ASSERT_FALSE(st.ok());
+}
+
 TEST_F(FileChunkSinkTest, test_callback) {
     {
         std::vector<std::string> partition_column_names = {"k1"};
@@ -72,6 +116,7 @@ TEST_F(FileChunkSinkTest, test_callback) {
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
         auto sink = std::make_unique<FileChunkSink>(partition_column_names, std::move(partition_column_evaluators),
                                                     std::move(partition_chunk_writer_factory), _runtime_state);
+        sink->init_profile();
         sink->callback_on_commit(CommitResult{
                 .io_status = Status::OK(),
                 .format = formats::PARQUET,

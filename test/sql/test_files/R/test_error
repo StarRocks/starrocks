@@ -35,7 +35,13 @@ Succeed: Total num: 1, size: 619. OK num: 1(upload 1 files).
 admin set frontend config ("enable_collect_query_detail_info" = "true");
 -- result:
 -- !result
-select count(*) from files('path' = 'oss://${oss_bucket}/test_files/orc_format/${uuid0}/*', 'format'='orc') where map_keys(col_map) != [-99999.99999];
+select count(*) from files(
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format"="orc")
+where map_keys(col_map) != [-99999.99999];
 -- result:
 18
 -- !result

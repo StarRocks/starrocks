@@ -97,3 +97,42 @@ Error: Value count does not match column count. Expect 3, but got 1. Row: 2023-0
 发生该错误的原因是导入命令或导入语句中指定的列分隔符与源数据中的列分隔符不一致。例如上面示例中，源数据为 CSV 格式，包括三列，列分隔符为逗号 (`,`)，但是导入命令或导入语句中却指定制表符 (`\t`) 作为列分隔符，最终导致源数据的三列数据解析成了一列数据。
 
 修改导入命令或导入语句中的列分隔符为逗号 (`,`)，然后再次尝试执行导入。
+
+## 6. 如果出现 "current running txns on db XXX is 100, larger than limit 100" 错误，我该怎么办？
+
+增加 FE 配置 `max_running_txn_num_per_db` 的值。
+
+## 7. 为什么在数据导入时收到 curl ERRORURL 提示 `be/storage/error_log` 不存在？
+
+BE错误日志默认保留48小时，之后会被清理。您可以使用 `load_error_log_reserve_hours` 调整保留时间。
+
+## 8. 如何排查导入时出现的错误 “Tablet is in error state … prepare_segment_writer meet invalid rssid”？
+
+此问题通常由版本滞后引起。比较分区级别的tablet版本，检查发布是否卡住。使用以下SQL比较版本：
+
+```SQL
+SELECT * FROM information_schema.be_tablets;
+SELECT * FROM information_schema.partitions_meta;
+```
+
+如果只有少数 Tablet 不一致，将滞后的副本标记为坏副本，以便从健康的副本中克隆。
+
+如果是由于正在进行的大表更新或schema change引起的，根据错误定位受影响的分区，考虑删除并重新导入。
+
+如果问题仍然存在，尝试重启FE和有问题的BE；如果仍然无效，重启所有BEs。
+
+## 9. 为什么DELETE操作失败并显示 “failed to execute delete, transaction id xxx, timeout(ms) 30000”？
+
+将FE配置 `load_straggler_wait_second` 的值增加到600（默认值：300）。
+
+## 10. 如何处理错误 “StarRocks planner use long time 3000 ms …”？
+
+SQL可能过于复杂。增加会话变量 `new_planner_optimize_timeout` 的值。
+
+## 11. 如何解决错误 “Primary-key index exceeds the limit.”？
+
+这是因为主键索引超过了内存限制。您可以通过将表属性 `enable_persistent_index` 设置为 `true` 来启用持久化索引。
+
+## 12. 如何解决 “current running txns on db XXX is 100, larger than limit 100”？
+
+增加FE配置 `max_running_txn_num_per_db` 的值。

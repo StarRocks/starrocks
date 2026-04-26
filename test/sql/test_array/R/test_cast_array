@@ -33,6 +33,10 @@ select count(*) from (select @arr_str arr from (select t1.k3 from tbl t1 join tb
 -- result:
 100
 -- !result
+select /*+SET_VAR(pipeline_dop=100)*/ count(*) from (select @arr_str arr from (select t1.k3 from tbl t1 join tbl t2) t) t group by arr[1];
+-- result:
+100
+-- !result
 select count(*), array_length(array_agg(arr)) from (select @arr_str arr from (select t1.k3 from tbl t1) t) t group by arr[1];
 -- result:
 10	10

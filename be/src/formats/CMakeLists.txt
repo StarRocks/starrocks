@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
-add_library(Formats STATIC
+ADD_BE_LIB(Formats
         csv/array_converter.cpp
         csv/array_reader.cpp
         csv/boolean_converter.cpp
@@ -33,6 +33,7 @@ add_library(Formats STATIC
         csv/default_value_converter.cpp
         csv/string_converter.cpp
         csv/varbinary_converter.cpp
+        json/json_utils.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
@@ -57,6 +58,7 @@ add_library(Formats STATIC
         orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
         orc/orc_schema_builder.cpp
+        orc/lzo_decompressor_registration.cpp
         orc/utils.cpp
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
@@ -87,9 +89,12 @@ add_library(Formats STATIC
         parquet/column_read_order_ctx.cpp
         parquet/statistics_helper.cpp
         parquet/parquet_block_split_bloom_filter.cpp
-        parquet/variant.h
-        parquet/variant.cpp
+        parquet/iceberg_row_id_reader.cpp
+        parquet/row_source_reader.cpp
+        parquet/parquet_pos_reader.cpp
+        column_evaluator.cpp
         disk_range.hpp
+        file_writer.cpp
         )
 
 add_subdirectory(orc/apache-orc)

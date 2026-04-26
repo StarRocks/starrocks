@@ -24,4 +24,6 @@ public interface SSLChannel {
     int readAll(ByteBuffer buffer) throws IOException;
 
     void write(ByteBuffer buffer) throws IOException;
+
+    SSLDecoder createDecoder();
 }

@@ -77,6 +77,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "\"enable_persistent_index\" = \"true\"\n" +
                 ");");
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.runningUnitTest = false;
     }
 
     private static String removeSlotIds(String s) {
@@ -142,11 +143,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String expectString =
                 "TExpr(nodes:[TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR," +
                         " scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), " +
-                        "opcode:MULTIPLY, num_children:2, output_scale:-1, output_column:-1, has_nullable_child:true, " +
+                        "opcode:MULTIPLY, num_children:2, output_scale:-1, has_nullable_child:true, " +
                         "is_nullable:true, is_monotonic:true, is_index_only_filter:false), " +
                         "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                         "scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))]), num_children:0, " +
-                        "slot_ref:TSlotRef(slot_id:5, tuple_id:0), output_scale:-1, output_column:-1," +
+                        "slot_ref:TSlotRef(slot_id:5, tuple_id:0), output_scale:-1," +
                         " has_nullable_child:false, is_nullable:true, is_monotonic:true, is_index_only_filter:false)," +
                         " TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:3, scale:2))])," +
                         " num_children:0, decimal_literal:TDecimalLiteral(value:3.14, integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), " +
@@ -297,6 +298,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
     @Test
     public void testDecimal32Count() throws Exception {
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet = "count[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: BIGINT";
@@ -486,6 +488,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
     @Test
     public void testDecimalNullableProperties() throws Exception {
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql;
         String plan;
 
@@ -841,4 +844,3 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "result: DECIMAL64(13,0); args nullable: true; result nullable: true]"), plan);
     }
 }
-

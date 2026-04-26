@@ -21,8 +21,12 @@ package com.starrocks.sql.common;
  * For list partition, it can be {@code List<List<String>>} to represent the list values of the partition.
  */
 public abstract class PCell implements Comparable<PCell> {
-
-    public abstract  boolean isIntersected(PCell o);
+    public abstract boolean isIntersected(PCell o);
 
     public abstract int compareTo(PCell o);
+
+    @SuppressWarnings("unchecked")
+    public <T> T cast() {
+        return (T) this;
+    }
 }

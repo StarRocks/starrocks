@@ -1,4 +1,4 @@
--- name: test_disable_compaction @sequential
+-- name: test_disable_compaction @sequential @native
 create database test_disable_compaction;
 use test_disable_compaction;
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* * * * *');
@@ -17,12 +17,12 @@ create table t(k int, v int) primary key(k)  properties('base_compaction_forbidd
 create table t(k int, v int) primary key(k);
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
 
--- name: test_invalid_cron @sequential
+-- name: test_invalid_cron @sequential @native
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='5 8-18 * * *');
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='-1 * * * *');
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* * * * 0');
 
--- name: test_create_alter_compaction_control @sequential
+-- name: test_create_alter_compaction_control @sequential @native
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* 8-18 * * *');
 show create table t;
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');

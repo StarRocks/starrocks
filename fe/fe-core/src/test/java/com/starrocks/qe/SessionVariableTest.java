@@ -13,6 +13,9 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.thrift.TBinaryEncodingFormat;
+import com.starrocks.thrift.TBinaryEncodingLevel;
+import com.starrocks.thrift.TQueryOptions;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -82,5 +85,94 @@ public class SessionVariableTest {
                     e.getMessage().contains("Legal values of lake_bucket_assign_mode are elastic|balance"),
                     e.getMessage());
         }
+    }
+
+    @Test
+    public void testSetEnableInsertPartialUpdate() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableInsertPartialUpdate(true);
+        Assertions.assertTrue(sessionVariable.isEnableInsertPartialUpdate());
+
+        sessionVariable.setEnableInsertPartialUpdate(false);
+        Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
+    }
+
+    @Test
+    public void testConnectorSinkShuffleModeBackwardCompatibility() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // Default mode is AUTO
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.AUTO,
+                sessionVariable.getConnectorSinkShuffleMode());
+
+        // Backward compatibility: enableIcebergSinkGlobalShuffle implies FORCE when mode stays at default AUTO.
+        com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "enableIcebergSinkGlobalShuffle", true);
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.FORCE,
+                sessionVariable.getConnectorSinkShuffleMode());
+
+        // Explicitly set mode to NEVER should not be affected by legacy boolean.
+        com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "connectorSinkShuffleMode", "never");
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.NEVER,
+                sessionVariable.getConnectorSinkShuffleMode());
+    }
+
+    @Test
+    public void testEnableMVPlanner() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // Test default value
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+
+        // Deprecated compatibility flag should remain inert.
+        sessionVariable.setMVPlanner(true);
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+
+        sessionVariable.setMVPlanner(false);
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+    }
+
+    @Test
+    public void testEnableIncrementalRefreshMvIsNoOp() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(true);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(false);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+    }
+
+    @Test
+    public void testBinaryEncodingDefaultsAndToThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.HEX, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.NESTED, queryOptions.getBinary_encoding_level());
+    }
+
+    @Test
+    public void testBinaryEncodingSettersNormalizeAndValidate() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        sessionVariable.setBinaryEncodingFormat("BASE64");
+        sessionVariable.setBinaryEncodingLevel("ALL");
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+        Assertions.assertEquals("base64", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("all", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.BASE64, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.ALL, queryOptions.getBinary_encoding_level());
+
+        sessionVariable.setBinaryEncodingFormat(null);
+        sessionVariable.setBinaryEncodingLevel(null);
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingFormat("invalid"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingLevel("invalid"));
     }
 }

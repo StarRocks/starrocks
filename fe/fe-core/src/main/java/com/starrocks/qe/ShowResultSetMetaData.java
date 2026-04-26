@@ -19,9 +19,9 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.type.ScalarType;
 
 import java.util.List;
 

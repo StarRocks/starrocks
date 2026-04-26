@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/fd_input_stream.h"
+#include "io/core/fd_input_stream.h"
 
 #include <fcntl.h>
 #include <gtest/gtest.h>
@@ -21,9 +21,9 @@
 
 #include <cstdlib>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "common/logging.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks::io {
 

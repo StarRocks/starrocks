@@ -22,16 +22,17 @@
 #include <string>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/compiler_util.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "formats/parquet/level_codec.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "simd/simd.h"
 
 namespace tparquet {
 class ColumnChunk;
@@ -203,7 +204,7 @@ Status RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size
         ss << ", " << rep_levels[i];
     }
     ss << "]";
-    VLOG_FILE << ss.str();
+    VLOG_ROW << ss.str();
 #endif
 
     if (!_meet_first_record) {
@@ -231,7 +232,7 @@ Status RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size
       //  we have read all the records in this column chunk.
     // }
 
-    VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;
+    VLOG_ROW << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;
     *num_rows = rows_read;
     *num_levels_parsed = levels_pos;
     return Status::OK();
@@ -266,6 +267,14 @@ Status OptionalStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_
     *num_levels_parsed = std::min(*num_rows, avail_levels);
     _consume_levels(*num_levels_parsed);
     return Status::OK();
+}
+
+const FilterData* StoredColumnReaderImpl::_convert_filter_row_to_value(const Filter* filter, size_t row_readed) {
+    if (!filter || !config::parquet_push_down_filter_to_decoder_enable) {
+        return nullptr;
+    }
+    // based on benchmark we added some threshold here, selectivity < 0.2
+    return SIMD::count_nonzero(*filter) * 1.0 / filter->size() < 0.2 ? filter->data() + row_readed : nullptr;
 }
 
 Status StoredColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field,

@@ -269,6 +269,11 @@ public class EmptyValueTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
         assertContains(plan, "0:EMPTYSET");
+
+        connectContext.getSessionVariable().setCboDisabledRules("TF_PRUNE_EMPTY_JOIN, TF_PRUNE_EMPTY_SCAN");
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "EMPTYSET");
+        connectContext.getSessionVariable().setCboDisabledRules("");
     }
 
     @Test

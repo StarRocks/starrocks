@@ -1,0 +1,48 @@
+-- name: test_alter_database_storage_volume @cloud
+CREATE STORAGE VOLUME IF NOT EXISTS sv_test01_${uuid0} type = s3 LOCATIONS = ('s3://${oss_bucket}/test_alter_db_storage_volume1') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="${oss_endpoint}", "aws.s3.region"="${oss_region}", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="true", "aws.s3.access_key" = "${oss_ak}", "aws.s3.secret_key" = "${oss_sk}");
+-- result:
+-- !result
+CREATE STORAGE VOLUME IF NOT EXISTS sv_test02_${uuid1} type = s3 LOCATIONS = ('s3://${oss_bucket}/test_alter_db_storage_volume2') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="${oss_endpoint}", "aws.s3.region"="${oss_region}", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="true", "aws.s3.access_key" = "${oss_ak}", "aws.s3.secret_key" = "${oss_sk}");
+-- result:
+-- !result
+CREATE DATABASE db${uuid0} PROPERTIES("storage_volume" = "sv_test01_${uuid0}");
+-- result:
+-- !result
+CREATE TABLE db${uuid0}.t1 (a int, b int) DISTRIBUTED BY HASH(a) BUCKETS 1;
+-- result:
+-- !result
+SHOW CREATE TABLE db${uuid0}.t1;
+-- result:
+[REGEX].*storage_volume. = .sv_test01_.*
+-- !result
+ALTER DATABASE db${uuid0} SET("storage_volume" = "sv_test02_${uuid1}");
+-- result:
+-- !result
+CREATE TABLE db${uuid0}.t2 (a int, b int) DISTRIBUTED BY HASH(a) BUCKETS 1;
+-- result:
+-- !result
+SHOW CREATE TABLE db${uuid0}.t2;
+-- result:
+[REGEX].*storage_volume. = .sv_test02_.*
+-- !result
+SHOW CREATE TABLE db${uuid0}.t1;
+-- result:
+[REGEX].*storage_volume. = .sv_test01_.*
+-- !result
+ALTER DATABASE db${uuid0} SET("storage_volume" = "builtin_storage_volume");
+-- result:
+-- !result
+DROP DATABASE db${uuid0} FORCE;
+-- result:
+-- !result
+shell: sleep 5
+-- result:
+0
+
+-- !result
+DROP STORAGE VOLUME sv_test01_${uuid0};
+-- result:
+-- !result
+DROP STORAGE VOLUME sv_test02_${uuid1};
+-- result:
+-- !result

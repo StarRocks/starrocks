@@ -22,8 +22,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -34,10 +34,10 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ShowAnalyzeStatusStmt extends EnhancedShowStmt {
+public class ShowAnalyzeStatusStmt extends ShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
 
-    public ShowAnalyzeStatusStmt(Predicate predicate, List<OrderByElement> orderByElements,
+    public ShowAnalyzeStatusStmt(Expr predicate, List<OrderByElement> orderByElements,
                                  LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;

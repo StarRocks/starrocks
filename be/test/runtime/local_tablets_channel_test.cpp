@@ -17,11 +17,20 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/brpc/reusable_closure.h"
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
@@ -30,15 +39,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/failpoint/fail_point.h"
-#include "util/reusable_closure.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
-class SecondaryReplicasWaiterTestCase;
+struct SecondaryReplicasWaiterTestCase;
 
 class LocalTabletsChannelTest : public testing::Test {
 protected:
@@ -63,12 +67,15 @@ protected:
 
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr);
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), nullptr, _load_id, _txn_id, string(),
-                                                      1000, std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), nullptr,
+                                                      ExecEnv::GetInstance()->diagnose_daemon(),
+                                                      ExecEnv::GetInstance()->brpc_stub_cache(), _load_id, _txn_id,
+                                                      string(), 1000, std::move(load_mem_tracker));
         _tablets_channel = new_local_tablets_channel(_load_channel.get(), {_load_id, _sink_id, _index_id},
-                                                     _load_channel->mem_tracker(), _root_profile.get());
+                                                     _load_channel->mem_tracker(), _root_profile.get(),
+                                                     ExecEnv::GetInstance()->brpc_stub_cache());
     }
 
     void TearDown() override {
@@ -216,12 +223,12 @@ protected:
 
     std::vector<PNetworkAddress> _nodes;
     PUniqueId _load_id;
-    int64_t _txn_id;
-    int64_t _db_id;
-    int64_t _table_id;
-    int64_t _partition_id;
-    int32_t _index_id;
-    int32_t _sink_id;
+    int64_t _txn_id = 0;
+    int64_t _db_id = 0;
+    int64_t _table_id = 0;
+    int64_t _partition_id = 0;
+    int32_t _index_id = 0;
+    int32_t _sink_id = 0;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<RuntimeProfile> _root_profile;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
@@ -234,9 +241,17 @@ using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, ReusableClosure<PL
 
 TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     _create_tablets(1);
-    // open as a secondary replica of 3 replicas
+
     ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
-    _open_channel(_nodes[1].node_id(), {replica_info});
+    PTabletWriterOpenRequest request;
+    _create_open_request(_nodes[1].node_id(), {replica_info}, &request);
+    // turn off _is_replicated_storage to avoid launching secondary waiter
+    request.set_is_replicated_storage(false);
+
+    std::shared_ptr<OlapTableSchemaParam> schema_param(new OlapTableSchemaParam());
+    ASSERT_OK(schema_param->init(request.schema()));
+    PTabletWriterOpenResult response;
+    ASSERT_OK(_tablets_channel->open(request, &response, schema_param, false));
 
     PTabletWriterAddChunkRequest add_chunk_request;
     add_chunk_request.mutable_id()->CopyFrom(_load_id);
@@ -247,6 +262,7 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     add_chunk_request.set_packet_seq(0);
     add_chunk_request.set_timeout_ms(60000);
 
+    // NOTE: this is a malformed request, because the chunk is nullptr but tablet_ids is not empty().
     auto non_exist_tablet_id = _tablets[0]->tablet_id() + 1;
     add_chunk_request.add_tablet_ids(non_exist_tablet_id);
 
@@ -255,6 +271,52 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
     ASSERT_TRUE(close_channel); // set_eos(true)
+    _tablets_channel->abort();
+}
+
+TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet_for_chunk_rows) {
+    // create 3 tablets
+    _create_tablets(3);
+
+    // open tablets[0] & tablets[1]
+    std::vector<ReplicaInfo> replica_infos;
+    replica_infos.emplace_back(ReplicaInfo{_tablets[0]->tablet_id(), _nodes});
+    replica_infos.emplace_back(ReplicaInfo{_tablets[1]->tablet_id(), _nodes});
+    PTabletWriterOpenRequest request;
+    _create_open_request(_nodes[1].node_id(), replica_infos, &request);
+    // Turn off _is_replicated_storage to avoid launching secondary waiter
+    request.set_is_replicated_storage(false);
+
+    std::shared_ptr<OlapTableSchemaParam> schema_param(new OlapTableSchemaParam());
+    ASSERT_OK(schema_param->init(request.schema()));
+    PTabletWriterOpenResult response;
+    ASSERT_OK(_tablets_channel->open(request, &response, schema_param, false));
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sink_id(_sink_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
+
+    {
+        int num_rows = 10;
+        auto chunk = _generate_data(num_rows, _tablets[0]->tablet_schema());
+        for (int i = 0; i < num_rows; i++) {
+            // tablets[2] not opened, so every 3 rows, there will be one row whose tablet_id can't be found.
+            add_chunk_request.add_tablet_ids(_tablets[i % 3]->tablet_id());
+            add_chunk_request.add_partition_ids(_partition_id);
+        }
+        bool close_channel = false;
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+        // chunk is released when out of the scope, simulating the resource release after RPC done.
+    }
+
+    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
     _tablets_channel->abort();
 }
 
@@ -385,20 +447,22 @@ TEST_F(LocalTabletsChannelTest, test_primary_replica_profile) {
             << add_chunk_response.status().error_msgs(0);
     ASSERT_TRUE(close_channel);
 
-    _tablets_channel->update_profile();
-    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
-    ASSERT_NE(nullptr, profile);
-    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
-    ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
-    ASSERT_TRUE(profile->get_counter("SubmitWriteTaskTime")->value() > 0);
-    ASSERT_TRUE(profile->get_counter("SubmitCommitTaskTime")->value() > 0);
-    ASSERT_EQ(0, profile->get_counter("WaitDrainSenderTime")->value());
-    ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
-    auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
-    ASSERT_NE(nullptr, primary_replicas_profile);
-    ASSERT_EQ(1, primary_replicas_profile->get_counter("TabletsNum")->value());
+    // profile should be same if there is no new data no matter how many times we update the profile
+    for (int i = 0; i < 3; i++) {
+        _tablets_channel->update_profile();
+        auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
+        ASSERT_NE(nullptr, profile);
+        ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+        ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
+        ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+        auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
+        ASSERT_NE(nullptr, primary_replicas_profile);
+        ASSERT_EQ(1, primary_replicas_profile->get_counter("TabletsNum")->value());
+        ASSERT_EQ(2, primary_replicas_profile->get_counter("WriterTaskCount")->value());
+        ASSERT_EQ(chunk.num_rows(), primary_replicas_profile->get_counter("RowCount")->value());
+        ASSERT_EQ(1, primary_replicas_profile->get_counter("MemtableInsertCount")->value());
+        ASSERT_EQ(1, primary_replicas_profile->get_counter("MemtableFlushedCount")->value());
+    }
 }
 
 TEST_F(LocalTabletsChannelTest, test_secondary_replica_profile) {
@@ -414,6 +478,33 @@ TEST_F(LocalTabletsChannelTest, test_secondary_replica_profile) {
     auto* secondary_replicas_profile = profile->get_child("SecondaryReplicas");
     ASSERT_NE(nullptr, secondary_replicas_profile);
     ASSERT_EQ(1, secondary_replicas_profile->get_counter("TabletsNum")->value());
+
+    auto& delta_writers = _tablets_channel->TEST_delta_writers();
+    ASSERT_EQ(1, delta_writers.size());
+    auto* async_writer = delta_writers.begin()->second.get();
+    ASSERT_NE(nullptr, async_writer);
+    auto* delta_writer = async_writer->writer();
+    ASSERT_NE(nullptr, delta_writer);
+
+    auto& writer_stat = const_cast<DeltaWriterStat&>(delta_writer->get_writer_stat());
+    writer_stat.row_count.store(77, std::memory_order_relaxed);
+    writer_stat.add_segment_count.store(9, std::memory_order_relaxed);
+    writer_stat.add_segment_time_ns.store(10000, std::memory_order_relaxed);
+    writer_stat.add_segment_io_time_ns.store(4300, std::memory_order_relaxed);
+    writer_stat.add_segment_data_size.store(5500, std::memory_order_relaxed);
+
+    // profile should be same if there is no new data no matter how many times we update the profile
+    for (int i = 0; i < 3; i++) {
+        _tablets_channel->update_profile();
+        profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
+        ASSERT_NE(nullptr, profile);
+        secondary_replicas_profile = profile->get_child("SecondaryReplicas");
+        ASSERT_NE(nullptr, secondary_replicas_profile);
+        ASSERT_EQ(77, secondary_replicas_profile->get_counter("RowCount")->value());
+        ASSERT_EQ(9, secondary_replicas_profile->get_counter("AddSegmentCount")->value());
+        ASSERT_EQ(4300, secondary_replicas_profile->get_counter("AddSegmentIOTime")->value());
+        ASSERT_EQ(5500, secondary_replicas_profile->get_counter("DataSize")->value());
+    }
 }
 
 using RpcTabletWriterCancelTuple =
@@ -839,6 +930,77 @@ TEST_F(LocalTabletsChannelTest, test_get_replica_status) {
     ASSERT_EQ(_tablets[3]->tablet_id(), result4.replica_statuses(3).tablet_id());
     ASSERT_EQ(LoadReplicaStatePB::NOT_PRESENT, result4.replica_statuses(3).state());
     ASSERT_EQ("can't find delta writer", result4.replica_statuses(3).message());
+}
+
+// Reproducer for the use-after-free in LoadChannel::get_load_replica_status.
+//
+// Root cause: the temporary shared_ptr returned by get_tablets_channel() is destroyed at
+// the semicolon, leaving only a raw pointer.  If another thread erases the map entry before
+// the raw pointer is used, the LocalTabletsChannel is freed and the subsequent method call
+// is a heap-use-after-free (caught by ASAN).
+//
+// The fix is to keep the shared_ptr in a named local variable so its lifetime covers the
+// entire call.
+TEST_F(LocalTabletsChannelTest, test_get_load_replica_status_use_after_free) {
+    _create_tablets(2);
+
+    std::vector<ReplicaInfo> replica_infos;
+    for (auto& tablet : _tablets) {
+        replica_infos.push_back({tablet->tablet_id(), {_nodes[0]}});
+    }
+
+    // Open the channel through LoadChannel so it is registered in _tablets_channels.
+    PTabletWriterOpenRequest open_request;
+    _create_open_request(0 /*node_id = primary*/, replica_infos, &open_request);
+    PTabletWriterOpenResult open_response;
+    LoadChannelOpenContext ctx;
+    ctx.cntl = nullptr;
+    ctx.request = &open_request;
+    ctx.response = &open_response;
+    ctx.done = nullptr;
+    ctx.receive_rpc_time_ns = MonotonicNanos();
+    _load_channel->open(ctx);
+    ASSERT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
+
+    TabletsChannelKey channel_key(_load_id, _sink_id, _index_id);
+    ASSERT_NE(nullptr, _load_channel->get_tablets_channel(channel_key));
+
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("LoadChannel::get_load_replica_status::after_raw_ptr");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    bool sync_triggered = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LoadChannel::get_load_replica_status::after_raw_ptr", [&](void*) {
+        // Simulate a concurrent channel close: erase the map entry, dropping
+        // the last shared_ptr reference from the channel manager's perspective.
+        //
+        // Buggy code  : local_tablets_channel is now a dangling pointer ->
+        //               ASAN reports heap-use-after-free on the next line.
+        // Fixed code  : the caller holds a named shared_ptr, so ref-count
+        //               stays >= 1 and the object remains alive.
+        std::lock_guard l(_load_channel->_lock);
+        _load_channel->_tablets_channels.erase(channel_key);
+        sync_triggered = true;
+    });
+
+    PLoadReplicaStatusRequest status_request;
+    status_request.mutable_load_id()->CopyFrom(_load_id);
+    status_request.set_txn_id(_txn_id);
+    status_request.set_index_id(_index_id);
+    status_request.set_sink_id(_sink_id);
+    status_request.set_node_id(0);
+    for (auto& tablet : _tablets) {
+        status_request.add_tablet_ids(tablet->tablet_id());
+    }
+
+    PLoadReplicaStatusResult status_response;
+    _load_channel->get_load_replica_status("127.0.0.1", &status_request, &status_response);
+
+    ASSERT_TRUE(sync_triggered);
+    // After the fix the call completes successfully; each tablet should have a status entry.
+    ASSERT_EQ(static_cast<int>(_tablets.size()), status_response.replica_statuses_size());
 }
 
 } // namespace starrocks

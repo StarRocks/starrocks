@@ -15,14 +15,13 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
 // Alter view statement
 public class AlterViewStmt extends DdlStmt {
-    private final TableName tableName;
+    private TableRef tableRef;
     private final boolean security;
     private final AlterDialectType alterDialect;
     private final Map<String, String> properties;
@@ -34,10 +33,10 @@ public class AlterViewStmt extends DdlStmt {
         MODIFY
     }
 
-    public AlterViewStmt(TableName tableName, boolean security, AlterDialectType alterDialect, Map<String, String> properties,
+    public AlterViewStmt(TableRef tableRef, boolean security, AlterDialectType alterDialect, Map<String, String> properties,
                          AlterViewClause alterClause, NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.security = security;
         this.alterDialect = alterDialect;
         this.properties = properties;
@@ -48,26 +47,31 @@ public class AlterViewStmt extends DdlStmt {
         AlterViewClause alterViewClause = new AlterViewClause(
                 stmt.getColWithComments(), stmt.getQueryStatement(), NodePosition.ZERO);
         alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
+        alterViewClause.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
         alterViewClause.setColumns(stmt.getColumns());
         alterViewClause.setComment(stmt.getComment());
-        return new AlterViewStmt(stmt.getTableName(), stmt.isSecurity(), AlterDialectType.NONE, Maps.newHashMap(),
+        return new AlterViewStmt(stmt.getTableRef(), stmt.isSecurity(), AlterDialectType.NONE, Maps.newHashMap(),
                 alterViewClause, NodePosition.ZERO);
     }
 
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
     public String getCatalog() {
-        return tableName.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return tableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTable() {
-        return tableName.getTbl();
-    }
-
-    public TableName getTableName() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public boolean isSecurity() {
@@ -88,6 +92,16 @@ public class AlterViewStmt extends DdlStmt {
 
     public AlterViewClause getAlterClause() {
         return alterClause;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return alterClause == null ? null : alterClause.getOriginalViewDefineSql();
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        if (alterClause != null) {
+            alterClause.setOriginalViewDefineSql(originalViewDefineSql);
+        }
     }
 
     @Override

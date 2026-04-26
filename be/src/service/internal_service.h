@@ -36,13 +36,13 @@
 
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
+#include <google/protobuf/service.h>
 
+#include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/countdown_latch.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace brpc {
@@ -52,7 +52,6 @@ class Controller;
 namespace starrocks {
 
 class TExecPlanFragmentParams;
-class TMVCommitEpochTask;
 class ExecEnv;
 
 template <typename T>
@@ -197,6 +196,11 @@ public:
     void update_transaction_state(google::protobuf::RpcController* controller,
                                   const PUpdateTransactionStateRequest* request,
                                   PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
+    void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
+                google::protobuf::Closure* done) override;
+
+    void lookup_close(google::protobuf::RpcController* controller, const PLookUpCloseRequest* request,
+                      PLookUpCloseResponse* response, google::protobuf::Closure* done) override;
 
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
@@ -239,16 +243,12 @@ private:
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
-    // MV Maintenance task
-    Status _submit_mv_maintenance_task(brpc::Controller* cntl);
-    Status _mv_start_maintenance(const TMVMaintenanceTasks& task);
-    Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
-    Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
-    Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
-
     // short circuit
     Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                PExecShortCircuitResult* response);
+
+    Status _prepare_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
+                                              const TExecPlanFragmentParams& t_unique_request);
 
 protected:
     ExecEnv* _exec_env;

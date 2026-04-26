@@ -120,6 +120,8 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
             builder.predicates = operator.predicates;
             builder.tableFullMORParams = operator.tableFullMORParams;
             builder.morParams = operator.morParams;
+            builder.globalDicts = operator.globalDicts;
+            builder.globalDictsExpr = operator.globalDictsExpr;
             return this;
         }
 

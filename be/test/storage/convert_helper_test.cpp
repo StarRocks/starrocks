@@ -19,13 +19,13 @@
 #include <string>
 #include <vector>
 
-#include "runtime/decimalv3.h"
+#include "base/testutil/parallel_test.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "testutil/parallel_test.h"
-#include "util/json.h"
+#include "types/decimalv3.h"
+#include "types/json_value.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -345,7 +345,7 @@ PARALLEL_TEST(ConvertHelperTest, testTimestampToDatetimeColumn) {
 
 template <LogicalType field_type>
 static void test_convert_same_numeric_types() {
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
 
     auto conv = get_field_converter(field_type, field_type);
     CppType values[5] = {std::numeric_limits<CppType>::lowest(), -123, 0, 123, std::numeric_limits<CppType>::max()};

@@ -14,9 +14,14 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "runtime/result_queue_mgr.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -59,7 +64,7 @@ bool MemoryScratchSinkOperator::pending_finish() const {
     // After set_finishing, there may be data that has not been sent.
     // We need to ensure that all remaining data are put into the queue.
     const_cast<MemoryScratchSinkOperator*>(this)->try_to_put_sentinel();
-    return !(_is_finished && _pending_result == nullptr && _has_put_sentinel);
+    return !(_is_finished && ((_pending_result == nullptr && _has_put_sentinel) || _queue->is_shutdown()));
 }
 
 Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
@@ -124,19 +129,20 @@ MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, c
 
 Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     _prepare_id_to_col_name_map();
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
 
     TUniqueId fragment_instance_id = state->fragment_instance_id();
-    state->exec_env()->result_queue_mgr()->create_queue(fragment_instance_id, &_queue);
+    auto* query_execution_services = state->query_execution_services();
+    query_execution_services->runtime->result_queue_mgr->create_queue(fragment_instance_id, &_queue);
     return Status::OK();
 }
 
 void MemoryScratchSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

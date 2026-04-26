@@ -5,6 +5,9 @@ select date_add('day', -1, date(concat(substr('2023-12-10', 1, 7), '-01')));
 SELECT date_add('day', -1, TIMESTAMP '2020-03-01 00:00:00');
 
 select date('2023-12-10')-interval '1' day;
+select date('2023-12-10') - interval '1' day * 3;
+select date('2023-12-10') - 3 * interval '1' day;
+select date('2023-12-10') - interval '6' day / 3;
 select date('2023-12-10 01:00:00')-interval '1' day;
 
 SELECT date_add('day', -1, '2023-12-10');

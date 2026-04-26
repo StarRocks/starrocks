@@ -39,12 +39,17 @@
 #include <sstream>
 #include <utility>
 
-#include "common/config.h"
+#include "base/string/string_util.h"
+#include "base/system/errno.h"
+#include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
+#include "common/config_storage_fwd.h"
+#include "common/system/backend_options.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
@@ -55,10 +60,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/utils.h" // for check_dir_existed
-#include "util/defer_op.h"
-#include "util/errno.h"
-#include "util/monotime.h"
-#include "util/string_util.h"
 
 using strings::Substitute;
 
@@ -69,13 +70,11 @@ static const char* const kTestFilePath = "/.testfile";
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
                  TxnManager* txn_manager)
         : _path(path),
-          _available_bytes(0),
-          _disk_capacity_bytes(0),
+
           _storage_medium(storage_medium),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
-          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
-          _current_shard(0) {}
+          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)) {}
 
 DataDir::~DataDir() {
     delete _id_generator;
@@ -83,7 +82,7 @@ DataDir::~DataDir() {
 }
 
 Status DataDir::init(bool read_only) {
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_fs->path_exists(_path));
     std::string align_tag_path = _path + ALIGN_TAG_PREFIX;
     if (access(align_tag_path.c_str(), F_OK) == 0) {
@@ -296,28 +295,8 @@ void DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status =
-            TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
-    if (load_tablet_status.is_time_out()) {
-        LOG(WARNING) << "load tablets from rocksdb timeout, try to compact meta and retry. path: " << _path;
-        Status s = _kv_store->compact();
-        if (!s.ok()) {
-            // We don't need to make sure compact MUST success. Just ignore the error.
-            LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
-        } else {
-            LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
-        }
-        for (auto tablet_id : tablet_ids) {
-            Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
-            if (!s.ok()) {
-                // Only print log, do not return error. Later load tablet from rocksdb can handle this.
-                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
-            }
-        }
-        tablet_ids.clear();
-        failed_tablet_ids.clear();
-        load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
-    }
+    Status load_tablet_status = TabletMetaManager::walk_with_compact_on_timeout(_kv_store, load_tablet_func,
+                                                                                config::load_tablet_timeout_seconds);
 
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
@@ -387,8 +366,8 @@ void DataDir::load() {
             return true;
         }
         RowsetSharedPtr rowset;
-        Status create_status =
-                RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(), rowset_meta, &rowset);
+        Status create_status = RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(),
+                                                            rowset_meta, &rowset, tablet->data_dir()->get_meta());
         if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
@@ -402,10 +381,9 @@ void DataDir::load() {
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
                 rowset_meta->set_skip_tablet_schema(true);
             }
-            Status commit_txn_status = _txn_manager->commit_txn(
-                    _kv_store, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
-                    rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true,
-                    tablet->tablet_state() != TABLET_RUNNING);
+            Status commit_txn_status = _txn_manager->commit_txn(tablet, rowset_meta->partition_id(),
+                                                                rowset_meta->txn_id(), rowset_meta->load_id(), rowset,
+                                                                true, tablet->tablet_state() != TABLET_RUNNING);
             if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
                              << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();

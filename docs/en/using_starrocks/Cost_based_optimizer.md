@@ -212,7 +212,8 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | When the Auto Full Collection task hits the sampled collection policy, if the table has an unusually large number of Predicate Columns and exceeds this configuration item, the task will not switch to full collection of the Predicate Columns, but maintains  to be the sampled collection of all columns. This configuration item controls the maximum value of Predicate Column for this behavior. |
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | If the number of columns in the table exceeds this configuration during automatic collection, only the column statistics for the Predicate Column will be collected. |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | The interval at which FE synchronize and persists statistics of Predicate Column. |
-| statistic_predicate_columns_ttl_hours       | LONG    | 24       | The elimination time of the Predicate Column statistics cached in FE. |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | The TTL in hours for Predicate Column entries in FE; vacuum removes older data. A negative value disables vacuum. |
+| enable_predicate_columns_collection         | BOOLEAN | TRUE     | Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization. |
 | enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | Whether to enable manual collection for the NDV information of the ARRAY type. |
 | enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | Whether to enable automatic collection for the NDV information of the ARRAY type. |
 
@@ -249,7 +250,7 @@ Parameter description:
   - `PREDICATE COLUMNS`: Collect statistics from only Predicate Columns. Supported since v3.5.0.
   - `MULTIPLE COLUMNS`: Collects joint statistics from the specified multiple columns. Currently, only manual synchronous collection of multiple columns is supported. The number of columns for manual statistics collection cannot exceed `statistics_max_multi_column_combined_num`, the default value is `10`. Supported since v3.5.0.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
+- `WITH SYNC | ASYNC MODE`: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE STATUS.
 
@@ -317,19 +318,20 @@ Parameter description:
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
+- `WITH SYNC | ASYNC MODE`: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
 - `WITH N BUCKETS`: `N` is the number of buckets for histogram collection. If not specified, the default value in `fe.conf` is used.
 
 - PROPERTIES: custom parameters. If `PROPERTIES` is not specified, the default settings in `fe.conf` are used.
 
-| **PROPERTIES**                 | **Type** | **Default value** | **Description**                                              |
-| ------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
-| statistic_sample_collect_rows  | INT      | 200000            | The minimum number of rows to collect. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
-| histogram_buckets_size         | LONG     | 64                | The default bucket number for a histogram.                   |
-| histogram_mcv_size             | INT      | 100               | The number of most common values (MCV) for a histogram.      |
-| histogram_sample_ratio         | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
-| histogram_max_sample_row_count | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
+| **PROPERTIES**                    | **Type** | **Default value** | **Description**                                              |
+| --------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
+| statistic_sample_collect_rows     | INT      | 200000            | The minimum number of rows to collect. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| histogram_buckets_size            | LONG     | 64                | The default bucket number for a histogram.                   |
+| histogram_mcv_size                | INT      | 100               | The number of most common values (MCV) for a histogram.      |
+| histogram_sample_ratio            | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
+| histogram_max_sample_row_count    | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
+| histogram_collect_bucket_ndv_mode | STRING   | none              | The mode for estimating the number of distinct values (NDV) per histogram bucket. `none` (default, no distinct count collected), `hll` (uses HyperLogLog for accurate estimation), or `sample` (uses a low overhead sample-based estimator). |
 
 The number of rows to collect for a histogram is controlled by multiple parameters. It is the larger value between `statistic_sample_collect_rows` and table row count * `histogram_sample_ratio`. The number cannot exceed the value specified by `histogram_max_sample_row_count`. If the value is exceeded, `histogram_max_sample_row_count` takes precedence.
 
@@ -346,6 +348,12 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1,v2 WITH 32 BUCKETS
 PROPERTIES(
    "histogram_mcv_size" = "32",
    "histogram_sample_ratio" = "0.5"
+);
+
+-- Collect histograms on v3 using the 'hll' mode for accurate distinct count estimation per bucket.
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
+PROPERTIES(
+   "histogram_collect_bucket_ndv_mode" = "hll"
 );
 ```
 

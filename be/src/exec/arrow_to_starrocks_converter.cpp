@@ -24,21 +24,25 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
+#ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
+#endif
+#include "base/utility/pred_guard.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "runtime/runtime_state_helper.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
-#include "util/pred_guard.h"
-#include "util/value_generator.h"
+#include "types/type_descriptor.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 
@@ -163,13 +167,13 @@ void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, s
     }
 }
 
-template <LogicalType LT, typename = StringOrBinaryGaurd<LT>>
+template <LogicalType LT, typename = StringOrBinaryGuard<LT>>
 static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY)
                                                              ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                              : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGaurd<LT>> {
+struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGuard<LT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<LT>;
@@ -343,6 +347,95 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
     }
 };
 
+// Arrow StringView converter specialization.
+//
+// StringView (Arrow Utf8View / BinaryView) stores strings in a split layout:
+//   - Inline:  strings <= 12 bytes live directly in the 16-byte view struct
+//   - Out-of-line: strings > 12 bytes reference data in one of potentially many
+//     variadic data buffers (not a single contiguous offset buffer)
+//
+// This means the offset-based bulk-memcpy path (optimize_non_fixed_size_binary) used by
+// Binary/String types is NOT safe for StringView — it assumes a single contiguous data
+// buffer, which would silently corrupt out-of-line strings. Instead, we iterate per-element
+// using GetView(i), which correctly resolves both inline and out-of-line storage.
+//
+// An alternative would be to cast StringView -> String via arrow::compute::Cast() first,
+// producing a contiguous offset-based array, then reuse the existing Binary/String converter.
+// We avoid that because it copies the string data twice: once into an intermediate Arrow
+// String array, then again into BinaryColumn. The direct approach here copies once.
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, StringOrBinaryGuard<LT>> {
+    using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
+    using ColumnType = RunTimeColumnType<LT>;
+
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
+                        ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
+        auto* concrete_array = down_cast<const ArrowArrayType*>(array);
+        auto* concrete_column = down_cast<ColumnType*>(column);
+        auto* filter_data = (&chunk_filter->front()) + column_start_idx;
+        size_t max_length = binary_max_length<LT>;
+        if (ctx != nullptr) {
+            size_t type_len = ctx->current_slot->type().len;
+            if (type_len > 0) {
+                max_length = type_len;
+            }
+        }
+
+        concrete_column->reserve(concrete_column->size() + num_elements);
+        bool repeated = false;
+        // Unlike offset-based Binary/String arrays where null slots still have valid offsets,
+        // StringView null slots may contain an undefined 16-byte view struct per the Arrow spec.
+        // GetView() would dereference a garbage buffer_index for out-of-line views. When
+        // is_nullable=true, null_data already guards this. For is_nullable=false, we check once
+        // whether the source array has nulls and guard per-element only when needed.
+        // The framework's fill_filter() typically handles this upstream, but we guard here
+        // defensively since GetView() on a garbage view is a segfault, not a wrong result.
+        const bool needs_null_guard = !is_nullable && concrete_array->null_count() > 0;
+        // Per-element iteration: GetView(i) returns a std::string_view that transparently
+        // handles both inline views (data in the struct) and out-of-line views (pointer
+        // into a variadic buffer). This is O(n) per element but necessary for correctness.
+        for (size_t i = 0; i < num_elements; ++i) {
+            size_t array_idx = array_start_idx + i;
+            if constexpr (is_nullable) {
+                if (null_data[i] == DATUM_NULL) {
+                    concrete_column->append_default();
+                    continue;
+                }
+            }
+            if (needs_null_guard && concrete_array->IsNull(array_idx)) {
+                concrete_column->append_default();
+                // Regardless of fill_filter called or not, we are setting this idx to be filtered out.
+                filter_data[i] = 0;
+                continue;
+            }
+            auto sv = concrete_array->GetView(array_idx);
+            Slice s{sv.data(), sv.size()};
+            if (s.size > max_length) {
+                // String exceeds column's max length (VARCHAR limit or CHAR(N) width).
+                // How we handle it depends on nullable/strict mode:
+                //   - nullable + non-strict: convert to NULL (preserves row, loses value)
+                //   - strict or non-nullable: filter out the row and report the error once
+                concrete_column->append_default();
+                if constexpr (is_nullable && !is_strict) {
+                    null_data[i] = DATUM_NULL;
+                } else {
+                    filter_data[i] = 0;
+                    if (ctx != nullptr && !repeated) {
+                        repeated = true;
+                        std::string reason =
+                                strings::Substitute("string length $0 exceeds max length $1", sv.size(), max_length);
+                        ctx->report_error_message(reason, std::string(sv));
+                    }
+                }
+            } else {
+                concrete_column->append(s);
+            }
+        }
+        return Status::OK();
+    }
+};
+
 template <typename T>
 struct RectifyDecimalType {
     using type = T;
@@ -355,54 +448,68 @@ struct RectifyDecimalType<DecimalV2Value> {
 template <typename T>
 using rectify_decimal_type = typename RectifyDecimalType<T>::type;
 VALUE_GUARD(LogicalType, ArrowDecimalOfAnyVersionLTGuard, arrow_lt_is_decimal_of_any_version, TYPE_DECIMAL,
-            TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+            TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_DECIMAL256)
 
-template <LogicalType LT, bool is_nullable, bool is_strict>
-struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::Guard,
-                      ArrowDecimalOfAnyVersionLTGuard<LT>> {
-    static constexpr ArrowTypeId AT = ArrowTypeId::DECIMAL;
+VALUE_GUARD(ArrowTypeId, ArrowDecimalATGuard, at_is_decimal, ArrowTypeId::DECIMAL, ArrowTypeId::DECIMAL32,
+            ArrowTypeId::DECIMAL64, ArrowTypeId::DECIMAL256)
+
+template <ArrowTypeId AT>
+struct ArrowDecimalCppType {};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL32> {
+    using type = int32_t;
+};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL64> {
+    using type = int64_t;
+};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL> {
+    using type = int128_t;
+};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL256> {
+    using type = int256_t;
+};
+
+template <ArrowTypeId AT>
+using ArrowDecimalCppTypeT = typename ArrowDecimalCppType<AT>::type;
+
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrowDecimalATGuard<AT>, ArrowDecimalOfAnyVersionLTGuard<LT>> {
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
-    using ArrowCppType = ArrowTypeIdToCppType<AT>;
+    using SrcType = ArrowDecimalCppTypeT<AT>;
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
 
-    static void optimize_decimal128_with_same_scale(const arrow::Decimal128Array* array, size_t array_start_idx,
-                                                    size_t num_elements, ColumnType* column, size_t column_start_idx) {
-        column->resize(column->size() + num_elements);
-        auto* data = &column->get_data().front() + column_start_idx;
-        auto* arrow_data = array->raw_values() + sizeof(CppType) * array_start_idx;
-        strings::memcpy_inlined(data, arrow_data, sizeof(CppType) * num_elements);
-    }
-
     template <bool is_aligned>
-    static void copy_int128_t(int128_t* dst, const uint8_t* src) {
+    static void copy_decimal_value(SrcType* dst, const uint8_t* src) {
         if constexpr (is_aligned) {
-            *dst = *(int128_t*)src;
+            *dst = *reinterpret_cast<const SrcType*>(src);
         } else {
-            memcpy(dst, src, sizeof(int128_t));
+            memcpy(dst, src, sizeof(SrcType));
         }
-    }
-
-    static Status cast_error(int bits, int dst_scale, int src_scale, int128_t value) {
-        std::string s = DecimalV3Cast::to_string<int128_t>(value, decimal_precision_limit<int128_t>, src_scale);
-        return Status::InternalError(strings::Substitute("Decimal$0(*,$1) cannot hold $2", bits, dst_scale, s));
     }
 
     template <bool is_aligned, typename T>
     static Status fill_column(T* data, const uint8_t* arrow_data, const size_t num_elements, int dst_scale,
                               int src_scale, [[maybe_unused]] uint8_t* null_data,
                               [[maye_unused]] uint8_t* filter_data) {
-        int128_t datum;
+        SrcType datum;
         const uint8_t* arrow_p = arrow_data;
         int adjust_scale = dst_scale - src_scale;
         if (adjust_scale == 0) {
-            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(int128_t)) {
+            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(SrcType)) {
                 if constexpr (is_nullable) {
                     if (null_data[i] == DATUM_NULL) continue;
                 }
-                copy_int128_t<is_aligned>(&datum, arrow_p);
-                auto overflow = DecimalV3Cast::to_decimal_trivial<int128_t, T, true>(datum, data + i);
+                copy_decimal_value<is_aligned>(&datum, arrow_p);
+                auto overflow = DecimalV3Cast::to_decimal_trivial<SrcType, T, true>(datum, data + i);
                 if (UNLIKELY(overflow)) {
                     if constexpr (is_nullable && !is_strict) {
                         null_data[i] = DATUM_NULL;
@@ -413,12 +520,12 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
             }
         } else if (adjust_scale > 0) {
             const auto scale_factor = get_scale_factor<T>(adjust_scale);
-            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(int128_t)) {
+            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(SrcType)) {
                 if constexpr (is_nullable) {
                     if (null_data[i] == DATUM_NULL) continue;
                 }
-                copy_int128_t<is_aligned>(&datum, arrow_p);
-                auto overflow = DecimalV3Cast::to_decimal<int128_t, T, T, true, true>(datum, scale_factor, data + i);
+                copy_decimal_value<is_aligned>(&datum, arrow_p);
+                auto overflow = DecimalV3Cast::to_decimal<SrcType, T, T, true, true>(datum, scale_factor, data + i);
                 if (UNLIKELY(overflow)) {
                     if constexpr (is_nullable && !is_strict) {
                         null_data[i] = DATUM_NULL;
@@ -428,14 +535,14 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
                 }
             }
         } else {
-            const auto scale_factor = get_scale_factor<int128_t>(-adjust_scale);
-            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(int128_t)) {
+            const auto scale_factor = get_scale_factor<SrcType>(-adjust_scale);
+            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(SrcType)) {
                 if constexpr (is_nullable) {
                     if (null_data[i] == DATUM_NULL) continue;
                 }
-                copy_int128_t<is_aligned>(&datum, arrow_p);
+                copy_decimal_value<is_aligned>(&datum, arrow_p);
                 auto overflow =
-                        DecimalV3Cast::to_decimal<int128_t, T, int128_t, false, true>(datum, scale_factor, data + i);
+                        DecimalV3Cast::to_decimal<SrcType, T, SrcType, false, true>(datum, scale_factor, data + i);
                 if (UNLIKELY(overflow)) {
                     if constexpr (is_nullable && !is_strict) {
                         null_data[i] = DATUM_NULL;
@@ -462,18 +569,18 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
             dst_scale = concrete_column->scale();
         }
 
+        using RectifiedCppType = rectify_decimal_type<CppType>;
         if constexpr (!is_nullable) {
-            if constexpr (lt_is_decimal128<LT> || lt_is_decimalv2<LT>) {
-                if (src_scale == dst_scale) {
-                    optimize_decimal128_with_same_scale(concrete_array, array_start_idx, num_elements, concrete_column,
-                                                        column_start_idx);
-                    return Status::OK();
-                }
+            if (src_scale == dst_scale && sizeof(SrcType) == sizeof(RectifiedCppType)) {
+                concrete_column->resize(column->size() + num_elements);
+                auto* data = (RectifiedCppType*)(&concrete_column->get_data().front() + column_start_idx);
+                auto* arrow_data = concrete_array->raw_values() + array_start_idx * concrete_type->byte_width();
+                strings::memcpy_inlined(data, arrow_data, sizeof(RectifiedCppType) * num_elements);
+                return Status::OK();
             }
         }
 
         concrete_column->resize(column->size() + num_elements);
-        using RectifiedCppType = rectify_decimal_type<CppType>;
         auto* data = (RectifiedCppType*)(&concrete_column->get_data().front() + column_start_idx);
         auto* arrow_data = concrete_array->raw_values() + array_start_idx * concrete_type->byte_width();
         bool is_aligned = ((uintptr_t)arrow_data & (concrete_type->byte_width() - 1)) == 0;
@@ -817,7 +924,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
                         size_t chunk_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
                         ArrowConvertContext* ctx, ConvertFuncTree* conv_func) {
         auto* col_array = down_cast<ArrayColumn*>(column);
-        UInt32Column* col_offsets = col_array->offsets_column().get();
+        UInt32Column* col_offsets = col_array->offsets_column_raw_ptr();
 
         auto type_id = array->type_id();
         if (is_list(type_id)) {
@@ -839,10 +946,15 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
         }
 
         Filter child_chunk_filter;
-        child_chunk_filter.resize(col_array->elements_column()->size() + child_array_num_elements, 1);
+        auto* elements_col = col_array->elements_column_raw_ptr();
+        child_chunk_filter.resize(elements_col->size() + child_array_num_elements, 1);
+#ifndef __APPLE__
         return ParquetScanner::convert_array_to_column(conv_func->children[0].get(), child_array_num_elements,
-                                                       child_array, col_array->elements_column(), child_array_start_idx,
-                                                       col_array->elements_column()->size(), &child_chunk_filter, ctx);
+                                                       child_array, elements_col, child_array_start_idx,
+                                                       elements_col->size(), &child_chunk_filter, ctx);
+#else
+        return Status::NotSupported("Parquet nested type conversion is not supported on this build");
+#endif
     }
 };
 
@@ -853,11 +965,15 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
                         ArrowConvertContext* ctx, ConvertFuncTree* conv_func) {
         // offset
         auto* col_map = down_cast<MapColumn*>(column);
-        UInt32Column* col_offsets = col_map->offsets_column().get();
+        UInt32Column* col_offsets = col_map->offsets_column_raw_ptr();
         list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
         // keys, values
-        size_t kv_size[] = {col_map->keys().size(), col_map->values().size()};
-        ColumnPtr kv_columns[] = {col_map->keys_column(), col_map->values_column()};
+#ifndef __APPLE__
+        auto* keys_column = col_map->keys_column_raw_ptr();
+        auto* values_column = col_map->values_column_raw_ptr();
+        Column* kv_columns[] = {keys_column, values_column};
+        size_t kv_size[] = {keys_column->size(), values_column->size()};
+#endif
         for (auto i = 0; i < 2; ++i) {
             size_t child_array_start_idx;
             size_t child_array_num_elements;
@@ -867,11 +983,15 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
                 return Status::InternalError(fmt::format("Unnest arrow array type({}) fail", array->type()->name()));
             }
 
+#ifndef __APPLE__
             Filter child_chunk_filter;
             child_chunk_filter.resize(kv_size[i] + child_array_num_elements, 1);
             RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(
                     conv_func->children[i].get(), child_array_num_elements, child_array, kv_columns[i],
                     child_array_start_idx, kv_size[i], &child_chunk_filter, ctx));
+#else
+            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
+#endif
         }
         return Status::OK();
     }
@@ -888,8 +1008,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         DCHECK_EQ(conv_func->field_names.size(), conv_func->children.size());
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
-
-            auto child_col = struct_col->field_column(child_name);
+            ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
             auto child_array = struct_array->GetFieldByName(child_name);
 
             if (child_array == nullptr) {
@@ -899,9 +1018,13 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
                 continue;
             }
 
+#ifndef __APPLE__
             RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
                                                                     child_array.get(), child_col, array_start_idx,
                                                                     chunk_start_idx, chunk_filter, ctx));
+#else
+            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
+#endif
         }
 
         return Status::OK();
@@ -949,12 +1072,14 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
         STRICT_ARROW_CONV_ENTRY_R(TYPE_FLOAT, ArrowTypeId::HALF_FLOAT, ArrowTypeId::FLOAT),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DOUBLE, ArrowTypeId::DOUBLE),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_VARCHAR, ArrowTypeId::STRING, ArrowTypeId::LARGE_STRING, ArrowTypeId::BINARY,
-                                  ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY),
+                                  ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY, ArrowTypeId::STRING_VIEW),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_VARBINARY, ArrowTypeId::STRING, ArrowTypeId::LARGE_STRING, ArrowTypeId::BINARY,
                                   ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATE, ArrowTypeId::DATE32),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATETIME, ArrowTypeId::DATE64, ArrowTypeId::TIMESTAMP),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL, ArrowTypeId::DECIMAL32,
+                                  ArrowTypeId::DECIMAL64),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL256, ArrowTypeId::DECIMAL256),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_ARRAY, ArrowTypeId::LIST, ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_MAP, ArrowTypeId::MAP),
@@ -983,13 +1108,20 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::DOUBLE, TYPE_DOUBLE, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::STRING, TYPE_CHAR, TYPE_VARCHAR, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::LARGE_STRING, TYPE_CHAR, TYPE_VARCHAR),
+        ARROW_CONV_ENTRY(ArrowTypeId::STRING_VIEW, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::LARGE_BINARY, TYPE_VARBINARY, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::DATE32, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::DATE64, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::TIMESTAMP, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
-        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                         TYPE_DECIMAL256),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL32, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                         TYPE_DECIMAL256),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL64, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                         TYPE_DECIMAL256),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL256, TYPE_DECIMAL256),
 
         // JSON converters
         ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_MAP, TYPE_JSON),
@@ -1028,7 +1160,7 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
     std::string error_msg =
             strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
                                 (current_slot == nullptr) ? "null" : current_slot->col_name(), raw_data);
-    state->append_error_msg_to_file(error_msg, reason);
+    RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
 }
 
 } // namespace starrocks

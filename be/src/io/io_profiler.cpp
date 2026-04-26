@@ -21,11 +21,37 @@
 #include <unordered_set>
 
 #include "fmt/format.h"
+#include "io/core/io_instrumentation.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/stack_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
+
+namespace {
+
+void add_read_hook(int64_t bytes, int64_t latency_ns) noexcept {
+    IOProfiler::add_read(bytes, latency_ns);
+}
+
+void add_write_hook(int64_t bytes, int64_t latency_ns) noexcept {
+    IOProfiler::add_write(bytes, latency_ns);
+}
+
+void add_sync_hook(int64_t latency_ns) noexcept {
+    IOProfiler::add_sync(latency_ns);
+}
+
+const io::IOEventHooks kIOProfilerHooks{add_read_hook, add_write_hook, add_sync_hook};
+
+struct IOProfilerHookRegistrar {
+    IOProfilerHookRegistrar() { (void)io::IOInstrumentation::set_hooks(&kIOProfilerHooks); }
+};
+
+const IOProfilerHookRegistrar kIOProfilerHookRegistrar;
+
+} // namespace
 
 std::atomic<uint32_t> IOProfiler::_context_io_mode(0);
 
@@ -100,7 +126,8 @@ struct IOStatEntry {
         uint64_t tablet_id = id & 0x0000FFFFFFFFFFFFUL;
         return fmt::format("{:>10} {:>10} {:>16} {:>8} {:>16} {:>8} {:>16} {:>8}", tablet_id,
                            IOProfiler::tag_to_string(tag), read_bytes.load(), read_ops.load(), write_bytes.load(),
-                           write_ops.load(), read_bytes + write_bytes, read_ops + write_ops);
+                           write_ops.load(), read_bytes.load() + write_bytes.load(),
+                           read_ops.load() + write_ops.load());
     }
 };
 
@@ -206,7 +233,7 @@ void IOProfiler::_add_tls_read(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.read_ops += 1;
     tls_io_stat.read_bytes += bytes;
     tls_io_stat.read_time_ns += latency_ns;
-    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    auto* metrics = GlobalMetricsRegistry::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
     if (UNLIKELY(metrics == nullptr)) {
         // some r/w operations may be performed before metrics are initialized, in which case updating metrics is ignored.
         return;
@@ -219,7 +246,7 @@ void IOProfiler::_add_tls_write(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.write_ops += 1;
     tls_io_stat.write_bytes += bytes;
     tls_io_stat.write_time_ns += latency_ns;
-    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    auto* metrics = GlobalMetricsRegistry::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
     if (UNLIKELY(metrics == nullptr)) {
         return;
     }

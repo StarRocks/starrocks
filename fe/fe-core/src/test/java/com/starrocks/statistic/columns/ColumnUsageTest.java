@@ -17,6 +17,7 @@ package com.starrocks.statistic.columns;
 import com.google.common.base.Splitter;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
@@ -25,7 +26,6 @@ import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -241,20 +241,20 @@ class ColumnUsageTest extends PlanTestBase {
             List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
             Assertions.assertEquals(1, collectJobs.size());
             StatisticsCollectJob job0 = collectJobs.get(0);
-            Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, job0.getAnalyzeType());
-            Assertions.assertEquals(List.of("v1", "v2", "v3"), job0.getColumnNames());
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, job0.getAnalyzeType());
+            Assertions.assertEquals(List.of("v1"), job0.getColumnNames());
             Config.statistic_auto_collect_small_table_size = defaultSmallTableSize;
             Config.statistic_auto_collect_max_predicate_column_size_on_sample_strategy = defaultPredicateColumnSize;
         }
     }
 
     @Test
-    public void testColumnUsagePersist() {
+    public void testColumnUsagePersist() throws MetaNotFoundException {
         // invalid column
         {
             String json = "{\"data\": [\"fe_id\", 1, 1, 1, \"NORMAL\", \"2025-01-01 00:00:00\", \"2025-01-01 " +
                     "00:00:00\"]}";
-            Assertions.assertThrows(IllegalStateException.class,
+            Assertions.assertThrows(MetaNotFoundException.class,
                     () -> PredicateColumnsStorage.ColumnUsageJsonRecord.fromJson(json));
         }
 
@@ -286,5 +286,20 @@ class ColumnUsageTest extends PlanTestBase {
             ColumnUsage restored = GsonUtils.GSON.fromJson(json, ColumnUsage.class);
             Assertions.assertEquals(usage, restored);
         }
+    }
+
+    @Test
+    public void testPredicateColumnsVacuumSkipsWhenTtlDisabled() throws Exception {
+        starRocksAssert.query("select * from t0 where v1 > 1").explainQuery();
+        PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
+        TableName t0 = new TableName(connectContext.getDatabase(), "t0");
+        Assertions.assertEquals(1, mgr.queryPredicateColumns(t0).size());
+
+        long beforeValue = Config.statistic_predicate_columns_ttl_hours;
+        Config.statistic_predicate_columns_ttl_hours = -1;
+        mgr.vacuum();
+        Assertions.assertEquals(1, mgr.queryPredicateColumns(t0).size());
+
+        Config.statistic_predicate_columns_ttl_hours = beforeValue;
     }
 }

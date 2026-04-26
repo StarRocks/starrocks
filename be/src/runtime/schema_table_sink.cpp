@@ -17,19 +17,22 @@
 #include <memory>
 #include <sstream>
 
-#include "agent/master_info.h"
+#include "base/brpc/ref_count_closure.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "common/configbase.h"
+#include "common/runtime_profile.h"
+#include "common/system/master_info.h"
 #include "exec/tablet_info.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
+#include "types/datum.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
-#include "util/ref_count_closure.h"
-#include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
 namespace starrocks {
@@ -48,29 +51,29 @@ Status SchemaTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _nodes_info = std::make_unique<StarRocksNodesInfo>(schema_table_sink.nodes_info);
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 
 Status SchemaTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     _profile =
             state->obj_pool()->add(new RuntimeProfile(strings::Substitute("SchemaTableSink (table=$0)", _table_name)));
     return Status::OK();
 }
 
 Status SchemaTableSink::open(RuntimeState* state) {
-    return Expr::open(_output_expr_ctxs, state);
+    return ExprExecutor::open(_output_expr_ctxs, state);
 }
 
-static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be_id, const string& name,
-                                const string& value) {
+static Status set_config_remote(const StarRocksNodesInfo& nodes_info, BrpcStubCache* brpc_stub_cache, int64_t be_id,
+                                const string& name, const string& value) {
     auto node_info = nodes_info.find_node(be_id);
     if (node_info == nullptr) {
         return Status::InternalError(strings::Substitute("set_config fail: be $0 not found", be_id));
     }
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+    auto stub = brpc_stub_cache->get_stub(node_info->host, node_info->brpc_port);
     if (stub == nullptr) {
         return Status::InternalError(strings::Substitute("set_config fail to get brpc stub for $0:$1", node_info->host,
                                                          node_info->brpc_port));
@@ -80,6 +83,7 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     request.set_params(strings::Substitute(R"({"name":"$0","value":"$1"})", name, value));
     auto* closure = new RefCountClosure<ExecuteCommandResultPB>();
     closure->cntl.set_timeout_ms(10000);
+    closure->ref();
     closure->ref();
     DeferOp op([&]() {
         if (closure->unref()) {
@@ -102,7 +106,8 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     return Status::OK();
 }
 
-static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, int64_t self_be_id, Columns& columns) {
+static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, BrpcStubCache* brpc_stub_cache,
+                                     int64_t self_be_id, Columns& columns) {
     if (columns.size() < 3) {
         return Status::InternalError("write be_configs table should have at least 3 columns");
     }
@@ -125,7 +130,7 @@ static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, int64
             s = update_config->update_config(name, value);
             mode = "local";
         } else {
-            s = set_config_remote(nodes_info, be_id, name, value);
+            s = set_config_remote(nodes_info, brpc_stub_cache, be_id, name, value);
             mode = strings::Substitute("remote be:$0", be_id);
         }
         if (s.ok()) {
@@ -144,13 +149,15 @@ Status SchemaTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
         ASSIGN_OR_RETURN(result_columns[i], _output_expr_ctxs[i]->evaluate(chunk));
     }
     if (_table_name == "be_configs") {
-        return write_be_configs_table(*_nodes_info, _be_id, result_columns);
+        auto* query_execution_services = state->query_execution_services();
+        return write_be_configs_table(*_nodes_info, query_execution_services->rpc->brpc_stub_cache, _be_id,
+                                      result_columns);
     }
     return Status::OK();
 }
 
-Status SchemaTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+Status SchemaTableSink::close(RuntimeState* state, const Status& exec_status) {
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 

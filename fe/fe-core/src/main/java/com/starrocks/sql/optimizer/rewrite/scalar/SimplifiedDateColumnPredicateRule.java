@@ -17,10 +17,8 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -28,6 +26,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 
 import java.time.DateTimeException;
 import java.util.regex.Pattern;
@@ -85,11 +87,11 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
                 return new BinaryPredicateOperator(binaryType, columnRef, right);
             } else if (binaryType == GT || binaryType == LE) {
                 // date_format(t, '%Y-%m-%d') >/<= '2023-03-27' -> t >=/< days_add('2023-03-27', 1)
-                Function daysAddFn = Expr.getBuiltinFunction(FunctionSet.DAYS_ADD,
-                        new Type[] {Type.DATETIME, Type.INT}, Function.CompareMode.IS_IDENTICAL);
+                Function daysAddFn = ExprUtils.getBuiltinFunction(FunctionSet.DAYS_ADD,
+                        new Type[] {DateType.DATETIME, IntegerType.INT}, Function.CompareMode.IS_IDENTICAL);
                 binaryType = binaryType == GT ? GE : LT;
                 return new BinaryPredicateOperator(binaryType, columnRef, new CallOperator(
-                        FunctionSet.DAYS_ADD, Type.DATETIME,
+                        FunctionSet.DAYS_ADD, DateType.DATETIME,
                         ImmutableList.of(right, ConstantOperator.createInt(1)), daysAddFn));
             }
         }

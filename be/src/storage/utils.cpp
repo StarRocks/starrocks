@@ -49,15 +49,17 @@
 #include <string>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
+#include "base/system/errno.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
-#include "util/errno.h"
-#include "util/string_parser.hpp"
 
 using std::string;
 using std::set;
@@ -121,7 +123,7 @@ Status move_to_trash(const std::filesystem::path& file_path) {
 }
 
 Status read_write_test_file(const string& test_file_path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(test_file_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(test_file_path));
 
     if (fs->path_exists(test_file_path).ok()) {
         RETURN_IF_ERROR(fs->delete_file(test_file_path));
@@ -238,10 +240,19 @@ const char* Errno::str() {
 }
 
 const char* Errno::str(int no) {
+#if defined(__APPLE__)
+    // macOS: strerror_r returns int, 0 on success
+    if (strerror_r(no, _buf, BUF_SIZE) != 0) {
+        LOG(WARNING) << "fail to get errno string. no=" << no << " errno=" << errno;
+        snprintf(_buf, BUF_SIZE, "unknown errno");
+    }
+#else
+    // Linux: strerror_r returns char* pointer
     if (nullptr != strerror_r(no, _buf, BUF_SIZE)) {
         LOG(WARNING) << "fail to get errno string. no=" << no << " errno=" << errno;
         snprintf(_buf, BUF_SIZE, "unknown errno");
     }
+#endif
 
     return _buf;
 }

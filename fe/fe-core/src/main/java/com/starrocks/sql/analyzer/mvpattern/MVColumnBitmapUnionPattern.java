@@ -35,10 +35,10 @@
 package com.starrocks.sql.analyzer.mvpattern;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.PrimitiveType;
 
 public class MVColumnBitmapUnionPattern implements MVColumnPattern {
 
@@ -48,7 +48,7 @@ public class MVColumnBitmapUnionPattern implements MVColumnPattern {
             return false;
         }
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
-        String fnNameString = fnExpr.getFnName().getFunction();
+        String fnNameString = fnExpr.getFunctionName();
         if (!fnNameString.equalsIgnoreCase(FunctionSet.BITMAP_UNION)) {
             return false;
         }
@@ -61,7 +61,7 @@ public class MVColumnBitmapUnionPattern implements MVColumnPattern {
             }
         } else if (fnExpr.getChild(0) instanceof FunctionCallExpr) {
             FunctionCallExpr child0FnExpr = (FunctionCallExpr) fnExpr.getChild(0);
-            if (!child0FnExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.TO_BITMAP)) {
+            if (!child0FnExpr.getFunctionName().equalsIgnoreCase(FunctionSet.TO_BITMAP)) {
                 return false;
             }
             return true;

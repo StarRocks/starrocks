@@ -32,14 +32,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
-#include "common/config.h"
-#include "testutil/assert.h"
+#include "base/testutil/assert.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
+#include "common/config_metrics_fwd.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -111,7 +112,7 @@ private:
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto instance = StarRocksMetrics::instance();
-    auto metrics = instance->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
     // check metric
     {
@@ -280,8 +281,7 @@ TEST_F(StarRocksMetricsTest, Normal) {
 
 TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     TestMetricsVisitor visitor;
-    auto instance = StarRocksMetrics::instance();
-    auto metrics = instance->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
 
@@ -296,7 +296,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
             std::string key("abc0");
             PageCacheHandle handle;
             auto data = std::make_unique<std::vector<uint8_t>>(1024);
-            ObjectCacheWriteOptions opts;
+            MemCacheWriteOptions opts;
             ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
             ASSERT_TRUE(_page_cache->lookup(key, &handle));
             data.release();
@@ -309,6 +309,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
         }
     }
     config::enable_metric_calculator = false;
+    metrics->set_collect_hook_enabled(true);
     metrics->collect(&visitor);
     ASSERT_STREQ("1025", lookup_metric->to_string().c_str());
     ASSERT_STREQ("1", hit_metric->to_string().c_str());
@@ -324,7 +325,9 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
 }
 
 TEST_F(StarRocksMetricsTest, test_metrics_register) {
-    auto instance = StarRocksMetrics::instance()->metrics();
+    pipeline::ExecStateReporterMetrics exec_metrics;
+    exec_metrics.register_all_metrics();
+    auto instance = GlobalMetricsRegistry::instance()->metrics();
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_io_time_us"));
@@ -364,6 +367,8 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("merge_commit", instance);
     assert_threadpool_metrics_register("exec_state_report", instance);
     assert_threadpool_metrics_register("priority_exec_state_report", instance);
+    assert_threadpool_metrics_register("automatic_partition", instance);
+    assert_threadpool_metrics_register("lake_metadata_fetch", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

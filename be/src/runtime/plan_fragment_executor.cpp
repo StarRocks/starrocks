@@ -37,10 +37,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/string/parse_util.h"
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/data_sink.h"
 #include "exec/exchange_node.h"
+#include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/scan_node.h"
 #include "gutil/map_util.h"
@@ -48,7 +51,9 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/message_body_sink.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
@@ -56,22 +61,23 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/parse_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
-        : _exec_env(exec_env),
+namespace {
+
+const RuntimeServices& runtime_services(const QueryExecutionServices* query_execution_services) {
+    return *query_execution_services->runtime;
+}
+
+} // namespace
+
+PlanFragmentExecutor::PlanFragmentExecutor(const QueryExecutionServices* query_execution_services,
+                                           report_status_callback report_status_cb)
+        : _query_execution_services(query_execution_services),
           _report_status_cb(std::move(report_status_cb)),
-          _done(false),
-          _prepared(false),
-          _closed(false),
-          enable_profile(true),
-          _start_time_ms(MonotonicMillis()),
-          _is_report_on_cancel(true),
-          _collect_query_statistics_with_every_batch(false),
-          _is_runtime_filter_merge_node(false) {}
+
+          _start_time_ms(MonotonicMillis()) {}
 
 PlanFragmentExecutor::~PlanFragmentExecutor() {
     close();
@@ -104,27 +110,33 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     // set up plan
     DCHECK(request.__isset.fragment);
-    RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
+    RETURN_IF_ERROR(ExecFactory::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
+    auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+
     if (request.fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
+        RETURN_IF_ERROR(
+                fragment_dict_state->init_query_global_dict(_runtime_state, request.fragment.query_global_dicts));
     }
 
     if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(fragment_dict_state->init_query_global_dict_exprs(_runtime_state,
+                                                                          request.fragment.query_global_dict_exprs));
     }
 
     if (request.fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_load_global_dict(_runtime_state, request.fragment.load_global_dicts));
     }
 
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
         _is_runtime_filter_merge_node = true;
-        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
-                                                       false);
+        runtime_services(_query_execution_services)
+                .runtime_filter_worker->open_query(_query_id, request.query_options, params.runtime_filter_params,
+                                                   false);
     }
-    _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    runtime_services(_query_execution_services).stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
 
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;
@@ -152,7 +164,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
-    _query_statistics.reset(new QueryStatistics());
+    _query_statistics = std::make_shared<QueryStatistics>();
 
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {
@@ -199,8 +211,9 @@ Status PlanFragmentExecutor::open() {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_non_pipeline_load(
-                _runtime_state->fragment_instance_id()));
+        RETURN_IF_ERROR(
+                runtime_services(_query_execution_services)
+                        .profile_report_worker->register_non_pipeline_load(_runtime_state->fragment_instance_id()));
     }
 
     Status status = _open_internal_vectorized();
@@ -359,7 +372,8 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
                 TUniqueId fragment_instance_id = _runtime_state->fragment_instance_id();
-                _exec_env->result_queue_mgr()->update_queue_status(fragment_instance_id, new_status);
+                runtime_services(_query_execution_services)
+                        .result_queue_mgr->update_queue_status(fragment_instance_id, new_status);
             }
         }
     }
@@ -382,8 +396,8 @@ void PlanFragmentExecutor::cancel() {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
-                _runtime_state->fragment_instance_id());
+        runtime_services(_query_execution_services)
+                .profile_report_worker->unregister_non_pipeline_load(_runtime_state->fragment_instance_id());
     }
     if (_stream_load_contexts.size() > 0) {
         for (const auto& stream_load_context : _stream_load_contexts) {
@@ -392,16 +406,18 @@ void PlanFragmentExecutor::cancel() {
                 stream_load_context->body_sink->cancel(st);
             }
             if (_channel_stream_load) {
-                _exec_env->stream_context_mgr()->remove_channel_context(stream_load_context);
+                runtime_services(_query_execution_services)
+                        .stream_context_mgr->remove_channel_context(stream_load_context);
             }
         }
         _stream_load_contexts.resize(0);
     }
-    _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
-    (void)_runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    _runtime_state->query_execution_services()->runtime->stream_mgr->cancel(_runtime_state->fragment_instance_id());
+    (void)_runtime_state->query_execution_services()->runtime->result_mgr->cancel(
+            _runtime_state->fragment_instance_id());
 
     if (_is_runtime_filter_merge_node) {
-        _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
+        _runtime_state->query_execution_services()->runtime->runtime_filter_worker->close_query(_query_id);
     }
 }
 
@@ -435,9 +451,9 @@ void PlanFragmentExecutor::close() {
     _chunk.reset();
 
     if (_is_runtime_filter_merge_node) {
-        _exec_env->runtime_filter_worker()->close_query(_query_id);
+        runtime_services(_query_execution_services).runtime_filter_worker->close_query(_query_id);
     }
-    _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
+    runtime_services(_query_execution_services).stream_mgr->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {
@@ -447,8 +463,8 @@ void PlanFragmentExecutor::close() {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !_runtime_state->is_cancelled()) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
-                    _runtime_state->fragment_instance_id());
+            runtime_services(_query_execution_services)
+                    .profile_report_worker->unregister_non_pipeline_load(_runtime_state->fragment_instance_id());
         }
 
         if (_stream_load_contexts.size() > 0) {
@@ -458,7 +474,8 @@ void PlanFragmentExecutor::close() {
                     stream_load_context->body_sink->cancel(st);
                 }
                 if (_channel_stream_load) {
-                    _exec_env->stream_context_mgr()->remove_channel_context(stream_load_context);
+                    runtime_services(_query_execution_services)
+                            .stream_context_mgr->remove_channel_context(stream_load_context);
                 }
             }
             _stream_load_contexts.resize(0);

@@ -37,31 +37,32 @@
 #include <atomic>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
-#include "exec/query_cache/cache_manager.h"
+#include "exec/query_cache/cache_manager_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/base_load_path_mgr.h"
-#include "runtime/mem_tracker.h"
-#include "storage/options.h"
-#include "util/threadpool.h"
+#include "runtime/mem_tracker_fwd.h"
+#include "runtime/service_contexts.h"
+#include "storage/options_fwd.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecessary includes will cause compilation very slow.
 // So please consider use forward declaration as much as possible.
 
 namespace starrocks {
 class AgentServer;
-class BfdParser;
 class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
 class FragmentMgr;
+class BaseLoadPathMgr;
 class LoadPathMgr;
 class LoadStreamMgr;
+class LookUpDispatcherMgr;
 class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
@@ -79,8 +80,7 @@ class SmallFileMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
-class QuerySpillManager;
-struct RfTracePoint;
+class GlobalSpillManager;
 
 class BackendServiceClient;
 class FrontendServiceClient;
@@ -102,10 +102,12 @@ class LocationProvider;
 class TabletManager;
 class UpdateManager;
 class ReplicationTxnManager;
+class LakePersistentIndexParallelCompactMgr;
 } // namespace lake
 namespace spill {
 class DirManager;
-}
+class GlobalSpillManager;
+} // namespace spill
 
 namespace connector {
 class ConnectorSinkSpillExecutor;
@@ -131,6 +133,7 @@ public:
 
     MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
+    std::shared_ptr<MemTracker> query_pool_mem_tracker_shared() { return _query_pool_mem_tracker; }
     MemTracker* connector_scan_pool_mem_tracker() { return _connector_scan_pool_mem_tracker.get(); }
     MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
     MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
@@ -143,6 +146,7 @@ public:
     MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker.get(); }
     MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker.get(); }
     MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker.get(); }
+    MemTracker* builtin_inverted_index_mem_tracker() { return _builtin_inverted_index_mem_tracker.get(); }
     MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker.get(); }
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
@@ -156,18 +160,18 @@ public:
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
+    MemTracker* brpc_iobuf_mem_tracker() { return _brpc_iobuf_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
-    MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
 
-    int64_t process_mem_limit() const { return _process_mem_tracker->limit(); }
+    int64_t process_mem_limit() const;
 
 private:
     static bool _is_init;
@@ -207,6 +211,7 @@ private:
     std::shared_ptr<MemTracker> _ordinal_index_mem_tracker;
     std::shared_ptr<MemTracker> _bitmap_index_mem_tracker;
     std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
+    std::shared_ptr<MemTracker> _builtin_inverted_index_mem_tracker;
 
     // The memory used for compaction
     std::shared_ptr<MemTracker> _compaction_mem_tracker;
@@ -225,6 +230,7 @@ private:
 
     // record mem usage in passthrough
     std::shared_ptr<MemTracker> _passthrough_mem_tracker;
+    std::shared_ptr<MemTracker> _brpc_iobuf_mem_tracker;
 
     std::shared_ptr<MemTracker> _clone_mem_tracker;
 
@@ -234,9 +240,6 @@ private:
 
     // The memory used for datacache
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
-
-    // The memory used for poco connection pool
-    std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
 };
@@ -269,6 +272,7 @@ public:
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     MetricRegistry* metrics() const { return _metrics; }
     DataStreamMgr* stream_mgr() { return _stream_mgr; }
+    LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
     ResultBufferMgr* result_mgr() { return _result_mgr; }
     ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
     ClientCache<BackendServiceClient>* client_cache() { return _backend_client_cache; }
@@ -299,7 +303,6 @@ public:
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
@@ -314,18 +317,24 @@ public:
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
+    const ExecutionEnv& execution_services() const { return _execution_services; }
+    const RpcServices& rpc_services() const { return _rpc_services; }
+    const LakeServices& lake_services() const { return _lake_services; }
+    const RuntimeServices& runtime_services() const { return _runtime_services; }
+    const AgentServices& agent_services() const { return _agent_services; }
+    const QueryExecutionServices& query_execution_services() const { return _query_execution_services; }
+    const AdminServices& admin_services() const { return _admin_services; }
 
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
     ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
+    MemTracker* query_pool_mem_tracker() { return GlobalEnv::GetInstance()->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
     ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
-
-    void add_rf_event(const RfTracePoint& pt);
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
@@ -352,15 +361,26 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
+    spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
+
     ThreadPool* delete_file_thread_pool();
 
     ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
+
+    ThreadPool* lake_metadata_fetch_thread_pool() { return _lake_metadata_fetch_thread_pool.get(); }
+
+    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
+
+    ThreadPool* pk_index_execution_thread_pool() { return _pk_index_execution_thread_pool.get(); }
+
+    ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
 
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
 private:
+    void _refresh_service_contexts();
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
 
@@ -398,7 +418,6 @@ private:
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
 
-    BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
     LoadChannelMgr* _load_channel_mgr = nullptr;
     LoadStreamMgr* _load_stream_mgr = nullptr;
@@ -428,11 +447,24 @@ private:
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _lake_metadata_fetch_thread_pool = nullptr;
+    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
+    std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
-    query_cache::CacheManagerRawPtr _cache_mgr;
+    query_cache::CacheManagerRawPtr _cache_mgr = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+    std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
+    LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
+    ExecutionEnv _execution_services;
+    RpcServices _rpc_services;
+    LakeServices _lake_services;
+    RuntimeServices _runtime_services;
+    AgentServices _agent_services;
+    QueryExecutionServices _query_execution_services;
+    AdminServices _admin_services;
 };
 
 template <>

@@ -15,26 +15,34 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
 
 public class AggStateDescTest {
     @Test
     public void testNewAggStateDesc() {
         AggregateFunction sum = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
-        AggStateDesc aggStateDesc = new AggStateDesc(sum);
+                Lists.<Type>newArrayList(IntegerType.INT), IntegerType.BIGINT, IntegerType.BIGINT, false, true, false);
+        AggStateDesc aggStateDesc = new AggStateDesc(sum.functionName(), sum.getReturnType(), 
+                Arrays.asList(sum.getArgs()), AggStateDesc.isAggFuncResultNullable(sum.functionName()));
         Assertions.assertEquals(1, aggStateDesc.getArgTypes().size());
-        Assertions.assertEquals(Type.INT, aggStateDesc.getArgTypes().get(0));
-        Assertions.assertEquals(Type.BIGINT, aggStateDesc.getReturnType());
+        Assertions.assertEquals(IntegerType.INT, aggStateDesc.getArgTypes().get(0));
+        Assertions.assertEquals(IntegerType.BIGINT, aggStateDesc.getReturnType());
         Assertions.assertEquals(FunctionSet.SUM, aggStateDesc.getFunctionName());
         Assertions.assertEquals(true, aggStateDesc.getResultNullable());
         Assertions.assertEquals("sum(int(11))", aggStateDesc.toSql());
         Assertions.assertEquals("sum(int(11))", aggStateDesc.toString());
-        Assertions.assertNotNull(aggStateDesc.toThrift());
+        Assertions.assertNotNull(TypeSerializer.toThrift(aggStateDesc));
         try {
-            Assertions.assertNotNull(aggStateDesc.getAggregateFunction());
+            Assertions.assertNotNull(ColumnDefAnalyzer.getAggregateFunction(aggStateDesc));
         } catch (Exception e) {
             Assertions.fail();
         }
@@ -43,15 +51,18 @@ public class AggStateDescTest {
     @Test
     public void testCompareAggStateDesc() {
         AggregateFunction sum1 = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
-        AggStateDesc aggStateDesc1 = new AggStateDesc(sum1);
+                Lists.<Type>newArrayList(IntegerType.INT), IntegerType.BIGINT, IntegerType.BIGINT, false, true, false);
+        AggStateDesc aggStateDesc1 = new AggStateDesc(sum1.functionName(), sum1.getReturnType(), 
+                Arrays.asList(sum1.getArgs()), AggStateDesc.isAggFuncResultNullable(sum1.functionName()));
         AggregateFunction sum2 = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
-        AggStateDesc aggStateDesc2 = new AggStateDesc(sum2);
+                Lists.<Type>newArrayList(IntegerType.INT), IntegerType.BIGINT, IntegerType.BIGINT, false, true, false);
+        AggStateDesc aggStateDesc2 = new AggStateDesc(sum2.functionName(), sum2.getReturnType(), 
+                Arrays.asList(sum2.getArgs()), AggStateDesc.isAggFuncResultNullable(sum2.functionName()));
         Assertions.assertEquals(aggStateDesc1, aggStateDesc2);
         AggregateFunction sum3 = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                Lists.<Type>newArrayList(Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false);
-        AggStateDesc aggStateDesc3 = new AggStateDesc(sum3);
+                Lists.<Type>newArrayList(FloatType.FLOAT), FloatType.DOUBLE, FloatType.DOUBLE, false, true, false);
+        AggStateDesc aggStateDesc3 = new AggStateDesc(sum3.functionName(), sum3.getReturnType(), 
+                Arrays.asList(sum3.getArgs()), AggStateDesc.isAggFuncResultNullable(sum3.functionName()));
         Assertions.assertNotEquals(aggStateDesc3, aggStateDesc2);
 
         AggStateDesc cloned3 = aggStateDesc3.clone();

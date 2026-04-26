@@ -15,7 +15,13 @@ shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/
 shell: ossutil64 cp --force ./sql/test_files/orc_format/map_decimal_date.lz4.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
 
 admin set frontend config ("enable_collect_query_detail_info" = "true");
-select count(*) from files('path' = 'oss://${oss_bucket}/test_files/orc_format/${uuid0}/*', 'format'='orc') where map_keys(col_map) != [-99999.99999];
+select count(*) from files(
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format"="orc")
+where map_keys(col_map) != [-99999.99999];
 admin set frontend config ("enable_collect_query_detail_info" = "false");
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null

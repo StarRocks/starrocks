@@ -17,6 +17,8 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -25,12 +27,15 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -39,6 +44,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -62,13 +68,13 @@ import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -283,6 +289,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
@@ -355,6 +367,12 @@ public class Analyzer {
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             analyzeSubmitTask(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterTaskStatement(AlterTaskStmt statement, ConnectContext context) {
+            TaskAnalyzer.analyzeAlterTaskStmt(statement);
             return null;
         }
 
@@ -457,6 +475,13 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                             ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
             DropStmtAnalyzer.analyze(statement, session);
             return null;
@@ -482,8 +507,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, ConnectContext context) {
-            statement.analyze(context);
+        public Void visitCreateSyncMVStmt(CreateSyncMVStmt statement, ConnectContext context) {
+            CreateSyncMVStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -534,7 +559,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
-            AlterDbQuotaAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, ConnectContext context) {
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -552,7 +583,7 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
-            AlterDatabaseRenameStatementAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -618,6 +649,13 @@ public class Analyzer {
         @Override
         public Void visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt statement,
                                                                ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement,
+                                                                      ConnectContext context) {
             ClusterSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
@@ -967,6 +1005,11 @@ public class Analyzer {
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
             return null;
+        }
+
+        @Override
+        public Void visitAddSqlDigestBlackListStatement(AddSqlDigestBlackListStmt statement, ConnectContext context) {
+            return AstVisitorExtendInterface.super.visitAddSqlDigestBlackListStatement(statement, context);
         }
 
         // ------------------------------------------- Export Statement ------------------------------------------------

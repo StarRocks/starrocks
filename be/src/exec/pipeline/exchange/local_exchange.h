@@ -18,15 +18,15 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
-#include "util/runtime_profile.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 class ExprContext;
-class RuntimeState;
 
 namespace pipeline {
 
@@ -90,6 +90,8 @@ public:
 
     Status shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) override;
 
+    void set_exchange_hash_function_version(int32_t version) { _exchange_hash_function_version = version; }
+
 private:
     const TPartitionType::type _part_type;
     // Compute per-row partition values.
@@ -99,6 +101,8 @@ private:
     std::vector<uint32_t> _hash_values;
     std::vector<uint32_t> _round_hashes;
     std::unique_ptr<Shuffler> _shuffler;
+    // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
+    int32_t _exchange_hash_function_version = 0;
 };
 
 // Random shuffle row-by-row for each chunk of source.
@@ -143,16 +147,6 @@ public:
 
     void finish_source() { _finished_source_number++; }
 
-    void epoch_finish(RuntimeState* state) {
-        if (incr_epoch_finished_sinker() == _sink_number) {
-            for (auto* source : _source->get_sources()) {
-                static_cast<void>(source->set_epoch_finishing(state));
-            }
-            // reset the number to be reused in the next epoch.
-            _epoch_finished_sinker = 0;
-        }
-    }
-
     const std::string& name() const { return _name; }
 
     bool need_input() const;
@@ -162,9 +156,9 @@ public:
 
     int32_t source_dop() const { return _source->get_sources().size(); }
 
-    int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
-
     size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
+    size_t get_peak_memory_usage() const { return _memory_manager->get_peak_memory_usage(); }
+    size_t get_peak_num_rows() const { return _memory_manager->get_peak_num_rows(); }
 
     void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _sink_observable.add_observer(state, observer);
@@ -184,9 +178,6 @@ protected:
     std::atomic<int32_t> _sink_number = 0;
     std::atomic<int32_t> _finished_source_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
-
-    // Stream MV
-    std::atomic<int32_t> _epoch_finished_sinker = 0;
 
 private:
     Observable _sink_observable;
@@ -262,6 +253,8 @@ private:
     LocalExchangeSourceOperatorFactory* _source;
     const std::vector<ExprContext*> _partition_expr_ctxs;
     std::vector<std::string> _transform_exprs;
+    // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
+    int32_t _exchange_hash_function_version = 0;
 };
 
 // Exchange the local data for broadcast

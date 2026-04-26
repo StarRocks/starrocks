@@ -565,9 +565,9 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = false;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
 
-        Assertions.assertTrue(plan.contains("dict_col=c_birth_country"));
-        Assertions.assertTrue(plan.contains("  13:Decode\n" +
-                "  |  <dict id 73> : <string id 15>"));
+        assertContains(plan, "dict_col=c_birth_country");
+        assertContains(plan, "  13:Decode\n" +
+                "  |  <dict id 73> : <string id 15>");
     }
 
     @Test
@@ -599,7 +599,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = false;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
 
-        Assertions.assertTrue(plan.contains("dict_col=c_birth_country"));
+        assertContains(plan, "dict_col=c_birth_country");
     }
 
     @Test

@@ -45,7 +45,7 @@ LOG_FILTERED_WARN = "You can use `--log_filtered` to show the details..."
 
 class ChooseCase(object):
     class CaseTR(object):
-        def __init__(self, ctx, name, file, sql, result, info, cleanup=None):
+        def __init__(self, ctx, name, file, sql, result, info, cleanup=None, tags=None):
             """init"""
             super().__init__()
             self.ctx = ctx
@@ -57,6 +57,8 @@ class ChooseCase(object):
             self.result: List = result
             # custom cleanup commands
             self.cleanup: List = cleanup or []
+            # case tags (e.g., @arrow_flight_sql, @sequential)
+            self.tags: List = tags or []
 
             # # get db from lines
             # self.db = set()
@@ -182,6 +184,9 @@ class ChooseCase(object):
                 elif isinstance(each_stat, dict) and each_stat.get("type", "") == CLEANUP_FLAG:
                     tools.assert_in("cmd", each_stat, "CLEANUP STATEMENT FORMAT ERROR!")
                     _case_sqls.extend(each_stat["cmd"])
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == SET_VAR_FLAG:
+                    tools.assert_in("stat", each_stat, "SET_VAR STATEMENT FORMAT ERROR!")
+                    _case_sqls.extend(each_stat["stat"])
                 else:
                     tools.ok_(False, "Init data error!")
 
@@ -263,6 +268,9 @@ class ChooseCase(object):
                 elif isinstance(each_stat, dict) and each_stat.get("type", "") == CLEANUP_FLAG:
                     tools.assert_in("cmd", each_stat, "CLEANUP STATEMENT FORMAT ERROR!")
                     _case_sqls.extend(each_stat["cmd"])
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == SET_VAR_FLAG:
+                    tools.assert_in("stat", each_stat, "SET_VAR STATEMENT FORMAT ERROR!")
+                    _case_sqls.extend(each_stat["stat"])
                 else:
                     tools.ok_(False, "Init data error!")
 
@@ -422,6 +430,7 @@ class ChooseCase(object):
                                 copy.deepcopy(tmp_res),
                                 info,
                                 cleanup=copy.deepcopy(tmp_cleanup_stat),
+                                tags=copy.deepcopy(tags),
                             )
                         )
 
@@ -515,7 +524,7 @@ class ChooseCase(object):
 
                     _t_info_line = f_lines[line_id].rstrip()
                     _t_line = _t_info_line.lstrip()
-                    tools.assert_regexp_matches(_t_line.lstrip(), t_info_regex, f"Missing thread info : {_t_line}")
+                    tools.assert_regex(_t_line.lstrip(), t_info_regex, f"Missing thread info : {_t_line}")
 
                     # get thread name & thread count
                     _t_name, _, _t_count = re.findall(r"-- ([0-9a-zA-Z_\- ]+)(\(([0-9]+)\))?:", _t_line)[0]
@@ -564,6 +573,63 @@ class ChooseCase(object):
                     "type": CONCURRENCY_FLAG,
                     "thread": concurrency_t_list
                 })
+
+            elif line_content.startswith(SET_VAR_FLAG):
+                # SET_VAR { ... } END SET_VAR
+                tools.ok_(not in_loop_flag, "SET_VAR block must not be inside LOOP!")
+
+                if not re.compile(f'{SET_VAR_FLAG}(\\s)*{{(\\s)*').fullmatch(line_content):
+                    tools.ok_(False, "SET_VAR struct illegal: file: %s, line: %s" % (file, line_id))
+
+                l_set_var_line = line_id
+                line_id += 1
+                set_var_stat = []
+                set_var_res = []
+                set_var_combinations = []
+
+                # fetch PROPERTY - JSON array of variable combinations
+                if line_id < len(f_lines) and f_lines[line_id].strip().startswith(PROPERTY_FLAG):
+                    prop_str = f_lines[line_id].strip()[len(PROPERTY_FLAG):]
+                    try:
+                        set_var_combinations = json.loads(prop_str)
+                    except Exception:
+                        raise AssertionError("SET_VAR property must be a JSON array: %s" % prop_str)
+
+                    tools.assert_true(
+                        isinstance(set_var_combinations, list) and len(set_var_combinations) > 0,
+                        "SET_VAR combinations must be a non-empty JSON array"
+                    )
+                    line_id += 1
+                else:
+                    tools.ok_(False, "SET_VAR block must have PROPERTY line with variable combinations: file: %s" % file)
+
+                # Read statements and results inside the block
+                while (line_id < len(f_lines)
+                       and not re.compile(f'}}(\\s)*{END_SET_VAR_FLAG}').fullmatch(f_lines[line_id].strip())):
+                    line_content = f_lines[line_id].strip()
+                    if line_content == "" or (line_content.startswith("--") and not line_content.startswith(NAME_FLAG)):
+                        line_id += 1
+                        continue
+                    line_id = __read_single_stat_and_result(line_content, line_id, set_var_stat, set_var_res)
+
+                tools.assert_less(line_id, len(f_lines), "SET_VAR FORMAT ERROR!")
+                r_set_var_line = line_id
+
+                tools.assert_greater(len(set_var_stat), 0, "SET_VAR FORMAT ERROR(EMPTY)!")
+                tmp_sql.append({
+                    "type": SET_VAR_FLAG,
+                    "combinations": set_var_combinations,
+                    "stat": set_var_stat,
+                    "res": set_var_res,
+                    "ori": f_lines[l_set_var_line: r_set_var_line + 1]
+                })
+                tmp_res.append({
+                    "type": SET_VAR_FLAG,
+                    "combinations": set_var_combinations,
+                    "stat": set_var_stat,
+                    "res": set_var_res,
+                })
+                line_id += 1
 
             elif line_content.startswith(CLEANUP_FLAG):
                 # CLEANUP { ... } END CLEANUP
@@ -618,6 +684,7 @@ class ChooseCase(object):
                         copy.deepcopy(tmp_res),
                         info,
                         cleanup=copy.deepcopy(tmp_cleanup_stat),
+                        tags=copy.deepcopy(tags),
                     )
                 )
 

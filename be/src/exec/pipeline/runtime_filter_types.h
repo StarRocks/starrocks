@@ -18,13 +18,16 @@
 #include <mutex>
 #include <utility>
 
+#include "base/utility/defer_op.h"
+#include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/pipeline/schedule/observer.h"
+#include "exec/runtime_filter/runtime_filter_descriptor.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
-#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -71,10 +74,27 @@ struct RuntimeMembershipFilterBuildParam {
 // and every HashJoinBuildOperatorFactory has its corresponding RuntimeFilterCollector.
 struct RuntimeFilterCollector {
     RuntimeFilterCollector(RuntimeInFilterList&& in_filters, RuntimeMembershipFilterList&& bloom_filters)
-            : _in_filters(std::move(in_filters)), _bloom_filters(std::move(bloom_filters)) {}
-    RuntimeFilterCollector(RuntimeInFilterList in_filters) : _in_filters(std::move(in_filters)) {}
+            : _in_filters(std::move(in_filters)), _bloom_filters(std::move(bloom_filters)) {
+        for (auto filter : _in_filters) {
+            DCHECK(filter->opened());
+        }
+    }
+
+    RuntimeFilterCollector(RuntimeInFilterList in_filters) : _in_filters(std::move(in_filters)) {
+        for (auto filter : _in_filters) {
+            DCHECK(filter->opened());
+        }
+    }
 
     RuntimeInFilterList& get_in_filters() { return _in_filters; }
+
+    static Status prepare_runtime_in_filters(RuntimeState* state, RuntimeInFilterList& in_filters) {
+        for (auto& in_filter : in_filters) {
+            RETURN_IF_ERROR(in_filter->prepare(state));
+            RETURN_IF_ERROR(in_filter->open(state));
+        }
+        return Status::OK();
+    }
 
     // In-filters are constructed by a node and may be pushed down to its descendant node.
     // Different tuple id and slot id between descendant and ancestor nodes may be referenced to the same column,
@@ -121,9 +141,12 @@ private:
 class RuntimeFilterHolder {
 public:
     void set_collector(RuntimeFilterCollectorPtr&& collector) {
-        DCHECK(_collector.load(std::memory_order_acquire) == nullptr);
-        _collector_ownership = std::move(collector);
-        _collector.store(_collector_ownership.get(), std::memory_order_release);
+        RuntimeFilterCollector* expected = nullptr;
+
+        if (_collector.compare_exchange_strong(expected, collector.get(), std::memory_order_release,
+                                               std::memory_order_acquire)) {
+            _collector_ownership = std::move(collector);
+        }
     }
     RuntimeFilterCollector* get_collector() { return _collector.load(std::memory_order_acquire); }
     bool is_ready() { return get_collector() != nullptr; }
@@ -220,54 +243,6 @@ private:
     // For instance level runtime filters, the sequence_id is -1
     // For pipeline level runtime filters, the sequence_id is corresponding operator driver sequence
     std::unordered_map<TPlanNodeId, SequenceToHolder> _holders;
-};
-
-// A ExecNode in non-pipeline engine can be decomposed into more than one OperatorFactories in pipeline engine.
-// Pipeline framework do not care about that runtime filters take affects on which OperatorFactories, since
-// it depends on Operators' implementation. so each OperatorFactory from the same ExecNode shared a
-// RefCountedRuntimeFilterProbeCollector, in which refcount is introduced to guarantee that both prepare and
-// close method of the RuntimeFilterProbeCollector inside this wrapper object is called only exactly-once.
-class RefCountedRuntimeFilterProbeCollector;
-using RefCountedRuntimeFilterProbeCollectorPtr = std::shared_ptr<RefCountedRuntimeFilterProbeCollector>;
-class RefCountedRuntimeFilterProbeCollector {
-public:
-    RefCountedRuntimeFilterProbeCollector(size_t num_factories_generated,
-                                          RuntimeFilterProbeCollector&& rf_probe_collector)
-            : _count((num_factories_generated << 32) | num_factories_generated),
-              _num_operators_generated(num_factories_generated),
-              _rf_probe_collector(std::move(rf_probe_collector)) {}
-
-    template <class... Args>
-    Status prepare(RuntimeState* state, Args&&... args) {
-        // TODO: stdpain assign operator nums here
-        if ((_count.fetch_sub(1) & PREPARE_COUNTER_MASK) == _num_operators_generated) {
-            RETURN_IF_ERROR(_rf_probe_collector.prepare(state, std::forward<Args>(args)...));
-            RETURN_IF_ERROR(_rf_probe_collector.open(state));
-        }
-        return Status::OK();
-    }
-
-    void close(RuntimeState* state) {
-        static constexpr size_t k = 1ull << 32;
-        if ((_count.fetch_sub(k) & CLOSE_COUNTER_MASK) == k) {
-            _rf_probe_collector.close(state);
-        }
-    }
-
-    RuntimeFilterProbeCollector* get_rf_probe_collector() { return &_rf_probe_collector; }
-    const RuntimeFilterProbeCollector* get_rf_probe_collector() const { return &_rf_probe_collector; }
-
-private:
-    static constexpr size_t PREPARE_COUNTER_MASK = 0xffff'ffffull;
-    static constexpr size_t CLOSE_COUNTER_MASK = 0xffff'ffff'0000'0000ull;
-
-    // a refcount, low 32 bit used count the close invocation times, and the high 32 bit used to count the
-    // prepare invocation times.
-    std::atomic<size_t> _count;
-    // how many OperatorFactories into whom a ExecNode is decomposed.
-    const size_t _num_operators_generated;
-    // a wrapped RuntimeFilterProbeCollector initialized by a ExecNode, which contains runtime bloom filters.
-    RuntimeFilterProbeCollector _rf_probe_collector;
 };
 
 // Used to merge runtime in-filters and bloom-filters generated by multiple HashJoinBuildOperator instances.

@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -27,6 +26,7 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
@@ -202,7 +202,7 @@ public class HiveMetastoreApiConverterTest {
                 .setHiveDbName("hive_db")
                 .setHiveTableName("hive_table")
                 .setPartitionColumnNames(Lists.newArrayList("p1"))
-                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
                 .setDataColumnNames(Lists.newArrayList("c1"))
                 .setTableLocation("table_location")
                 .setStorageFormat(HiveStorageFormat.PARQUET)
@@ -225,13 +225,71 @@ public class HiveMetastoreApiConverterTest {
     }
 
     @Test
+    public void testToMetastoreApiTableWithSerdeProperties() {
+        Map<String, String> serdeProperties = new HashMap<>();
+        serdeProperties.put("field.delim", ",");
+        serdeProperties.put("collection.delim", "|");
+        serdeProperties.put("mapkey.delim", ":");
+        serdeProperties.put("line.delim", "\n");
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("text_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .setStorageFormat(HiveStorageFormat.TEXTFILE)
+                .setSerdeProperties(serdeProperties)
+                .build();
+
+        Table table = HiveMetastoreApiConverter.toMetastoreApiTable(hiveTable);
+        Map<String, String> serdeParams = table.getSd().getSerdeInfo().getParameters();
+        Assertions.assertNotNull(serdeParams);
+        Assertions.assertEquals(",", serdeParams.get("field.delim"));
+        Assertions.assertEquals("|", serdeParams.get("collection.delim"));
+        Assertions.assertEquals(":", serdeParams.get("mapkey.delim"));
+        Assertions.assertEquals("\n", serdeParams.get("line.delim"));
+    }
+
+    @Test
+    public void testExtractSerdeProperties() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("file_format", "textfile");
+        properties.put("field.delim", ",");
+        properties.put("collection.delim", "|");
+        properties.put("mapkey.delim", ":");
+        properties.put("line.delim", "\n");
+        properties.put("some_other_prop", "value");
+
+        Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
+        Assertions.assertEquals(4, serdeProps.size());
+        Assertions.assertEquals(",", serdeProps.get("field.delim"));
+        Assertions.assertEquals("|", serdeProps.get("collection.delim"));
+        Assertions.assertEquals(":", serdeProps.get("mapkey.delim"));
+        Assertions.assertEquals("\n", serdeProps.get("line.delim"));
+        Assertions.assertFalse(serdeProps.containsKey("file_format"));
+        Assertions.assertFalse(serdeProps.containsKey("some_other_prop"));
+    }
+
+    @Test
+    public void testExtractSerdePropertiesEmpty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("file_format", "parquet");
+
+        Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
+        Assertions.assertTrue(serdeProps.isEmpty());
+    }
+
+    @Test
     public void testToApiTableProperties() {
         HiveTable hiveTable = HiveTable.builder()
                 .setCatalogName("hive_catalog")
                 .setHiveDbName("hive_db")
                 .setHiveTableName("hive_table")
                 .setPartitionColumnNames(Lists.newArrayList("p1"))
-                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
                 .setDataColumnNames(Lists.newArrayList("c1"))
                 .setTableLocation("table_location")
                 .setStorageFormat(HiveStorageFormat.PARQUET)

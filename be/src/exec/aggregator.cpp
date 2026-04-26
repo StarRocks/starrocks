@@ -22,7 +22,9 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
@@ -32,13 +34,18 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#ifndef __APPLE__
+#include "udf/java/java_udf.h"
+#endif
 #include "udf/java/utils.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -101,22 +108,6 @@ inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
     }
 }
 
-template <bool UseIntermediateAsOutput>
-bool AggFunctionTypes::is_result_nullable() const {
-    if constexpr (UseIntermediateAsOutput) {
-        // If using intermediate results as output, no output will be generated and only the input will be serialized.
-        // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
-        return has_nullable_child;
-    } else {
-        // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
-        // Therefore, we need to decide whether the output is really nullable case by case:
-        // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
-        // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
-        // 3. Always nullable: `is_always_nullable_result`.
-        return (has_nullable_child && is_nullable) || is_always_nullable_result;
-    }
-}
-
 bool AggFunctionTypes::use_nullable_fn(bool use_intermediate_as_output) const {
     // The non-nullable version functions assume that both the input and output are non-nullable, while the nullable version
     // functions support nullable input or nullable output, which will judge whether the input and output are nullable.
@@ -167,7 +158,15 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context);
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration,
+                         bool use_cache = false, bool* cache_hit_out = nullptr);
+
+int64_t Aggregator::get_two_level_threahold() {
+    if (config::two_level_memory_threshold < 0) {
+        return agg::two_level_memory_threshold;
+    }
+    return config::two_level_memory_threshold;
+}
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
@@ -222,6 +221,7 @@ void AggregatorParams::init() {
             bool is_nullable = desc.nodes[0].is_nullable;
             // collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
@@ -232,6 +232,7 @@ void AggregatorParams::init() {
                     ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
             if (fn.__isset.agg_state_desc && AggStateUtils::is_agg_state_if(fn.name.function_name)) {
                 agg_fn_types[i].is_always_nullable_result = true;
+                agg_fn_types[i].serialize_always_nullable = true;
             }
             if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
@@ -279,33 +280,60 @@ Status Aggregator::open(RuntimeState* state) {
         return Status::OK();
     }
     _is_opened = true;
-    RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
     for (auto& _intermediate_agg_expr_ctx : _intermediate_agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_intermediate_agg_expr_ctx, state));
     }
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
 
     // init function context
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
+#ifndef __APPLE__
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, [this]() {
+        auto& opts = state->query_options();
+        bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
+        auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
+            std::vector<int> attached_udaf_idx;
+            attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
-                    auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                _agg_fn_ctxs[i]);
-                    RETURN_IF_ERROR(st);
+                    // use_cache only when isolation is explicitly shared and enable_cache_udaf is set
+                    bool use_cache = enable_cache && fn.__isset.isolated && !fn.isolated;
+                    bool cache_hit = false;
+                    Status st;
+                    {
+                        SCOPED_TIMER(_agg_stat->udaf_load_timer);
+                        st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                               _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                               use_cache ? &cache_hit : nullptr);
+                    }
+                    if (use_cache) {
+                        if (cache_hit) {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_hit_count, 1);
+                        } else {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
+                        }
+                    }
+                    if (!st.ok()) {
+                        for (int idx : attached_udaf_idx) {
+                            destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+                        }
+                        return st;
+                    }
+                    attached_udaf_idx.emplace_back(i);
                 }
             }
             return Status::OK();
         });
         RETURN_IF_ERROR(promise_st->get_future().get());
     }
+#endif
 
     // For SQL: select distinct id from table or select id from from table group by id;
     // we don't need to allocate memory for agg states.
@@ -374,12 +402,16 @@ Status Aggregator::open(RuntimeState* state) {
 
             return Status::OK();
         };
+#ifdef __APPLE__
+        RETURN_IF_ERROR(call_agg_create());
+#else
         if (_has_udaf) {
             auto promise_st = call_function_in_pthread(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
         }
+#endif
 
         if (_agg_expr_ctxs.empty()) {
             return Status::InternalError("Invalid agg query plan");
@@ -395,13 +427,13 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
+Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
     if (_is_prepared) {
         return Status::OK();
     }
     _is_prepared = true;
     _state = state;
-    _pool = pool;
+    _pool = std::make_unique<ObjectPool>();
     _runtime_profile = runtime_profile;
 
     _limit = _params->limit;
@@ -410,9 +442,11 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _intermediate_tuple_id = _params->intermediate_tuple_id;
     _output_tuple_id = _params->output_tuple_id;
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_min_max, &_group_by_min_max, state, true));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool.get(), _params->conjuncts, &_conjunct_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool.get(), _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool.get(), _params->grouping_min_max, &_group_by_min_max, state, true));
     _ranges.resize(_group_by_expr_ctxs.size());
     if (_group_by_min_max.size() == _group_by_expr_ctxs.size() * 2) {
         for (size_t i = 0; i < _group_by_expr_ctxs.size(); ++i) {
@@ -467,9 +501,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
             RETURN_IF_ERROR(
-                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+                    ExprFactory::create_expr_from_thrift_nodes(_pool.get(), desc.nodes, &node_idx, &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -488,9 +522,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         for (int i = 0; i < agg_size; ++i) {
             int node_idx = 0;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool, aggr_exprs[i].nodes, nullptr, &node_idx,
-                                                                   &expr, &ctx, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_from_thrift_nodes(_pool.get(), aggr_exprs[i].nodes, &node_idx,
+                                                                       &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _intermediate_agg_expr_ctxs[i].emplace_back(ctx);
         }
     }
@@ -505,17 +539,17 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_group_by_expr_ctxs, state));
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
     for (const auto& ctx : _intermediate_agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -570,6 +604,7 @@ bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTyp
 Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn,
                                               bool is_result_nullable, const AggregateFunction** ret) {
     std::vector<TypeDescriptor> arg_types;
+    arg_types.reserve(fn.arg_types.size());
     for (auto& type : fn.arg_types) {
         arg_types.push_back(TypeDescriptor::from_thrift(type));
     }
@@ -582,10 +617,10 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
         if (!AggStateUtils::is_agg_state_if(func_name)) {
             agg_state_desc.set_is_result_nullable(is_result_nullable);
         }
-        ASSIGN_OR_RETURN(auto agg_state_func,
+        ASSIGN_OR_RETURN(const AggregateFunction* agg_state_func,
                          AggStateUtils::get_agg_state_function(agg_state_desc, func_name, arg_types));
-        *ret = agg_state_func.get();
-        _combinator_function.emplace_back(std::move(agg_state_func));
+        *ret = agg_state_func;
+        _combinator_function.emplace_back(agg_state_func);
     } else {
         // get function
         if (func_name == FUNCTION_COUNT) {
@@ -660,11 +695,13 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
         _release_agg_memory();
     }
 
+#ifndef __APPLE__
     for (int i = 0; i < _agg_functions.size(); i++) {
-        if (_agg_fn_ctxs[i]) {
-            _agg_fn_ctxs[i]->release_mems();
+        if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+            clear_java_udaf_states(_agg_fn_ctxs[i]);
         }
     }
+#endif
 
     _mem_pool->free_all();
     _agg_state_mem_usage = 0;
@@ -738,11 +775,13 @@ void Aggregator::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
+#ifndef __APPLE__
         for (int i = 0; i < _agg_functions.size(); i++) {
-            if (_agg_fn_ctxs[i]) {
-                _agg_fn_ctxs[i]->release_mems();
+            if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                destroy_java_udaf_context(_agg_fn_ctxs[i]);
             }
         }
+#endif
 
         if (_is_only_group_by_columns) {
             _hash_set_variant.reset();
@@ -750,19 +789,30 @@ void Aggregator::close(RuntimeState* state) {
             _hash_map_variant.reset();
         }
 
-        Expr::close(_group_by_expr_ctxs, state);
+        ExprExecutor::close(_group_by_expr_ctxs, state);
         for (const auto& i : _agg_expr_ctxs) {
-            Expr::close(i, state);
+            ExprExecutor::close(i, state);
         }
-        Expr::close(_conjunct_ctxs, state);
+        ExprExecutor::close(_conjunct_ctxs, state);
+
+        for (auto* func : _combinator_function) {
+            delete func;
+        }
+        _combinator_function.clear();
+
         return Status::OK();
     };
+#ifdef __APPLE__
+    (void)agg_close();
+#else
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
     }
+#endif
+    _spiller.reset();
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
@@ -830,7 +880,8 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
         ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[j]->evaluate(chunk));
         // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
         if (j == 0) {
-            _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+            _agg_input_columns[i][j] =
+                    ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
         } else {
             // if function has at least two argument, unpack const column selectively
             // for function like corr, FE forbid second args to be const, we will always unpack const column for it
@@ -838,7 +889,8 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
             if (agg_expr_ctxs[j]->root()->is_constant()) {
                 _agg_input_columns[i][j] = std::move(col);
             } else {
-                _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+                _agg_input_columns[i][j] =
+                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
             }
         }
         _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
@@ -919,10 +971,34 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
 }
 
 RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    if (desc->type() != TRuntimeFilterBuildType::AGG_FILTER) {
+        return nullptr;
+    }
     int expr_order = desc->build_expr_order();
     const auto& group_type_type = _group_by_types[expr_order].result_type.type;
     AggInRuntimeFilterBuilder in_builder(desc, group_type_type);
     return in_builder.build(this, state->obj_pool());
+}
+
+RuntimeFilter* Aggregator::build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    if (desc->type() != TRuntimeFilterBuildType::TOPN_FILTER) {
+        return nullptr;
+    }
+    int expr_order = desc->build_expr_order();
+    const auto& group_type_type = _group_by_types[expr_order].result_type.type;
+    // only build when group by keys's size is less than limit
+    if (size() < desc->limit()) {
+        return nullptr;
+    }
+
+    if (_topn_runtime_filter_builder == nullptr) {
+        // for the first time to build the topn runtime filter
+        _topn_runtime_filter_builder = new AggTopNRuntimeFilterBuilder(desc, group_type_type);
+        _pool->add(_topn_runtime_filter_builder);
+        return _topn_runtime_filter_builder->build(this, state->obj_pool());
+    } else {
+        return _topn_runtime_filter_builder->runtime_filter();
+    }
 }
 
 Status Aggregator::_evaluate_const_columns(int i) {
@@ -941,7 +1017,7 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     // TODO(kks): we should approve memory allocate here
     auto use_intermediate = _use_intermediate_as_output();
-    Columns agg_result_column = _create_agg_result_columns(1, use_intermediate);
+    MutableColumns agg_result_column = _create_agg_result_columns(1, use_intermediate);
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     if (!use_intermediate) {
         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
@@ -1038,13 +1114,13 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                     // At present, the type of problem cannot be completely solved,
                     // and a new solution needs to be designed to solve it completely
                     if (agg_input_column != nullptr && agg_input_column->size() == num_input_rows) {
-                        agg_input_column->filter(_streaming_selection);
+                        agg_input_column->as_mutable_raw_ptr()->filter(_streaming_selection);
                     }
                 }
             }
         }
 
-        Columns agg_result_column = _create_agg_result_columns(num_rows, true);
+        MutableColumns agg_result_column = _create_agg_result_columns(num_rows, true);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
@@ -1052,15 +1128,17 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 if (force_use_intermediate_as_output) {
                     if (agg_result_column[i]->is_nullable()) {
-                        _agg_input_columns[i][0] = ColumnHelper::cast_to_nullable_column(_agg_input_columns[i][0]);
+                        _agg_input_columns[i][0] =
+                                ColumnHelper::cast_to_nullable_column(std::move(_agg_input_columns[i][0]));
                     }
                 }
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
                 {
                     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+                    // convert_to_serialize_format expects const Columns&, create a view
                     _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
-                                                                   result_chunk->num_rows(), &agg_result_column[i]);
+                                                                   result_chunk->num_rows(), agg_result_column[i]);
                 }
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
@@ -1100,7 +1178,7 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
 
         const auto num_rows = _group_by_columns[0]->size();
-        Columns agg_result_column = _create_agg_result_columns(num_rows, true);
+        MutableColumns agg_result_column = _create_agg_result_columns(num_rows, true);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
@@ -1111,7 +1189,7 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
                 _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
-                                                               result_chunk->num_rows(), &agg_result_column[i]);
+                                                               result_chunk->num_rows(), agg_result_column[i]);
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
@@ -1136,7 +1214,7 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
         // At present, the type of problem cannot be completely solved,
         // and a new solution needs to be designed to solve it completely
         if (_group_by_column->size() == num_input_rows) {
-            _group_by_column->filter(_streaming_selection);
+            _group_by_column->as_mutable_raw_ptr()->filter(_streaming_selection);
         }
     }
 
@@ -1170,8 +1248,8 @@ Status Aggregator::check_has_error() {
 
 // When need finalize, create column by result type
 // otherwise, create column by serde type
-Columns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_intermediate) {
-    Columns agg_result_columns(_agg_fn_types.size());
+MutableColumns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_intermediate) {
+    MutableColumns agg_result_columns(_agg_fn_types.size());
 
     if (!use_intermediate) {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
@@ -1191,8 +1269,8 @@ Columns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_interme
     return agg_result_columns;
 }
 
-Columns Aggregator::_create_group_by_columns(size_t num_rows) const {
-    Columns group_by_columns(_group_by_types.size());
+MutableColumns Aggregator::_create_group_by_columns(size_t num_rows) const {
+    MutableColumns group_by_columns(_group_by_types.size());
     for (size_t i = 0; i < _group_by_types.size(); ++i) {
         group_by_columns[i] =
                 ColumnHelper::create_column(_group_by_types[i].result_type, _group_by_types[i].is_nullable);
@@ -1201,14 +1279,14 @@ Columns Aggregator::_create_group_by_columns(size_t num_rows) const {
     return group_by_columns;
 }
 
-void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns) {
+void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                                agg_result_columns[i].get());
     }
 }
 
-void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns) {
+void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());
@@ -1246,6 +1324,30 @@ ChunkPtr Aggregator::_build_output_chunk(const Columns& group_by_columns, const 
     return result_chunk;
 }
 
+ChunkPtr Aggregator::_build_output_chunk(MutableColumns&& group_by_columns, MutableColumns&& agg_result_columns,
+                                         bool use_intermediate_as_output) {
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    // For different agg phase, we should use different TupleDescriptor
+    if (!use_intermediate_as_output) {
+        for (size_t i = 0; i < group_by_columns.size(); i++) {
+            result_chunk->append_column(std::move(group_by_columns[i]), _output_tuple_desc->slots()[i]->id());
+        }
+        for (size_t i = 0; i < agg_result_columns.size(); i++) {
+            size_t id = group_by_columns.size() + i;
+            result_chunk->append_column(std::move(agg_result_columns[i]), _output_tuple_desc->slots()[id]->id());
+        }
+    } else {
+        for (size_t i = 0; i < group_by_columns.size(); i++) {
+            result_chunk->append_column(std::move(group_by_columns[i]), _intermediate_tuple_desc->slots()[i]->id());
+        }
+        for (size_t i = 0; i < agg_result_columns.size(); i++) {
+            size_t id = group_by_columns.size() + i;
+            result_chunk->append_column(std::move(agg_result_columns[i]), _intermediate_tuple_desc->slots()[id]->id());
+        }
+    }
+    return result_chunk;
+}
+
 void Aggregator::_reset_exprs() {
     SCOPED_TIMER(_agg_stat->expr_release_timer);
     for (auto& _group_by_column : _group_by_columns) {
@@ -1270,8 +1372,8 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {
-                auto* const_column = static_cast<ConstColumn*>(_group_by_columns[i].get());
-                const_column->data_column()->assign(chunk->num_rows(), 0);
+                auto* const_column = static_cast<const ConstColumn*>(_group_by_columns[i].get());
+                const_column->data_column()->as_mutable_raw_ptr()->assign(chunk->num_rows(), 0);
                 _group_by_columns[i] = const_column->data_column();
             }
         }
@@ -1582,6 +1684,22 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     });
 }
 
+void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
+    _streaming_selection.resize(chunk_size);
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                        AllocateState<MapType>(this), &_tmp_agg_states,
+                                                                        &_streaming_selection);
+    });
+    // if _streaming_selection is not all 0, means there are new group by keys,
+    // we need to build the topn runtime filter
+    if (_topn_runtime_filter_builder != nullptr &&
+        SIMD::count_zero(_streaming_selection.data(), chunk_size) != chunk_size) {
+        _topn_runtime_filter_builder->update(_group_by_columns, _streaming_selection);
+    }
+}
+
 // When meets not found group keys, mark the first pos into `_streaming_selection` and insert into the hashmap
 // so the following group keys(same as the first not found group keys) are not marked as non-founded.
 // This can be used for stream mv so no need to find multi times for the same non-found group keys.
@@ -1598,7 +1716,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                                              bool force_use_intermediate_as_output) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
-    RETURN_IF_ERROR(_hash_map_variant.visit([&](auto& variant_value) {
+    RETURN_IF_ERROR(_hash_map_variant.visit([&, this](auto& variant_value) {
         auto& hash_map_with_key = *variant_value;
         using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
 
@@ -1608,8 +1726,8 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
         auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
-        Columns group_by_columns = _create_group_by_columns(num_rows);
-        Columns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
+        MutableColumns group_by_columns = _create_group_by_columns(num_rows);
+        MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 
         int32_t read_index = 0;
         {
@@ -1628,6 +1746,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         if (read_index > 0) {
             {
                 SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                // Pass MutableColumns directly to hashtable interface
                 hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
             }
 
@@ -1678,7 +1797,8 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         }
 
         _it_hash = it;
-        auto result_chunk = _build_output_chunk(group_by_columns, agg_result_columns, use_intermediate);
+        auto result_chunk =
+                _build_output_chunk(std::move(group_by_columns), std::move(agg_result_columns), use_intermediate);
         _num_rows_returned += read_index;
         _num_rows_processed += read_index;
         *chunk = std::move(result_chunk);
@@ -1703,7 +1823,7 @@ void Aggregator::build_hash_set_with_selection(size_t chunk_size) {
 void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
-    _hash_set_variant.visit([&](auto& variant_value) {
+    _hash_set_variant.visit([&, this](auto& variant_value) {
         auto& hash_set = *variant_value;
         using HashSetWithKey = std::remove_reference_t<decltype(hash_set)>;
         using Iterator = typename HashSetWithKey::Iterator;
@@ -1711,7 +1831,7 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
         auto end = hash_set.hash_set.end();
         const auto hash_set_size = _hash_set_variant.size();
         auto num_rows = std::min<size_t>(hash_set_size - _num_rows_processed, chunk_size);
-        Columns group_by_columns = _create_group_by_columns(num_rows);
+        MutableColumns group_by_columns = _create_group_by_columns(num_rows);
 
         // Computer group by columns and aggregate result column
         int32_t read_index = 0;
@@ -1754,11 +1874,11 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
         auto use_intermediate = _use_intermediate_as_output();
         if (!use_intermediate) {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
-                result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
+                result_chunk->append_column(std::move(group_by_columns[i]), _output_tuple_desc->slots()[i]->id());
             }
         } else {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
-                result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
+                result_chunk->append_column(std::move(group_by_columns[i]), _intermediate_tuple_desc->slots()[i]->id());
             }
         }
         _num_rows_returned += read_index;

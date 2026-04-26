@@ -19,15 +19,12 @@
 #include <boost/thread/future.hpp>
 #include <future>
 
-#include "column/chunk.h"
 #include "common/status.h"
 #include "connector/connector.h"
 #include "connector_chunk_sink.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
-#include "fs/fs.h"
-#include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 #include "utils.h"
 
@@ -45,7 +42,7 @@ public:
 
     const std::vector<std::string>& transform_expr() const { return _transform_exprs; }
 
-    Status add(Chunk* chunk) override;
+    Status add(const ChunkPtr& chunk) override;
 
 private:
     std::vector<std::string> _transform_exprs;

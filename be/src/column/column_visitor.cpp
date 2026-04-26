@@ -20,6 +20,7 @@ namespace starrocks {
     Status ColumnVisitor::visit(const ClassName& column) { return Status::NotSupported(#ClassName); }
 
 VISIT_IMPL(NullableColumn)
+VISIT_IMPL(AdaptiveNullableColumn)
 VISIT_IMPL(ConstColumn)
 VISIT_IMPL(ArrayColumn)
 VISIT_IMPL(MapColumn)
@@ -72,6 +73,6 @@ VISIT_IMPL(FixedLengthColumnBase<uint24_t>)
 VISIT_IMPL(FixedLengthColumnBase<int96_t>)
 VISIT_IMPL(FixedLengthColumnBase<decimal12_t>)
 VISIT_IMPL(ObjectColumn<JsonValue>)
-VISIT_IMPL(ObjectColumn<VariantValue>)
+VISIT_IMPL(ObjectColumn<VariantRowValue>)
 
 } // namespace starrocks

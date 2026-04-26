@@ -38,10 +38,10 @@ public class MaterializedViewWithMultiStageTest extends MaterializedViewTest {
         // set join derive rewrite in view delta
         String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
                 + "left outer join depts b on (emps.deptno=b.deptno)\n"
-                + "left outer join dependents using (empid)";
+                + "left outer join dependents on (emps.empid=dependents.empid)";
 
         String query = "select emps.empid, dependents.name from emps\n"
-                + " join dependents using (empid)\n"
+                + " join dependents on (emps.empid=dependents.empid)\n"
                 + "where dependents.name = 'name1'";
         testRewriteOK(mv, query);
     }

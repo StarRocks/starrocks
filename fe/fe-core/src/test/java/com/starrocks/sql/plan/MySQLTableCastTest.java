@@ -65,6 +65,10 @@ public class MySQLTableCastTest extends PlanTestBase {
         sqls.add(Pair.create("select * from ods_order where cast(org_order_no as int)",
                 "predicates: CAST(CAST(org_order_no AS INT) AS BOOLEAN)"));
 
+        // MySQL-compatible SIGNED cast should return BIGINT.
+        sqls.add(Pair.create("select cast(2147483648 as signed)", "<slot 2> : 2147483648"));
+        sqls.add(Pair.create("select cast(1 as signed integer)", "<slot 2> : 1"));
+
         return sqls.stream().map(e -> Arguments.of(e));
     }
 

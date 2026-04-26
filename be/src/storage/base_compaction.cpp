@@ -14,11 +14,13 @@
 
 #include "storage/base_compaction.h"
 
+#include "base/debug/trace.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
-#include "util/defer_op.h"
-#include "util/starrocks_metrics.h"
-#include "util/trace.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
 

@@ -1,0 +1,40 @@
+-- name: test_external_catalog_information_schema_pattern
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_catalog_information_schema_pattern/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_external_catalog_information_schema_pattern/${uuid0}"
+);
+
+set catalog ice_hadoop${uuid0};
+
+create database ice_hadoop${uuid0}.ice_hadoop_db1;
+
+create table ice_hadoop${uuid0}.ice_hadoop_db1.atest (
+    c0 int, 
+    c1 string
+);
+
+create database ice_hadoop${uuid0}.ice_hadoop_db2;
+
+create table ice_hadoop${uuid0}.ice_hadoop_db2.btest (
+    c2 int, 
+    c3 string
+);
+
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE from information_schema.columns where table_schema like 'ice_hadoop_db%' order by COLUMN_NAME;
+
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE from information_schema.columns where table_schema like 'ice_hadoop_db_' order by COLUMN_NAME;
+
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE from information_schema.columns where table_schema like 'ice_hadoop_db1' order by COLUMN_NAME;
+
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE from information_schema.columns where table_name like '_test' order by COLUMN_NAME;
+
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE from information_schema.columns where table_name like 'a_est' order by COLUMN_NAME;
+
+set catalog default_catalog;
+drop catalog ice_hadoop${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null

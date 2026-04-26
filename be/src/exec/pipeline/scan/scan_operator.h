@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "exec/exec_node.h"
+#include "base/concurrency/race_detect.h"
+#include "base/concurrency/spinlock.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/source_operator.h"
@@ -22,8 +23,7 @@
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/race_detect.h"
-#include "util/spinlock.h"
+#include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {
 
@@ -177,7 +177,7 @@ protected:
         if (chunk == nullptr || chunk->is_empty() || !_topn_filter_back_pressure) {
             return;
         }
-        if (auto* topn_runtime_filters = runtime_bloom_filters()) {
+        if (auto* topn_runtime_filters = get_factory()->get_runtime_bloom_filters()) {
             auto input_num_rows = chunk->num_rows();
             _init_topn_runtime_filter_counters();
             topn_runtime_filters->evaluate(chunk, _topn_filter_eval_context);
@@ -214,14 +214,14 @@ protected:
             return;
         }
 
-        if (auto* bloom_filters = runtime_bloom_filters()) {
+        if (auto* bloom_filters = get_factory()->get_runtime_bloom_filters()) {
             _init_rf_counters(true);
             if (_topn_filter_back_pressure) {
                 _bloom_filter_eval_context.mode = RuntimeMembershipFilterEvalContext::Mode::M_WITHOUT_TOPN;
             }
             bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
         }
-        ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+        ChunkPredicateEvaluator::eval_filter_null_values(chunk, get_factory()->get_filter_null_value_columns());
     }
 
 protected:
@@ -314,6 +314,7 @@ public:
     SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
     std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+    ScanNode* scan_node() { return _scan_node; }
 
 protected:
     ScanNode* const _scan_node;

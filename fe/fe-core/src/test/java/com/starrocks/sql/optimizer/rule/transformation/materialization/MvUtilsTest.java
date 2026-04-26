@@ -19,14 +19,13 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -39,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -97,9 +97,9 @@ public class MvUtilsTest {
     @Test
     public void testGetAllPredicate() {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
-        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
-        ColumnRefOperator columnRef3 = columnRefFactory.create("col3", Type.INT, false);
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", IntegerType.INT, false);
+        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", IntegerType.INT, false);
+        ColumnRefOperator columnRef3 = columnRefFactory.create("col3", IntegerType.INT, false);
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, columnRef2);
 

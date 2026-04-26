@@ -21,10 +21,10 @@
 
 #include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exprs/runtime_filter_bank.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -75,7 +75,7 @@ public:
     void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
-    Status parse_runtime_filters(RuntimeState* state);
+    virtual Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
@@ -102,7 +102,7 @@ protected:
     pipeline::ScanSplitContext* _split_context = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
-        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
         return Status::OK();
     }
 
@@ -199,6 +199,8 @@ enum ConnectorType {
     LAKE = 5,
     BINLOG = 6,
     ICEBERG = 7,
+    BENCHMARK = 8,
+    CACHE_STATS = 9,
 };
 
 class Connector {
@@ -212,6 +214,8 @@ public:
     static const std::string LAKE;
     static const std::string BINLOG;
     static const std::string ICEBERG;
+    static const std::string BENCHMARK;
+    static const std::string CACHE_STATS;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
@@ -227,6 +231,11 @@ public:
     //                                                         const std::string& table_handle) const;
 
     virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
+
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const {
         CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
         __builtin_unreachable();
     }

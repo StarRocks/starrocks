@@ -19,16 +19,17 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/simd/batch_run_counter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
-#include "exec/exec_node.h"
+#include "common/config_scan_io_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
 
@@ -57,22 +58,21 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     ColumnPtr result_column = std::move(dict_value_column);
     for (int32_t i = sub_field_path.size() - 1; i >= 0; i--) {
         if (!result_column->is_nullable()) {
-            result_column =
-                    NullableColumn::create(std::move(result_column), NullColumn::create(result_column->size(), 0));
+            result_column = NullableColumn::create(result_column, NullColumn::create(result_column->size(), 0));
         }
         Columns columns;
         columns.emplace_back(result_column);
         std::vector<std::string> field_names;
         field_names.emplace_back(sub_field_path[i]);
-        result_column = StructColumn::create(std::move(columns), std::move(field_names));
+        result_column = StructColumn::create(columns, std::move(field_names));
     }
 
     ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
     dict_value_chunk->append_column(result_column, slot_id);
     Filter filter(dict_size, 1);
     int dict_values_after_filter = 0;
-    ASSIGN_OR_RETURN(dict_values_after_filter,
-                     ExecNode::eval_conjuncts_into_filter(conjunct_ctxs, dict_value_chunk.get(), &filter));
+    ASSIGN_OR_RETURN(dict_values_after_filter, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
+                                                       conjunct_ctxs, dict_value_chunk.get(), &filter));
 
     // dict column is empty after conjunct eval, file group can be skipped
     if (dict_values_after_filter == 0) {
@@ -184,12 +184,14 @@ bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_t
         //      And any convert should be disabled, because the length cannot change.
     } else if (type == LogicalType::TYPE_DECIMAL32 || type == LogicalType::TYPE_DECIMAL64 ||
                type == LogicalType::TYPE_DECIMAL128 || type == LogicalType::TYPE_DECIMALV2) {
-        //TODO: Decimal can be stored as INT32, INT64, BYTE_ARRAY, FLBA in parquet
-        //      SR stores the decimalxx as intxx with precision and scale,
-        //      First the int type should match the parquet's physical type
-        //      And the logical type of sr and parquet's scale and precision should also be the same
-        //      Ohterwise, we need to convert the value.
-        //      But we should notice that if the convert will cause precision loss, otherwise it should be disabled.
+        const bool exact_decimal_layout = field.precision == col_type.precision && field.scale == col_type.scale;
+        if (exact_decimal_layout) {
+            if (type == LogicalType::TYPE_DECIMAL32 && parquet_type == tparquet::Type::type::INT32) {
+                appliable = true;
+            } else if (type == LogicalType::TYPE_DECIMAL64 && parquet_type == tparquet::Type::type::INT64) {
+                appliable = true;
+            }
+        }
     } else {
         //TODO: Other types like TYPE_TIME, TYPE_DATE_V1, TYPE_DATETIME, TYPE_DATETIME_V1 is stored different with int type in sr
         //    should be converted as int32_t or int64_t.

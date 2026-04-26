@@ -34,8 +34,11 @@ array_repeat(element, count)
 
 例 1:
 
-```plain text
-mysql> select array_repeat(1,5) as res;
+```sql
+select array_repeat(1,5) as res;
+```
+
+```sql
 +-------------+
 | res         |
 +-------------+
@@ -45,8 +48,11 @@ mysql> select array_repeat(1,5) as res;
 
 例 2:
 
-```plain text
-mysql> select  array_repeat([1,2],3) as res;
+```sql
+select  array_repeat([1,2],3) as res;
+```
+
+```sql
 +---------------------+
 | res                 |
 +---------------------+
@@ -56,8 +62,11 @@ mysql> select  array_repeat([1,2],3) as res;
 
 例 3:
 
-```Plain
-mysql> select array_repeat(1,-1) as res;
+```sql
+select array_repeat(1,-1) as res;
+```
+
+```sql
 +------+
 | res  |
 +------+
@@ -67,8 +76,11 @@ mysql> select array_repeat(1,-1) as res;
 
 例 4:
 
-```Plain
-mysql> select  array_repeat(null,3) as res;
+```sql
+select  array_repeat(null,3) as res;
+```
+
+```sql
 +------+
 | res  |
 +------+
@@ -78,10 +90,13 @@ mysql> select  array_repeat(null,3) as res;
 
 例 5:
 
-```Plain
-mysql> CREATE TABLE IF NOT EXISTS test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
-mysql> INTO test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
-mysql> select array_repeat(COLA,COLB) from test;
+```sql
+CREATE TABLE IF NOT EXISTS test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
+INSERT INTO test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
+select array_repeat(COLA,COLB) from test;
+```
+
+```sql
 +--------------------------+
 | array_repeat(COLA, COLB) |
 +--------------------------+

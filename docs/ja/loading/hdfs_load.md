@@ -6,11 +6,11 @@ keywords: ['Broker Load']
 
 # HDFS からのデータロード
 
-import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.md'
+import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.mdx'
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
-import PipeAdvantages from '../_assets/commonMarkdown/pipeAdvantages.md'
+import PipeAdvantages from '../_assets/commonMarkdown/pipeAdvantages.mdx'
 
 StarRocks は、HDFS からデータをロードするために次のオプションを提供します。
 
@@ -40,9 +40,9 @@ HDFS クラスターとの接続を確立するために、シンプルな認証
 
 `FILES()` を使用すると、次のことができます:
 
-- [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して HDFS から直接データをクエリする。
+- [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用して HDFS から直接データをクエリする。
 - [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS) を使用してテーブルを作成し、ロードする。
-- [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して既存のテーブルにデータをロードする。
+- [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用して既存のテーブルにデータをロードする。
 
 ### 典型的な例
 

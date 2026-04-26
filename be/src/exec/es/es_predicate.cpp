@@ -41,10 +41,12 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/types/int128.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/es/es_query_builder.h"
 #include "exprs/column_ref.h"
@@ -53,9 +55,7 @@
 #include "exprs/in_const_predicate.hpp"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "types/large_int_value.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -104,7 +104,7 @@ VExtLiteral::VExtLiteral(LogicalType type, ColumnPtr column, const std::string& 
     } else if (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
         DCHECK(!column->is_null(0));
         if (column->is_constant()) {
-            _value = down_cast<ConstColumn*>(column.get())->data_column()->debug_item(0);
+            _value = down_cast<const ConstColumn*>(column.get())->data_column()->debug_item(0);
         } else {
             _value = column->debug_item(0);
         }
@@ -122,12 +122,12 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (is_type_in<T, std::monostate, int96_t, decimal12_t, DecimalV2Value, DatumArray,
                                              DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*,
-                                             VariantValue*>()) {
+                                             VariantRowValue*>()) {
                         // ignore these types
                     } else if constexpr (std::is_same_v<T, Slice>) {
                         res = std::string(arg.data, arg.size);
                     } else if constexpr (std::is_same_v<T, __int128_t>) {
-                        res = LargeIntValue::to_string(arg);
+                        res = int128_to_string(arg);
                     } else {
                         res = std::to_string(arg);
                     }
@@ -248,7 +248,7 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
         // how to process literal
         ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
         auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _timezone));
-        std::string col = slot_desc->col_name();
+        std::string col{slot_desc->col_name()};
 
         // ES does not support non-bool literal pushdown for bool type
         if (column_ref->type().type == TYPE_BOOLEAN && expr->type().type != TYPE_BOOLEAN) {
@@ -309,7 +309,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 return Status::InternalError("build disjuncts failed: no SLOT_REF child");
             }
             bool is_not_null = fname == "is_not_null_pred" ? true : false;
-            std::string col = slot_desc->col_name();
+            std::string col{slot_desc->col_name()};
             if (_field_context.find(col) != _field_context.end()) {
                 col = _field_context[col];
             }
@@ -340,7 +340,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             if (type != TYPE_VARCHAR && type != TYPE_CHAR) {
                 return Status::InternalError("build disjuncts failed: like value is not a string");
             }
-            std::string col = slot_desc->col_name();
+            std::string col{slot_desc->col_name()};
             if (_field_context.find(col) != _field_context.end()) {
                 col = _field_context[col];
             }
@@ -438,7 +438,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             return Status::InternalError("unsupported type to push down to ES");
         }
 
-        std::string col = slot_desc->col_name();
+        std::string col{slot_desc->col_name()};
         if (_field_context.find(col) != _field_context.end()) {
             col = _field_context[col];
         }

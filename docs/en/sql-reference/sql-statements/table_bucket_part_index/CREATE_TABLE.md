@@ -212,8 +212,82 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
-- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
-- **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
+- **DEFAULT (\<expr\>)**: Use the result returned by a given expression or function as the default value. The following expressions are supported:
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md): Generate unique identifiers.
+  - ARRAY literal expressions (e.g., `[1, 2, 3]`): For ARRAY type columns.
+  - MAP expressions (e.g., `map{key: value}`): For MAP type columns.
+  - row() function (e.g., `row(val1, val2)`): For STRUCT type columns.
+- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. StarRocks supports specifying default values for different types:
+  
+  **Basic types**: Use string literals to specify default values.
+  
+  ```sql
+  -- Numeric types
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- String types
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- Date/time types
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- Boolean type
+  is_active BOOLEAN DEFAULT 'true'  -- Supports 'true'/'false'/'1'/'0'
+  ```
+  
+  **JSON type**: Use JSON-formatted strings to specify default values.
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY type**: Only empty string is supported as default value.
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP and HLL types**: Only empty string is supported as default value, only for AGGREGATE KEY tables.
+  
+  ```sql
+  -- In AGGREGATE KEY tables
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **Complex types (ARRAY/MAP/STRUCT)**: Use expression syntax to specify default values, only supported for OLAP tables.
+  
+  :::note
+  Default values for complex types are **only supported when `fast_schema_evolution = true`**. If the table's `fast_schema_evolution` property is explicitly set to `false`, adding default values for complex types will result in an error.
+  :::
+  
+  ```sql
+  -- ARRAY type
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP type
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT type
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- Complex nesting: STRUCT with nested STRUCT, ARRAY, and MAP
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **Limitations**:
+  
+  - TIME and VARIANT types do not support default values yet.
+  - Default values for complex types (ARRAY/MAP/STRUCT) are only supported for OLAP tables and require the `fast_schema_evolution` property to be enabled.
 
 **AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
 
@@ -245,15 +319,25 @@ Data is sequenced in specified key columns and has different attributes for diff
 
 - AGGREGATE KEY: Identical content in key columns will be aggregated into value columns according to the specified aggregation type. It usually applies to business scenarios such as financial statements and multi-dimensional analysis.
 - UNIQUE KEY/PRIMARY KEY: Identical content in key columns will be replaced in value columns according to the import sequence. It can be applied to make addition, deletion, modification and query on key columns.
-- DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. 
+- DUPLICATE KEY: Identical content in key columns co-exists in StarRocks. It can be used to store detailed data or data with no aggregation attributes.
 
   :::note
   DUPLICATE KEY is the default type. Data will be sequenced according to key columns.
   :::
 
 :::note
-Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+Value columns do not need to specify aggregation types when other key type is used to create tables with the exception of AGGREGATE KEY.
 :::
+
+### Range-based Distribution
+
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+
+The range-based distribution semantic is different from the default semantic in the following aspects:
+- If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
+- If none of the key type, a DISTRIBUTED BY clause, or an ORDER BY is specified, a Duplicate Key table with the random bucketing strategy will be created.
+- If the key type and a DISTRIBUTED BY clause are not specified, but an ORDER BY clause is specified, a Duplicate Key table with the range-based distribution strategy will be created. In this case, DUPLICATE KEY is equivalent to an ORDER BY clause, and vice versa.
+- If both DUPLICATE KEY and an ORDER BY clause are specified, only the ORDER BY clause will take effect, and DUPLICATE KEY will be ignored.
 
 ## COMMENT
 
@@ -413,6 +497,10 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+
+- Range-based distribution
+
+  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. For detailed information, see [Range-based distribution](#range-based-distribution).
 
 ## Rollup index
 
@@ -715,14 +803,37 @@ PROPERTIES (
       You can foreshorten this interval by setting a lower value for the FE dynamic configuration `lake_autovacuum_grace_period_minutes`. However, remember to reset the configuration to its original value after you modify the `file_bundling` property.
   :::
 
-### Fast schema evolution
+### Fast Schema Evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+- `fast_schema_evolution`: Whether to enable Fast Schema Evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling Fast Schema Evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using ALTER TABLE after table creation.
 
   :::note
-  - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
-  - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
+  - Fast Schema Evolution is supported for shared-nothing clusters since v3.2.0.
+  - Fast Schema Evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
   :::
+
+- `cloud_native_fast_schema_evolution_v2`: Whether to enable Fast Schema Evolution v2 for the **cloud-native table**. Supported from v4.1 onwards. Valid values are `TRUE` (default) or `FALSE`. When Fast Schema Evolution v2 is enabled, schema changes become a synchronous process. When the ALTER TABLE statement returns successfully, the new schema is effective immediately. The system will only modify FE metadata rather than tablet metadata located on S3, so it can always achieve second-level latency no matter how many partitions or tablets in the table. While in the legacy behavior, schema changes are run as an asynchronous job that updates tablet metadata over time.
+
+  :::note
+  - Fast Schema Evolution v2 is supported from v4.1 onwards and only for **cloud-native tables** in shared-data clusters.
+  - Default behaviors:
+    - For new tables created in a v4.1 cluster, Fast Schema Evolution v2 is enabled by default.
+    - For existing tables from a cluster upgraded to v4.1, Fast Schema Evolution v2 is disabled by default. You can enable it by explicitly setting this property to `true` via [ALTER TABLE](ALTER_TABLE.md).
+  - Downgrade requirements:
+    - To downgrade a shared-data cluster from v4.1 to v4.0.5 or later, you can directly downgrade it following the standard downgrade procedures.
+    - Before downgrading a shared-data cluster from v4.1 to v3.x or patch versions earlier than v4.0.5, you must manually set `cloud_native_fast_schema_evolution_v2` to `false` for any tables that have enabled Fast Schema Evolution v2 via ALTER TABLE. You must wait until the asynchronous jobs become FINISHED. You can track the job status via SHOW ALTER.
+  :::
+
+You can inspect the schema change jobs via [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md).
+
+Example:
+
+```SQL
+-- List recent column/schema change jobs in the table
+SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
+```
+
+For cloud-native tables with Fast Schema Evolution v2 enabled, schema change jobs will typically appear as FINISHED, because the change is applied by updating FE metadata only.
 
 ### Forbid Base Compaction
 
@@ -804,7 +915,7 @@ PROPERTIES (
 
 - `flat_json.enable` (Optional): Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
 - `flat_json.null.factor` (Optional): The proportion threshold of NULL values in the column. A column will not be extracted by Flat JSON if its proportion of NULL values is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
-- `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.9`.
+- `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
 
 ## Examples

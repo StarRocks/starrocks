@@ -15,7 +15,6 @@
 package com.starrocks.connector.kudu;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -25,9 +24,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.Type;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
@@ -133,6 +134,11 @@ public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredi
             default:
                 return null;
         }
+    }
+
+    @Override
+    public List<KuduPredicate> visitLargeInPredicate(LargeInPredicateOperator operator, Void context) {
+        throw new UnsupportedOperationException("not support large in predicate in the KuduPredicateConverter");
     }
 
     @Override

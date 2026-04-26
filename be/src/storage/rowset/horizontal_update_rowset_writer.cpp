@@ -14,6 +14,8 @@
 
 #include "storage/rowset/horizontal_update_rowset_writer.h"
 
+#include "common/config_compaction_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/key_cache.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
@@ -107,6 +109,8 @@ Status HorizontalUpdateRowsetWriter::flush_chunk(const Chunk& chunk, SegmentPB* 
         _num_uptfile++;
         _total_update_row_size += static_cast<int64_t>(chunk.bytes_usage());
     }
+    // check global_dict
+    _check_global_dict((*segment_writer).get());
     (*segment_writer).reset();
     return Status::OK();
 }
@@ -122,6 +126,8 @@ Status HorizontalUpdateRowsetWriter::flush() {
             std::lock_guard<std::mutex> l(_lock);
             _num_uptfile++;
         }
+        // check global_dict
+        _check_global_dict(_update_file_writer.get());
         _update_file_writer.reset();
     }
     return Status::OK();

@@ -22,7 +22,7 @@ import com.starrocks.sql.parser.NodePosition;
  * Queries from JDBC will be handled by COM_QUERY protocol, it will generate UseDbStmt.
  */
 public class UseDbStmt extends StatementBase {
-    private String catalog;
+    private final String catalog;
     private final String database;
 
     public UseDbStmt(String catalog, String database, NodePosition pos) {
@@ -33,10 +33,6 @@ public class UseDbStmt extends StatementBase {
 
     public String getCatalogName() {
         return this.catalog;
-    }
-
-    public void setCatalogName(String catalogName) {
-        this.catalog = catalogName;
     }
 
     public String getDbName() {

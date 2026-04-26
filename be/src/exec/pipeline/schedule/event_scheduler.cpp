@@ -14,9 +14,11 @@
 
 #include "exec/pipeline/schedule/event_scheduler.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/utils.h"
 
@@ -56,11 +58,7 @@ void EventScheduler::try_schedule(const DriverRawPtr driver) {
     } else if (driver->is_finished()) {
         add_to_ready_queue = true;
     } else {
-        auto status_or_is_not_blocked = driver->is_not_blocked();
-        if (!status_or_is_not_blocked.ok()) {
-            fragment_ctx->cancel(status_or_is_not_blocked.status());
-            add_to_ready_queue = true;
-        } else if (status_or_is_not_blocked.value()) {
+        if (driver->check_is_ready()) {
             driver->set_driver_state(DriverState::READY);
             add_to_ready_queue = true;
         }

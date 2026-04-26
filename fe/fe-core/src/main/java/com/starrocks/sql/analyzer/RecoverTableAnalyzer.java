@@ -16,12 +16,14 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverTableStmt;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.TableRef;
+
+import static com.starrocks.sql.analyzer.AnalyzerUtils.normalizedTableRef;
 
 public class RecoverTableAnalyzer {
 
     public static void analyze(RecoverTableStmt statement, ConnectContext context) {
-        TableName tableName = statement.getTableNameObject();
-        tableName.normalization(context);
+        TableRef tableRef = normalizedTableRef(statement.getTableRef(), context);
+        statement.setTableRef(tableRef);
     }
 }

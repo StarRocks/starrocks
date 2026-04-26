@@ -289,9 +289,9 @@ public:
         return false;
     }
 
-    const string& get_segment_encryption_meta(int segment_id) const;
-    const string& get_uptfile_encryption_meta(int upt_file_id) const;
-    const string& get_delfile_encryption_meta(int del_file_id) const;
+    const std::string& get_segment_encryption_meta(int segment_id) const;
+    const std::string& get_uptfile_encryption_meta(int upt_file_id) const;
+    const std::string& get_delfile_encryption_meta(int del_file_id) const;
 
 private:
     bool _deserialize_from_pb(std::string_view value) {

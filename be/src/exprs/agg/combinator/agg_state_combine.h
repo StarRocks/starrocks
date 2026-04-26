@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
@@ -38,7 +40,7 @@ struct AggStateCombineState {};
 class AggStateCombine final : public AggStateCombinator<AggStateCombineState, AggStateCombine> {
 public:
     AggStateCombine(AggStateDesc agg_state_desc, const AggregateFunction* function)
-            : AggStateCombinator(agg_state_desc, function) {
+            : AggStateCombinator(std::move(agg_state_desc), function) {
         DCHECK(_function != nullptr);
     }
 
@@ -56,10 +58,9 @@ public:
         _serialize_to_column_nullable(ctx, state, to);
     }
 
-    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK_EQ(1, srcs.size());
-        *dst = srcs[0];
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
+                                     MutableColumnPtr& dst) const override {
+        _function->convert_to_serialize_format(ctx, srcs, chunk_size, dst);
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
@@ -78,7 +79,7 @@ private:
             _function->get_name() == AggStateUtils::FUNCTION_COUNT_NULLABLE) {
             if (LIKELY(to->is_nullable())) {
                 auto* nullable_column = down_cast<NullableColumn*>(to);
-                _function->serialize_to_column(ctx, state, nullable_column->mutable_data_column());
+                _function->serialize_to_column(ctx, state, nullable_column->data_column_raw_ptr());
                 nullable_column->null_column_data().push_back(0);
             } else {
                 _function->serialize_to_column(ctx, state, to);

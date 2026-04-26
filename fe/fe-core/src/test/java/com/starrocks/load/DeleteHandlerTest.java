@@ -35,20 +35,24 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.load.DeleteJob.DeleteState;
+import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -73,6 +77,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -135,7 +140,18 @@ public class DeleteHandlerTest {
             }
 
             @Mock
-            public void logInsertTransactionState(TransactionState transactionState) {
+            public void logInsertTransactionState(TransactionState transactionState,
+                    com.starrocks.persist.WALApplier walApplier) {
+                if (walApplier != null) {
+                    walApplier.apply(transactionState);
+                }
+            }
+
+            @Mock
+            public void logFinishMultiDelete(MultiDeleteInfo info, com.starrocks.persist.WALApplier walApplier) {
+                if (walApplier != null) {
+                    walApplier.apply(info);
+                }
             }
         };
 
@@ -160,6 +176,14 @@ public class DeleteHandlerTest {
                 result = db.getTable("test_tbl");
 
                 globalStateMgr.getLocalMetastore().getTable(CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+
+                globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
                 minTimes = 0;
                 result = db.getTable("test_tbl");
 
@@ -228,8 +252,10 @@ public class DeleteHandlerTest {
             BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                     new IntLiteral(3));
 
-            DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                    new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+            DeleteStmt deleteStmt = new DeleteStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                            null, NodePosition.ZERO),
+                    new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
             new Expectations(globalTransactionMgr) {
                 {
@@ -255,8 +281,10 @@ public class DeleteHandlerTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -303,8 +331,10 @@ public class DeleteHandlerTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -354,8 +384,10 @@ public class DeleteHandlerTest {
             BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                     new IntLiteral(3));
 
-            DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                    new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+            DeleteStmt deleteStmt = new DeleteStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                            null, NodePosition.ZERO),
+                    new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
             Set<Replica> finishedReplica = Sets.newHashSet();
             finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -420,8 +452,10 @@ public class DeleteHandlerTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -477,8 +511,10 @@ public class DeleteHandlerTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -524,8 +560,10 @@ public class DeleteHandlerTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -568,7 +606,7 @@ public class DeleteHandlerTest {
     }
 
     @Test
-    public void testRemoveOldOnReplay() throws Exception {
+    public void testRemoveOldOnReplay(@Mocked MetadataMgr metadataMgr) throws Exception {
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb(1L);
@@ -576,6 +614,23 @@ public class DeleteHandlerTest {
                 result = db;
 
                 globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+
+                globalStateMgr.getMetadataMgr();
+                minTimes = 0;
+                result = metadataMgr;
+
+            }
+        };
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                minTimes = 0;
+                result = null;
+
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 minTimes = 0;
                 result = db.getTable("test_tbl");
             }

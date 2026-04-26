@@ -21,11 +21,11 @@ import org.apache.paimon.metrics.MetricRegistry;
 
 import java.util.Map;
 
-public class PaimonMetricRegistry extends MetricRegistry {
+public class PaimonMetricRegistry implements MetricRegistry {
     private MetricGroup metricGroup;
 
     @Override
-    protected MetricGroup createMetricGroup(String groupName, Map<String, String> variables) {
+    public MetricGroup createMetricGroup(String groupName, Map<String, String> variables) {
         MetricGroup metricGroup = new MetricGroupImpl(groupName, variables);
         this.metricGroup = metricGroup;
         return metricGroup;

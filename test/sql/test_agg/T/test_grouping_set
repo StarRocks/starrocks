@@ -1,4 +1,4 @@
--- name: test_grouping_set
+-- name: test_grouping_set @mac
 
 CREATE TABLE `t0` (
   `v1` bigint(20) NULL COMMENT "",

@@ -42,6 +42,30 @@ public class SessionVariableConstants {
     public static final String ELASTIC = "elastic";
     public static final String BALANCE = "balance";
 
+    public static final String ETL = "etl";
+    public static final String DEFAULT = "default";
+
+    public enum ExecMode {
+        DEFAULT,
+        ETL;
+
+        public static ExecMode getDefault() {
+            return DEFAULT;
+        }
+
+        public boolean isETL() {
+            return this == ETL;
+        }
+
+        public static ExecMode parse(String str) {
+            try {
+                return EnumUtils.getEnumIgnoreCase(ExecMode.class, str);
+            } catch (Exception e) {
+                return getDefault();
+            }
+        }
+    }
+
     public enum ChooseInstancesMode {
 
         // the number of chosen instances is the same as the max number of instances from its children fragments

@@ -137,7 +137,7 @@ public class RowOutputInfo {
     }
 
     public List<ColumnRefOperator> getOutputColRefs() {
-        return chooseOutputMap().values().stream().map(e -> e.getColumnRef()).collect(Collectors.toList());
+        return chooseOutputMap().values().stream().map(ColumnOutputInfo::getColumnRef).collect(Collectors.toList());
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {

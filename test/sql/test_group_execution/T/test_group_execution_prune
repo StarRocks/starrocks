@@ -49,27 +49,27 @@ select count(1) from t1 join [colocate] t2 using(k1);
 with
     t1 as (select * from t0 where k1 = 1),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 >= 1),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 < 1),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 in (1,2,3,4)),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 not in (1,2,3,4)),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by k1) tb;
 -- prune right
 with
     t1 as (select * from t0 where k1 = 1),
@@ -104,24 +104,24 @@ select count(1) from t2 join [colocate] t1 using(k1);
 with
     t1 as (select * from t0 where k1 = 1),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 >= 1),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 < 1),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 in (1,2,3,4)),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by k1) tb;
 
 with
     t1 as (select * from t0 where k1 not in (1,2,3,4)),
     t2 as (select * from t0)
-select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by k1) tb;

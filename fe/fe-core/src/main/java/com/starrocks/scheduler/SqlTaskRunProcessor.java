@@ -35,6 +35,8 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
         StmtExecutor executor = null;
         try {
             ConnectContext ctx = context.getCtx();
+            // Set query source to TASK for task-submitted queries
+            ctx.setQuerySource(com.starrocks.qe.QueryDetail.QuerySource.TASK);
             ctx.getAuditEventBuilder().reset();
             ctx.getAuditEventBuilder()
                     .setTimestamp(System.currentTimeMillis())
@@ -58,6 +60,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
 
             executor = StmtExecutor.newInternalExecutor(ctx, sqlStmt);
             ctx.setExecutor(executor);
+            ctx.setMultiStmt(false);
             ctx.setThreadLocalInfo();
             executor.addRunningQueryDetail(sqlStmt);
             executor.execute();

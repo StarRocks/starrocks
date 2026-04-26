@@ -15,17 +15,18 @@
 #pragma once
 
 #include <memory>
+#include <sstream>
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value.h"
+#include "types/datum.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/variant_value.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
 
 namespace starrocks {
 
@@ -37,25 +38,23 @@ public:
     using ValueType = T;
     using Container = Buffer<ValueType*>;
 
-    struct ObjectDataProxyContainer {
-        ObjectDataProxyContainer(const ObjectColumn& column) : _column(column) {}
+    struct ImmContainer {
+        ImmContainer() = default;
+        explicit ImmContainer(const ObjectColumn& column) : _column(&column) {}
 
-        T* operator[](size_t index) const { return _column.get_object(index); }
+        T* operator[](size_t index) const { return _column->get_object(index); }
 
-        size_t size() const { return _column.size(); }
+        size_t size() const { return _column->size(); }
 
     private:
-        const ObjectColumn& _column;
+        const ObjectColumn* _column = nullptr;
     };
-    using ImmContainer = ObjectDataProxyContainer;
 
     ObjectColumn() = default;
 
     explicit ObjectColumn(size_t size) : _pool(size) {}
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
-
-    ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)) {}
 
     void operator=(const ObjectColumn&) = delete;
 
@@ -69,16 +68,6 @@ public:
 
     bool is_object() const override { return true; }
 
-    const uint8_t* raw_data() const override {
-        _build_slices();
-        return reinterpret_cast<const uint8_t*>(_slices.data());
-    }
-
-    uint8_t* mutable_raw_data() override {
-        _build_slices();
-        return reinterpret_cast<uint8_t*>(_slices.data());
-    }
-
     size_t size() const override { return _pool.size(); }
 
     size_t capacity() const override { return _pool.capacity(); }
@@ -90,9 +79,9 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
-    void reserve(size_t n) override { _pool.reserve(n); }
+    void reserve(size_t n) override;
 
-    void resize(size_t n) override { _pool.resize(n); }
+    void resize(size_t n) override;
 
     void assign(size_t n, size_t idx) override;
 
@@ -152,10 +141,6 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
@@ -164,17 +149,7 @@ public:
 
     T* get_object(size_t n) const { return const_cast<T*>(&_pool[n]); }
 
-    Buffer<T*>& get_data() {
-        _build_cache();
-        return _cache;
-    }
-
-    const Buffer<T*>& get_data() const {
-        _build_cache();
-        return _cache;
-    }
-
-    const ObjectDataProxyContainer immutable_data() const { return ObjectDataProxyContainer(*this); }
+    ImmContainer immutable_data() const { return ImmContainer(*this); }
 
     Datum get(size_t n) const override { return Datum(get_object(n)); }
 
@@ -188,24 +163,11 @@ public:
         auto& r = down_cast<ObjectColumn&>(rhs);
         std::swap(this->_delete_state, r._delete_state);
         std::swap(this->_pool, r._pool);
-        std::swap(this->_cache_ok, r._cache_ok);
-        std::swap(this->_cache, r._cache);
-        std::swap(this->_buffer, r._buffer);
-        std::swap(this->_slices, r._slices);
     }
 
     void reset_column() override {
         Column::reset_column();
         _pool.clear();
-        _cache_ok = false;
-        _cache.clear();
-        _slices.clear();
-        _buffer.clear();
-    }
-
-    void reset_cache() {
-        _cache_ok = false;
-        _cache.clear();
     }
 
     Buffer<T>& get_pool() { return _pool; }
@@ -236,42 +198,21 @@ public:
         return Status::OK();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 
     void check_or_die() const override {}
 
-private:
-    // add this to avoid warning clang-diagnostic-overloaded-virtual
+    void build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const;
+
+    // Unhide the virtual `Column::append(const Column&)` so derived classes
+    // (e.g. JsonColumn) can also add it back to their scope via `using`.
     using Column::append;
-
-    void _build_cache() const {
-        if (_cache_ok) {
-            return;
-        }
-
-        _cache.clear();
-        _cache.reserve(_pool.size());
-        for (int i = 0; i < _pool.size(); ++i) {
-            _cache.emplace_back(const_cast<T*>(&_pool[i]));
-        }
-
-        _cache_ok = true;
-    }
-
-    // Currently, only for data loading
-    void _build_slices() const;
 
 private:
     Buffer<T> _pool;
-    mutable bool _cache_ok = false;
-    mutable Buffer<T*> _cache;
-
-    // Only for data loading
-    mutable Buffer<Slice> _slices;
-    mutable Buffer<uint8_t> _buffer;
 };
 } // namespace starrocks

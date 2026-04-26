@@ -48,13 +48,10 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Resource;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
@@ -77,9 +74,11 @@ import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -90,6 +89,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -119,6 +119,10 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -169,8 +173,8 @@ public class SparkLoadJob extends BulkLoadJob {
     protected long sparkLoadSubmitTimeoutSecond = Config.spark_load_submit_timeout_second;
     // below for push task
     private final Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
-    private final Map<Long, PushBrokerReaderParams> indexToPushBrokerReaderParams = Maps.newHashMap();
-    private final Map<Long, Integer> indexToSchemaHash = Maps.newHashMap();
+    private final Map<Long, PushBrokerReaderParams> indexMetaIdToPushBrokerReaderParams = Maps.newHashMap();
+    private final Map<Long, Integer> indexMetaIdToSchemaHash = Maps.newHashMap();
     private final Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask = Maps.newHashMap();
     private final Set<Long> finishedReplicas = Sets.newHashSet();
     private final Set<Long> quorumTablets = Sets.newHashSet();
@@ -228,13 +232,10 @@ public class SparkLoadJob extends BulkLoadJob {
         sparkResource = ((SparkResource) oriResource).getCopiedResource();
         sparkResource.update(resourceDesc);
 
-        // broker desc
+        // broker desc -> persist properties
         Map<String, String> brokerProperties = sparkResource.getBrokerPropertiesWithoutPrefix();
-        if (sparkResource.hasBroker()) {
-            brokerDesc = new BrokerDesc(sparkResource.getBroker(), brokerProperties);
-        } else {
-            brokerDesc = new BrokerDesc(brokerProperties);
-        }
+        String name = sparkResource.hasBroker() ? sparkResource.getBroker() : "";
+        this.brokerPersistInfo = new BrokerPropertiesPersistInfo(name, brokerProperties);
     }
 
     @Override
@@ -249,6 +250,10 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     protected void unprotectedExecuteJob() throws LoadException {
         // create pending task
+        BrokerDesc brokerDesc = null;
+        if (brokerPersistInfo != null) {
+            brokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+        }
         LoadTask task = new SparkLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(),
                 sparkResource, brokerDesc);
         task.init();
@@ -291,9 +296,12 @@ public class SparkLoadJob extends BulkLoadJob {
             appId = attachment.getAppId();
             etlOutputPath = attachment.getOutputPath();
 
-            executeEtl();
             // log etl state
-            unprotectedLogUpdateStateInfo();
+            long curTimestamp = System.currentTimeMillis();
+            SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
+                    id, JobState.ETL, transactionId, sparkLoadAppHandle, curTimestamp, appId, etlOutputPath,
+                    loadStartTimestamp, tabletMetaToFileInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(info, wal -> executeEtl(curTimestamp));
         } finally {
             writeUnlock();
         }
@@ -302,8 +310,8 @@ public class SparkLoadJob extends BulkLoadJob {
     /**
      * update etl start time and state in spark load job
      */
-    private void executeEtl() {
-        etlStartTimestamp = System.currentTimeMillis();
+    private void executeEtl(long etlStartTimestamp) {
+        this.etlStartTimestamp = etlStartTimestamp;
         state = JobState.ETL;
         LOG.info("update to {} state success. job id: {}", state, id);
     }
@@ -332,8 +340,9 @@ public class SparkLoadJob extends BulkLoadJob {
 
         // get etl status
         SparkEtlJobHandler handler = new SparkEtlJobHandler();
+        BrokerDesc runtimeBrokerDescForStatus = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
         EtlStatus status =
-                handler.getEtlJobStatus(sparkLoadAppHandle, appId, id, etlOutputPath, sparkResource, brokerDesc);
+                handler.getEtlJobStatus(sparkLoadAppHandle, appId, id, etlOutputPath, sparkResource, runtimeBrokerDescForStatus);
         writeLock();
         try {
             switch (status.getState()) {
@@ -407,9 +416,8 @@ public class SparkLoadJob extends BulkLoadJob {
         }
 
         // get etl output files and update loading state
-        unprotectedUpdateToLoadingState(etlStatus, handler.getEtlFilePaths(etlOutputPath, brokerDesc));
-        // log loading statedppResult
-        unprotectedLogUpdateStateInfo();
+        BrokerDesc runtimeBrokerDescForPaths = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+        unprotectedUpdateToLoadingState(etlStatus, handler.getEtlFilePaths(etlOutputPath, runtimeBrokerDescForPaths));
         // prepare loading infos
         unprotectedPrepareLoadingInfos();
     }
@@ -428,9 +436,13 @@ public class SparkLoadJob extends BulkLoadJob {
 
             loadingStatus = etlStatus;
             progress = 0;
-            unprotectedUpdateState(JobState.LOADING);
             loadStartTimestamp = System.currentTimeMillis();
             startLoad = true;
+            SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
+                    id, JobState.LOADING, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
+                    loadStartTimestamp, tabletMetaToFileInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(
+                    info, wal -> unprotectedUpdateState(JobState.LOADING));
             LOG.info("update to {} state success. job id: {}", state, id);
         } catch (Exception e) {
             LOG.warn("update to {} state failed. job id: {}", state, id, e);
@@ -441,11 +453,11 @@ public class SparkLoadJob extends BulkLoadJob {
     private void unprotectedPrepareLoadingInfos() {
         for (String tabletMetaStr : tabletMetaToFileInfo.keySet()) {
             String[] fileNameArr = tabletMetaStr.split("\\.");
-            // tableId.partitionId.indexId.bucket.schemaHash
+            // tableId.partitionId.indexMetaId.bucket.schemaHash
             Preconditions.checkState(fileNameArr.length == 5);
             long tableId = Long.parseLong(fileNameArr[0]);
             long partitionId = Long.parseLong(fileNameArr[1]);
-            long indexId = Long.parseLong(fileNameArr[2]);
+            long indexMetaId = Long.parseLong(fileNameArr[2]);
             int schemaHash = Integer.parseInt(fileNameArr[4]);
 
             if (!tableToLoadPartitions.containsKey(tableId)) {
@@ -453,17 +465,18 @@ public class SparkLoadJob extends BulkLoadJob {
             }
             tableToLoadPartitions.get(tableId).add(partitionId);
 
-            indexToSchemaHash.put(indexId, schemaHash);
+            indexMetaIdToSchemaHash.put(indexMetaId, schemaHash);
         }
     }
 
-    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
-        if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
+    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexMetaId) throws StarRocksException {
+        if (!indexMetaIdToPushBrokerReaderParams.containsKey(indexMetaId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
-            pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId), brokerDesc);
-            indexToPushBrokerReaderParams.put(indexId, pushBrokerReaderParams);
+            pushBrokerReaderParams.init(table.getSchemaByIndexMetaId(indexMetaId),
+                    new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
+            indexMetaIdToPushBrokerReaderParams.put(indexMetaId, pushBrokerReaderParams);
         }
-        return indexToPushBrokerReaderParams.get(indexId);
+        return indexMetaIdToPushBrokerReaderParams.get(indexMetaId);
     }
 
     private Set<Long> submitPushTasks() throws StarRocksException {
@@ -491,7 +504,7 @@ public class SparkLoadJob extends BulkLoadJob {
             try {
                 // check state is still loading. If state is cancelled or finished, return.
                 // if state is cancelled or finished and not return, this would throw
-                // "No partitions have data available for loading" exception,
+                // "No rows were imported from upstream" exception,
                 // because tableToLoadPartitions was already cleaned up,
                 if (state != JobState.LOADING) {
                     LOG.warn("job state is not loading. job id: {}, state: {}", id, state);
@@ -519,13 +532,13 @@ public class SparkLoadJob extends BulkLoadJob {
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
-                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {
-                            long indexId = index.getId();
-                            int schemaHash = indexToSchemaHash.get(indexId);
+                            long indexMetaId = index.getMetaId();
+                            int schemaHash = indexMetaIdToSchemaHash.get(indexMetaId);
 
                             List<TColumn> columnsDesc = new ArrayList<TColumn>();
-                            for (Column column : table.getSchemaByIndexId(indexId)) {
+                            for (Column column : table.getSchemaByIndexMetaId(indexMetaId)) {
                                 columnsDesc.add(column.toThrift());
                             }
 
@@ -534,11 +547,11 @@ public class SparkLoadJob extends BulkLoadJob {
                                 long tabletId = tablet.getId();
                                 totalTablets.add(tabletId);
                                 String tabletMetaStr = String.format("%d.%d.%d.%d.%d", tableId, partitionId,
-                                        indexId, bucket++, schemaHash);
+                                        indexMetaId, bucket++, schemaHash);
 
                                 Set<Long> tabletFinishedReplicas = Sets.newHashSet();
                                 Set<Long> tabletAllReplicas = Sets.newHashSet();
-                                PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexId);
+                                PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexMetaId);
 
                                 if (tablet instanceof LocalTablet) {
                                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -548,7 +561,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                                                 .getBackend(backendId);
 
-                                        pushTask(backendId, tableId, partitionId, indexId, tabletId,
+                                        pushTask(backendId, tableId, partitionId, index.getId(), tabletId,
                                                 replicaId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
                                                 backend, replica, tabletFinishedReplicas,
                                                 TTabletType.TABLET_TYPE_DISK, columnsDesc);
@@ -575,7 +588,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         continue;
                                     }
 
-                                    pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
+                                    pushTask(backend.getId(), tableId, partitionId, index.getId(), tabletId,
                                             tabletId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
                                             backend, new Replica(tabletId, backend.getId(), -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE, columnsDesc);
@@ -598,7 +611,7 @@ public class SparkLoadJob extends BulkLoadJob {
                     String errMsg = new LogBuilder(LogKey.LOAD_JOB, id)
                             .add("database_id", dbId)
                             .add("label", label)
-                            .add("error_msg", "No partitions have data available for loading")
+                            .add("error_msg", "No rows were imported from upstream")
                             .build();
                     throw new LoadException(errMsg);
                 }
@@ -644,9 +657,10 @@ public class SparkLoadJob extends BulkLoadJob {
             }
 
             // update broker address
-            if (brokerDesc.hasBroker()) {
+            BrokerDesc runtimeBrokerDescForPush = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+            if (runtimeBrokerDescForPush.hasBroker()) {
                 FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
-                        brokerDesc.getName(), backend.getHost());
+                        runtimeBrokerDescForPush.getName(), backend.getHost());
                 tBrokerScanRange.getBroker_addresses().add(
                         new TNetworkAddress(fsBroker.ip, fsBroker.port));
                 LOG.debug("push task for replica {}, broker {}:{}, backendId {}," +
@@ -793,7 +807,8 @@ public class SparkLoadJob extends BulkLoadJob {
             try {
                 // delete label dir, remove the last taskId dir
                 String outputPath = etlOutputPath.substring(0, etlOutputPath.lastIndexOf("/"));
-                handler.deleteEtlOutputPath(outputPath, brokerDesc);
+                handler.deleteEtlOutputPath(outputPath,
+                        new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
             } catch (Exception e) {
                 LOG.warn("delete etl files failed. id: {}, state: {}", id, state, e);
             }
@@ -814,8 +829,8 @@ public class SparkLoadJob extends BulkLoadJob {
             // clear job infos that not persist
             resourceDesc = null;
             tableToLoadPartitions.clear();
-            indexToPushBrokerReaderParams.clear();
-            indexToSchemaHash.clear();
+            indexMetaIdToPushBrokerReaderParams.clear();
+            indexMetaIdToSchemaHash.clear();
             tabletToSentReplicaPushTask.clear();
             finishedReplicas.clear();
             quorumTablets.clear();
@@ -826,8 +841,8 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        super.afterVisible(txnState, txnOperated);
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
         // collect table-level metrics after spark load job finished
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (null == db) {
@@ -847,18 +862,18 @@ public class SparkLoadJob extends BulkLoadJob {
             }
         });
         clearJob();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
-        super.afterAborted(txnState, txnOperated, txnStatusChangeReason);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
+        super.afterAborted(txnState, txnStatusChangeReason);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 
     @Override
-    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn, boolean needLog) {
-        super.cancelJobWithoutCheck(failMsg, abortTxn, needLog);
+    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn) {
+        super.cancelJobWithoutCheck(failMsg, abortTxn);
         clearJob();
     }
 
@@ -896,16 +911,6 @@ public class SparkLoadJob extends BulkLoadJob {
                 }
             }
         }
-    }
-
-    /**
-     * log load job update info when job state changed to etl or loading
-     */
-    private void unprotectedLogUpdateStateInfo() {
-        SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
-                id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
-                loadStartTimestamp, tabletMetaToFileInfo);
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(info);
     }
 
     @Override
@@ -1035,8 +1040,8 @@ public class SparkLoadJob extends BulkLoadJob {
                 Type type = column.getType();
                 if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
                     // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
-                    srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
-                    srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
+                    srcSlotDesc.setType(VarcharType.VARCHAR);
+                    srcSlotDesc.setColumn(new Column(column.getName(), VarcharType.VARCHAR));
                 } else {
                     srcSlotDesc.setType(type);
                     srcSlotDesc.setColumn(new Column(column.getName(), type));
@@ -1055,7 +1060,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 destSidToSrcSidWithoutTrans.put(destSlotDesc.getId().asInt(), srcSlotDesc.getId().asInt());
                 Expr expr = new SlotRef(srcSlotDesc);
                 expr = castToSlot(destSlotDesc, expr);
-                params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());
+                params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThrift.treeToThrift(expr));
             }
             params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
             params.setSrc_tuple_id(srcTupleDesc.getId().asInt());
@@ -1082,14 +1087,16 @@ public class SparkLoadJob extends BulkLoadJob {
             if (dstType.isBoolean() && srcType.isVarchar()) {
                 // there is no cast VARCHAR to BOOLEAN function
                 // so we cast VARCHAR to TINYINT first, then cast TINYINT to BOOLEAN
-                return new CastExpr(Type.BOOLEAN, new CastExpr(Type.TINYINT, expr));
+                return new CastExpr(BooleanType.BOOLEAN, new CastExpr(IntegerType.TINYINT, expr));
             } else if (dstType.isScalarType()) {
                 if ((dstType.isBitmapType() || dstType.isHllType()) && srcType.isVarchar()) {
                     // there is no cast VARCHAR to BITMAP|HLL function,
                     // bitmap and hll data will be converted from varchar in be push.
                     return expr;
                 }
-                return dstType.getPrimitiveType() != srcType.getPrimitiveType() ? expr.castTo(dstType) : expr;
+                return dstType.getPrimitiveType() != srcType.getPrimitiveType()
+                        ? ExprCastFunction.castTo(expr, dstType)
+                        : expr;
             } else {
                 throw new AnalysisException("Spark-Load does not support complex types yet");
             }

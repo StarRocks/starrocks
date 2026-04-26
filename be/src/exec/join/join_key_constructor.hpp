@@ -17,7 +17,7 @@
 #include <optional>
 
 #include "column/column.h"
-#include "join_key_constructor.h"
+#include "exec/join/join_key_constructor.h"
 
 namespace starrocks {
 
@@ -26,23 +26,27 @@ namespace starrocks {
 // ------------------------------------------------------------------------------------
 
 template <LogicalType LT>
-auto BuildKeyConstructorForOneKey<LT>::get_key_data(const JoinHashTableItems& table_items) -> const ImmBuffer<CppType> {
-    ColumnPtr data_column;
-    if (table_items.key_columns[0]->is_nullable()) {
-        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
-        data_column = null_column->data_column();
-    } else {
-        data_column = table_items.key_columns[0];
-    }
-
+void BuildKeyConstructorForOneKey<LT>::build_key(RuntimeState* state, JoinHashTableItems* table_items) {
+    // TODO: Going forward, if system testing verifies that the slice cache has no impact on join performance
+    // in all scenarios, we will ultimately avoid building the slice cache. According to current simple benchmark
+    // results, it provides only minor performance benefits in medium-cardinality scenarios.
     if constexpr (lt_is_string<LT>) {
+        const auto* data_column = ColumnHelper::get_data_column(table_items->key_columns[0]);
         if (UNLIKELY(data_column->is_large_binary())) {
-            return ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->get_data();
+            ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->build_slices(table_items->build_slice);
         } else {
-            return ColumnHelper::as_raw_column<BinaryColumn>(data_column)->get_data();
+            ColumnHelper::as_raw_column<BinaryColumn>(data_column)->build_slices(table_items->build_slice);
         }
+    }
+}
+
+template <LogicalType LT>
+auto BuildKeyConstructorForOneKey<LT>::get_key_data(const JoinHashTableItems& table_items) -> const ImmBuffer<CppType> {
+    if constexpr (lt_is_string<LT>) {
+        return table_items.build_slice;
     } else {
-        return ColumnHelper::as_raw_column<ColumnType>(data_column)->get_data();
+        const auto* data_column = ColumnHelper::get_data_column(table_items.key_columns[0]);
+        return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
     }
 }
 
@@ -51,7 +55,7 @@ const std::optional<ImmBuffer<uint8_t>> BuildKeyConstructorForOneKey<LT>::get_is
         const JoinHashTableItems& table_items) {
     if (table_items.key_columns[0]->is_nullable() && table_items.key_columns[0]->has_null()) {
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
-        return nullable_column->null_column()->get_data();
+        return nullable_column->immutable_null_column_data();
     } else {
         return std::nullopt;
     }
@@ -67,17 +71,21 @@ void ProbeKeyConstructorForOneKey<LT>::build_key(const JoinHashTableItems& table
     } else {
         probe_state->null_array = std::nullopt;
     }
+    if constexpr (lt_is_string<LT>) {
+        const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state->key_columns)[0]);
+        data_column->build_slices(probe_state->probe_slice);
+    }
 }
 
 template <LogicalType LT>
 auto ProbeKeyConstructorForOneKey<LT>::get_key_data(const HashTableProbeState& probe_state)
         -> const ImmBuffer<CppType> {
-    if ((*probe_state.key_columns)[0]->is_nullable()) {
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state.key_columns)[0]);
-        return ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
+    if constexpr (lt_is_string<LT>) {
+        return probe_state.probe_slice;
+    } else {
+        const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state.key_columns)[0]);
+        return data_column->get_data();
     }
-
-    return ColumnHelper::as_raw_column<ColumnType>((*probe_state.key_columns)[0])->get_data();
 }
 
 // ------------------------------------------------------------------------------------
@@ -110,16 +118,19 @@ void BuildKeyConstructorForSerializedFixedSize<LT>::build_key(RuntimeState* stat
         }
     }
     // Serialize to key columns.
-    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, table_items->build_key_column.get(), 1,
-                                                           row_count);
+    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns,
+                                                           table_items->build_key_column->as_mutable_raw_ptr(),
+                                                           table_items->serialized_fixed_size_key_bytes, 1, row_count);
     // Build key is_nulls.
     if (!null_columns.empty()) {
         table_items->build_key_nulls.resize(row_count + 1);
         auto* dest_is_nulls = table_items->build_key_nulls.data();
-        std::memcpy(dest_is_nulls, null_columns[0]->get_data().data(), (row_count + 1) * sizeof(NullColumn::ValueType));
+        const auto& null_data_0 = null_columns[0]->immutable_data();
+        std::memcpy(dest_is_nulls, null_data_0.data(), (row_count + 1) * sizeof(NullColumn::ValueType));
         for (uint32_t i = 1; i < null_columns.size(); i++) {
+            const auto& null_data_i = null_columns[i]->immutable_data();
             for (uint32_t j = 1; j < 1 + row_count; j++) {
-                dest_is_nulls[j] |= null_columns[i]->get_data()[j];
+                dest_is_nulls[j] |= null_data_i[j];
             }
         }
     }
@@ -154,18 +165,21 @@ void ProbeKeyConstructorForSerializedFixedSize<LT>::build_key(const JoinHashTabl
 
     // Build key and is_nulls.
     const uint32_t row_count = probe_state->probe_row_count;
-    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
-                                                           row_count);
+    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns,
+                                                           probe_state->probe_key_column->as_mutable_raw_ptr(),
+                                                           table_items.serialized_fixed_size_key_bytes, 0, row_count);
 
     if (null_columns.empty()) {
         probe_state->null_array = std::nullopt;
     } else {
+        const auto& null_data_0 = null_columns[0]->immutable_data();
         for (uint32_t i = 0; i < row_count; i++) {
-            probe_state->is_nulls[i] = null_columns[0]->get_data()[i];
+            probe_state->is_nulls[i] = null_data_0[i];
         }
         for (uint32_t i = 1; i < null_columns.size(); i++) {
+            const auto& null_data_i = null_columns[i]->immutable_data();
             for (uint32_t j = 0; j < row_count; j++) {
-                probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
+                probe_state->is_nulls[j] |= null_data_i[j];
             }
         }
 

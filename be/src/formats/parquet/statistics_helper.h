@@ -19,7 +19,7 @@
 #include "exprs/in_const_predicate.hpp"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 

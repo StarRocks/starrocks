@@ -17,7 +17,6 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.hudi.HudiConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
@@ -28,6 +27,7 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
@@ -152,10 +152,17 @@ public class HudiScanNode extends ScanNode {
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    @Override
+    public void prepareRetry() {
+        this.scanRangeSource.reset();
     }
 }

@@ -96,8 +96,8 @@ public class LakeAggregatePublishTest {
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
 
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIds()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets1.add(tabletCommitInfo);
@@ -117,7 +117,7 @@ public class LakeAggregatePublishTest {
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
 
         Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
     }
@@ -129,7 +129,7 @@ public class LakeAggregatePublishTest {
     
         List<Tablet> tablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             tablets.addAll(baseIndex.getTablets());
         }
 
@@ -150,7 +150,7 @@ public class LakeAggregatePublishTest {
 
             when(mockManager.getAliveComputeNodes(any())).thenReturn(null);
             LakeAggregator lakeAggregator = new LakeAggregator();
-            Assertions.assertNotNull(lakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(10)));
+            Assertions.assertNotNull(lakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(10), null));
         } finally {
             Field warehouseMgrField = GlobalStateMgr.class.getDeclaredField("warehouseMgr");
             warehouseMgrField.setAccessible(true);

@@ -23,9 +23,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
@@ -37,6 +38,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -54,12 +56,12 @@ import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -113,7 +115,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
@@ -123,7 +126,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String dbName = deltaLakeTable.getCatalogDBName();
         String tableName = deltaLakeTable.getCatalogTableName();
         PredicateSearchKey key =
-                PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().end().get(), params.getPredicate());
+                PredicateSearchKey.of(dbName, tableName, params);
 
         triggerDeltaLakePlanFilesIfNeeded(key, table, params.getPredicate(), params.getFieldNames());
 
@@ -138,7 +141,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
-        return buildRemoteInfoSource(table, params.getPredicate(), false);
+        return buildRemoteInfoSource(table, params);
     }
 
     @Override
@@ -155,7 +158,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String tableName = deltaLakeTable.getCatalogTableName();
         Engine engine = deltaLakeTable.getDeltaEngine();
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.getVersion(engine), predicate);
+
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(snapshot.getVersion(engine)))
+                .setPredicate(predicate)
+                .setLimit(limit)
+                .build();
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, params);
 
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
 
@@ -198,7 +207,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
     }
 
-    private Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
+    private CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
@@ -216,7 +225,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
-        return new Iterator<>() {
+        return new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
             CloseableIterator<Row> scanFileRows;
             boolean hasMore = true;
@@ -236,7 +245,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                 DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
                 return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
-                                estimateRowSize, dv);
+                        estimateRowSize, dv);
             }
 
             private void ensureOpen() {
@@ -261,12 +270,32 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
                 }
             }
+
+            @Override
+            public void close() {
+                try {
+                    if (scanFileRows != null) {
+                        scanFileRows.close();
+                    }
+                } catch (Exception ignored) {
+                }
+                try {
+                    if (scanFilesAsBatches != null) {
+                        scanFilesAsBatches.close();
+                    }
+                } catch (Exception ignored) {
+                } finally {
+                    scanFileRows = null;
+                    scanFilesAsBatches = null;
+                    hasMore = false;
+                }
+            }
         };
     }
 
-    private RemoteFileInfoSource buildRemoteInfoSource(Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
-        Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
-                buildFileScanTaskIterator(table, operator, enableCollectColumnStats);
+    private RemoteFileInfoSource buildRemoteInfoSource(Table table, GetRemoteFilesParams params) {
+        CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
+                buildFileScanTaskIterator(table, params.getPredicate(), params.isEnableColumnStats());
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
@@ -277,6 +306,14 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             @Override
             public boolean hasMoreOutput() {
                 return iterator.hasNext();
+            }
+
+            @Override
+            public void close() {
+                try {
+                    iterator.close();
+                } catch (Exception ignored) {
+                }
             }
         };
     }
@@ -313,15 +350,18 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String traceLabel = enableCollectColumnStats ? "DELTA_LAKE.updateDeltaLakeFileStats" :
                 "DELTA_LAKE.updateDeltaLakeCardinality";
 
-        Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
-                buildFileScanTaskIterator(table, operator, enableCollectColumnStats);
-        while (iterator.hasNext()) {
-            Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
-            files.add(pair.first);
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
-                statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                        nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
+        try (CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
+                buildFileScanTaskIterator(table, operator, enableCollectColumnStats)) {
+            while (iterator.hasNext()) {
+                Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
+                files.add(pair.first);
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
+                    statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
+                            nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
+                }
             }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException("Failed to iter deltalake file scan iterator", e);
         }
         splitTasks.put(key, files);
         scannedTables.add(key);
@@ -344,8 +384,16 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         try {
             return deltaOps.getTable(dbName, tblName);
         } catch (Exception e) {
-            LOG.error("Failed to get table {}.{}", dbName, tblName, e);
-            return null;
+            LOG.error("Failed to get deltalake table {}.{}.{}", catalogName, dbName, tblName, e);
+            String errMsg = e.getMessage();
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            if (ce instanceof SemanticException se) {
+                errMsg = se.getDetailMsg();
+            } else if (ce != null) {
+                errMsg = String.format("Failed to get deltalake table %s.%s.%s. %s", catalogName, dbName, tblName,
+                        ce.getMessage());
+            }
+            throw new StarRocksConnectorException(errMsg, e);
         }
     }
 

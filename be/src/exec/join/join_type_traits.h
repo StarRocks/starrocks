@@ -14,18 +14,15 @@
 
 #pragma once
 
-#include "util/runtime_profile.h"
-
-#define JOIN_HASH_MAP_H
-
-#include "join_hash_map_helper.h"
-#include "join_hash_map_method.hpp"
-#include "join_hash_table_descriptor.h"
-#include "join_key_constructor.hpp"
-
 #if defined(__aarch64__)
 #include "arm_acle.h"
 #endif
+
+#include <string>
+
+#include "exec/join/join_hash_map_method_fwd.h"
+#include "exec/join/join_key_constructor_fwd.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -45,7 +42,8 @@ namespace starrocks {
     M(RANGE_DIRECT_MAPPING_SET)            \
     M(DENSE_RANGE_DIRECT_MAPPING)          \
     M(LINEAR_CHAINED)                      \
-    M(LINEAR_CHAINED_SET)
+    M(LINEAR_CHAINED_SET)                  \
+    M(LINEAR_CHAINED_ASOF)
 
 #define APPLY_JOIN_KEY_CONSTRUCTOR_UNARY_TYPE(M) \
     M(ONE_KEY_BOOLEAN)                           \
@@ -117,7 +115,20 @@ namespace starrocks {
     M(LINEAR_CHAINED_SET_DECIMAL32)              \
     M(LINEAR_CHAINED_SET_DECIMAL64)              \
     M(LINEAR_CHAINED_SET_DECIMAL128)             \
-    M(LINEAR_CHAINED_SET_VARCHAR)
+    M(LINEAR_CHAINED_SET_VARCHAR)                \
+                                                 \
+    M(LINEAR_CHAINED_ASOF_INT)                   \
+    M(LINEAR_CHAINED_ASOF_BIGINT)                \
+    M(LINEAR_CHAINED_ASOF_LARGEINT)              \
+    M(LINEAR_CHAINED_ASOF_FLOAT)                 \
+    M(LINEAR_CHAINED_ASOF_DOUBLE)                \
+    M(LINEAR_CHAINED_ASOF_DATE)                  \
+    M(LINEAR_CHAINED_ASOF_DATETIME)              \
+    M(LINEAR_CHAINED_ASOF_DECIMALV2)             \
+    M(LINEAR_CHAINED_ASOF_DECIMAL32)             \
+    M(LINEAR_CHAINED_ASOF_DECIMAL64)             \
+    M(LINEAR_CHAINED_ASOF_DECIMAL128)            \
+    M(LINEAR_CHAINED_ASOF_VARCHAR)
 
 enum class JoinKeyConstructorType {
 #define NAME_TO_ENUM(NAME) NAME,
@@ -294,6 +305,27 @@ REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_SET, TYPE_DECIMAL64, LinearChainedJ
 REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_SET, TYPE_DECIMAL128, LinearChainedJoinHashSet,
                               LINEAR_CHAINED_SET_DECIMAL128);
 REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_SET, TYPE_VARCHAR, LinearChainedJoinHashSet, LINEAR_CHAINED_SET_VARCHAR);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_INT, LinearChainedAsofJoinHashMap, LINEAR_CHAINED_ASOF_INT);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_BIGINT, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_BIGINT);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_LARGEINT, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_LARGEINT);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_FLOAT, LinearChainedAsofJoinHashMap, LINEAR_CHAINED_ASOF_FLOAT);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_DOUBLE, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_DOUBLE);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_DATE, LinearChainedAsofJoinHashMap, LINEAR_CHAINED_ASOF_DATE);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_DATETIME, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_DATETIME);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_DECIMALV2, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_DECIMALV2);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_DECIMAL32, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_DECIMAL32);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_DECIMAL64, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_DECIMAL64);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_DECIMAL128, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_DECIMAL128);
+REGISTER_JOIN_MAP_METHOD_TYPE(LINEAR_CHAINED_ASOF, TYPE_VARCHAR, LinearChainedAsofJoinHashMap,
+                              LINEAR_CHAINED_ASOF_VARCHAR);
 
 #undef REGISTER_JOIN_MAP_TYPE
 

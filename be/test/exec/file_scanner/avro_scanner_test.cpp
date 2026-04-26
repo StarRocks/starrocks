@@ -20,8 +20,11 @@
 #include <iostream>
 #include <sstream>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
+#include "common/config_avro_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "exec/avro_test.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -29,7 +32,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,0 +1,52 @@
+-- name: test_txn_syntax_noop_when_disabled
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_txn(k int) primary key(k);
+set enable_sql_transaction = false;
+-- when disabled, BEGIN/COMMIT are no-op
+begin;
+insert into t_txn values(1);
+commit;
+
+select * from t_txn order by k;
+
+-- name: test_txn_rollback_when_enabled
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_txn(k int) primary key(k);
+
+set enable_sql_transaction = true;
+begin;
+insert into t_txn values(2);
+rollback;
+
+select * from t_txn order by k;
+
+-- name: test_txn_commit_when_enabled
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_txn(k int) primary key(k);
+
+set enable_sql_transaction = true;
+begin;
+insert into t_txn values(3);
+commit;
+
+select * from t_txn order by k;
+
+-- name: test_enable_then_error_on_unsupported_stmt
+set enable_sql_transaction = true;
+begin;
+-- explicit txn now supports Insert/Update/Delete/Begin/Commit/Rollback/Set/Select, SELECT runs fine
+select 1;
+rollback;
+
+-- name: test_disable_then_no_error
+set enable_sql_transaction = false;
+begin;
+-- when disabled, BEGIN/COMMIT are no-op, SELECT runs fine
+select 1;
+commit;

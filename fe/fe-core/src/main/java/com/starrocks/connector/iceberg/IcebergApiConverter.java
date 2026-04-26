@@ -17,16 +17,10 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.IcebergView;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorViewDefinition;
@@ -45,7 +39,19 @@ import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.UnknownType;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
@@ -60,26 +66,30 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.transforms.PartitionSpecVisitor;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.DateTimeUtil;
 import org.apache.iceberg.view.SQLViewRepresentation;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewVersion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -94,7 +104,6 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
-import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static java.lang.String.format;
 import static org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap.copyOf;
 import static org.apache.iceberg.view.ViewProperties.COMMENT;
@@ -115,9 +124,9 @@ public class IcebergApiConverter {
                 .setResourceName(toResourceName(catalogName, "iceberg"))
                 .setCatalogDBName(remoteDbName)
                 .setCatalogTableName(remoteTableName)
-                .setComment(nativeTbl.properties().getOrDefault("common", ""))
+                .setComment(nativeTbl.properties().getOrDefault("comment", ""))
                 .setNativeTable(nativeTbl)
-                .setFullSchema(toFullSchemas(nativeTbl.schema()))
+                .setFullSchema(toFullSchemas(nativeTbl.schema(), nativeTbl))
                 .setIcebergProperties(toIcebergProps(
                         nativeTbl.properties() != null ? Optional.of(copyOf(nativeTbl.properties())) : Optional.empty(),
                         nativeCatalogType));
@@ -135,9 +144,18 @@ public class IcebergApiConverter {
             int index = icebergColumns.size();
             org.apache.iceberg.types.Type type = toIcebergColumnType(column.getType());
             String colComment = StringUtils.defaultIfBlank(column.getComment(), null);
-            Types.NestedField field = Types.NestedField.of(
-                    index, column.isAllowNull(), column.getName(), type, colComment);
-            icebergColumns.add(field);
+            Types.NestedField.Builder fieldBuilder = Types.NestedField.builder()
+                    .withId(index)
+                    .isOptional(column.isAllowNull())
+                    .withName(column.getName())
+                    .ofType(type)
+                    .withDoc(colComment);
+            Literal<?> defaultLiteral = toIcebergDefaultLiteral(column, type);
+            if (defaultLiteral != null) {
+                fieldBuilder.withInitialDefault(defaultLiteral);
+                fieldBuilder.withWriteDefault(defaultLiteral);
+            }
+            icebergColumns.add(fieldBuilder.build());
         }
 
         org.apache.iceberg.types.Type icebergSchema = Types.StructType.of(icebergColumns);
@@ -146,20 +164,25 @@ public class IcebergApiConverter {
         return new Schema(icebergSchema.asStructType().fields());
     }
 
-    public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) {
+    public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) throws DdlException {
         if (orderByElements == null) {
             return null;
         }
 
+        Set<String> addedSortKey = new HashSet<>();
         SortOrder.Builder builder = SortOrder.builderFor(schema);
         for (OrderByElement orderByElement : orderByElements) {
-            String columnName = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String columnName = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             Preconditions.checkNotNull(columnName);
             NullOrder nullOrder = orderByElement.getNullsFirstParam() ? NullOrder.NULLS_FIRST : NullOrder.NULLS_LAST;
             if (orderByElement.getIsAsc()) {
                 builder.asc(columnName, nullOrder);
             } else {
                 builder.desc(columnName, nullOrder);
+            }
+            if (!addedSortKey.add(columnName)) {
+                throw new DdlException("Duplicate sort key column " + columnName + " is not allowed.");
             }
         }
 
@@ -183,7 +206,7 @@ public class IcebergApiConverter {
             if (colName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 Expr partExpr = desc.getPartitionExprs().get(idx++);
                 if (partExpr instanceof FunctionCallExpr) {
-                    String fn = ((FunctionCallExpr) partExpr).getFnName().getFunction();
+                    String fn = ((FunctionCallExpr) partExpr).getFunctionName();
                     Expr child = ((FunctionCallExpr) partExpr).getChild(0);
                     if (child instanceof SlotRef) {
                         colName = ((SlotRef) child).getColumnName();
@@ -258,6 +281,8 @@ public class IcebergApiConverter {
                     return Types.DecimalType.of(scalarType.getScalarPrecision(), scalarType.getScalarScale());
                 case TIME:
                     return Types.TimeType.get();
+                case VARIANT:
+                    return Types.VariantType.get();
                 default:
                     throw new StarRocksConnectorException("Unsupported primitive column type %s", primitiveType);
             }
@@ -291,6 +316,39 @@ public class IcebergApiConverter {
         throw new StarRocksConnectorException("Unsupported complex column type %s", type);
     }
 
+    private static void addMetaColumns(List<Column> fullSchema) {
+        Column column = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+        column.setIsHidden(true);
+        fullSchema.add(column);
+
+        column = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true);
+        column.setIsHidden(true);
+        fullSchema.add(column);
+    }
+
+    public static List<Column> toFullSchemas(Schema schema, Table table) {
+        List<Column> fullSchema = toFullSchemas(schema);
+        if (table instanceof BaseTable) {
+            addMetaColumns(fullSchema);
+            if (((BaseTable) table).operations().current().formatVersion() >= 3) {
+                boolean hasRowId = fullSchema.stream().anyMatch(column -> column.getName().equals(IcebergTable.ROW_ID));
+                if (!hasRowId) {
+                    Column column = new Column(IcebergTable.ROW_ID, IntegerType.BIGINT, true);
+                    column.setIsHidden(true);
+                    fullSchema.add(column);
+                }
+                boolean hasLastUpdatedSequenceNumber = fullSchema.stream()
+                        .anyMatch(column -> column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER));
+                if (!hasLastUpdatedSequenceNumber) {
+                    Column column = new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, IntegerType.BIGINT, true);
+                    column.setIsHidden(true);
+                    fullSchema.add(column);
+                }
+            }
+        }
+        return fullSchema;
+    }
+
     public static List<Column> toFullSchemas(Schema schema) {
         List<Column> fullSchema = Lists.newArrayList();
         List<Types.NestedField> columns;
@@ -306,13 +364,169 @@ public class IcebergApiConverter {
                 srType = fromIcebergType(field.type());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
-                srType = Type.UNKNOWN_TYPE;
+                srType = UnknownType.UNKNOWN_TYPE;
             }
-            Column column = new Column(field.name(), srType, true);
+            Column column = new Column(field.name(), srType, field.isOptional());
             column.setComment(field.doc());
+            // Prioritize write-default (used for INSERT) over initial-default (used for backfill)
+            String writeDefault = toWriteDefaultValueString(field);
+            String defaultVal = writeDefault != null ? writeDefault : toInitialDefaultValueString(field);
+            if (defaultVal != null) {
+                column.setDefaultValue(defaultVal);
+            }
             fullSchema.add(column);
         }
         return fullSchema;
+    }
+
+    public static String toInitialDefaultValueString(Types.NestedField field) {
+        return toDefaultValueString(field, false);
+    }
+
+    public static String toWriteDefaultValueString(Types.NestedField field) {
+        return toDefaultValueString(field, true);
+    }
+
+    public static String getWriteDefaultValue(Schema schema, String columnName) {
+        Types.NestedField field = schema.findField(columnName);
+        if (field == null) {
+            field = schema.columns().stream()
+                    .filter(col -> col.name().equalsIgnoreCase(columnName))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (field == null) {
+            return null;
+        }
+        return toWriteDefaultValueString(field);
+    }
+
+    public static Literal<?> toIcebergDefaultLiteral(Column column, org.apache.iceberg.types.Type icebergType) {
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.NULL) {
+            return null;
+        }
+        if (defaultValueType == Column.DefaultValueType.VARY) {
+            throw new StarRocksConnectorException(
+                    "Unsupported iceberg default expression for column %s: %s",
+                    column.getName(),
+                    column.getDefaultExpr().toSql());
+        }
+
+        String defaultValue = column.calculatedDefaultValue();
+        if (defaultValue == null && column.getDefaultExpr() != null && !column.getDefaultExpr().hasExprObject()) {
+            defaultValue = column.getDefaultExpr().getExpr();
+        }
+        if (defaultValue == null) {
+            throw new StarRocksConnectorException("Unsupported iceberg default value for column %s", column.getName());
+        }
+
+        try {
+            PrimitiveType primitiveType = column.getType().getPrimitiveType();
+            Literal<?> literal;
+            switch (primitiveType) {
+                case BOOLEAN:
+                    if ("1".equals(defaultValue) || "true".equalsIgnoreCase(defaultValue)) {
+                        literal = Literal.of(true).to(icebergType);
+                    } else if ("0".equals(defaultValue) || "false".equalsIgnoreCase(defaultValue)) {
+                        literal = Literal.of(false).to(icebergType);
+                    } else {
+                        throw new StarRocksConnectorException("Invalid boolean default value '%s' for column %s",
+                                defaultValue, column.getName());
+                    }
+                    break;
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                    literal = Literal.of(Integer.parseInt(defaultValue)).to(icebergType);
+                    break;
+                case BIGINT:
+                    literal = Literal.of(Long.parseLong(defaultValue)).to(icebergType);
+                    break;
+                case FLOAT:
+                    literal = Literal.of(Float.parseFloat(defaultValue)).to(icebergType);
+                    break;
+                case DOUBLE:
+                    literal = Literal.of(Double.parseDouble(defaultValue)).to(icebergType);
+                    break;
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                case DECIMAL256:
+                    literal = Literal.of(new BigDecimal(defaultValue)).to(icebergType);
+                    break;
+                case CHAR:
+                case VARCHAR:
+                    literal = Literal.of(defaultValue).to(icebergType);
+                    break;
+                case DATE:
+                case TIME:
+                    literal = Literal.of(defaultValue).to(icebergType);
+                    break;
+                case DATETIME:
+                    String timestampValue = defaultValue.contains("T") ? defaultValue : defaultValue.replace(' ', 'T');
+                    literal = Literal.of(timestampValue).to(icebergType);
+                    break;
+                default:
+                    throw new StarRocksConnectorException("Unsupported iceberg default type %s for column %s",
+                            primitiveType, column.getName());
+            }
+            if (literal == null) {
+                throw new StarRocksConnectorException(
+                        "Unsupported iceberg default value '%s' for column %s", defaultValue, column.getName());
+            }
+            return literal;
+        } catch (RuntimeException e) {
+            throw new StarRocksConnectorException(
+                    String.format("Failed to convert default value '%s' for column %s", defaultValue, column.getName()), e);
+        }
+    }
+
+    private static String toDefaultValueString(Types.NestedField field, boolean useWriteDefault) {
+        Object defaultValue;
+        if (useWriteDefault) {
+            if (field.writeDefaultLiteral() == null) {
+                return null;
+            }
+            defaultValue = field.writeDefault();
+        } else {
+            if (field.initialDefaultLiteral() == null) {
+                return null;
+            }
+            defaultValue = field.initialDefault();
+        }
+        if (defaultValue == null) {
+            return null;
+        }
+        try {
+            switch (field.type().typeId()) {
+                case BOOLEAN:
+                    return Boolean.TRUE.equals(defaultValue) ? "1" : "0";
+                case INTEGER:
+                case LONG:
+                case FLOAT:
+                case DOUBLE:
+                case DECIMAL:
+                case STRING:
+                    return defaultValue.toString();
+                case DATE:
+                    return DateTimeUtil.daysToIsoDate(((Number) defaultValue).intValue());
+                case TIME:
+                    return DateTimeUtil.microsToIsoTime(((Number) defaultValue).longValue());
+                case TIMESTAMP:
+                    Types.TimestampType timestampType = (Types.TimestampType) field.type();
+                    long micros = ((Number) defaultValue).longValue();
+                    return (timestampType.shouldAdjustToUTC()
+                            ? DateTimeUtil.timestamptzFromMicros(micros).toLocalDateTime()
+                            : DateTimeUtil.timestampFromMicros(micros)).toString().replace('T', ' ');
+                default:
+                    return null;
+            }
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to convert {} default value for iceberg field {}",
+                    useWriteDefault ? "write" : "initial", field.name(), e);
+            return null;
+        }
     }
 
     public static Map<String, String> toIcebergProps(Optional<Map<String, String>> properties, String nativeCatalogType) {
@@ -405,7 +619,12 @@ public class IcebergApiConverter {
         }
 
         for (Types.NestedField field : nativeTable.schema().columns()) {
-            if (field.type() instanceof Types.DecimalType || field.type() == Types.UUIDType.get()) {
+            // https://apache.googlesource.com/parquet-format/+/HEAD/LogicalTypes.md
+            // the decimal128/uuid data sinked with physical type fixed_len_byte_array will be stored as big endian
+            // decimal64/32 are sinked with physical type int as little endian
+            // iceberg data file's upper/lower bound treat decimal/uuid's byte buffer as big endian.
+            if (dataFile.getFormat().equalsIgnoreCase("PARQUET")
+                    && field.type() instanceof Types.DecimalType && ((Types.DecimalType) field.type()).precision() <= 18) {
                 //change to BigEndian
                 reverseBuffer(lowerBounds.get(field.fieldId()));
                 reverseBuffer(upperBounds.get(field.fieldId()));
@@ -416,35 +635,51 @@ public class IcebergApiConverter {
                 nullValueCounts, null, lowerBounds, upperBounds);
     }
 
+    private static void setFormatProperties(ImmutableMap.Builder<String, String> tableProperties,
+                                         String fileFormat, String compressionCodec) {
+        String format = "parquet";
+        String compressionKey = TableProperties.PARQUET_COMPRESSION;
+        if ("avro".equalsIgnoreCase(fileFormat)) {
+            format = "avro";
+            compressionKey = TableProperties.AVRO_COMPRESSION;
+        } else if ("orc".equalsIgnoreCase(fileFormat)) {
+            format = "orc";
+            compressionKey = TableProperties.ORC_COMPRESSION;
+        } else if (fileFormat != null && !"parquet".equalsIgnoreCase(fileFormat)) {
+            throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
+        }
+        tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, format);
+        if (compressionCodec != null) {
+            tableProperties.put(compressionKey, compressionCodec);
+        }
+    }
+
+    private static void setCompressionProperties(ImmutableMap.Builder<String, String> tableProperties,
+                                             String fileFormat, String compressionCodec) {
+        if ("parquet".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.PARQUET_COMPRESSION, compressionCodec);
+        } else if ("avro".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.AVRO_COMPRESSION, compressionCodec);
+        } else if ("orc".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.ORC_COMPRESSION, compressionCodec);
+        }
+    }
+
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
         String fileFormat = createProperties.getOrDefault(FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
-        String compressionCodec = null;
+        String compressionCodec = createProperties.get(COMPRESSION_CODEC);
 
-        if ("parquet".equalsIgnoreCase(fileFormat)) {
-            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "parquet");
-            compressionCodec =
-                    createProperties.getOrDefault(COMPRESSION_CODEC, TableProperties.PARQUET_COMPRESSION_DEFAULT);
-            tableProperties.put(TableProperties.PARQUET_COMPRESSION, compressionCodec);
-        } else if ("avro".equalsIgnoreCase(fileFormat)) {
-            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "avro");
-            compressionCodec =
-                    createProperties.getOrDefault(COMPRESSION_CODEC, TableProperties.AVRO_COMPRESSION_DEFAULT);
-            tableProperties.put(TableProperties.AVRO_COMPRESSION, compressionCodec);
-        } else if ("orc".equalsIgnoreCase(fileFormat)) {
-            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
-            compressionCodec =
-                    createProperties.getOrDefault(COMPRESSION_CODEC, TableProperties.ORC_COMPRESSION_DEFAULT);
-            tableProperties.put(TableProperties.ORC_COMPRESSION, compressionCodec);
-        } else if (fileFormat != null) {
-            throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
+        if (!createProperties.containsKey(TableProperties.DEFAULT_FILE_FORMAT)) {
+            setFormatProperties(tableProperties, fileFormat, compressionCodec);
+        } else if (compressionCodec != null) {
+            setCompressionProperties(tableProperties, fileFormat, compressionCodec);
         }
 
-        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
-            throw new IllegalArgumentException("Unsupported compression codec in USING: " + compressionCodec);
+        if (!createProperties.containsKey(TableProperties.FORMAT_VERSION)) {
+            tableProperties.put(TableProperties.FORMAT_VERSION, "2");
         }
-        tableProperties.put(TableProperties.FORMAT_VERSION, "1");
 
         return tableProperties.build();
     }
@@ -489,7 +724,7 @@ public class IcebergApiConverter {
         String viewName = icebergView.name();
         String location = icebergView.location();
         IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
-                columns, sqlView.sql(), defaultCatalogName, defaultDbName, location);
+                columns, sqlView.sql(), defaultCatalogName, defaultDbName, location, icebergView.properties());
         view.setComment(comment);
         return view;
     }
@@ -620,14 +855,16 @@ public class IcebergApiConverter {
 
         String queryId = connectContext.getQueryId().toString();
 
-        Map<String, String> properties = com.google.common.collect.ImmutableMap.of(
-                "queryId", queryId,
-                "starrocksCatalog", catalogName,
-                "starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
-
+        Map<String, String> properties = new HashMap<>();
         if (!Strings.isNullOrEmpty(definition.getComment())) {
             properties.put(IcebergMetadata.COMMENT, definition.getComment());
         }
+        if (!MapUtils.isEmpty(definition.getProperties())) {
+            properties.putAll(definition.getProperties());
+        }
+        properties.put("queryId", queryId);
+        properties.put("starrocksCatalog", catalogName);
+        properties.put("starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         return properties;
     }

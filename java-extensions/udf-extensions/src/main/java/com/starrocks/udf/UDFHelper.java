@@ -237,7 +237,12 @@ public class UDFHelper {
             } else {
                 // Note: add the timezone offset back because Time#getTime() returns the GMT timestamp
                 long v = boxedArr[i].getTime();
-                dataArr[i] = (v + timeZone.getOffset(v)) / 1000;
+                double secondOfDay = (v + timeZone.getOffset(v)) / 1000.0;
+                secondOfDay %= 24 * 3600;
+                if (secondOfDay < 0) {
+                    secondOfDay += 24 * 3600;
+                }
+                dataArr[i] = secondOfDay;
             }
         }
 
@@ -272,6 +277,16 @@ public class UDFHelper {
 
     private static void getStringTimeStampResult(int numRows, Timestamp[] column, long columnAddr) {
         // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    private static void getStringTimeResult(int numRows, Time[] column, long columnAddr) {
         String[] results = new String[numRows];
         for (int i = 0; i < numRows; i++) {
             if (column[i] != null) {
@@ -532,6 +547,8 @@ public class UDFHelper {
                     getStringDateTimeResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof Timestamp[]) {
                     getStringTimeStampResult(numRows, (Timestamp[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof Time[]) {
+                    getStringTimeResult(numRows, (Time[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof BigDecimal[]) {
                     getStringDecimalResult(numRows, (BigDecimal[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof BigInteger[]) {
@@ -865,15 +882,31 @@ public class UDFHelper {
     public static void batchUpdate(Object o, Method method, FunctionStates ctx, int[] states, Object[] column)
             throws Throwable {
         Object[][] inputs = (Object[][]) column;
-        Object[] parameter = new Object[inputs.length + 1];
+        boolean isVarArgs = method.isVarArgs();
         int numRows = states.length;
+        
         try {
-            for (int i = 0; i < numRows; ++i) {
-                parameter[0] = ctx.get(states[i]);
-                for (int j = 0; j < column.length; ++j) {
-                    parameter[j + 1] = inputs[j][i];
+            if (isVarArgs) {
+                // For varargs methods, collect all input columns into a single varargs array parameter
+                int numVarArgs = inputs.length;
+                for (int i = 0; i < numRows; ++i) {
+                    Object state = ctx.get(states[i]);
+                    Object[] varargsParam = new Object[numVarArgs];
+                    for (int j = 0; j < numVarArgs; ++j) {
+                        varargsParam[j] = inputs[j][i];
+                    }
+                    method.invoke(o, state, varargsParam);
                 }
-                method.invoke(o, parameter);
+            } else {
+                // Original logic for non-varargs methods
+                Object[] parameter = new Object[inputs.length + 1];
+                for (int i = 0; i < numRows; ++i) {
+                    parameter[0] = ctx.get(states[i]);
+                    for (int j = 0; j < column.length; ++j) {
+                        parameter[j + 1] = inputs[j][i];
+                    }
+                    method.invoke(o, parameter);
+                }
             }
         } catch (InvocationTargetException e) {
             throw e.getTargetException();
@@ -883,14 +916,29 @@ public class UDFHelper {
     public static void batchUpdateState(Object o, Method method, Object[] column)
             throws Throwable {
         Object[][] inputs = (Object[][]) column;
-        Object[] parameter = new Object[inputs.length];
+        boolean isVarArgs = method.isVarArgs();
         int numRows = inputs[0].length;
+        
         try {
-            for (int i = 0; i < numRows; ++i) {
-                for (int j = 0; j < column.length; ++j) {
-                    parameter[j] = inputs[j][i];
+            if (isVarArgs) {
+                // For varargs methods, collect all input columns into a single varargs array parameter
+                int numVarArgs = inputs.length;
+                for (int i = 0; i < numRows; ++i) {
+                    Object[] varargsParam = new Object[numVarArgs];
+                    for (int j = 0; j < numVarArgs; ++j) {
+                        varargsParam[j] = inputs[j][i];
+                    }
+                    method.invoke(o, (Object) varargsParam);
                 }
-                method.invoke(o, parameter);
+            } else {
+                // Original logic for non-varargs methods
+                Object[] parameter = new Object[inputs.length];
+                for (int i = 0; i < numRows; ++i) {
+                    for (int j = 0; j < column.length; ++j) {
+                        parameter[j] = inputs[j][i];
+                    }
+                    method.invoke(o, parameter);
+                }
             }
         } catch (InvocationTargetException e) {
             throw e.getTargetException();
@@ -900,16 +948,34 @@ public class UDFHelper {
     public static void batchUpdateIfNotNull(Object o, Method method, FunctionStates ctx, int[] states, Object[] column)
             throws Throwable {
         Object[][] inputs = (Object[][]) column;
-        Object[] parameter = new Object[inputs.length + 1];
+        boolean isVarArgs = method.isVarArgs();
         int numRows = states.length;
+        
         try {
-            for (int i = 0; i < numRows; ++i) {
-                if (states[i] != -1) {
-                    parameter[0] = ctx.get(states[i]);
-                    for (int j = 0; j < column.length; ++j) {
-                        parameter[j + 1] = inputs[j][i];
+            if (isVarArgs) {
+                // For varargs methods, collect all input columns into a single varargs array parameter
+                int numVarArgs = inputs.length;
+                for (int i = 0; i < numRows; ++i) {
+                    if (states[i] != -1) {
+                        Object state = ctx.get(states[i]);
+                        Object[] varargsParam = new Object[numVarArgs];
+                        for (int j = 0; j < numVarArgs; ++j) {
+                            varargsParam[j] = inputs[j][i];
+                        }
+                        method.invoke(o, state, varargsParam);
                     }
-                    method.invoke(o, parameter);
+                }
+            } else {
+                // Original logic for non-varargs methods
+                Object[] parameter = new Object[inputs.length + 1];
+                for (int i = 0; i < numRows; ++i) {
+                    if (states[i] != -1) {
+                        parameter[0] = ctx.get(states[i]);
+                        for (int j = 0; j < column.length; ++j) {
+                            parameter[j + 1] = inputs[j][i];
+                        }
+                        method.invoke(o, parameter);
+                    }
                 }
             }
         } catch (InvocationTargetException e) {
@@ -936,15 +1002,29 @@ public class UDFHelper {
     public static Object[] batchCall(Object o, Method method, int batchSize, Object[] column)
             throws Throwable {
         Object[][] inputs = (Object[][]) column;
-        Object[] parameter = new Object[inputs.length];
+        boolean isVarArgs = method.isVarArgs();
         Object[] res = (Object[]) Array.newInstance(method.getReturnType(), batchSize);
 
         try {
-            for (int i = 0; i < batchSize; ++i) {
-                for (int j = 0; j < column.length; ++j) {
-                    parameter[j] = inputs[j][i];
+            if (isVarArgs) {
+                // For varargs methods, collect all input columns into a single varargs array parameter
+                int numVarArgs = inputs.length;
+                for (int i = 0; i < batchSize; ++i) {
+                    Object[] varargsParam = new Object[numVarArgs];
+                    for (int j = 0; j < numVarArgs; ++j) {
+                        varargsParam[j] = inputs[j][i];
+                    }
+                    res[i] = method.invoke(o, (Object) varargsParam);
                 }
-                res[i] = method.invoke(o, parameter);
+            } else {
+                // Original logic for non-varargs methods
+                Object[] parameter = new Object[inputs.length];
+                for (int i = 0; i < batchSize; ++i) {
+                    for (int j = 0; j < column.length; ++j) {
+                        parameter[j] = inputs[j][i];
+                    }
+                    res[i] = method.invoke(o, parameter);
+                }
             }
             return res;
         } catch (InvocationTargetException e) {

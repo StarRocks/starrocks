@@ -16,13 +16,13 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
+import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 import java.util.List;

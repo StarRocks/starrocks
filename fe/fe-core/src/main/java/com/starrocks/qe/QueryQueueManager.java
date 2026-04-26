@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
@@ -54,6 +55,9 @@ public class QueryQueueManager {
     }
 
     public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws StarRocksException, InterruptedException {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Maybe wait for query queue, queryId: {}", UUIDUtil.fromTUniqueid(coord.getQueryId()).toString());
+        }
         final JobSpec jobSpec = coord.getJobSpec();
         final SlotProvider slotProvider = jobSpec.getSlotProvider();
         long startMs = System.currentTimeMillis();
@@ -149,11 +153,12 @@ public class QueryQueueManager {
         long groupId = group == null ? LogicalSlot.ABSENT_GROUP_ID : group.getId();
 
         long nowMs = context.getStartTime();
+        long queryTimeoutSecond = coord.getJobSpec().getQueryOptions().getQuery_timeout();
         final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
-        long queryQueuePendingTimeoutSecond =
+        int queryQueuePendingTimeoutSecond =
                 slotManager.getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
         long expiredPendingTimeMs = nowMs + queryQueuePendingTimeoutSecond * 1000L;
-        long expiredAllocatedTimeMs = nowMs + queryQueuePendingTimeoutSecond * 1000L;
+        long expiredAllocatedTimeMs = expiredPendingTimeMs + queryTimeoutSecond * 1000L;
 
         int numFragments = coord.getFragments().size();
         int pipelineDop = coord.getJobSpec().getQueryOptions().getPipeline_dop();
@@ -167,7 +172,7 @@ public class QueryQueueManager {
 
         return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), warehouseId,
                 groupId, numSlots, expiredPendingTimeMs, expiredAllocatedTimeMs,
-                frontend.getStartTime(), numFragments, pipelineDop);
+                frontend.getStartTime(), numFragments, pipelineDop, context.getSessionVariable().getExecMode());
     }
 
     private int estimateNumSlots(ConnectContext context, DefaultCoordinator coord) {

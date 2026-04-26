@@ -15,95 +15,17 @@
 #pragma once
 
 #include <algorithm>
-#include <concepts>
 
-#include "column/german_string.h"
+#include "base/orlp/pdqsort.h"
+#include "column/column_sorter_comparator.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "types/timestamp_value.h"
-#include "util/json.h"
-#include "util/orlp/pdqsort.h"
+#include "types/json_value.h"
 
 namespace starrocks {
-
-// Comparator for sort
-template <class T>
-struct SorterComparator {
-    static int compare(const T& lhs, const T& rhs) {
-        if (lhs == rhs) {
-            return 0;
-        } else if (lhs < rhs) {
-            return -1;
-        } else {
-            return 1;
-        }
-    }
-};
-
-template <>
-struct SorterComparator<Slice> {
-    static int compare(const Slice& lhs, const Slice& rhs) {
-        int x = lhs.compare(rhs);
-        if (x > 0) return 1;
-        if (x < 0) return -1;
-        return x;
-    }
-};
-
-template <>
-struct SorterComparator<GermanString> {
-    static int compare(const GermanString& lhs, const GermanString& rhs) {
-        int x = lhs.compare(rhs);
-        if (x > 0) return 1;
-        if (x < 0) return -1;
-        return x;
-    }
-};
-
-template <>
-struct SorterComparator<DateValue> {
-    static int compare(const DateValue& lhs, const DateValue& rhs) {
-        auto x = lhs.julian() - rhs.julian();
-        if (x == 0) {
-            return x;
-        } else {
-            return x > 0 ? 1 : -1;
-        }
-    }
-};
-
-template <>
-struct SorterComparator<TimestampValue> {
-    static int compare(TimestampValue lhs, TimestampValue rhs) {
-        auto x = lhs.timestamp() - rhs.timestamp();
-        if (x == 0) {
-            return x;
-        } else {
-            return x > 0 ? 1 : -1;
-        }
-    }
-};
-
-template <typename T>
-concept FloatingPoint = std::is_floating_point_v<T>;
-
-template <FloatingPoint T>
-struct SorterComparator<T> {
-    static int compare(T lhs, T rhs) {
-        lhs = std::isnan(lhs) ? 0 : lhs;
-        rhs = std::isnan(rhs) ? 0 : rhs;
-        if (lhs == rhs) {
-            return 0;
-        } else if (lhs < rhs) {
-            return -1;
-        } else {
-            return 1;
-        }
-    }
-};
 
 // TODO: reduce duplicate code
 template <class NullPred>
@@ -241,8 +163,8 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
                                          PermutationType& permutation, Tie& tie, DataComparator cmp,
                                          std::pair<int, int> range, bool build_tie, size_t limit = 0,
                                          size_t* limited = nullptr) {
-    auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
-    auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
+    auto lesser = [&](const auto& lhs, const auto& rhs) { return cmp(lhs, rhs) < 0; };
+    auto greater = [&](const auto& lhs, const auto& rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](size_t first_iter, size_t last_iter) {
         auto begin = permutation.begin() + first_iter;
         auto end = permutation.begin() + last_iter;
@@ -257,7 +179,7 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
             }
 
             // Find if any element equal with the nth element, take it into account of this run
-            auto nth = permutation[limit - 1];
+            const auto& nth = permutation[limit - 1];
             size_t equal_count = 0;
             for (auto iter = begin + n; iter < end; iter++) {
                 if (cmp(*iter, nth) == 0) {

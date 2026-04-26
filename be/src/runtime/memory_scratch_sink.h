@@ -34,13 +34,13 @@
 
 #pragma once
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "runtime/result_queue_mgr.h"
-#include "util/blocking_queue.hpp"
 
 namespace arrow {
 
@@ -78,7 +78,7 @@ public:
 
     Status send_chunk(RuntimeState* state, Chunk* chunk) override;
 
-    Status close(RuntimeState* state, Status exec_status) override;
+    Status close(RuntimeState* state, const Status& exec_status) override;
 
     RuntimeProfile* profile() override { return _profile; }
 

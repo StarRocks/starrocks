@@ -22,8 +22,8 @@ import com.starrocks.lake.DataCacheInfo;
 public class SinglePartitionPersistInfo extends PartitionPersistInfoV2 {
 
     public SinglePartitionPersistInfo(Long dbId, Long tableId, Partition partition,
-                                      DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                      DataProperty dataProperty, short replicationNum,
                                       boolean isTempPartition, DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, dataCacheInfo);
+        super(dbId, tableId, partition, dataProperty, replicationNum, isTempPartition, dataCacheInfo);
     }
 }

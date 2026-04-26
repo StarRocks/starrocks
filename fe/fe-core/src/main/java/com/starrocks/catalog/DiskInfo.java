@@ -59,16 +59,13 @@ public class DiskInfo implements Writable {
 
     @SerializedName(value = "r")
     private String rootPath;
-    @SerializedName(value = "t")
-    private long totalCapacityB;
-    @SerializedName(value = "u")
-    private long dataUsedCapacityB;
-    @SerializedName(value = "a")
-    private long diskAvailableCapacityB;
     @SerializedName(value = "s")
     private DiskState state;
 
-    // path hash and storage medium are reported from Backend and no need to persist
+    // The following properties are reported from Backend and only used in leader node, so no need to persist
+    private long totalCapacityB;
+    private long dataUsedCapacityB;
+    private long diskAvailableCapacityB;
     private long pathHash = 0;
     private TStorageMedium storageMedium;
 
@@ -139,13 +136,8 @@ public class DiskInfo implements Writable {
         return state == DiskState.ONLINE;
     }
 
-    // return true if changed
-    public boolean setState(DiskState state) {
-        if (this.state != state) {
-            this.state = state;
-            return true;
-        }
-        return false;
+    public void setState(DiskState state) {
+        this.state = state;
     }
 
     public long getPathHash() {

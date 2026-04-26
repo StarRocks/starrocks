@@ -16,6 +16,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
@@ -64,20 +65,20 @@ struct PartialUpdateState {
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     MutableColumnPtr write_column;
-    Rowset* rowset;
+    Rowset* rowset{nullptr};
     TabletSchemaCSPtr schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id{0};
+    uint32_t segment_id{0};
     std::vector<uint32_t> rowids;
     MutableColumnPtr delete_pks;
-    bool skip_rewrite;
-    AutoIncrementPartialUpdateState() : rowset(nullptr), schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    bool skip_rewrite{false};
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
     void init(Rowset* rowset, TabletSchemaCSPtr schema, uint32_t id, uint32_t segment_id) {
         this->rowset = rowset;
-        this->schema = schema;
+        this->schema = std::move(schema);
         this->id = id;
         this->segment_id = segment_id;
     }
@@ -100,6 +101,8 @@ class RowsetUpdateState {
 public:
     RowsetUpdateState();
     ~RowsetUpdateState();
+    RowsetUpdateState(const RowsetUpdateState&) = delete;
+    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 
     Status load(Tablet* tablet, Rowset* rowset);
 
@@ -107,8 +110,8 @@ public:
                  uint32_t segment_id, EditVersion latest_applied_version, const PrimaryIndex& index,
                  MutableColumnPtr& delete_pks, int64_t* append_column_size);
 
-    const std::vector<MutableColumnPtr>& upserts() const { return _upserts; }
-    const std::vector<MutableColumnPtr>& deletes() const { return _deletes; }
+    const MutableColumns& upserts() const { return _upserts; }
+    const MutableColumns& deletes() const { return _deletes; }
 
     std::size_t memory_usage() const { return _memory_usage; }
 
@@ -169,9 +172,9 @@ private:
     std::once_flag _load_once_flag;
     Status _status;
     // one for each segment file
-    std::vector<MutableColumnPtr> _upserts;
+    MutableColumns _upserts;
     // one for each delete file
-    std::vector<MutableColumnPtr> _deletes;
+    MutableColumns _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
     TabletSchemaCSPtr _tablet_schema = nullptr;
@@ -189,9 +192,6 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
     std::map<string, string> _column_to_expr_value;
-
-    RowsetUpdateState(const RowsetUpdateState&) = delete;
-    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

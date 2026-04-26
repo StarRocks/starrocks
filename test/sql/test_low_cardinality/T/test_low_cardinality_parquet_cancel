@@ -256,3 +256,7 @@ drop catalog ice_cat_${uuid0};
 
 
 set catalog default_catalog;
+
+CLEANUP {
+    admin disable failpoint 'parquet_reader_returns_global_dict_not_match_status';
+} END CLEANUP

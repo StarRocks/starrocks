@@ -48,15 +48,16 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -67,8 +68,8 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -78,6 +79,8 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -213,8 +216,8 @@ public class RestoreJobTest {
         new MockUp<OlapTable>() {
             @Mock
             public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                    int replicationNum, long version, int schemaHash,
-                    long partitionId, Database db) {
+                                                  int replicationNum, long version, int schemaHash,
+                                                  long partitionId, Database db) {
                 return Status.OK;
             }
         };
@@ -348,11 +351,11 @@ public class RestoreJobTest {
                 physicalPartInfo.id = physicalPartition.getId();
                 partInfo.subPartitions.put(physicalPartInfo.id, physicalPartInfo);
 
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     BackupIndexInfo idxInfo = new BackupIndexInfo();
                     idxInfo.id = index.getId();
-                    idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                    idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                     physicalPartInfo.indexes.put(idxInfo.name, idxInfo);
 
                     for (Tablet tablet : index.getTablets()) {
@@ -449,7 +452,11 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = new Delegate<Long>() {
+                    public Long getNextId() {
+                        return id.incrementAndGet();
+                    }
+                };
 
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -528,11 +535,11 @@ public class RestoreJobTest {
             tblInfo.partitions.put(partInfo.name, partInfo);
 
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {
@@ -574,13 +581,13 @@ public class RestoreJobTest {
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(12, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(24, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -588,7 +595,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assertions.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(24, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -621,7 +628,11 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = new Delegate<Long>() {
+                    public Long getNextId() {
+                        return id.incrementAndGet();
+                    }
+                };
 
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -700,11 +711,11 @@ public class RestoreJobTest {
             tblInfo.partitions.put(partInfo.name, partInfo);
 
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {
@@ -746,13 +757,13 @@ public class RestoreJobTest {
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(3, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(6, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -760,7 +771,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assertions.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(6, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -798,19 +809,22 @@ public class RestoreJobTest {
         OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+        System.out.println("tbl signature: " + RestoreJob.getSignature(tbl, BackupHandler.SIGNATURE_VERSION, partNames, true));
         tbl.setName("newName");
         partNames = Lists.newArrayList(tbl.getPartitionNames());
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+        System.out.println("tbl signature: " + RestoreJob.getSignature(tbl, BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
 
     @Test
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
+        RestoreJob restoreJob = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
-        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+        restoreJob.resetIdsForRestore(globalStateMgr, expectedRestoreTbl, db, 3, null);
 
         new Expectations(globalStateMgr) {
             {
@@ -823,8 +837,8 @@ public class RestoreJobTest {
             }
         };
         expectedRestoreTbl.setColocateGroup("test_group");
-        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
-        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+        restoreJob.resetIdsForRestore(globalStateMgr, expectedRestoreTbl, db, 3, null);
+        restoreJob.resetIdsForRestore(globalStateMgr, expectedRestoreTbl, db, 3, null);
 
         Config.enable_colocate_restore = false;
     }
@@ -840,7 +854,11 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = new Delegate<Long>() {
+                    public Long getNextId() {
+                        return id.incrementAndGet();
+                    }
+                };
 
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -1007,7 +1025,7 @@ public class RestoreJobTest {
     public void testRestoreAddFunction() {
         backupMeta = new BackupMeta(Lists.newArrayList());
         Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                new Type[] { Type.INT }, new String[] { "argName" }, Type.INT, false);
+                new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
 
         backupMeta.setFunctions(Lists.newArrayList(f1));
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
@@ -1057,5 +1075,127 @@ public class RestoreJobTest {
         localBackupHandler.replayAddJob(job3);
         Config.history_job_keep_max_second = oldVal;
         Assertions.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
+    }
+
+    @Test
+    public void testResetMVIdsForRestore() {
+        // Test case: Verify that resetMVIdsForRestore correctly handles database ID mapping
+        // for materialized views during restore operations
+        
+        // This test validates the fix for the bug where resetMVIdsForRestore was incorrectly
+        // using the RestoreJob's dbId field instead of remoteOlapTbl.getDbId() and db.getId()
+        
+        // Setup: Define test IDs
+        long oldDbId = 10000L;
+        long oldTableId = 20000L;
+        long newDbId = db.getId();
+        
+        // Track the dbId values that are accessed
+        final long[] capturedOldDbId = {0};
+        final long[] capturedNewDbId = {0};
+        final boolean[] setDbIdCalled = {false};
+        
+        // Create a MaterializedView with mocked behavior to track dbId operations
+        new MockUp<MaterializedView>() {
+            private long mvDbId = oldDbId;
+            private long mvTableId = oldTableId;
+            
+            @Mock
+            public long getDbId() {
+                capturedOldDbId[0] = mvDbId;
+                return mvDbId;
+            }
+            
+            @Mock
+            public void setDbId(long newDbId) {
+                setDbIdCalled[0] = true;
+                capturedNewDbId[0] = newDbId;
+                this.mvDbId = newDbId;
+            }
+            
+            @Mock
+            public long getId() {
+                return mvTableId;
+            }
+            
+            @Mock
+            public void setId(long newId) {
+                this.mvTableId = newId;
+            }
+            
+            @Mock
+            public String getName() {
+                return "test_mv";
+            }
+            
+            @Mock
+            public Map<String, Long> getIndexNameToId() {
+                return Maps.newHashMap();
+            }
+            
+            @Mock
+            public com.starrocks.catalog.PartitionInfo getPartitionInfo() {
+                // Return a minimal mock to avoid NullPointerException
+                return new com.starrocks.catalog.SinglePartitionInfo();
+            }
+            
+            @Mock
+            public Map<Long, Partition> getIdToPartition() {
+                return Maps.newHashMap();
+            }
+            
+            @Mock
+            public Map<Long, Long> getPhysicalPartitionIdToPartitionId() {
+                return Maps.newHashMap();
+            }
+            
+        };
+        
+        // Create the MaterializedView instance after MockUp is set up
+        MaterializedView testMv = new MaterializedView();
+        
+        // Setup MvRestoreContext to track ID mappings
+        MvRestoreContext mvRestoreContext = new MvRestoreContext();
+        
+        // Create RestoreJob instance
+        RestoreJob restoreJob = new RestoreJob(label, "2018-01-01 01:01:01", newDbId, db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, mvRestoreContext);
+        
+        // Create the old MvId based on the initial state
+        // This is the key test: oldMvId should use remoteOlapTbl.getDbId(), not this.dbId
+        MvId oldMvIdObj = new MvId(oldDbId, testMv.getId());
+        
+        // Execute: Call resetMVIdsForRestore
+        Status result = restoreJob.resetMVIdsForRestore(globalStateMgr, testMv, db, 3, mvRestoreContext);
+        
+        // Verify: Check the result is OK
+        Assertions.assertTrue(result.ok(), "resetMVIdsForRestore should return OK status");
+        
+        // Verify: setDbId was called with the new database ID
+        Assertions.assertTrue(setDbIdCalled[0], "setDbId should be called on the MaterializedView");
+        Assertions.assertEquals(newDbId, capturedNewDbId[0], 
+                "setDbId should be called with the new database ID");
+        
+        // Verify: getDbId was called and captured the old database ID
+        Assertions.assertEquals(oldDbId, capturedOldDbId[0], 
+                "getDbId should return the old database ID from the table");
+        
+        // Verify: Check that MvRestoreContext contains the correct ID mapping
+        // The key verification: oldMvIdObj (created with oldDbId) should be in the map
+        com.starrocks.backup.mv.MvBackupInfo mvBackupInfo = 
+                mvRestoreContext.getMvIdToTableNameMap().get(oldMvIdObj);
+        Assertions.assertNotNull(mvBackupInfo, 
+                "MvBackupInfo should be stored in MvRestoreContext with old MvId as key");
+        
+        // Verify: Check that the local MvId in MvBackupInfo has the new database ID
+        MvId newMvIdObj = mvBackupInfo.getLocalMvId();
+        Assertions.assertNotNull(newMvIdObj, "Local MvId should be set in MvBackupInfo");
+        Assertions.assertEquals(newDbId, newMvIdObj.getDbId(), 
+                "Local MvId should have the new database ID from target database");
+        
+        // Additional verification: The new MvId should have a different table ID
+        Assertions.assertNotEquals(oldTableId, newMvIdObj.getId(), 
+                "MaterializedView table ID should be updated to a new ID");
     }
 }

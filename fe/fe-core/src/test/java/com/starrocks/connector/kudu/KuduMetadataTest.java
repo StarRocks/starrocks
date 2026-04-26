@@ -16,7 +16,6 @@ package com.starrocks.connector.kudu;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.KuduTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -24,6 +23,8 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.kudu.Schema;
@@ -47,7 +48,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.starrocks.catalog.KuduTableTest.genColumnSchema;
-import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+import static com.starrocks.type.TypeFactory.CATALOG_MAX_VARCHAR_LENGTH;
 
 public class KuduMetadataTest {
     @Mocked
@@ -104,9 +105,9 @@ public class KuduMetadataTest {
         Assertions.assertEquals("tbl1", kuduTable.getCatalogTableName());
         Assertions.assertEquals(2, kuduTable.getColumns().size());
         Assertions.assertEquals(0, kuduTable.getPartitionColumnNames().size());
-        Assertions.assertEquals(ScalarType.INT, kuduTable.getColumns().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, kuduTable.getColumns().get(0).getType());
         Assertions.assertTrue(kuduTable.getBaseSchema().get(0).isAllowNull());
-        Assertions.assertEquals(ScalarType.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH),
+        Assertions.assertEquals(TypeFactory.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH),
                 kuduTable.getBaseSchema().get(1).getType());
         Assertions.assertTrue(kuduTable.getBaseSchema().get(1).isAllowNull());
     }

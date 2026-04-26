@@ -27,6 +27,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 
 namespace starrocks {
@@ -78,8 +79,8 @@ void RuntimeFilterCacheAction::_handle_stat(HttpRequest* req) {
     const std::string& enable_trace = _exec_env->runtime_filter_cache()->enable_trace() ? "true" : "false";
     _handle(req, [=](rapidjson::Document& root) {
         auto& allocator = root.GetAllocator();
-        root.AddMember("cache_times", rapidjson::Value(cache_times), allocator);
-        root.AddMember("use_times", rapidjson::Value(use_times), allocator);
+        root.AddMember("cache_times", rapidjson::Value(static_cast<uint64_t>(cache_times)), allocator);
+        root.AddMember("use_times", rapidjson::Value(static_cast<uint64_t>(use_times)), allocator);
         root.AddMember("enable_trace", rapidjson::Value(enable_trace.c_str(), enable_trace.size()), allocator);
     });
 }

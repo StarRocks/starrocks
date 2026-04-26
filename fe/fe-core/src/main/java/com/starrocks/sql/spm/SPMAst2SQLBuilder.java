@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
@@ -154,13 +155,18 @@ public class SPMAst2SQLBuilder {
         }
 
         @Override
+        public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+            return super.visitLargeInPredicate(node, context);
+        }
+
+        @Override
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             if (SPMFunctions.isSPMFunctions(node)) {
                 if (enableSPMDigest) {
                     return "?";
                 }
                 List<String> children = node.getChildren().stream().map(this::visit).toList();
-                return SPMFunctions.toSQL(node.getFnName().getFunction(), children);
+                return SPMFunctions.toSQL(node.getFunctionName(), children);
             }
             return super.visitFunctionCall(node, context);
         }

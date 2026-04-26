@@ -41,8 +41,12 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.DropTabletCacheRequest;
+import com.starrocks.proto.DropTabletCacheResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
@@ -56,7 +60,6 @@ import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
@@ -83,6 +86,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.StatusPB;
@@ -102,7 +107,6 @@ import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
-import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
@@ -1067,11 +1071,6 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
-            throw new org.apache.commons.lang.NotImplementedException("TODO");
-        }
-
-        @Override
         public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
         }
@@ -1165,6 +1164,11 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<DropTabletCacheResponse> dropTabletCache(DropTabletCacheRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
         public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
             return CompletableFuture.completedFuture(null);
         }
@@ -1211,6 +1215,16 @@ public class PseudoBackend {
 
         @Override
         public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

@@ -1,0 +1,72 @@
+-- name: test_select_after_insert_same_table_should_fail
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1(id int) primary key(id);
+create table t2(id int) primary key(id);
+
+begin;
+insert into t1 values(1);
+select * from t1;
+commit;
+
+-- name: test_select_any_table_should_fail
+create database db_${uuid1};
+use db_${uuid1};
+
+create table t1(id int) primary key(id);
+create table t2(id int) primary key(id);
+
+begin;
+insert into t1 values(1);
+select * from t2;
+commit;
+
+-- name: test_set_then_dml_then_commit
+create database db_${uuid2};
+use db_${uuid2};
+
+create table t1(id int) primary key(id);
+
+begin;
+set query_timeout = 300;
+insert into t1 values(10);
+commit;
+select * from t1 order by id;
+
+-- name: test_update_then_select_same_table_should_fail
+create database db_${uuid3};
+use db_${uuid3};
+
+create table t1(id int, v int) primary key(id);
+insert into t1 values(1, 1);
+
+begin;
+update t1 set v = 2 where id = 1;
+select * from t1;
+commit;
+
+-- name: test_delete_then_select_same_table_should_fail
+create database db_${uuid4};
+use db_${uuid4};
+
+create table t1(id int, v int) primary key(id);
+insert into t1 values(1,1);
+
+begin;
+delete from t1 where id = 1;
+select * from t1;
+commit;
+
+-- name: test_insert_into_select_same_table_should_fail
+create database db_${uuid5};
+use db_${uuid5};
+
+create table t1(id int, v int) primary key(id);
+insert into t1 values (1, 10), (2, 20);
+
+begin;
+insert into t1 values (3, 30);
+-- attempt to read modified table via insert-select
+insert into t1 select * from t1;
+commit;

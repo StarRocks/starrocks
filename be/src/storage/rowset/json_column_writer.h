@@ -17,18 +17,19 @@
 #include <map>
 
 #include "storage/rowset/column_writer.h"
+#include "storage/rowset/object_column_writer.h"
 
 namespace starrocks {
 class BloomFilter;
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
                                                                   TypeInfoPtr type_info, WritableFile* wfile,
-                                                                  std::unique_ptr<ScalarColumnWriter> json_writer);
+                                                                  std::unique_ptr<ObjectColumnWriter> json_writer);
 
 class FlatJsonColumnWriter : public ColumnWriter {
 public:
     FlatJsonColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
-                         std::unique_ptr<ScalarColumnWriter> json_writer);
+                         std::unique_ptr<ObjectColumnWriter> json_writer);
 
     ~FlatJsonColumnWriter() override = default;
 
@@ -61,22 +62,22 @@ protected:
     Status _write_flat_column();
 
 private:
-    Status _flat_column(Columns& json_datas);
+    Status _flat_column(MutableColumns& json_datas);
 
 protected:
     ColumnMetaPB* _json_meta;
     WritableFile* _wfile;
-    std::unique_ptr<ScalarColumnWriter> _json_writer;
+    std::unique_ptr<ObjectColumnWriter> _json_writer;
 
     std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
-    Columns _flat_columns;
+    MutableColumns _flat_columns;
 
-    Columns _json_datas;
+    MutableColumns _json_datas;
     size_t _estimate_size = 0;
 
-    bool _has_remain;
+    bool _has_remain = false;
     std::shared_ptr<BloomFilter> _remain_filter;
     bool _is_flat = false;
     const FlatJsonConfig* _flat_json_config = nullptr;

@@ -16,11 +16,18 @@
 
 #include <utility>
 
+#include "column/raw_data_visitor.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -33,7 +40,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -47,21 +53,19 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
 }
 
 DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
-        : _state(kUninitialized),
-          _opt(std::move(opt)),
+        : _opt(std::move(opt)),
           _mem_tracker(mem_tracker),
           _storage_engine(storage_engine),
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
-          _schema_initialized(false),
+
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
           _replicate_token(nullptr),
-          _segment_flush_token(nullptr),
-          _with_rollback_log(true) {}
+          _segment_flush_token(nullptr) {}
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
@@ -401,7 +405,9 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
         if (_opt.slots != nullptr && _opt.slots->back()->col_name() == "__op") {
             size_t op_column_id = chunk.num_columns() - 1;
             const auto& op_column = chunk.get_column_by_index(op_column_id);
-            auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+            RawDataVisitor visitor;
+            RETURN_IF_ERROR(op_column->accept(&visitor));
+            const auto* ops = visitor.result();
             ok = !std::any_of(ops, ops + chunk.num_rows(), [](auto op) { return op == TOpType::UPSERT; });
         } else {
             ok = false;
@@ -439,7 +445,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                     "memory limit exceeded, please reduce load frequency or increase config "
                     "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
         }
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     }
     auto state = get_state();
     if (state != kWriting) {
@@ -467,15 +473,15 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = _flush_memtable();
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = _flush_memtable();
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (full) {
         st = flush_memtable_async();
-        _reset_mem_table();
         ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
+        RETURN_IF_ERROR(_reset_mem_table());
     }
     if (!st.ok()) {
         _set_state(kAborted, st);
@@ -559,6 +565,7 @@ Status DeltaWriter::manual_flush() {
 }
 
 Status DeltaWriter::flush_memtable_async(bool eos) {
+    DeferOp defer([this] { _mem_table.reset(); });
     _last_write_ts = 0;
     _write_buffer_size = 0;
     // _mem_table is nullptr means write() has not been called
@@ -685,7 +692,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
     return Status::OK();
 }
 
-void DeltaWriter::_reset_mem_table() {
+Status DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
@@ -697,8 +704,14 @@ void DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+        pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+    }
+    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
     _write_buffer_size = _mem_table->write_buffer_size();
+    return Status::OK();
 }
 
 Status DeltaWriter::commit() {
@@ -876,20 +889,22 @@ const char* DeltaWriter::replica_state_name(ReplicaState state) {
     return "";
 }
 
-Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
+Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_tablet_schema->num_key_columns());
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
-    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     MutableColumnPtr upserts = std::move(col);
 
     std::vector<uint64_t> rss_rowids;
@@ -918,8 +933,9 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
         const TabletColumn& tablet_column = _tablet_schema->column(i);
         if (tablet_column.is_auto_increment()) {
-            auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
+            auto* column = chunk.get_column_raw_ptr_by_index(i);
+            auto* int64_column = down_cast<Int64Column*>(column);
+            RETURN_IF_ERROR(int64_column->fill_range(ids, filter));
             break;
         }
     }

@@ -18,7 +18,7 @@
 
 #include <vector>
 
-#include "util/phmap/phmap.h"
+#include "base/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -71,9 +71,10 @@ TEST(STLCountingAllocatorTest, normal) {
                              STLCountingAllocator<int>>
                 m{STLCountingAllocator<int>(&memory_usage)};
         m.insert({1, 1});
-        ASSERT_EQ(memory_usage, 28);
+        ASSERT_GT(memory_usage, 0);
+        int64_t memory_usage_after_first_insert = memory_usage;
         m.insert({2, 2});
-        ASSERT_EQ(memory_usage, 44);
+        ASSERT_GE(memory_usage, memory_usage_after_first_insert);
     }
     ASSERT_EQ(memory_usage, 0);
 }

@@ -28,12 +28,18 @@ public class FunctionRef implements ParseNode {
     private final NodePosition pos;
     private final QualifiedName fnName;
     private final String alias;
+    private final boolean isGlobalFunction;
 
     public FunctionRef(QualifiedName fnName, String alias, NodePosition pos) {
+        this(fnName, alias, pos, false);
+    }
+
+    public FunctionRef(QualifiedName fnName, String alias, NodePosition pos, boolean isGlobalFunction) {
         Preconditions.checkArgument(fnName != null && !fnName.getParts().isEmpty(), "Function name is not valid");
         this.fnName = fnName;
         this.pos = pos;
         this.alias = alias;
+        this.isGlobalFunction = isGlobalFunction;
     }
 
     public QualifiedName getFnName() {
@@ -57,6 +63,10 @@ public class FunctionRef implements ParseNode {
 
     public String getAlias() {
         return this.alias;
+    }
+
+    public boolean isGlobalFunction() {
+        return isGlobalFunction;
     }
 
     @Override

@@ -16,11 +16,11 @@
 
 #include <gutil/strings/substitute.h>
 
+#include "base/container/raw_container.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -43,15 +43,16 @@ public:
         // No optimization for const column now.
         arg0 = ColumnHelper::unfold_const_column(_children[0]->type(), num_rows, arg0);
         arg1 = ColumnHelper::unfold_const_column(_children[1]->type(), num_rows, arg1);
-        auto* array_column = down_cast<ArrayColumn*>(get_data_column(arg0.get()));
+        const auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg0.get()));
         auto* array_elements = array_column->elements_column().get();
-        auto* array_elements_data = get_data_column(array_elements);
+        const auto* array_elements_data = ColumnHelper::get_data_column(array_elements);
         DCHECK_EQ(num_rows, arg0->size());
         DCHECK_EQ(num_rows, arg1->size());
         DCHECK_EQ(num_rows + 1, array_column->offsets_column()->size());
 
-        const int32_t* subscripts = down_cast<Int32Column*>(get_data_column(arg1.get()))->get_data().data();
-        const uint32_t* offsets = array_column->offsets_column()->get_data().data();
+        const int32_t* subscripts =
+                down_cast<const Int32Column*>(ColumnHelper::get_data_column(arg1.get()))->immutable_data().data();
+        const uint32_t* offsets = array_column->offsets_column()->immutable_data().data();
 
         if (_check_is_out_of_bounds) {
             uint32_t prev = offsets[0];
@@ -88,14 +89,14 @@ public:
             prev = curr;
         }
 
-        if (auto* nullable = dynamic_cast<NullableColumn*>(arg0.get()); nullable != nullptr) {
-            const uint8_t* nulls = nullable->null_column()->raw_data();
+        if (auto* nullable = dynamic_cast<const NullableColumn*>(arg0.get()); nullable != nullptr) {
+            const auto& nulls = nullable->immutable_null_column_data();
             for (size_t i = 0; i < num_rows; i++) {
                 null_flags[i] |= nulls[i];
             }
         }
-        if (auto* nullable = dynamic_cast<NullableColumn*>(arg1.get()); nullable != nullptr) {
-            const uint8_t* nulls = nullable->null_column()->raw_data();
+        if (auto* nullable = dynamic_cast<const NullableColumn*>(arg1.get()); nullable != nullptr) {
+            const auto& nulls = nullable->immutable_null_column_data();
             for (size_t i = 0; i < num_rows; i++) {
                 null_flags[i] |= nulls[i];
             }
@@ -116,15 +117,15 @@ public:
         DCHECK_EQ(num_rows, selection.size());
 
         if (array_elements->has_null()) {
-            auto* nullable_elements = down_cast<NullableColumn*>(array_elements);
-            const uint8_t* nulls = nullable_elements->null_column()->raw_data();
+            const auto* nullable_elements = down_cast<const NullableColumn*>(array_elements);
+            const auto& nulls = nullable_elements->immutable_null_column_data();
             for (size_t i = 0; i < num_rows; i++) {
                 null_flags[i] |= nulls[selection[i]];
             }
         }
 
         // Construct the final result column;
-        ColumnPtr result_data = array_elements_data->clone_empty();
+        MutableColumnPtr result_data = array_elements_data->clone_empty();
         NullColumn::MutablePtr result_null = NullColumn::create();
         result_null->get_data().swap(null_flags);
 
@@ -141,7 +142,6 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayElementExpr(*this)); }
 
 private:
-    Column* get_data_column(Column* column) { return ColumnHelper::get_data_column(column); }
     bool _check_is_out_of_bounds = false;
 };
 

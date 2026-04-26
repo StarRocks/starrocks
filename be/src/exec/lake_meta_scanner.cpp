@@ -14,11 +14,25 @@
 
 #include "exec/lake_meta_scanner.h"
 
+#include "base/testutil/sync_point.h"
 #include "exec/lake_meta_scan_node.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/global_dict/config.h"
-#include "testutil/sync_point.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
+
+namespace {
+
+lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
+    const auto* query_execution_services = state->query_execution_services();
+    return query_execution_services != nullptr && query_execution_services->lake != nullptr
+                   ? query_execution_services->lake->lake_tablet_manager
+                   : nullptr;
+}
+
+} // namespace
 
 LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
 
@@ -38,15 +52,27 @@ Status LakeMetaScanner::_real_init() {
     reader_params.tablet_id = _tablet_id;
     reader_params.version = Version(0, _version);
     reader_params.runtime_state = _runtime_state;
+    reader_params.tablet_manager = lake_tablet_manager(_runtime_state);
+    RETURN_IF(reader_params.tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     reader_params.chunk_size = _runtime_state->chunk_size();
     reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     reader_params.desc_tbl = &_parent->_desc_tbl;
     reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
                                                ? _parent->_meta_scan_node.low_cardinality_threshold
                                                : DICT_DECODE_MAX_SIZE;
+
+    if (_parent->_meta_scan_node.__isset.schema_key) {
+        const auto& t_schema_key = _parent->_meta_scan_node.schema_key;
+        reader_params.schema_key.emplace();
+        reader_params.schema_key->set_schema_id(t_schema_key.schema_id);
+        reader_params.schema_key->set_db_id(t_schema_key.db_id);
+        reader_params.schema_key->set_table_id(t_schema_key.table_id);
+    }
+
     // Pass column access paths and extend schema similar to OLAP path
     if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {
         reader_params.column_access_paths = &_parent->_column_access_paths;
+        reader_params.next_uniq_id = starrocks::next_uniq_id(_parent->_meta_scan_node);
     }
 
     _reader = std::make_unique<LakeMetaReader>();

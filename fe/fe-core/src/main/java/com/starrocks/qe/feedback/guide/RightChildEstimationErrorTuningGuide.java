@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -29,6 +30,8 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 import java.util.Optional;
+
+import static com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule.JOIN_COMMUTATIVITY_MAP;
 
 public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
 
@@ -63,6 +66,10 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
         }
 
         PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+        JoinOperator joinType = joinOperator.getJoinType();
+        if (joinType.isAsofJoin() || joinType.isNullAwareLeftAntiJoin()) {
+            return Optional.empty();
+        }
         SkeletonNode leftChildNode = joinNode.getChild(0);
         SkeletonNode rightChildNode = joinNode.getChild(1);
 
@@ -91,6 +98,10 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
             if (isBroadcastJoin(rightChild)) {
                 if (leftNodeExecStats.getPullRows() < BROADCAST_THRESHOLD && leftSize < rightSize
                         && !commuteJoinHelper.onlyShuffle()) {
+                    JoinOperator commutedJoinType = JOIN_COMMUTATIVITY_MAP.get(joinOperator.getJoinType());
+                    if (shouldDisallowBroadcastAfterCommute(commutedJoinType)) {
+                        return Optional.empty();
+                    }
                     // original plan: small table inner join large table(broadcast)
                     // rewrite to: large table inner join small table(broadcast)
                     PhysicalDistributionOperator broadcastOp = new PhysicalDistributionOperator(
@@ -165,6 +176,11 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
                     if (optExpression.isExistRequiredDistribution()) {
                         return Optional.empty();
                     }
+                    
+                    JoinOperator commutedJoinType = JOIN_COMMUTATIVITY_MAP.get(joinOperator.getJoinType());
+                    if (shouldDisallowBroadcastAfterCommute(commutedJoinType)) {
+                        return Optional.empty();
+                    }
 
                     // original plan: small table(shuffle) inner join large table(shuffle)
                     // rewrite to: large table inner join small table(broadcast)
@@ -226,5 +242,16 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Check if broadcasting is disallowed after commuting the join.
+     * After commutation, if the join becomes RIGHT OUTER/SEMI/ANTI or FULL OUTER JOIN,
+     * the right side (which would be broadcast) becomes null-preserving, making broadcast incorrect.
+     */
+    private boolean shouldDisallowBroadcastAfterCommute(JoinOperator commutedJoinType) {
+        return commutedJoinType != null && (commutedJoinType.isRightOuterJoin() || 
+                commutedJoinType.isRightSemiJoin() || commutedJoinType.isRightAntiJoin() || 
+                commutedJoinType.isFullOuterJoin());
     }
 }

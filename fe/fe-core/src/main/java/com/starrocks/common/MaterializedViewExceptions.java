@@ -31,6 +31,8 @@ public class MaterializedViewExceptions {
 
     public static final String INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED = "metadata backup/restore mv corrupted:";
 
+    public static final String INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES = "mv consecutive failures: ";
+
     /**
      * Create the inactive reason when base table not exists
      */
@@ -69,7 +71,7 @@ public class MaterializedViewExceptions {
         return INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED + tableName;
     }
 
-    public static String inactiveReasonForBaseTableActive(String tableName) {
+    public static String inactiveReasonForBaseTableInActive(String tableName) {
         return "base-mv inactive: " + tableName;
     }
 
@@ -95,5 +97,20 @@ public class MaterializedViewExceptions {
 
     public static SemanticException reportBaseTableNotExists(String tableName) {
         return new SemanticException(inactiveReasonForBaseTableNotExists(tableName));
+    }
+
+    public static String inactiveReasonForConsecutiveFailures(String mvName) {
+        return INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES + mvName;
+    }
+
+    public static String unsupportedReasonForLegacyIncrementalMaintenance() {
+        return "Legacy incremental materialized view maintenance is no longer supported";
+    }
+
+    public static String unSupportedReasonForMVFSE(String reason) {
+        return String.format("fast schema evolution failed: %s. Please use 1) 'CREATE a new MV " +
+                "and use `SWAP MV` to replace the current', or 2) `ALTER MATERIALIZED VIEW <NAME> SET " +
+                "('query_rewrite_consistency'='force_mv')` to force query rewrite. or 3) `ALTER MATERIALIZED VIEW " +
+                "<NAME> set ('enable_query_rewrite'='false')` to disable query rewrite.", reason);
     }
 }

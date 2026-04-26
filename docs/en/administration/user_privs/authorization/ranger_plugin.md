@@ -5,6 +5,8 @@ sidebar_position: 40
 
 # Manage permissions with Apache Ranger
 
+import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
+
 [Apache Ranger](https://ranger.apache.org/) provides a centralized security management framework that allows users to customize access policies through a visual web page. This helps determine which roles can access which data and exercise fine-grained data access control for various components and services in the Hadoop ecosystem.
 
 Apache Ranger provides the following core modules:
@@ -75,9 +77,16 @@ Also, please notice that if you didn't install the ranger-starrocks-plugin, then
 
 3. Restart Ranger Admin.
 
-   ```SQL
-   ranger-admin restart
-   ```
+   -  Ranger 0.5.x:
+
+      ```SQL
+      ranger-admin restart
+      ```
+   - Ranger 2.x and above:
+   
+      ```SQL
+      ./ews/ranger-admin-services.sh restart
+      ```
 
 ### Configure StarRocks Service on Ranger Admin
 
@@ -85,11 +94,7 @@ Also, please notice that if you didn't install the ranger-starrocks-plugin, then
 This step configures the StarRocks Service on Ranger so that users can perform access control on StarRocks objects through Ranger.
 :::
 
-1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
-
-   ```SQL
-   wget https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json
-   ```
+<ServiceDefLink />
 
    :::note
    If you do not need Ranger's autocomplete feature (which means you did not install the ranger-starrocks-plugin), you must set `implClass` in the .json file to empty:

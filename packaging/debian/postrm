@@ -1,0 +1,66 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    purge)
+        # Identify the component for this package
+        if [ -n "$DPKG_MAINTSCRIPT_PACKAGE" ]; then
+            case "$DPKG_MAINTSCRIPT_PACKAGE" in
+                starrocks-*)
+                    COMP=${DPKG_MAINTSCRIPT_PACKAGE#starrocks-}
+                    ;;
+                *)
+                    COMP=""
+                    ;;
+            esac
+
+            # Delete COMPONENT-SPECIFIC data and logs
+            # We never delete the top-level /var/lib/starrocks broadly to protect other nodes.
+            if [ -n "$COMP" ]; then
+                echo "Purging data and logs for StarRocks $COMP..."
+                rm -rf "/var/lib/starrocks/$COMP"
+                rm -rf "/var/log/starrocks/$COMP"
+                rm -rf "/etc/starrocks/$COMP"
+                # Clean up the component-specific runtime directory created by systemd/PID_DIR.
+                rm -rf "/run/starrocks-$COMP"
+            fi
+        fi
+
+        # Clean up empty parent directories
+        # rmdir will only succeed if the directory is empty, which is safe.
+        for dir in /etc/starrocks /var/lib/starrocks /var/log/starrocks; do
+            if [ -d "$dir" ]; then
+                rmdir "$dir" 2>/dev/null || true
+            fi
+        done
+
+        # Remove the system user and group (shared across components)
+        # Only do this if no other starrocks server packages are left.
+        has_starrocks_server=false
+        for pkg in starrocks-fe starrocks-be starrocks-cn; do
+            if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
+                has_starrocks_server=true
+                break
+            fi
+        done
+
+        if [ "$has_starrocks_server" = false ]; then
+            if getent passwd starrocks >/dev/null; then
+                userdel starrocks || true
+            fi
+            if getent group starrocks >/dev/null; then
+                groupdel starrocks || true
+            fi
+        fi
+    ;;
+
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    ;;
+
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+exit 0

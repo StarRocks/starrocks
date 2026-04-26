@@ -93,7 +93,7 @@ public class BrokerLoadPendingTask extends LoadTask {
                     if (brokerDesc.hasBroker()) {
                         BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
                     } else {
-                        HdfsUtil.parseFile(path, brokerDesc, fileStatuses);
+                        HdfsUtil.parseFile(path, brokerDesc.getProperties(), fileStatuses);
                     }
                 }
                 fileStatusList.add(fileStatuses);

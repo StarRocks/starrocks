@@ -18,11 +18,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "common/config_exec_fwd.h"
 #include "connector/connector.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "gutil/strings/join.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "service/service_be/lake_service.h"
@@ -33,8 +40,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_meta_manager.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -64,6 +69,13 @@ std::vector<TScanRangeParams> create_scan_ranges_cloud(std::vector<TabletMetadat
 class TestBase : public ::testing::Test {
 public:
     ~TestBase() override {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "table_schema_service_disable_remote_schema_for_load");
+        if (fp != nullptr) {
+            fp->setMode(trigger_mode);
+        }
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
@@ -77,7 +89,15 @@ protected:
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {}
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "table_schema_service_disable_remote_schema_for_load");
+        if (fp != nullptr) {
+            fp->setMode(trigger_mode);
+        }
+    }
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }
 
@@ -121,6 +141,21 @@ struct PrimaryKeyParam {
     PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
     bool enable_transparent_data_encryption = false;
+};
+
+template <typename T>
+class ConfigResetGuard {
+public:
+    ConfigResetGuard(T* val, T new_val) {
+        _val = val;
+        _old_val = *val;
+        *val = new_val;
+    }
+    ~ConfigResetGuard() { *_val = _old_val; }
+
+private:
+    T* _val;
+    T _old_val;
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
@@ -247,7 +282,7 @@ inline StatusOr<TabletMetadataPtr> TestBase::batch_publish(int64_t tablet_id, in
     return TEST_batch_publish(_tablet_mgr.get(), tablet_id, base_version, new_version, txn_ids);
 }
 
-inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type) {
+inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type, size_t num_of_columns) {
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(next_id());
     metadata->set_version(1);
@@ -258,6 +293,42 @@ inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysTyp
     //  +--------+------+-----+------+
     //  |   c0   |  INT | YES |  NO  |
     //  |   c1   |  INT | NO  |  NO  |
+    //  |   ..   |  INT | ... |  ... |
+    //  |   ci   |  INT | Y,N |  NO  |
+    auto schema = metadata->mutable_schema();
+    schema->set_keys_type(keys_type);
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    for (size_t i = 0; i < num_of_columns; ++i) {
+        auto c = schema->add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c" + std::to_string(i));
+        c->set_type("INT");
+        c->set_is_nullable(false);
+        c->set_is_key(i % 2 == 0);
+        if (i % 2 == 1) {
+            c->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        }
+    }
+    return metadata;
+}
+
+inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type) {
+    return generate_simple_tablet_metadata(keys_type, 2);
+}
+
+inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata_v2(KeysType keys_type) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(1);
+    //
+    //  | column | type | KEY | NULL |
+    //  +--------+------+-----+------+
+    //  |   c0   |  VARCHAR | YES |  NO  |
+    //  |   c1   |  INT | NO  |  NO  |
     auto schema = metadata->mutable_schema();
     schema->set_keys_type(keys_type);
     schema->set_id(next_id());
@@ -267,9 +338,10 @@ inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysTyp
     {
         c0->set_unique_id(next_id());
         c0->set_name("c0");
-        c0->set_type("INT");
+        c0->set_type("VARCHAR");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        c0->set_length(3200);
     }
     auto c1 = schema->add_column();
     {
@@ -291,8 +363,11 @@ inline std::shared_ptr<RuntimeState> create_runtime_state() {
 inline std::shared_ptr<RuntimeState> create_runtime_state(const TQueryOptions& query_options) {
     TUniqueId fragment_id;
     TQueryGlobals query_globals;
-    std::shared_ptr<RuntimeState> runtime_state =
-            std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+    auto* exec_env = ExecEnv::GetInstance();
+    std::shared_ptr<RuntimeState> runtime_state = std::make_shared<RuntimeState>(
+            fragment_id, query_options, query_globals, &exec_env->query_execution_services(), exec_env);
+    auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
+    runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;
     runtime_state->init_mem_trackers(id);
     return runtime_state;

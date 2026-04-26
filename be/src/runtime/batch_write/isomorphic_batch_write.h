@@ -23,10 +23,10 @@
 #include <string>
 #include <unordered_set>
 
+#include "base/concurrency/countdown_latch.h"
 #include "common/statusor.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/batch_write/txn_state_cache.h"
-#include "util/countdown_latch.h"
 
 namespace starrocks {
 

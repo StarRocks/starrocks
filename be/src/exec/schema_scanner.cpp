@@ -16,7 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/schema_scanner/schema_analyze_status.h"
@@ -28,6 +28,7 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
+#include "exec/schema_scanner/schema_be_tablet_write_log_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
@@ -40,6 +41,7 @@
 #include "exec/schema_scanner/schema_dummy_scanner.h"
 #include "exec/schema_scanner/schema_fe_metrics_scanner.h"
 #include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
+#include "exec/schema_scanner/schema_fe_threads_scanner.h"
 #include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
@@ -55,6 +57,7 @@
 #include "exec/schema_scanner/schema_table_privileges_scanner.h"
 #include "exec/schema_scanner/schema_tables_config_scanner.h"
 #include "exec/schema_scanner/schema_tables_scanner.h"
+#include "exec/schema_scanner/schema_tablet_reshard_jobs_scanner.h"
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 #include "exec/schema_scanner/schema_tasks_scanner.h"
 #include "exec/schema_scanner/schema_temp_tables_scanner.h"
@@ -73,13 +76,13 @@
 #include "exprs/literal.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
 StarRocksServer* SchemaScanner::_s_starrocks_server;
 
-SchemaScanner::SchemaScanner(ColumnDesc* columns, int column_num)
-        : _is_init(false), _param(nullptr), _columns(columns), _column_num(column_num) {}
+SchemaScanner::SchemaScanner(ColumnDesc* columns, int column_num) : _columns(columns), _column_num(column_num) {}
 
 SchemaScanner::~SchemaScanner() = default;
 
@@ -180,6 +183,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeMetricsScanner>();
     case TSchemaTableType::SCH_FE_METRICS:
         return std::make_unique<SchemaFeMetricsScanner>();
+    case TSchemaTableType::SCH_FE_THREADS:
+        return std::make_unique<SchemaFeThreadsScanner>();
     case TSchemaTableType::SCH_BE_TXNS:
         return std::make_unique<SchemaBeTxnsScanner>();
     case TSchemaTableType::SCH_BE_CONFIGS:
@@ -196,6 +201,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeBvarsScanner>();
     case TSchemaTableType::SCH_BE_CLOUD_NATIVE_COMPACTIONS:
         return std::make_unique<SchemaBeCloudNativeCompactionsScanner>();
+    case TSchemaTableType::SCH_BE_TABLET_WRITE_LOG:
+        return std::make_unique<SchemaBeTabletWriteLogScanner>();
     case TSchemaTableType::STARROCKS_ROLE_EDGES:
         return std::make_unique<StarrocksRoleEdgesScanner>();
     case TSchemaTableType::STARROCKS_GRANT_TO_ROLES:
@@ -240,6 +247,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<WarehouseMetricsScanner>();
     case TSchemaTableType::SCH_WAREHOUSE_QUERIES:
         return std::make_unique<WarehouseQueriesScanner>();
+    case TSchemaTableType::SCH_TABLET_RESHARD_JOBS:
+        return std::make_unique<SchemaTabletReshardJobsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
@@ -255,9 +264,6 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     }
 
     int offset = (null_column + 7) / 8;
-    int null_byte = 0;
-    int null_bit = 0;
-
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
         const TypeDescriptor& type_desc = _columns[i].type;
@@ -267,18 +273,7 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
 
-        if (_columns[i].is_null) {
-            t_slot_desc.__set_nullIndicatorByte(null_byte);
-            t_slot_desc.__set_nullIndicatorBit(null_bit);
-            null_bit = (null_bit + 1) % 8;
-
-            if (0 == null_bit) {
-                null_byte++;
-            }
-        } else {
-            t_slot_desc.__set_nullIndicatorByte(0);
-            t_slot_desc.__set_nullIndicatorBit(-1);
-        }
+        t_slot_desc.__set_isNullable(_columns[i].is_null);
 
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
@@ -357,7 +352,7 @@ bool SchemaScanner::_parse_expr_predicate(Expr* conjunct, const std::string& col
     if (slot_id_mapping.find(slot_id) == slot_id_mapping.end()) {
         return false;
     }
-    auto& slot_name = slot_id_mapping.at(slot_id)->col_name();
+    auto slot_name = slot_id_mapping.at(slot_id)->col_name();
     if (!boost::iequals(slot_name, col_name)) {
         return false;
     }

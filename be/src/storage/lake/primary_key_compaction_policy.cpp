@@ -14,10 +14,54 @@
 
 #include "storage/lake/primary_key_compaction_policy.h"
 
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
+
+double RowsetCandidate::io_count() const {
+    int64_t large_rowset_threshold = config::lake_compaction_max_rowset_size;
+
+    // For non-overlapped rowsets that are already large enough, return 0
+    // to indicate they don't need compaction. The only exception is if they have deletes,
+    // in which case we still want to consider compacting them to reclaim space.
+    if (!rowset_meta_ptr->overlapped() && stat.num_dels == 0) {
+        int64_t rowset_size = static_cast<int64_t>(rowset_meta_ptr->data_size());
+        if (rowset_size >= large_rowset_threshold) {
+            // Already a large, well-compacted rowset with no deletes - zero priority
+            return 0;
+        }
+    }
+
+    double cnt = 1;
+    if (rowset_meta_ptr->overlapped()) {
+        int segments_size = rowset_meta_ptr->segments_size();
+        if (segments_size == 0) {
+            cnt = 1;
+        } else if (rowset_meta_ptr->segment_size_size() == 0) {
+            // No segment_size info, fall back to counting all segments
+            cnt = segments_size;
+        } else {
+            // Count only segments smaller than the large segment threshold
+            int effective_count = 0;
+            for (int i = 0; i < rowset_meta_ptr->segment_size_size(); i++) {
+                if (static_cast<int64_t>(rowset_meta_ptr->segment_size(i)) < large_rowset_threshold) {
+                    effective_count++;
+                }
+            }
+            cnt = std::max(1, effective_count);
+        }
+    }
+    if (stat.num_dels > 0) {
+        // if delvec file exist, that means we need to read segment files and delvec files both
+        // And update_compaction_delvec_file_io_ratio control the io amp ratio of delvec files, default is 2.
+        // Bigger update_compaction_delvec_file_io_amp_ratio means high priority about merge rowset with delvec files.
+        cnt *= config::update_compaction_delvec_file_io_amp_ratio;
+    }
+    return cnt;
+}
 
 StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_level(
         std::vector<RowsetCandidate>& rowsets) {
@@ -91,9 +135,35 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
 // Return true if segment number meet the requirement of min input
 bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
     int64_t total_segment_cnt = 0;
+    int64_t large_rowset_threshold = config::lake_compaction_max_rowset_size;
     for (int i = 0; i < tablet_metadata->rowsets_size(); i++) {
         const auto& rowset = tablet_metadata->rowsets(i);
-        total_segment_cnt += rowset.overlapped() ? rowset.segments_size() : 1;
+        if (!rowset.overlapped()) {
+            // Large non-overlapped rowsets are already well-compacted, skip them
+            if (rowset.data_size() >= large_rowset_threshold) {
+                continue;
+            }
+            total_segment_cnt += 1;
+        } else if (rowset.segments_size() == 0) {
+            // No segments in the rowset, count as 1
+            total_segment_cnt += 1;
+        } else if (rowset.segment_size_size() == 0) {
+            // No segment_size info, fall back to counting all segments
+            total_segment_cnt += rowset.segments_size();
+        } else {
+            // Count only segments smaller than the large segment threshold
+            int64_t rowset_effective_count = 0;
+            for (int j = 0; j < rowset.segment_size_size(); j++) {
+                if (static_cast<int64_t>(rowset.segment_size(j)) < large_rowset_threshold) {
+                    rowset_effective_count++;
+                }
+            }
+            // At least count 1 for non-empty overlapped rowset
+            if (rowset_effective_count == 0) {
+                rowset_effective_count = 1;
+            }
+            total_segment_cnt += rowset_effective_count;
+        }
         if (total_segment_cnt >= config::lake_pk_compaction_min_input_segments) {
             // Return when requirement meet
             return true;
@@ -114,8 +184,6 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         return rowset_indexes;
     }
     std::vector<RowsetCandidate> rowset_vec;
-    const auto tablet_id = tablet_metadata->id();
-    const auto tablet_version = tablet_metadata->version();
     const int64_t compaction_data_size_threshold =
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
     // 1. generate rowset candidate vector
@@ -127,7 +195,7 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         if (rowset_pb.has_num_dels()) {
             stat.num_dels = rowset_pb.num_dels();
         } else {
-            stat.num_dels = mgr->get_rowset_num_deletes(tablet_id, tablet_version, rowset_pb);
+            stat.num_dels = mgr->get_rowset_num_deletes(*tablet_metadata, rowset_pb);
         }
         rowset_vec.emplace_back(&rowset_pb, stat, i);
     }

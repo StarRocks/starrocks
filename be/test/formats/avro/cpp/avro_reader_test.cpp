@@ -16,14 +16,16 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/adaptive_nullable_column.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_scan_io_fwd.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "fs/fs.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -49,8 +51,7 @@ public:
     void materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk) {
         chunk->materialized_nullable();
         for (int i = 0; i < chunk->num_columns(); i++) {
-            AdaptiveNullableColumn* adaptive_column =
-                    down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+            auto* adaptive_column = down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
             chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
                                                                  adaptive_column->materialized_raw_null_column()),
                                           i);
@@ -303,7 +304,7 @@ TEST_F(AvroReaderTest, test_read_complex_types_as_varchar) {
     // read as varchar type
     for (auto& slot_desc : tmp_slot_descs) {
         slot_descs.emplace_back(_obj_pool.add(
-                new SlotDescriptor(slot_desc.id(), slot_desc.col_name(),
+                new SlotDescriptor(slot_desc.id(), std::string(slot_desc.col_name()),
                                    TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH))));
     }
 

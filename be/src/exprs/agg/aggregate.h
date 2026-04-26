@@ -17,6 +17,7 @@
 #include <type_traits>
 
 #include "column/column.h"
+#include "column/nullable_column.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
@@ -103,7 +104,7 @@ public:
 
     // For streaming aggregation, we directly convert column data to serialize format
     virtual void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                             ColumnPtr* dst) const = 0;
+                                             MutableColumnPtr& dst) const = 0;
 
     // Insert current aggregation state into dst column from start to end
     // For aggregation window functions
@@ -225,6 +226,10 @@ public:
         // can't invoke this function
         DCHECK(0);
     }
+
+    // There may be other operators which may change immediate state's nullable between multi stage aggregate,
+    // so even for non-nullable aggregate function, we still need to support nullable immediate input.
+    virtual bool support_nullable_immediate_input() const { return false; }
 
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
@@ -425,25 +430,53 @@ public:
 
     void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
-        }
-    }
-
-    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
-                                 AggDataPtr* states, const Filter& filter) const override {
-        for (size_t i = 0; i < chunk_size; i++) {
-            // TODO: optimize with simd ?
-            if (filter[i] == 0) {
+        if (!this->support_nullable_immediate_input() && column->is_nullable()) {
+            NullableColumn* nullable_column = down_cast<NullableColumn*>(const_cast<Column*>(column));
+            DCHECK_EQ(false, nullable_column->has_null());
+            auto* data_column = nullable_column->data_column().get();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                static_cast<const Derived*>(this)->merge(ctx, data_column, states[i] + state_offset, i);
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
                 static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
             }
         }
     }
 
+    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+                                 AggDataPtr* states, const Filter& filter) const override {
+        auto merge_selectively = [&](const Column* merge_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (filter[i] == 0) {
+                    static_cast<const Derived*>(this)->merge(ctx, merge_column, states[i] + state_offset, i);
+                }
+            }
+        };
+
+        if (!this->support_nullable_immediate_input() && column->is_nullable()) {
+            NullableColumn* nullable_column = down_cast<NullableColumn*>(const_cast<Column*>(column));
+            DCHECK_EQ(false, nullable_column->has_null());
+            auto* data_column = nullable_column->data_column().get();
+            merge_selectively(data_column);
+        } else {
+            merge_selectively(column);
+        }
+    }
+
     void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
                                   size_t size) const override {
-        for (size_t i = start; i < start + size; ++i) {
-            static_cast<const Derived*>(this)->merge(ctx, input, state, i);
+        if (!this->support_nullable_immediate_input() && input->is_nullable()) {
+            NullableColumn* nullable_column = down_cast<NullableColumn*>(const_cast<Column*>(input));
+            DCHECK_EQ(false, nullable_column->has_null());
+            auto* data_column = nullable_column->data_column().get();
+            for (size_t i = start; i < start + size; ++i) {
+                static_cast<const Derived*>(this)->merge(ctx, data_column, state, i);
+            }
+        } else {
+            for (size_t i = start; i < start + size; ++i) {
+                static_cast<const Derived*>(this)->merge(ctx, input, state, i);
+            }
         }
     }
 
@@ -462,7 +495,7 @@ public:
     }
 };
 
-using AggregateFunctionPtr = std::shared_ptr<AggregateFunction>;
+using AggregateFunctionPtr = const AggregateFunction*;
 
 struct AggregateFunctionEmptyState {};
 

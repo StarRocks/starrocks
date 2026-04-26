@@ -18,12 +18,12 @@
 
 #include <map>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "connector/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
-#include "fs/fs.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::connector {
 
@@ -47,24 +47,29 @@ public:
 
     Status init();
 
-    virtual Status add(Chunk* chunk);
+    virtual Status add(const ChunkPtr& chunk);
 
-    Status finish();
+    virtual Status finish();
 
     void rollback();
 
-    bool is_finished();
+    virtual bool is_finished();
 
     virtual void callback_on_commit(const CommitResult& result) = 0;
 
-    Status write_partition_chunk(const std::string& partition, const vector<int8_t>& partition_field_null_list,
-                                 Chunk* chunk);
+    Status write_partition_chunk(const std::string& partition, const std::vector<int8_t>& partition_field_null_list,
+                                 const ChunkPtr& chunk);
 
     Status status();
 
     void set_status(const Status& status);
 
+    void set_profile(RuntimeProfile* profile);
+
 protected:
+    void push_rollback_action(const std::function<void()>& action);
+    void init_profile();
+
     AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
 
@@ -76,14 +81,17 @@ protected:
     std::vector<std::function<void()>> _rollback_actions;
 
     std::map<PartitionKey, PartitionChunkWriterPtr> _partition_chunk_writers;
+    // passed to SinkOperatorMemoryManager to check memory usage
+    std::vector<PartitionChunkWriterPtr> _writers;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 
     std::shared_mutex _mutex;
     Status _status;
+    RuntimeProfile* _profile = nullptr;
+    ConnectorSinkProfile* _sink_profile = nullptr;
 };
 
 struct ConnectorChunkSinkContext {
-public:
     virtual ~ConnectorChunkSinkContext() = default;
 };
 

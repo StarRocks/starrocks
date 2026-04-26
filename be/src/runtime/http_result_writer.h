@@ -33,9 +33,9 @@
 // under the License.
 
 #pragma once
+#include "base/container/raw_container.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/result_writer.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

@@ -107,7 +107,7 @@ enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
      TXN_EMPTY = 2;
-     TXN_DYNAMIC_TABLET = 3;
+     TXN_TABLET_RESHARD = 3;
 }
 
 enum ReplicationTxnStatePB {
@@ -182,29 +182,6 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
-message RecordPredicatePB {
-    enum RecordPredicateTypePB {
-        UNKNOWN = 0;
-        COLUMN_HASH_IS_CONGRUENT = 1;
-    }
-
-    message ColumnHashIsCongruentPB {
-        optional int64 modulus = 1;
-        optional int64 remainder = 2;
-        repeated string column_names = 3;
-    }
-
-    optional RecordPredicateTypePB type = 1;
-    // set by some type of predicate (RecordPredicateTypePB is AND/OR/NOT...) which will be implemented in the future
-    repeated RecordPredicatePB children = 2;
-    // The following member should be set one of them by predicate type
-    optional ColumnHashIsCongruentPB column_hash_is_congruent = 3;
-}
-
-message PersistentIndexSstablePredicatePB {
-    optional RecordPredicatePB record_predicate = 1;
-}
-
 message IndexValueWithVerPB {
     // will be set after mvcc support
     optional int64 version = 1;
@@ -215,30 +192,6 @@ message IndexValueWithVerPB {
 
 message IndexValuesWithVerPB {
     repeated IndexValueWithVerPB values = 1;
-}
-
-message PersistentIndexSstablePB {
-    optional int64 version = 1; // Deprecated
-    optional string filename = 2;
-    optional int64 filesize = 3;
-    // used for rebuild point of persistent index
-    optional uint64 max_rss_rowid = 4;
-    optional bytes encryption_meta = 5;
-    // Whether this file shared by multiple tablets
-    optional bool shared = 6 [default=false];
-    // Filter out rows which do not satisfy the predicate
-    // when reading this specific sstable
-    optional PersistentIndexSstablePredicatePB predicate = 7;
-    // For sstable generated during data write & compaction process.
-    optional uint32 shared_rssid = 8;
-    optional int64 shared_version = 9;
-    // For sstable generated during compaction process.
-    optional bool has_delvec = 10;
-}
-
-message PersistentIndexSstableMetaPB {
-    // sstables are ordered with the smaller version on the left.
-    repeated PersistentIndexSstablePB sstables = 1;
 }
 
 enum TransactionStatusPB {
@@ -254,4 +207,34 @@ message TransactionStatePB {
     optional int64 txn_id = 1;
     optional TransactionStatusPB status = 2;
     optional string reason = 3;
+}
+
+enum VariantTypePB {
+    NORMAL_VALUE = 0;
+    NULL_VALUE = 1;
+    MINIMUM = 2;
+    MAXIMUM = 3;
+}
+
+message VariantPB {
+    optional PTypeDesc type = 1;
+    optional string value = 2;
+    optional VariantTypePB variant_type = 3;
+}
+
+message TuplePB {
+    repeated VariantPB values = 1;
+}
+
+message TabletRangePB {
+    optional TuplePB lower_bound = 1;
+    optional TuplePB upper_bound = 2;
+    optional bool lower_bound_included = 3;
+    optional bool upper_bound_included = 4;
+}
+
+enum PrimaryKeyEncodingTypePB {
+    PK_ENCODING_TYPE_NONE = 0;
+    PK_ENCODING_TYPE_V1 = 1;
+    PK_ENCODING_TYPE_V2 = 2;
 }

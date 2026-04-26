@@ -42,9 +42,9 @@
 #include <string>
 #include <vector>
 
+#include "base/utility/scoped_cleanup.h"
 #include "storage/olap_common.h"
 #include "storage/utils.h"
-#include "util/scoped_cleanup.h"
 
 using apache::thrift::ThriftDebugString;
 using std::numeric_limits;

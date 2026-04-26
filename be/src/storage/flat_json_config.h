@@ -24,7 +24,7 @@ namespace starrocks {
 class FlatJsonConfig {
 public:
     // Constructor
-    FlatJsonConfig() = default;
+    FlatJsonConfig();
 
     // Constructor with parameters
     FlatJsonConfig(bool enable, double nullFactor, double sparsityFactor, int maxColumnMax)
@@ -101,8 +101,8 @@ public:
 
 private:
     bool _flat_json_enable = false;
-    double _flat_json_null_factor = 0.3;
-    double _flat_json_sparsity_factor = 0.9;
-    int _flat_json_max_column_max = 100;
+    double _flat_json_null_factor = 0;
+    double _flat_json_sparsity_factor = 0;
+    int _flat_json_max_column_max = 0;
 };
 } // namespace starrocks

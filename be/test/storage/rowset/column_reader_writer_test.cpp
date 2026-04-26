@@ -36,19 +36,22 @@
 
 #include <iostream>
 
+#include "base/testutil/assert.h"
+#include "base/types/decimal12.h"
+#include "base/uid_util.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
-#include "storage/aggregate_type.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal12.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
@@ -58,491 +61,485 @@
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
+#include "testutil/schema_test_helper.h"
 #include "types/date_value.h"
+#include "types/storage_type_traits.h"
 
 using std::string;
 
 namespace starrocks {
 
-// NOLINTNEXTLINE
-static const std::string TEST_DIR = "/column_reader_writer_test";
-
 class ColumnReaderWriterTest : public testing::Test {
-public:
-    ColumnReaderWriterTest() {
-        TabletSchemaPB schema_pb;
-        auto* c0 = schema_pb.add_column();
-        c0->set_name("pk");
-        c0->set_is_key(true);
-        c0->set_type("BIGINT");
-
-        auto* c1 = schema_pb.add_column();
-        c1->set_name("v1");
-        c1->set_is_key(false);
-        c1->set_type("SMALLINT");
-
-        auto* c2 = schema_pb.add_column();
-        c2->set_name("v2");
-        c2->set_type("INT");
-
-        _dummy_segment_schema = TabletSchema::create(schema_pb);
-    }
-
-    ~ColumnReaderWriterTest() override = default;
-
 protected:
-    void SetUp() override {}
+    void SetUp() override;
 
     void TearDown() override {}
 
-    std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
-    }
+    std::shared_ptr<Segment> create_dummy_segment(const std::string& fname);
 
     template <LogicalType type, EncodingTypePB encoding, uint32_t version>
-    void test_nullable_data(const Column& src, const std::string& null_encoding = "0",
-                            const std::string& null_ratio = "0") {
-        config::set_config("null_encoding", null_encoding);
-
-        using Type = typename TypeTraits<type>::CppType;
-        TypeInfoPtr type_info = get_type_info(type);
-        int num_rows = src.size();
-        ColumnMetaPB meta;
-
-        auto fs = std::make_shared<MemoryFileSystem>();
-        ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
-
-        const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5.data", TEST_DIR, type, encoding, version,
-                                                      null_encoding, null_ratio);
-        auto segment = create_dummy_segment(fs, fname);
-        // write data
-        {
-            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
-
-            ColumnWriterOptions writer_opts;
-            writer_opts.page_format = version;
-            writer_opts.meta = &meta;
-            writer_opts.meta->set_column_id(0);
-            writer_opts.meta->set_unique_id(0);
-            writer_opts.meta->set_type(type);
-            if (type == TYPE_CHAR || type == TYPE_VARCHAR) {
-                writer_opts.meta->set_length(128);
-            } else {
-                writer_opts.meta->set_length(0);
-            }
-            writer_opts.meta->set_encoding(encoding);
-            writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
-            writer_opts.meta->set_is_nullable(true);
-            writer_opts.need_zone_map = true;
-
-            TabletColumn column(STORAGE_AGGREGATE_NONE, type);
-            if (type == TYPE_VARCHAR) {
-                column = create_varchar_key(1, true, 128);
-            } else if (type == TYPE_CHAR) {
-                column = create_char_key(1, true, 128);
-            }
-            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
-            ASSERT_OK(writer->init());
-
-            ASSERT_TRUE(writer->append(src).ok());
-
-            ASSERT_TRUE(writer->finish().ok());
-            ASSERT_TRUE(writer->write_data().ok());
-            ASSERT_TRUE(writer->write_ordinal_index().ok());
-            ASSERT_TRUE(writer->write_zone_map().ok());
-
-            // close the file
-            ASSERT_TRUE(wfile->close().ok());
-            std::cout << "version=" << version << ", bytes append: " << wfile->size() << "\n";
-        }
-        // read and check
-        {
-            // read and check
-            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
-
-            ColumnIteratorOptions iter_opts;
-            OlapReaderStatistics stats;
-            iter_opts.stats = &stats;
-            iter_opts.read_file = read_file.get();
-            iter_opts.use_page_cache = true;
-            auto st = iter->init(iter_opts);
-            ASSERT_TRUE(st.ok());
-
-            // first read get data from disk
-            // second read get data from page cache
-            for (int i = 0; i < 2; ++i) {
-                // sequence read
-                {
-                    st = iter->seek_to_first();
-                    ASSERT_TRUE(st.ok()) << st.to_string();
-                    ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
-                    // will do direct copy to column
-                    size_t rows_read = src.size();
-                    dst->reserve(rows_read);
-                    st = iter->next_batch(&rows_read, dst.get());
-                    ASSERT_TRUE(st.ok());
-                    ASSERT_EQ(src.size(), rows_read);
-                    ASSERT_EQ(dst->size(), rows_read);
-
-                    for (size_t i = 0; i < rows_read; i++) {
-                        ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i)))
-                                << " row " << i << ": " << datum_to_string(type_info.get(), src.get(i)) << " vs "
-                                << datum_to_string(type_info.get(), dst->get(i));
-                    }
-                }
-
-                {
-                    for (int rowid = 0; rowid < num_rows; rowid += 4025) {
-                        st = iter->seek_to_ordinal(rowid);
-                        ASSERT_TRUE(st.ok());
-
-                        size_t rows_read = 1024;
-                        ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
-
-                        st = iter->next_batch(&rows_read, dst.get());
-                        ASSERT_TRUE(st.ok());
-                        for (int i = 0; i < rows_read; ++i) {
-                            ASSERT_EQ(0, type_info->cmp(src.get(rowid + i), dst->get(i)))
-                                    << " row " << rowid + i << ": "
-                                    << datum_to_string(type_info.get(), src.get(rowid + i)) << " vs "
-                                    << datum_to_string(type_info.get(), dst->get(i));
-                        }
-                    }
-                }
-
-                {
-                    st = iter->seek_to_first();
-                    ASSERT_TRUE(st.ok());
-
-                    ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
-                    SparseRange<> read_range;
-                    size_t write_num = src.size();
-                    read_range.add(Range<>(0, write_num / 3));
-                    read_range.add(Range<>(write_num / 2, (write_num * 2 / 3)));
-                    read_range.add(Range<>((write_num * 3 / 4), write_num));
-                    size_t read_num = read_range.span_size();
-
-                    st = iter->next_batch(read_range, dst.get());
-                    ASSERT_TRUE(st.ok());
-                    ASSERT_EQ(read_num, dst->size());
-
-                    size_t offset = 0;
-                    SparseRangeIterator<> read_iter = read_range.new_iterator();
-                    while (read_iter.has_more()) {
-                        Range<> r = read_iter.next(read_num);
-                        for (int i = 0; i < r.span_size(); ++i) {
-                            ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
-                                    << " row " << r.begin() + i << ": "
-                                    << datum_to_string(type_info.get(), src.get(r.begin() + i)) << " vs "
-                                    << datum_to_string(type_info.get(), dst->get(i + offset));
-                        }
-                        offset += r.span_size();
-                    }
-                }
-            }
-        }
-    }
+    void test_nullable_data(const Column& src, const std::string& null_encoding = "0");
 
     template <LogicalType type>
-    void test_read_default_value(string value, void* result) {
-        using Type = typename TypeTraits<type>::CppType;
-        TypeInfoPtr type_info = get_type_info(type);
-        // read and check
-        {
-            TabletColumn tablet_column = create_with_default_value<type>(value);
-            DefaultValueColumnIterator iter(tablet_column.has_default_value(), tablet_column.default_value(),
-                                            tablet_column.is_nullable(), type_info, tablet_column.length(), 100);
-            ColumnIteratorOptions iter_opts;
-            auto st = iter.init(iter_opts);
-            ASSERT_TRUE(st.ok());
-            // sequence read
-            {
-                st = iter.seek_to_first();
-                ASSERT_TRUE(st.ok()) << st.to_string();
-
-                auto column = ChunkHelper::column_from_field_type(type, true);
-
-                size_t rows_read = 512;
-                st = iter.next_batch(&rows_read, column.get());
-                ASSERT_TRUE(st.ok());
-                for (int j = 0; j < rows_read; ++j) {
-                    if (type == TYPE_CHAR) {
-                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
-                                << "j:" << j;
-                    } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
-                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
-                                << "j:" << j;
-                    } else {
-                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
-                    }
-                }
-            }
-
-            {
-                auto column = ChunkHelper::column_from_field_type(type, true);
-
-                for (int rowid = 0; rowid < 1024; rowid += 128) {
-                    st = iter.seek_to_ordinal(rowid);
-                    ASSERT_TRUE(st.ok());
-
-                    size_t rows_read = 512;
-                    st = iter.next_batch(&rows_read, column.get());
-                    ASSERT_TRUE(st.ok());
-                    for (int j = 0; j < rows_read; ++j) {
-                        if (type == TYPE_CHAR) {
-                            ASSERT_EQ(*(string*)result,
-                                      reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
-                                    << "j:" << j;
-                        } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
-                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string());
-                        } else {
-                            ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    void test_read_default_value(string value, void* result);
 
     template <uint32_t version>
-    void test_int_array(const std::string& null_encoding = "0") {
-        config::set_config("null_encoding", null_encoding);
-        auto fs = std::make_shared<MemoryFileSystem>();
-        ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
-
-        TabletColumn array_column = create_array(0, true, sizeof(Collection));
-        TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
-        array_column.add_sub_column(int_column);
-
-        UInt32Column::Ptr src_offsets = UInt32Column::create();
-        NullableColumn::Ptr src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        ArrayColumn::Ptr src_column = ArrayColumn::create(src_elements, src_offsets);
-
-        // insert [1, 2, 3], [4, 5, 6]
-        src_elements->append_datum(1);
-        src_elements->append_datum(2);
-        src_elements->append_datum(3);
-        src_offsets->append(3);
-
-        src_elements->append_datum(4);
-        src_elements->append_datum(5);
-        src_elements->append_datum(6);
-        src_offsets->append(6);
-
-        TypeInfoPtr type_info = get_type_info(array_column);
-        ColumnMetaPB meta;
-
-        // delete test file.
-        const std::string fname = TEST_DIR + "/test_array_int.data";
-        auto segment = create_dummy_segment(fs, fname);
-        // write data
-        {
-            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
-
-            ColumnWriterOptions writer_opts;
-            writer_opts.page_format = version;
-            writer_opts.meta = &meta;
-            writer_opts.meta->set_column_id(0);
-            writer_opts.meta->set_unique_id(0);
-            writer_opts.meta->set_type(TYPE_ARRAY);
-            writer_opts.meta->set_length(0);
-            writer_opts.meta->set_encoding(DEFAULT_ENCODING);
-            writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
-            writer_opts.meta->set_is_nullable(false);
-            writer_opts.need_zone_map = false;
-
-            // init integer sub column
-            ColumnMetaPB* element_meta = writer_opts.meta->add_children_columns();
-            element_meta->set_column_id(0);
-            element_meta->set_unique_id(0);
-            element_meta->set_type(int_column.type());
-            element_meta->set_length(int_column.length());
-            element_meta->set_encoding(DEFAULT_ENCODING);
-            element_meta->set_compression(LZ4_FRAME);
-            element_meta->set_is_nullable(false);
-
-            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &array_column, wfile.get()));
-            ASSERT_OK(writer->init());
-
-            ASSERT_TRUE(writer->append(*src_column).ok());
-
-            ASSERT_TRUE(writer->finish().ok());
-            ASSERT_TRUE(writer->write_data().ok());
-            ASSERT_TRUE(writer->write_ordinal_index().ok());
-
-            // close the file
-            ASSERT_TRUE(wfile->close().ok());
-        }
-
-        // read and check
-        {
-            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
-
-            ColumnIteratorOptions iter_opts;
-            OlapReaderStatistics stats;
-            iter_opts.stats = &stats;
-            iter_opts.read_file = read_file.get();
-            ASSERT_TRUE(iter->init(iter_opts).ok());
-
-            // sequence read
-            {
-                auto st = iter->seek_to_first();
-                ASSERT_TRUE(st.ok()) << st.to_string();
-
-                UInt32Column::Ptr dst_offsets = UInt32Column::create();
-                NullableColumn::Ptr dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                ArrayColumn::Ptr dst_column = ArrayColumn::create(dst_elements, dst_offsets);
-                size_t rows_read = src_column->size();
-                st = iter->next_batch(&rows_read, dst_column.get());
-                ASSERT_TRUE(st.ok());
-                ASSERT_EQ(src_column->size(), rows_read);
-
-                ASSERT_EQ("[1,2,3]", dst_column->debug_item(0));
-                ASSERT_EQ("[4,5,6]", dst_column->debug_item(1));
-            }
-
-            ASSERT_EQ(2, meta.num_rows());
-            ASSERT_EQ(42, reader->total_mem_footprint());
-        }
-    }
+    void test_int_array(const std::string& null_encoding = "0");
 
     template <LogicalType type>
-    ColumnPtr numeric_data(int null_ratio) {
-        using CppType = typename CppTypeTraits<type>::CppType;
-        auto col = ChunkHelper::column_from_field_type(type, true);
-        CppType value = 0;
-        size_t count = 2 * 1024 / sizeof(CppType);
-        col->reserve(count);
-        for (size_t i = 0; i < count; ++i) {
-            (void)col->append_numbers(&value, sizeof(CppType));
-            value = value + 1;
-        }
-        for (size_t i = 0; i < count; i += null_ratio) {
-            ((CppType*)col->raw_data())[i] = 0;
-            (void)col->set_null(i);
-        }
-        return col;
-    }
+    MutableColumnPtr numeric_data(int null_ratio);
 
-    ColumnPtr low_cardinality_strings(int null_ratio) {
-        static std::string s1(4, 'a');
-        static std::string s2(4, 'b');
-        size_t count = 128 * 1024 / 4;
-        auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
-        auto nc = down_cast<NullableColumn*>(col.get());
-        nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(s1.size() * count);
-        auto v = std::vector<Slice>{s1, s2, s1, s1, s2, s2, s1, s2, s1, s1, s2, s1, s2, s1, s1, s1};
-        for (size_t i = 0; i < count; i += 16) {
-            CHECK(col->append_strings(v));
-        }
-        CHECK_EQ(count, col->size());
-        for (size_t i = 0; i < count; i += null_ratio) {
-            ((Slice*)col->raw_data())[i] = Slice();
-            CHECK(col->set_null(i));
-        }
-        return col;
-    }
-
-    ColumnPtr high_cardinality_strings(int null_ratio) {
-        std::string s1("abcdefghijklmnopqrstuvwxyz");
-        std::string s2("bbcdefghijklmnopqrstuvwxyz");
-        std::string s3("cbcdefghijklmnopqrstuvwxyz");
-        std::string s4("dbcdefghijklmnopqrstuvwxyz");
-        std::string s5("ebcdefghijklmnopqrstuvwxyz");
-        std::string s6("fbcdefghijklmnopqrstuvwxyz");
-        std::string s7("gbcdefghijklmnopqrstuvwxyz");
-        std::string s8("hbcdefghijklmnopqrstuvwxyz");
-
-        auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
-        size_t count = (128 * 1024 / s1.size()) / 8 * 8;
-        auto nc = down_cast<NullableColumn*>(col.get());
-        nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
-        for (size_t i = 0; i < count; i += 8) {
-            (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
-
-            std::next_permutation(s1.begin(), s1.end());
-            std::next_permutation(s2.begin(), s2.end());
-            std::next_permutation(s3.begin(), s3.end());
-            std::next_permutation(s4.begin(), s4.end());
-            std::next_permutation(s5.begin(), s5.end());
-            std::next_permutation(s6.begin(), s6.end());
-            std::next_permutation(s7.begin(), s7.end());
-            std::next_permutation(s8.begin(), s8.end());
-        }
-        CHECK_EQ(count, col->size());
-        for (size_t i = 0; i < count; i += null_ratio) {
-            ((Slice*)col->raw_data())[i] = Slice();
-            CHECK(col->set_null(i));
-        }
-        return col;
-    }
-
-    ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 / sizeof(DateValue);
-        auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
-        DateValue value = DateValue::create(2020, 10, 1);
-        for (size_t i = 0; i < count; i++) {
-            CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
-            value = value.add<TimeUnit::DAY>(1);
-        }
-        for (size_t i = 0; i < count; i += null_ratio) {
-            ((DateValue*)col->raw_data())[i] = DateValue{0};
-            CHECK(col->set_null(i));
-        }
-        return col;
-    }
-
-    ColumnPtr datetime_values(int null_ratio) {
-        size_t count = 4 * 1024 / sizeof(TimestampValue);
-        auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
-        TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
-        for (size_t i = 0; i < count; i++) {
-            CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
-            value = value.add<TimeUnit::MICROSECOND>(1);
-        }
-        for (size_t i = 0; i < count; i += null_ratio) {
-            ((TimestampValue*)col->raw_data())[i] = TimestampValue{0};
-            CHECK(col->set_null(i));
-        }
-        return col;
-    }
+    MutableColumnPtr low_cardinality_strings(int null_ratio);
+    MutableColumnPtr high_cardinality_strings(int null_ratio);
+    MutableColumnPtr date_values(int null_ratio);
+    MutableColumnPtr datetime_values(int null_ratio);
 
     template <LogicalType type>
-    void test_numeric_types() {
-        auto col = numeric_data<type>(1);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "1");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "1");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "1");
+    void test_numeric_types();
 
-        col = numeric_data<type>(4);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "4");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "4");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "4");
+    std::unique_ptr<ColumnIterator> create_and_init_iterator(ColumnMetaPB& meta, Segment* segment,
+                                                             const std::string& fname);
 
-        col = numeric_data<type>(10000);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "10000");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "10000");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "10000");
-    }
+    template <LogicalType type>
+    static TabletColumn make_tablet_column();
+
+    static void flush_column_writer(ColumnWriter* writer);
+
+    template <LogicalType type, EncodingTypePB encoding, uint32_t version>
+    static ColumnWriterOptions make_writer_opts(ColumnMetaPB* meta, bool is_nullable = true, bool need_zone_map = true);
+
+    const std::string TEST_DIR = "/column_reader_writer_test";
 
     MemPool _pool;
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
+    std::shared_ptr<MemoryFileSystem> _fs;
+    OlapReaderStatistics _stats;
+    std::unique_ptr<ColumnReader> _reader;
+    std::unique_ptr<RandomAccessFile> _read_file;
 };
+
+std::shared_ptr<Segment> ColumnReaderWriterTest::create_dummy_segment(const std::string& fname) {
+    return std::make_shared<Segment>(_fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
+}
+
+void ColumnReaderWriterTest::flush_column_writer(ColumnWriter* writer) {
+    ASSERT_OK(writer->finish());
+    ASSERT_OK(writer->write_data());
+    ASSERT_OK(writer->write_ordinal_index());
+    ASSERT_OK(writer->write_zone_map());
+}
+
+template <LogicalType type>
+TabletColumn ColumnReaderWriterTest::make_tablet_column() {
+    if constexpr (type == TYPE_VARCHAR) {
+        return create_varchar_key(1, true, 128);
+    } else if constexpr (type == TYPE_CHAR) {
+        return create_char_key(1, true, 128);
+    } else {
+        return TabletColumn(STORAGE_AGGREGATE_NONE, type);
+    }
+}
+
+std::unique_ptr<ColumnIterator> ColumnReaderWriterTest::create_and_init_iterator(ColumnMetaPB& meta, Segment* segment,
+                                                                                 const std::string& fname) {
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment, nullptr));
+    ASSIGN_OR_ABORT(auto iter, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    ColumnIteratorOptions iter_opts;
+    iter_opts.stats = &_stats;
+    iter_opts.read_file = _read_file.get();
+    iter_opts.use_page_cache = true;
+    EXPECT_OK(iter->init(iter_opts));
+
+    return iter;
+}
+
+template <LogicalType type, EncodingTypePB encoding, uint32_t version>
+ColumnWriterOptions ColumnReaderWriterTest::make_writer_opts(ColumnMetaPB* meta, bool is_nullable, bool need_zone_map) {
+    ColumnWriterOptions writer_opts;
+    writer_opts.page_format = version;
+    writer_opts.meta = meta;
+    writer_opts.meta->set_column_id(0);
+    writer_opts.meta->set_unique_id(0);
+    writer_opts.meta->set_type(type);
+    writer_opts.meta->set_length((type == TYPE_CHAR || type == TYPE_VARCHAR) ? 128 : 0);
+    writer_opts.meta->set_encoding(encoding);
+    writer_opts.meta->set_compression(LZ4_FRAME);
+    writer_opts.meta->set_is_nullable(is_nullable);
+    writer_opts.need_zone_map = need_zone_map;
+    return writer_opts;
+}
+
+template <LogicalType type, EncodingTypePB encoding, uint32_t version>
+void ColumnReaderWriterTest::test_nullable_data(const Column& src, const std::string& null_encoding) {
+    ASSERT_OK(config::set_config("null_encoding", null_encoding));
+
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    TypeInfoPtr type_info = get_type_info(type);
+    ColumnMetaPB meta;
+
+    // write data
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts = make_writer_opts<type, encoding, version>(&meta);
+        TabletColumn column = make_tablet_column<type>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(src));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    // read and check
+    {
+        auto iter = create_and_init_iterator(meta, segment.get(), fname);
+
+        // first read get data from disk
+        // second read get data from page cache
+        for (int i = 0; i < 2; ++i) {
+            // sequence read
+            {
+                ASSERT_OK(iter->seek_to_first());
+                MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                // will do direct copy to column
+                size_t rows_read = src.size();
+                dst->reserve(rows_read);
+                ASSERT_OK(iter->next_batch(&rows_read, dst.get()));
+                ASSERT_EQ(src.size(), rows_read);
+                ASSERT_EQ(dst->size(), rows_read);
+
+                for (size_t i = 0; i < rows_read; i++) {
+                    ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i)))
+                            << " row " << i << ": " << datum_to_string(type_info.get(), src.get(i)) << " vs "
+                            << datum_to_string(type_info.get(), dst->get(i));
+                }
+            }
+
+            {
+                int num_rows = src.size();
+                for (int rowid = 0; rowid < num_rows; rowid += 4025) {
+                    ASSERT_OK(iter->seek_to_ordinal(rowid));
+
+                    size_t rows_read = 1024;
+                    MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+
+                    ASSERT_OK(iter->next_batch(&rows_read, dst.get()));
+                    for (int i = 0; i < rows_read; ++i) {
+                        ASSERT_EQ(0, type_info->cmp(src.get(rowid + i), dst->get(i)))
+                                << " row " << rowid + i << ": " << datum_to_string(type_info.get(), src.get(rowid + i))
+                                << " vs " << datum_to_string(type_info.get(), dst->get(i));
+                    }
+                }
+            }
+
+            {
+                ASSERT_OK(iter->seek_to_first());
+
+                MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                SparseRange<> read_range;
+                size_t write_num = src.size();
+                read_range.add(Range<>(0, write_num / 3));
+                read_range.add(Range<>(write_num / 2, (write_num * 2 / 3)));
+                read_range.add(Range<>((write_num * 3 / 4), write_num));
+                size_t read_num = read_range.span_size();
+
+                ASSERT_OK(iter->next_batch(read_range, dst.get()));
+                ASSERT_EQ(read_num, dst->size());
+
+                size_t offset = 0;
+                SparseRangeIterator<> read_iter = read_range.new_iterator();
+                while (read_iter.has_more()) {
+                    Range<> r = read_iter.next(read_num);
+                    for (int i = 0; i < r.span_size(); ++i) {
+                        ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
+                                << " row " << r.begin() + i << ": "
+                                << datum_to_string(type_info.get(), src.get(r.begin() + i)) << " vs "
+                                << datum_to_string(type_info.get(), dst->get(i + offset));
+                    }
+                    offset += r.span_size();
+                }
+            }
+        }
+    }
+}
+
+template <LogicalType type>
+void ColumnReaderWriterTest::test_read_default_value(string value, void* result) {
+    using Type = StorageCppType<type>;
+    TypeInfoPtr type_info = get_type_info(type);
+    // read and check
+    {
+        TabletColumn tablet_column = create_with_default_value<type>(value);
+        DefaultValueColumnIterator iter(tablet_column.has_default_value(), tablet_column.default_value(),
+                                        tablet_column.is_nullable(), type_info, tablet_column.length(), 100);
+        ColumnIteratorOptions iter_opts;
+        ASSERT_OK(iter.init(iter_opts));
+        // sequence read
+        {
+            ASSERT_OK(iter.seek_to_first());
+
+            auto column = ChunkHelper::column_from_field_type(type, true);
+
+            size_t rows_read = 512;
+            ASSERT_OK(iter.next_batch(&rows_read, column.get()));
+            Buffer<uint8_t> buffer;
+            Buffer<Slice> slices;
+            if constexpr (is_object_type(type)) {
+                const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
+                data_column->build_slices(buffer, slices);
+                for (int j = 0; j < rows_read; ++j) {
+                    ASSERT_EQ(value, slices[j].to_string());
+                }
+            } else {
+                const auto values = GetStorageContainer<type>::get_data(column);
+                for (int j = 0; j < rows_read; ++j) {
+                    if constexpr (type == TYPE_CHAR) {
+                        ASSERT_EQ(*(string*)result, values[j].to_string()) << "j:" << j;
+                    } else if constexpr (type == TYPE_VARCHAR) {
+                        ASSERT_EQ(value, values[j].to_string()) << "j:" << j;
+                    } else {
+                        ASSERT_EQ(*(Type*)result, values[j]);
+                    }
+                }
+            }
+        }
+
+        {
+            auto column = ChunkHelper::column_from_field_type(type, true);
+
+            for (int rowid = 0; rowid < 1024; rowid += 128) {
+                ASSERT_OK(iter.seek_to_ordinal(rowid));
+
+                size_t rows_read = 512;
+                ASSERT_OK(iter.next_batch(&rows_read, column.get()));
+
+                Buffer<uint8_t> buffer;
+                Buffer<Slice> slices;
+                if constexpr (is_object_type(type)) {
+                    const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
+                    data_column->build_slices(buffer, slices);
+                    for (int j = 0; j < rows_read; ++j) {
+                        ASSERT_EQ(value, slices[j].to_string());
+                    }
+                } else {
+                    const auto values = GetStorageContainer<type>::get_data(column);
+                    for (int j = 0; j < rows_read; ++j) {
+                        if constexpr (type == TYPE_CHAR) {
+                            ASSERT_EQ(*(string*)result, values[j].to_string()) << "j:" << j;
+                        } else if constexpr (type == TYPE_VARCHAR) {
+                            ASSERT_EQ(value, values[j].to_string());
+                        } else {
+                            ASSERT_EQ(*(Type*)result, values[j]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <uint32_t version>
+void ColumnReaderWriterTest::test_int_array(const std::string& null_encoding) {
+    ASSERT_OK(config::set_config("null_encoding", null_encoding));
+
+    TabletColumn array_column = create_array(0, true, sizeof(Collection));
+    TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
+    array_column.add_sub_column(int_column);
+
+    auto src_offsets = UInt32Column::create();
+    auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto src_column = ArrayColumn::create(src_elements, src_offsets);
+
+    // insert [1, 2, 3], [4, 5, 6]
+    src_elements->append_datum(1);
+    src_elements->append_datum(2);
+    src_elements->append_datum(3);
+    src_offsets->append(3);
+
+    src_elements->append_datum(4);
+    src_elements->append_datum(5);
+    src_elements->append_datum(6);
+    src_offsets->append(6);
+
+    TypeInfoPtr type_info = get_type_info(array_column);
+    ColumnMetaPB meta;
+
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    // write data
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+
+        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_ARRAY, DEFAULT_ENCODING, version>(&meta, false, false);
+
+        // init integer sub column
+        ColumnMetaPB* element_meta = writer_opts.meta->add_children_columns();
+        element_meta->set_column_id(0);
+        element_meta->set_unique_id(0);
+        element_meta->set_type(int_column.type());
+        element_meta->set_length(0);
+        element_meta->set_encoding(DEFAULT_ENCODING);
+        element_meta->set_compression(LZ4_FRAME);
+        element_meta->set_is_nullable(false);
+
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &array_column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*src_column));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+
+    // read and check
+    {
+        auto iter = create_and_init_iterator(meta, segment.get(), fname);
+
+        // sequence read
+        {
+            ASSERT_OK(iter->seek_to_first());
+
+            auto dst_offsets = UInt32Column::create();
+            auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            auto dst_column = ArrayColumn::create(std::move(dst_elements), std::move(dst_offsets));
+            size_t rows_read = src_column->size();
+            ASSERT_OK(iter->next_batch(&rows_read, dst_column.get()));
+            ASSERT_EQ(src_column->size(), rows_read);
+
+            ASSERT_EQ("[1,2,3]", dst_column->debug_item(0));
+            ASSERT_EQ("[4,5,6]", dst_column->debug_item(1));
+        }
+
+        ASSERT_EQ(2, meta.num_rows());
+        ASSERT_EQ(42, _reader->total_mem_footprint());
+    }
+}
+
+template <LogicalType type>
+MutableColumnPtr ColumnReaderWriterTest::numeric_data(int null_ratio) {
+    using CppType = StorageCppType<type>;
+    auto col = ChunkHelper::column_from_field_type(type, true);
+    CppType value = 0;
+    size_t count = 2 * 1024 / sizeof(CppType);
+    col->reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        (void)col->append_numbers(&value, sizeof(CppType));
+        value = value + 1;
+    }
+    for (size_t i = 0; i < count; i += null_ratio) {
+        (void)col->set_null(i);
+    }
+    return col;
+}
+
+MutableColumnPtr ColumnReaderWriterTest::low_cardinality_strings(int null_ratio) {
+    static std::string s1(4, 'a');
+    static std::string s2(4, 'b');
+    size_t count = 128 * 1024 / 4;
+    auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    auto nc = down_cast<NullableColumn*>(col.get());
+    nc->reserve(count);
+    auto v = std::vector<Slice>{s1, s2, s1, s1, s2, s2, s1, s2, s1, s1, s2, s1, s2, s1, s1, s1};
+    for (size_t i = 0; i < count; i += 16) {
+        CHECK(col->append_strings(v));
+    }
+    CHECK_EQ(count, col->size());
+    for (size_t i = 0; i < count; i += null_ratio) {
+        CHECK(col->set_null(i));
+    }
+    return col;
+}
+
+MutableColumnPtr ColumnReaderWriterTest::high_cardinality_strings(int null_ratio) {
+    std::string s1("abcdefghijklmnopqrstuvwxyz");
+    std::string s2("bbcdefghijklmnopqrstuvwxyz");
+    std::string s3("cbcdefghijklmnopqrstuvwxyz");
+    std::string s4("dbcdefghijklmnopqrstuvwxyz");
+    std::string s5("ebcdefghijklmnopqrstuvwxyz");
+    std::string s6("fbcdefghijklmnopqrstuvwxyz");
+    std::string s7("gbcdefghijklmnopqrstuvwxyz");
+    std::string s8("hbcdefghijklmnopqrstuvwxyz");
+
+    auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    size_t count = (128 * 1024 / s1.size()) / 8 * 8;
+    auto nc = down_cast<NullableColumn*>(col.get());
+    nc->reserve(count);
+    for (size_t i = 0; i < count; i += 8) {
+        (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
+
+        std::next_permutation(s1.begin(), s1.end());
+        std::next_permutation(s2.begin(), s2.end());
+        std::next_permutation(s3.begin(), s3.end());
+        std::next_permutation(s4.begin(), s4.end());
+        std::next_permutation(s5.begin(), s5.end());
+        std::next_permutation(s6.begin(), s6.end());
+        std::next_permutation(s7.begin(), s7.end());
+        std::next_permutation(s8.begin(), s8.end());
+    }
+    CHECK_EQ(count, col->size());
+    for (size_t i = 0; i < count; i += null_ratio) {
+        CHECK(col->set_null(i));
+    }
+    return col;
+}
+
+MutableColumnPtr ColumnReaderWriterTest::date_values(int null_ratio) {
+    size_t count = 4 * 1024 / sizeof(DateValue);
+    auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
+    DateValue value = DateValue::create(2020, 10, 1);
+    for (size_t i = 0; i < count; i++) {
+        CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
+        value = value.add<TimeUnit::DAY>(1);
+    }
+    for (size_t i = 0; i < count; i += null_ratio) {
+        CHECK(col->set_null(i));
+    }
+    return col;
+}
+
+MutableColumnPtr ColumnReaderWriterTest::datetime_values(int null_ratio) {
+    size_t count = 4 * 1024 / sizeof(TimestampValue);
+    auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
+    TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
+    for (size_t i = 0; i < count; i++) {
+        CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
+        value = value.add<TimeUnit::MICROSECOND>(1);
+    }
+    for (size_t i = 0; i < count; i += null_ratio) {
+        CHECK(col->set_null(i));
+    }
+    return col;
+}
+
+template <LogicalType type>
+void ColumnReaderWriterTest::test_numeric_types() {
+    auto col = numeric_data<type>(1);
+    test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0");
+    test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0");
+    test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
+
+    col = numeric_data<type>(4);
+    test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0");
+    test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0");
+    test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
+
+    col = numeric_data<type>(10000);
+    test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0");
+    test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0");
+    test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
+}
+
+void ColumnReaderWriterTest::SetUp() {
+    TabletSchemaPB schema_pb;
+    SchemaTestHelper::add_column_pb(&schema_pb, "pk", "BIGINT", true);
+    SchemaTestHelper::add_column_pb(&schema_pb, "v1", "SMALLINT", false);
+    SchemaTestHelper::add_column_pb(&schema_pb, "v2", "INT", false);
+    _dummy_segment_schema = TabletSchema::create(schema_pb);
+
+    _fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(_fs->create_dir(TEST_DIR).ok());
+}
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_int) {
@@ -557,49 +554,39 @@ TEST_F(ColumnReaderWriterTest, test_double) {
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_date) {
     auto col = date_values(100);
-    test_nullable_data<TYPE_DATE, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<TYPE_DATE, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<TYPE_DATE, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<TYPE_DATE, BIT_SHUFFLE, 1>(*col, "0");
+    test_nullable_data<TYPE_DATE, BIT_SHUFFLE, 2>(*col, "0");
+    test_nullable_data<TYPE_DATE, BIT_SHUFFLE, 2>(*col, "1");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_datetime) {
     auto col = datetime_values(100);
-    test_nullable_data<TYPE_DATETIME, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<TYPE_DATETIME, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<TYPE_DATETIME, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<TYPE_DATETIME, BIT_SHUFFLE, 1>(*col, "0");
+    test_nullable_data<TYPE_DATETIME, BIT_SHUFFLE, 2>(*col, "0");
+    test_nullable_data<TYPE_DATETIME, BIT_SHUFFLE, 2>(*col, "1");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_binary) {
     auto c = low_cardinality_strings(10000);
-    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "10000");
+    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0");
+    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0");
+    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
 
-    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "10000");
+    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 1>(*c, "0");
+    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "0");
+    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
 
     c = high_cardinality_strings(100);
-    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "100");
+    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0");
+    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0");
+    test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
 
-    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "100");
+    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 1>(*c, "0");
+    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "0");
+    test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
 }
-
-#ifdef STRING_COLUMN_WRITER_TEST
-// NOLINTNEXTLINE
-TEST_F(ColumnReaderWriterTest, test_string_column_writer_benchmark) {
-    for (int i = 0; i < 10000; i++) {
-        auto c = high_cardinality_strings(100000);
-        test_nullable_data<TYPE_VARCHAR, PLAIN_ENCODING, 1>(*c, "0", "10000");
-    }
-}
-#endif
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_default_value) {
@@ -663,45 +650,25 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         (void)col->append_numbers(&i, sizeof(int32_t));
     }
     for (size_t i = 0; i < count; i += 2) {
-        ((int32_t*)col->raw_data())[i] = 0;
         (void)col->set_null(i);
     }
 
     ColumnMetaPB meta;
-    auto fs = std::make_shared<MemoryFileSystem>();
-    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
     const std::string fname = strings::Substitute("$0/test_scalar_column_total_mem_footprint.data", TEST_DIR);
-    auto segment = create_dummy_segment(fs, fname);
+    auto segment = create_dummy_segment(fname);
 
     // write data
     {
-        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
 
-        ColumnWriterOptions writer_opts;
-        writer_opts.page_format = 2;
-        writer_opts.meta = &meta;
-        writer_opts.meta->set_column_id(0);
-        writer_opts.meta->set_unique_id(0);
-        writer_opts.meta->set_type(TYPE_INT);
-        writer_opts.meta->set_length(0);
-        writer_opts.meta->set_encoding(BIT_SHUFFLE);
-        writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
-        writer_opts.meta->set_is_nullable(true);
-        writer_opts.need_zone_map = true;
+        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
 
         TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_INT);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
         ASSERT_OK(writer->init());
-
-        ASSERT_TRUE(writer->append(*col).ok());
-
-        ASSERT_TRUE(writer->finish().ok());
-        ASSERT_TRUE(writer->write_data().ok());
-        ASSERT_TRUE(writer->write_ordinal_index().ok());
-        ASSERT_TRUE(writer->write_zone_map().ok());
-
-        // close the file
-        ASSERT_TRUE(wfile->close().ok());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
     }
 
     // read and check
@@ -716,9 +683,6 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
 }
 
 TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
-    auto fs = std::make_shared<MemoryFileSystem>();
-    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
-    const std::string fname = strings::Substitute("$0/test_large_varchar_column_writer.data", TEST_DIR);
     // write data
     {
         int32_t old_config = config::dictionary_speculate_min_chunk_size;
@@ -726,20 +690,11 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
         // Test 3 different dictionary_speculate_min_chunk_size.
         int32_t dict_chunk_sizes[3] = {TEST_N - 1, TEST_N, TEST_N + 1};
         for (int32_t dict_chunk_size : dict_chunk_sizes) {
-            fs->delete_file(fname);
-            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+            const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
             ColumnMetaPB meta;
-            ColumnWriterOptions writer_opts;
-            writer_opts.page_format = 2;
-            writer_opts.meta = &meta;
-            writer_opts.meta->set_column_id(0);
-            writer_opts.meta->set_unique_id(0);
-            writer_opts.meta->set_type(TYPE_VARCHAR);
+            ColumnWriterOptions writer_opts = make_writer_opts<TYPE_VARCHAR, PLAIN_ENCODING, 2>(&meta);
             writer_opts.meta->set_length(1024 * 1024);
-            writer_opts.meta->set_encoding(PLAIN_ENCODING);
-            writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
-            writer_opts.meta->set_is_nullable(true);
-            writer_opts.need_zone_map = true;
 
             TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_VARCHAR);
             column = create_varchar_key(1, true, 1024 * 1024);
@@ -753,35 +708,21 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             col_strs.resize(TEST_N);
             for (int i = 0; i < TEST_N; i++) {
                 col_strs[i] = strings::Substitute("test_$0", i);
-                col_slices.push_back(Slice(col_strs[i]));
+                col_slices.emplace_back(col_strs[i]);
             }
             col->reserve(TEST_N);
             col->append_strings(col_slices);
             ASSERT_TRUE(writer->append(*col).ok());
 
-            ASSERT_TRUE(writer->finish().ok());
-            ASSERT_TRUE(writer->write_data().ok());
-            ASSERT_TRUE(writer->write_ordinal_index().ok());
-            ASSERT_TRUE(writer->write_zone_map().ok());
+            flush_column_writer(writer.get());
 
             // close the file
             ASSERT_TRUE(wfile->close().ok());
             // read and check result
-            auto segment = create_dummy_segment(fs, fname);
-            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
-            ColumnIteratorOptions iter_opts;
-            OlapReaderStatistics stats;
-            iter_opts.stats = &stats;
-            iter_opts.read_file = read_file.get();
-            iter_opts.use_page_cache = true;
-            auto st = iter->init(iter_opts);
-            ASSERT_TRUE(st.ok());
+            auto segment = create_dummy_segment(fname);
+            auto iter = create_and_init_iterator(meta, segment.get(), fname);
             ASSERT_TRUE(iter->seek_to_first().ok());
-            ColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            MutableColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
             dst->reserve(TEST_N);
             size_t rows_read = TEST_N;
             ASSERT_TRUE(iter->next_batch(&rows_read, dst.get()).ok());

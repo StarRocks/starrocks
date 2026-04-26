@@ -1,0 +1,85 @@
+-- name: test_create_mv_with_iceberg
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_iceberg_db_${uuid0};
+-- result:
+-- !result
+use mv_iceberg_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+  num int,
+  dt date
+)
+PARTITION BY (dt);
+-- result:
+-- !result
+INSERT INTO t1 VALUES 
+  (1,"2020-06-15"),(2,"2020-06-18"),(3,"2020-06-21"),(4,"2020-06-24"),
+  (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+  (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+  (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+  (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY date_trunc('month', dt)
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("replication_num" = "1")
+AS  SELECT v1.num, v1.dt from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 as v1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select count(1) from test_mv1;
+-- result:
+20
+-- !result
+CREATE MATERIALIZED VIEW test_mv2 
+PARTITION BY date_trunc('month', dt)
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("replication_num" = "1")
+AS  SELECT v1.num, v1.dt from test_mv1 as v1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+select count(1) from test_mv2;
+-- result:
+20
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv2;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database default_catalog.db_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} force;
+-- result:
+-- !result

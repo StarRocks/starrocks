@@ -61,6 +61,7 @@ OBJECT_DATABASE: NULL
 | [role_edges](./role_edges.md)                   | Records the grantees of roles.                                                |
 | [object_dependencies](./object_dependencies.md) | Records the dependency relationship of asynchronous materialized views.       |
 | [policy_references](./policy_references.md)     | Records the objects row access policies and column masking policies reference.|
+| [fe_locks](./fe_locks.md)                       | Records the information about metadata locks in StarRocks FE.                 |
 
 :::note
 

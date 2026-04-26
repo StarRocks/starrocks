@@ -29,8 +29,8 @@ import java.util.stream.Collectors;
  * Histogram metric with tags to distinguish different metrics with the same name.
  * e.g. mv_refresh_duration{mv_db_name="db1", mv_name="mv1"}
  */
-public final class HistogramMetric extends Histogram {
-    private final List<MetricLabel> labels = Lists.newArrayList();
+public class HistogramMetric extends Histogram {
+    protected final List<MetricLabel> labels = Lists.newArrayList();
     private final String name;
 
     public HistogramMetric(String name) {

@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#pragma once
 
 #include <array>
 #include <initializer_list>
@@ -18,12 +19,12 @@
 #include <vector>
 
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/datum_convert.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
+#include "types/datum.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -37,7 +38,7 @@ struct DatumBuilder {
         Datums datums;
         datums.resize(data.size());
         for (size_t i = 0; i < data.size(); i++) {
-            datums[i].set(static_cast<typename TypeTraits<Type>::CppType>(data[i]));
+            datums[i].set(static_cast<StorageCppType<Type>>(data[i]));
         }
         return datums;
     }
@@ -211,7 +212,7 @@ private:
     void next_row(Chunk* chunk) {
         for (size_t i = 0; i < _schema.num_fields(); i++) {
             const Datum& v = _columns[i][_next_row];
-            chunk->get_column_by_index(i)->append_datum(v);
+            chunk->get_column_raw_ptr_by_index(i)->append_datum(v);
         }
         _next_row++;
     }

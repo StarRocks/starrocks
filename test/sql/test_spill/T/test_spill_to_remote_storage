@@ -71,3 +71,7 @@ select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group
 select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 having c0 > 100 limit 10) tb;
 select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 limit 100) tb;
 admin disable failpoint 'force_allocate_remote_block';
+
+CLEANUP {
+    admin disable failpoint 'force_allocate_remote_block';
+} END CLEANUP

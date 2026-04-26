@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "exprs/runtime_filter.h"
+#include "runtime/runtime_filter.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {

@@ -32,6 +32,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,36 +43,47 @@ public class DataCacheSelectExecutor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
 
     public static DataCacheSelectMetrics cacheSelect(DataCacheSelectStatement statement,
-                                                             ConnectContext connectContext) throws Exception {
+                                                     ConnectContext connectContext) throws Exception {
         InsertStmt insertStmt = statement.getInsertStmt();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final Warehouse wh = warehouseManager.getWarehouse(connectContext.getCurrentWarehouseName());
+        final ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        final List<ComputeResource> computeResources = computeResourceProvider.getComputeResources(wh);
+
         List<StmtExecutor> subStmtExecutors = Lists.newArrayList();
-        for (int workerGroupIdx = 0; workerGroupIdx < wh.getWorkerGroupIds().size(); workerGroupIdx++) {
-            long workerGroupId = wh.getWorkerGroupIds().get(workerGroupIdx);
-            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, workerGroupIdx == 0);
-            ComputeResource computeResource = warehouseManager.getComputeResourceProvider().ofComputeResource(
-                    wh.getId(), workerGroupId);
-            subContext.setCurrentComputeResource(computeResource);
-            StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
-            // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
-            // If DataCacheSelect is forward to leader, connectContext's Executor is null
-            if (connectContext.getExecutor() != null) {
-                connectContext.getExecutor().registerSubStmtExecutor(subStmtExecutor);
-            }
-            subStmtExecutor.addRunningQueryDetail(insertStmt);
-            try {
-                subStmtExecutor.execute();
-            } finally {
-                subStmtExecutor.addFinishedQueryDetail();
+        boolean isFirstSubContext = true;
+        for (ComputeResource computeResource : computeResources) {
+            if (!computeResourceProvider.isResourceAvailable(computeResource)) {
+                // skip if this compute resource is not available
+                LOG.warn("skip cache select for compute resource {} because it is not available", computeResource);
+                continue;
             }
 
-            if (subContext.getState().isError()) {
-                // throw exception if StmtExecutor execute failed
-                throw new StarRocksException(subContext.getState().getErrorMessage());
+            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
+            try (var scope = subContext.bindScope()) {
+                subContext.setCurrentComputeResource(computeResource);
+                subContext.setMultiStmt(false);
+                StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
+                isFirstSubContext = false;
+                // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
+                // If DataCacheSelect is forward to leader, connectContext's Executor is null
+                if (connectContext.getExecutor() != null) {
+                    connectContext.getExecutor().registerSubStmtExecutor(subStmtExecutor);
+                }
+                subStmtExecutor.addRunningQueryDetail(insertStmt);
+                try {
+                    subStmtExecutor.execute();
+                } finally {
+                    subStmtExecutor.addFinishedQueryDetail();
+                }
+
+                if (subContext.getState().isError()) {
+                    // throw exception if StmtExecutor execute failed
+                    throw new StarRocksException(subContext.getState().getErrorMessage());
+                }
+                subStmtExecutors.add(subStmtExecutor);
             }
-            subStmtExecutors.add(subStmtExecutor);
         }
 
         DataCacheSelectMetrics metrics = null;
@@ -132,12 +144,9 @@ public class DataCacheSelectExecutor {
             LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
         }
         context.setExecutionId(executionId);
-        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
-        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
-        context.setThreadLocalInfo();
 
         // clone an new session variable
-        SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        SessionVariable sessionVariable = connectContext.getSessionVariable().clone();
         // overwrite catalog
         sessionVariable.setCatalog(statement.getCatalog());
         // force enable datacache and populate

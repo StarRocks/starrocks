@@ -40,17 +40,17 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <hadoop.version>3.4.1</hadoop.version>
+        <hadoop.version>3.4.3</hadoop.version>
         <guava.version>32.0.1-jre</guava.version>
         <zookeeper.version>3.9.3</zookeeper.version>
         <protobuf.version>3.25.5</protobuf.version>
-        <thrift.version>0.14.1</thrift.version>
+        <thrift.version>0.22.0</thrift.version>
         <tomcat.version>9.0.106</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
-        <jackson.version>2.18.3</jackson.version>
+        <jackson.version>2.21.1</jackson.version>
         <avro.version>1.11.4</avro.version>
-        <jetty.version>9.4.57.v20241219</jetty.version>
-        <io.netty.version>4.1.125.Final</io.netty.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
+        <io.netty.version>4.1.128.Final</io.netty.version>
     </properties>
 
     <profiles>
@@ -102,20 +102,7 @@ under the License.
                     <id>cloudera</id>
                     <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
                 </repository>
-                <!-- for bdb je -->
-                <repository>
-                    <id>oracleReleases</id>
-                    <url>https://download.oracle.com/maven</url>
-                </repository>
             </repositories>
-
-            <pluginRepositories>
-                <!-- for cup-maven-plugin -->
-                <pluginRepository>
-                    <id>spring-plugins</id>
-                    <url>http://repo.spring.io/plugins-release/</url>
-                </pluginRepository>
-            </pluginRepositories>
         </profile>
     </profiles>
 

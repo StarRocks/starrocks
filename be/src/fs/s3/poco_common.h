@@ -24,7 +24,6 @@
 #include <memory>
 
 #include "fs/s3/pool_base.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks::poco {
@@ -68,9 +67,7 @@ class EndpointHTTPSessionPool : public PoolBase<Poco::Net::HTTPClientSession> {
 public:
     using Base = PoolBase<Poco::Net::HTTPClientSession>;
     EndpointHTTPSessionPool(std::string host, uint16_t port, bool is_https)
-            : Base(ENDPOINT_POOL_SIZE), _host(std::move(host)), _port(port), _is_https(is_https) {
-        _mem_tracker = GlobalEnv::GetInstance()->poco_connection_pool_mem_tracker();
-    }
+            : Base(ENDPOINT_POOL_SIZE), _host(std::move(host)), _port(port), _is_https(is_https) {}
 
 private:
     ObjectPtr allocObject() override;
@@ -80,7 +77,6 @@ private:
     const std::string _host;
     const uint16_t _port;
     const bool _is_https;
-    MemTracker* _mem_tracker = nullptr;
 };
 
 class HTTPSessionPools {

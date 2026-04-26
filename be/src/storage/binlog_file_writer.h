@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/compression/block_compression.h"
 #include "fs/fs.h"
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_util.h"
 #include "storage/rowset/rowset.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
@@ -234,7 +234,7 @@ private:
     const BlockCompressionCodec* _compress_codec = nullptr;
 
     std::unique_ptr<WritableFile> _file;
-    WriterState _writer_state;
+    WriterState _writer_state{WAITING_INIT};
     // file meta for committed data
     std::unique_ptr<BinlogFileMetaPB> _file_meta;
     // rowsets used by committed data

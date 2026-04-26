@@ -14,12 +14,13 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.FN_REFLEN;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -31,29 +32,29 @@ public class TemporaryTablesTable {
 
     public static SystemTable create() {
         return new SystemTable(SystemId.TEMP_TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
-                .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
-                .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                .column("ENGINE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                .column("VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("ROW_FORMAT", ScalarType.createVarchar(10))
-                .column("TABLE_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("AVG_ROW_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("MAX_DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("INDEX_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("DATA_FREE", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("AUTO_INCREMENT", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                .column("UPDATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                .column("CHECK_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                .column("TABLE_COLLATION", ScalarType.createVarchar(MY_CS_NAME_SIZE))
-                .column("CHECKSUM", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("CREATE_OPTIONS", ScalarType.createVarchar(255))
-                .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
-                .column("SESSION", ScalarType.createVarchar(128))
-                .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                .column("TABLE_CATALOG", TypeFactory.createVarcharType(FN_REFLEN))
+                .column("TABLE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("ENGINE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("VERSION", IntegerType.BIGINT)
+                .column("ROW_FORMAT", TypeFactory.createVarcharType(10))
+                .column("TABLE_ROWS", IntegerType.BIGINT)
+                .column("AVG_ROW_LENGTH", IntegerType.BIGINT)
+                .column("DATA_LENGTH", IntegerType.BIGINT)
+                .column("MAX_DATA_LENGTH", IntegerType.BIGINT)
+                .column("INDEX_LENGTH", IntegerType.BIGINT)
+                .column("DATA_FREE", IntegerType.BIGINT)
+                .column("AUTO_INCREMENT", IntegerType.BIGINT)
+                .column("CREATE_TIME", DateType.DATETIME)
+                .column("UPDATE_TIME", DateType.DATETIME)
+                .column("CHECK_TIME", DateType.DATETIME)
+                .column("TABLE_COLLATION", TypeFactory.createVarcharType(MY_CS_NAME_SIZE))
+                .column("CHECKSUM", IntegerType.BIGINT)
+                .column("CREATE_OPTIONS", TypeFactory.createVarcharType(255))
+                .column("TABLE_COMMENT", TypeFactory.createVarcharType(2048))
+                .column("SESSION", TypeFactory.createVarcharType(128))
+                .column("TABLE_ID", IntegerType.BIGINT)
                 .build(), TSchemaTableType.SCH_TEMP_TABLES);
     }
 }

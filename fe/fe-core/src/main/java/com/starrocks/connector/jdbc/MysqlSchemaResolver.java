@@ -18,12 +18,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.jetbrains.annotations.NotNull;
 
 import java.sql.Connection;
@@ -39,22 +39,44 @@ import static java.lang.Math.max;
 public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
+    protected boolean isInternalSchema(String schemaName) {
+        return schemaName.equalsIgnoreCase("information_schema") ||
+                schemaName.equalsIgnoreCase("mysql") ||
+                schemaName.equalsIgnoreCase("performance_schema") ||
+                schemaName.equalsIgnoreCase("sys");
+    }
+
+    @Override
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_CAT");
                 // skip internal schemas
-                if (!schemaName.equalsIgnoreCase("information_schema") &&
-                        !schemaName.equalsIgnoreCase("mysql") &&
-                        !schemaName.equalsIgnoreCase("performance_schema") &&
-                        !schemaName.equalsIgnoreCase("sys")) {
+                if (!isInternalSchema(schemaName)) {
                     schemaNames.add(schemaName);
                 }
             }
             return schemaNames.build();
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean databaseExists(Connection connection, String dbName) throws SQLException {
+        // Skip internal schemas to maintain consistency with listSchemas()
+        if (isInternalSchema(dbName)) {
+            return false;
+        }
+        try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
+            while (resultSet.next()) {
+                String catalogName = resultSet.getString("TABLE_CAT");
+                if (catalogName.equals(dbName)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -133,10 +155,10 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DECIMAL32;
                 break;
             case Types.CHAR:
-                return ScalarType.createCharType(columnSize);
+                return TypeFactory.createCharType(columnSize);
             case Types.VARCHAR:
             case Types.LONGVARCHAR: //text type in mysql
-                return ScalarType.createVarcharType(columnSize);
+                return TypeFactory.createVarcharType(columnSize);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -146,20 +168,24 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
+            case Types.BINARY:
+            case Types.VARBINARY:
+                primitiveType = PrimitiveType.VARBINARY;
+                break;
             default:
                 // The mysql-connector-j will convert the JSON type in MySQL to Types.LONGVARCHAR(1073741824).
                 // However, the mariadb-java-client does not handle the JSON type,
                 // so it will be converted to Types.Other. Here, in order to handle JSON, for the Types.Other,
                 // it is uniformly converted to Types.LONGVARCHAR(1073741824).
                 // If later mariadb-java-client support json, this code can be reverted.
-                return ScalarType.createVarcharType(1073741824);
+                return TypeFactory.createVarcharType(1073741824);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
+            return TypeFactory.createType(primitiveType);
         } else {
             int precision = columnSize + max(-digits, 0);
-            return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
+            return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }
     }
 
@@ -172,6 +198,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
@@ -200,6 +227,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
@@ -223,6 +251,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
             ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             long createTime = TimeUtils.getEpochSeconds();

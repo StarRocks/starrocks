@@ -46,7 +46,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
     };
 
     struct PartialChunks {
-        std::queue<std::unique_ptr<Chunk>> queue;
+        std::queue<ChunkUniquePtr> queue;
         int64_t num_rows{0};
         size_t memory_usage{0};
         std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_key_datum;
@@ -66,8 +66,7 @@ public:
                      uint32_t size, size_t memory_bytes);
 
     Status add_chunk(const std::vector<std::optional<std::string>>& partition_key,
-                     const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum,
-                     std::unique_ptr<Chunk> chunk);
+                     const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum, ChunkUniquePtr chunk);
 
     bool has_output() const override;
 
@@ -78,20 +77,6 @@ public:
         auto notify = defer_notify();
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
-        return Status::OK();
-    }
-
-    bool is_epoch_finished() const override {
-        std::lock_guard<std::mutex> l(_chunk_lock);
-        return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
-    }
-    Status set_epoch_finishing(RuntimeState* state) override {
-        std::lock_guard<std::mutex> l(_chunk_lock);
-        _is_epoch_finished = true;
-        return Status::OK();
-    }
-    Status reset_epoch(RuntimeState* state) override {
-        _is_epoch_finished = false;
         return Status::OK();
     }
 
@@ -139,9 +124,6 @@ private:
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<ChunkBufferMemoryManager>& _memory_manager;
     std::map<std::vector<std::optional<std::string>>, PartialChunks> _partition_key2partial_chunks;
-
-    // STREAM MV
-    bool _is_epoch_finished = false;
 };
 
 class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {

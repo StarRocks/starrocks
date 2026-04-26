@@ -1,0 +1,26 @@
+--- a/build_detect_platform
++++ b/build_detect_platform
+@@ -154,6 +154,16 @@
+     rm -f $CXXOUTPUT 2>/dev/null
+
+     # Test if gcc SSE 4.2 is supported
++    # First check if we're on x86/x86_64 architecture before testing SSE
++    ARCH=`$CXX -dumpmachine 2>/dev/null | cut -d'-' -f1`
++    case "$ARCH" in
++      x86_64|i386|i686)
++        # Only test SSE on x86/x86_64 platforms
++        ;;
++      *)
++        echo "Non-x86 architecture detected ($ARCH), skipping SSE detection"
++        PLATFORM_SSEFLAGS=""
++        ;;
++    esac
+     $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT -msse4.2 2>/dev/null  <<EOF
+       int main() {}
+ EOF
+@@ -161,6 +168,7 @@
+         PLATFORM_SSEFLAGS="-msse4.2"
+     fi
+
+     rm -f $CXXOUTPUT 2>/dev/null
+ fi

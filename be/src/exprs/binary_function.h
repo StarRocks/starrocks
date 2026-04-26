@@ -16,13 +16,13 @@
 
 #include <cstdint>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/function_helper.h"
-#include "simd/simd.h"
 #include "typeinfo"
 #include "types/logical_type.h"
 
@@ -56,19 +56,15 @@ public:
         result->resize_uninitialized(v1->size());
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
+                      lt_is_object_family<RType>) {
+            const auto r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+            const auto r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], r2[i]);
             }
-        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
-            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
-            const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
-            for (int i = 0; i < s; ++i) {
-                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2[i]);
-            }
         } else {
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
             auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data().data();
             auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data().data();
             for (int i = 0; i < s; ++i) {
@@ -91,20 +87,15 @@ public:
         result->resize_uninitialized(size);
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data()[0];
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, r2[i]);
-            }
-        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
-            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+        const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
+                      lt_is_object_family<RType>) {
             const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
             }
         } else {
-            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
             const auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data().data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
@@ -127,21 +118,16 @@ public:
         auto& r3 = result->get_data();
         auto* data3 = r3.data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data()[0];
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], data2);
-            }
-        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
+        auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
+                      lt_is_object_family<RType>) {
             const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
-            const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
             }
         } else {
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
             const auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data().data();
-            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
             }
@@ -161,15 +147,9 @@ public:
         result->resize_uninitialized(1);
         auto& r3 = result->get_data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
-            r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
-        } else {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
-            r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
-        }
+        const auto r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+        const auto r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
+        r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
 
         return result;
     }
@@ -273,9 +253,10 @@ public:
                 data = data_result;
             }
 
-            NullColumnPtr null_flags;
+            NullColumn::MutablePtr null_flags;
             if (data->is_nullable()) {
-                null_flags = ColumnHelper::as_raw_column<NullableColumn>(data)->null_column();
+                auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(data);
+                null_flags = NullColumn::static_pointer_cast(Column::mutate(nullable_column->null_column()));
             } else {
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
                 null_flags->resize(data->size());
@@ -300,7 +281,7 @@ public:
                 if (SIMD::count_nonzero(null_flags->get_data())) {
                     auto null_result = NullableColumn::create(data, null_flags);
                     if (data_result->is_constant()) {
-                        return ConstColumn::create(null_result, data_result->size());
+                        return ConstColumn::create(std::move(null_result), data_result->size());
                     }
                     return null_result;
                 }
@@ -337,7 +318,7 @@ public:
                     PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(v1, data2));
 
             // is null, return only null
-            if (1 == null_result->get_data()[0]) {
+            if (1 == null_result->immutable_data()[0]) {
                 return ColumnHelper::create_const_null_column(v1->size());
             } else {
                 // not null return const column
@@ -356,7 +337,7 @@ public:
             if constexpr (lt_is_decimal<ResultType>) {
                 return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
             } else {
-                return NullableColumn::create(std::move(data_result), std::move(null_result));
+                return NullableColumn::create(data_result, std::move(null_result));
             }
         }
 
@@ -365,7 +346,7 @@ public:
 
         ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
 
-        NullColumnPtr null_result = ColumnHelper::as_column<NullColumn>(produce_null);
+        NullColumn::MutablePtr null_result = ColumnHelper::as_column<NullColumn>(std::move(*produce_null).mutate());
         FunctionHelper::union_produce_nullable_column(v1, v2, &null_result);
 
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);
@@ -375,7 +356,7 @@ public:
         if constexpr (lt_is_decimal<ResultType>) {
             return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
         } else {
-            return NullableColumn::create(std::move(data_result), std::move(null_result));
+            return NullableColumn::create(data_result, std::move(null_result));
         }
     }
 
@@ -538,8 +519,9 @@ public:
         if (v1->only_null()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(
                     ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column());
-            ld = RunTimeColumnType<LType>::create();
-            ld->append_default();
+            auto ld_mut = RunTimeColumnType<LType>::create();
+            ld_mut->append_default();
+            ld = std::move(ld_mut);
             ln = p->null_column();
         } else if (v1->is_constant()) {
             ld = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
@@ -556,8 +538,9 @@ public:
         if (v2->only_null()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(
                     ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column());
-            rd = RunTimeColumnType<LType>::create();
-            rd->append_default();
+            auto rd_mut = RunTimeColumnType<LType>::create();
+            rd_mut->append_default();
+            rd = std::move(rd_mut);
             rn = p->null_column();
         } else if (v2->is_constant()) {
             rd = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();

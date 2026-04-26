@@ -15,7 +15,6 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.persist.gson.GsonUtils;
 
 import java.util.HashSet;
 import java.util.List;
@@ -148,7 +147,19 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
         super.revoke(type, privilegeTypes, objects);
     }
 
-    public RolePrivilegeCollectionV2 cloneSelf() {
-        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), RolePrivilegeCollectionV2.class);
+    @Override
+    public RolePrivilegeCollectionV2 clone() {
+        RolePrivilegeCollectionV2 ret = new RolePrivilegeCollectionV2();
+        ret.name = this.name;
+        ret.mask = this.mask;
+        if (this.parentRoleIds != null) {
+            ret.parentRoleIds = new HashSet<>(this.parentRoleIds);
+        }
+        if (this.subRoleIds != null) {
+            ret.subRoleIds = new HashSet<>(this.subRoleIds);
+        }
+        ret.comment = this.comment;
+        ret.typeToPrivilegeEntryList = cloneTypeToPrivilegeEntryList();
+        return ret;
     }
 }

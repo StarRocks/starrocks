@@ -73,7 +73,7 @@ jobs:
       - name: Checkout code
         id: checkout_code
         if: github.base_ref != 'main'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: refs/pull/${{ github.event.pull_request.number }}/head
@@ -113,8 +113,92 @@ jobs:
           TEAM: feature-reviewer
           PRE_COMMENT: ${{ steps.branch_access_check.outputs.comment }}
         run: |
-          cd ci-tool
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
+
+  repo-handbook:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: Repo Handbook
+    if: needs.basic-checker.outputs.PASS == 'true'
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            handbook:
+              - '.github/workflows/ci-pipeline-branch.yml'
+              - '.github/workflows/ci-pipeline.yml'
+              - 'AGENTS.md'
+              - 'CLAUDE.md'
+              - 'be/AGENTS.md'
+              - 'be/src/common/AGENTS.md'
+              - 'docs/AGENTS.md'
+              - 'fe/AGENTS.md'
+              - 'gensrc/AGENTS.md'
+              - 'java-extensions/AGENTS.md'
+              - 'test/AGENTS.md'
+              - 'handbook/**'
+              - 'build-support/README.md'
+              - 'build-support/handbook_plan.py'
+              - 'build-support/check_repo_handbook.py'
+              - 'build-support/test_handbook_plan.py'
+              - 'build-support/test_check_repo_handbook.py'
+
+      - uses: actions/checkout@v6
+        if: steps.path-filter.outputs.handbook == 'true'
+
+      - name: Handbook Tool Tests
+        if: steps.path-filter.outputs.handbook == 'true'
+        run: |
+          python3 -m unittest build-support/test_check_repo_handbook.py
+          python3 -m unittest build-support/test_handbook_plan.py
+
+      - name: Handbook Check
+        if: steps.path-filter.outputs.handbook == 'true'
+        run: |
+          python3 build-support/check_repo_handbook.py
+
+  schema-compatibility:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: Schema Compatibility
+    if: needs.basic-checker.outputs.PASS == 'true'
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            schema:
+              - '.github/workflows/ci-pipeline-branch.yml'
+              - '.github/workflows/ci-pipeline.yml'
+              - 'gensrc/proto/**'
+              - 'gensrc/thrift/**'
+              - 'build-support/check_gensrc_schema_compatibility.py'
+              - 'build-support/test_check_gensrc_schema_compatibility.py'
+              - 'build-support/schema_compatibility_waivers.json'
+
+      - uses: actions/checkout@v6
+        if: steps.path-filter.outputs.schema == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Compute Merge Base
+        if: steps.path-filter.outputs.schema == 'true'
+        id: merge_base
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Schema Tool Tests
+        if: steps.path-filter.outputs.schema == 'true'
+        run: |
+          python3 -m unittest build-support/test_check_gensrc_schema_compatibility.py
+
+      - name: Schema Check
+        if: steps.path-filter.outputs.schema == 'true'
+        run: |
+          python3 build-support/check_gensrc_schema_compatibility.py --mode changed --base "${{ steps.merge_base.outputs.base }}"
 
   be-checker:
     runs-on: ubuntu-latest
@@ -130,72 +214,39 @@ jobs:
         with:
           filters: |
             be:
-            - 'be/**'
-            - 'gensrc/**'
-            - 'run-be-ut.sh'
-            - 'build.sh'
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+              - 'be/**'
+              - 'gensrc/**'
+              - 'run-be-ut.sh'
+              - 'build.sh'
+              - 'thirdparty/**'
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+      - uses: dorny/paths-filter@v3
+        id: linux-thirdparty-filter
+        with:
+          predicate-quantifier: every
+          filters: |
             thirdparty:
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+              - 'thirdparty/**'
+              - '!thirdparty/build-thirdparty-darwin.sh'
+              - '!thirdparty/vars-darwin-aarch64.sh'
+            dev_env:
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
+          thirdparty=false
+          if [[ "${{ steps.linux-thirdparty-filter.outputs.thirdparty }}" == 'true' || "${{ steps.linux-thirdparty-filter.outputs.dev_env }}" == 'true' ]]; then
+            thirdparty=true
+          fi
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
-          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
-
-  clang-format:
-    runs-on: [self-hosted, light]
-    needs: be-checker
-    name: Clang-Format
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-    if: ${{ needs.be-checker.outputs.output1 == 'true' }}
-    steps:
-      - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: BRANCH INFO
-        id: branch
-        run: |
-          echo ${{github.base_ref}}
-          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
-
-      - name: Checkout PR
-        run: |
-          BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
-          git pull;
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
-
-      - name: Run Clang-Format
-        run: |
-          export PATH=/var/lib/llvm/bin:$PATH
-          bash build-support/check-format.sh
-
-      - name: Clean ENV
-        if: always()
-        run: |
-          rm -rf ${{ github.workspace }}/*
+          echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: [be-checker, clang-format]
+    needs: be-checker
+    if: ${{ needs.be-checker.outputs.output2 == 'true' }}
     name: Thirdparty Update
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -214,7 +265,6 @@ jobs:
 
       - name: Update Image (${{ matrix.linux }})
         id: update-image
-        if: needs.be-checker.outputs.output2  == 'true'
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
@@ -222,7 +272,7 @@ jobs:
           ./bin/run-pr-update-image.sh
 
       - name: Upload Thirdparty Result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: THIRDPARTY-RESULT-${{ matrix.linux }}
           path: image_cache.info
@@ -233,16 +283,18 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+          if [[ -d ci-tool ]]; then
               cd ci-tool && source lib/init.sh
               ./bin/elastic-cluster.sh --delete
           fi
           rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
-    runs-on: [self-hosted, normal]
+    runs-on: ubuntu-latest
     needs:
+      - be-checker
       - thirdparty-update
+    if: "!cancelled() && needs.be-checker.outputs.output1 == 'true'"
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
@@ -256,19 +308,24 @@ jobs:
           fi
 
       - name: Download Thirdparty Artifact
-        uses: actions/download-artifact@v4
+        if: needs.thirdparty-update.result == 'success'
+        uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
 
       - name: Read Info
         id: info
-        if: needs.thirdparty-update.result == 'success'
         run: |
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
-          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
-          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+            echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          else
+            echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
+          fi
 
   be-ut:
     runs-on: [self-hosted, normal]
@@ -298,14 +355,14 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
 
       - name: clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        uses: actions/upload-artifact@v4
-        if: always()
+        uses: actions/upload-artifact@v6
+        if: always() && steps.run_ut.outputs.BE_LOG
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -336,8 +393,8 @@ jobs:
               - 'fe/**'
               - 'gensrc/**'
               - 'run-fe-ut.sh'
+              - 'run-java-exts-ut.sh'
               - 'java-extensions/**'
-              - 'build.sh'
 
       - run: echo ${{ steps.changes.outputs.fe }}
 
@@ -365,7 +422,7 @@ jobs:
         with:
           filters: |
             java:
-              - '**.java'
+              - 'fe/**/*.java'
 
       - run: echo ${{ steps.java-file.outputs.java }}
 
@@ -375,7 +432,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -410,10 +467,16 @@ jobs:
 
   fe-ut:
     runs-on: [self-hosted, normal]
-    needs: fe-codestyle-check
+    needs: [fe-codestyle-check, thirdparty-info]
     name: FE UT
+    if: >
+      always() &&
+      needs.fe-codestyle-check.result == 'success' &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.thirdparty-info.result != 'cancelled'
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - name: clean
         run: |
@@ -425,28 +488,33 @@ jobs:
         run: |
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 60
+        timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          IMAGE_CACHE_ID="${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}"
+          if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
+              export image_cache_id=${IMAGE_CACHE_ID}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo ">>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        if: always()
-        uses: actions/upload-artifact@v4
+        if: always() && steps.run_ut.outputs.RES_LOG
+        uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
@@ -479,7 +547,7 @@ jobs:
           echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pr_num
           path: ./pr_num.txt
@@ -487,7 +555,7 @@ jobs:
           overwrite: true
 
       - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: head_sha
           path: ./head_sha.txt

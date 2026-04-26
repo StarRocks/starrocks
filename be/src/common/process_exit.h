@@ -54,4 +54,8 @@ bool is_frontend_aware_of_exit();
 // clear the flag of frontend awareness of the shutdown.
 void clear_frontend_aware_of_exit();
 
+void set_process_is_crashing();
+
+bool is_process_crashing();
+
 } // namespace starrocks

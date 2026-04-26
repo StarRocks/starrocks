@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/disk_cache/block_cache.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -29,7 +29,6 @@
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/runtime_state.h"
 #include "storage/runtime_range_pruner.hpp"
 
 namespace tparquet {

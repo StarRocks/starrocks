@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import org.apache.logging.log4j.LogManager;
@@ -105,7 +106,7 @@ public class ShowTransactionStmtAnalyzer {
 
                 if (hasTxnId) {
                     if (!(subExpr.getChild(1) instanceof IntLiteral)) {
-                        LOG.warn("id is not IntLiteral. value: {}", subExpr.toSql());
+                        LOG.warn("id is not IntLiteral. value: {}", ExprToSql.toSql(subExpr));
                         valid = false;
                         break;
                     }

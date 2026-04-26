@@ -41,6 +41,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -192,17 +193,20 @@ public class ExportExportingTask extends PriorityLeaderTask {
     private void initProfile() {
         profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, String.valueOf(job.getId()));
-        summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(job.getStartTimeMs()));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(job.getStartTimeMs(), profileZone));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - job.getStartTimeMs();
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.END_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(currentTimestamp, profileZone));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, job.getState().toString());
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, "xxx");
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, String.valueOf(job.getDbId()));
@@ -240,13 +244,13 @@ public class ExportExportingTask extends PriorityLeaderTask {
                 try {
                     // check export file exist
                     if (!job.getBrokerDesc().hasBroker()) {
-                        if (HdfsUtil.checkPathExist(exportedFile, job.getBrokerDesc())) {
+                        if (HdfsUtil.checkPathExist(exportedFile, job.getBrokerDesc().getProperties())) {
                             failMsg = exportedFile + " already exist";
                             LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
                             break;
                         }
-                        if (!HdfsUtil.checkPathExist(exportedTempFile, job.getBrokerDesc())) {
+                        if (!HdfsUtil.checkPathExist(exportedTempFile, job.getBrokerDesc().getProperties())) {
                             failMsg = exportedFile + " temp file not exist";
                             LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
@@ -270,7 +274,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     // move
                     int timeoutMs = Math.min(Math.max(1, getLeftTimeSecond()), 3600) * 1000;
                     if (!job.getBrokerDesc().hasBroker()) {
-                        HdfsUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc(), timeoutMs);
+                        HdfsUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc().getProperties(), timeoutMs);
                     } else {
                         BrokerUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc(), timeoutMs);
                     }

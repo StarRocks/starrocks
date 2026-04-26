@@ -33,4 +33,12 @@ public class ModifyBrokerInfo implements Writable {
         this.brokerName = brokerName;
         this.brokerAddresses = brokerAddresses;
     }
+
+    public String getName() {
+        return brokerName;
+    }
+
+    public List<FsBroker> getAddresses() {
+        return brokerAddresses;
+    }
 }

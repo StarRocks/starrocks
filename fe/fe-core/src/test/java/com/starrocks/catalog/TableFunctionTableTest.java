@@ -31,6 +31,9 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -39,6 +42,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,11 +74,11 @@ public class TableFunctionTableTest {
             TableFunctionTable table = new TableFunctionTable(newProperties());
             List<Column> schema = table.getFullSchema();
             Assertions.assertEquals(5, schema.size());
-            Assertions.assertEquals(new Column("col_int", Type.INT), schema.get(0));
-            Assertions.assertEquals(new Column("col_string", Type.VARCHAR), schema.get(1));
-            Assertions.assertEquals(new Column("col_path1", ScalarType.createDefaultString(), true), schema.get(2));
-            Assertions.assertEquals(new Column("col_path2", ScalarType.createDefaultString(), true), schema.get(3));
-            Assertions.assertEquals(new Column("col_path3", ScalarType.createDefaultString(), true), schema.get(4));
+            Assertions.assertEquals(new Column("col_int", IntegerType.INT), schema.get(0));
+            Assertions.assertEquals(new Column("col_string", VarcharType.VARCHAR), schema.get(1));
+            Assertions.assertEquals(new Column("col_path1", StringType.DEFAULT_STRING, true), schema.get(2));
+            Assertions.assertEquals(new Column("col_path2", StringType.DEFAULT_STRING, true), schema.get(3));
+            Assertions.assertEquals(new Column("col_path3", StringType.DEFAULT_STRING, true), schema.get(4));
         });
     }
 
@@ -213,7 +217,8 @@ public class TableFunctionTableTest {
     public void testNoFilesFound() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
-            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws StarRocksException {
+            public static List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir)
+                    throws StarRocksException {
                 return Lists.newArrayList();
             }
         };
@@ -295,7 +300,7 @@ public class TableFunctionTableTest {
     @Test
     public void testCSVDelimiterConverterForUnload() {
         Map<String, String> properties = new HashMap<>();
-        properties.put("path", "file://test_dir");
+        properties.put("path", "file:///test_dir");
         properties.put("format", "csv");
 
         {
@@ -357,5 +362,221 @@ public class TableFunctionTableTest {
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "Invalid parquet.version: '2.0'. Expected values should be 2.4, 2.6, 1.0",
                 () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+    }
+
+    @Test
+    public void testCSVIncludeHeaderForUnload() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file:///test_dir");
+        properties.put("format", "csv");
+
+        // default: csv.include_header is false
+        {
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            // verify toTTableFunctionTable also sets this field
+            Assertions.assertFalse(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = true
+        {
+            properties.put("csv.include_header", "true");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            Assertions.assertTrue(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = false (explicit)
+        {
+            properties.put("csv.include_header", "false");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            Assertions.assertFalse(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = TRUE (case insensitive)
+        {
+            properties.put("csv.include_header", "TRUE");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+        }
+
+        // csv.include_header = FALSE (case insensitive)
+        {
+            properties.put("csv.include_header", "FALSE");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+        }
+
+        // abnormal: invalid value
+        {
+            properties.put("csv.include_header", "invalid");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "got invalid parameter \"csv.include_header\" = \"invalid\", expect a boolean value (true or false).",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+    }
+
+    @Test
+    public void testCSVEncloseEscapeForUnload() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file:///test_dir");
+        properties.put("format", "csv");
+
+        // default: neither specified, both are 0 (disabled)
+        {
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) 0, (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) 0, (byte) Deencapsulation.getField(table, "csvEscape"));
+            // toTTableFunctionTable should not set these fields when disabled
+            Assertions.assertFalse(table.toTTableFunctionTable().isSetCsv_enclose());
+            Assertions.assertFalse(table.toTTableFunctionTable().isSetCsv_escape());
+        }
+
+        // enclose='"' and escape='"' (RFC 4180 style)
+        {
+            properties.put("csv.enclose", "\"");
+            properties.put("csv.escape", "\"");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) '"', (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) '"', (byte) Deencapsulation.getField(table, "csvEscape"));
+            Assertions.assertTrue(table.toTTableFunctionTable().isSetCsv_enclose());
+            Assertions.assertEquals((byte) '"', table.toTTableFunctionTable().getCsv_enclose());
+            Assertions.assertTrue(table.toTTableFunctionTable().isSetCsv_escape());
+            Assertions.assertEquals((byte) '"', table.toTTableFunctionTable().getCsv_escape());
+        }
+
+        // enclose='"' and escape='\\' (backslash escape style)
+        {
+            properties.put("csv.enclose", "\"");
+            properties.put("csv.escape", "\\");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) '"', (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) '\\', (byte) Deencapsulation.getField(table, "csvEscape"));
+            Assertions.assertEquals((byte) '"', table.toTTableFunctionTable().getCsv_enclose());
+            Assertions.assertEquals((byte) '\\', table.toTTableFunctionTable().getCsv_escape());
+        }
+
+        // only enclose specified (escape disabled)
+        {
+            properties.remove("csv.escape");
+            properties.put("csv.enclose", "|");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) '|', (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) 0, (byte) Deencapsulation.getField(table, "csvEscape"));
+            Assertions.assertTrue(table.toTTableFunctionTable().isSetCsv_enclose());
+            Assertions.assertFalse(table.toTTableFunctionTable().isSetCsv_escape());
+        }
+
+        // abnormal: empty csv.enclose
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.enclose", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.enclose must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: empty csv.escape
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.escape", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.escape must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-character csv.enclose (would previously silently take first byte)
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.enclose", "ab");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.enclose must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-character csv.escape
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.escape", "\\\\");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.escape must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-byte (non-ASCII) csv.enclose (Chinese char is 3 UTF-8 bytes)
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.enclose", "中");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.enclose must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-byte (non-ASCII) csv.escape
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.escape", "中");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.escape must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+    }
+
+    @Test
+    public void testAutoDetectTypes() throws NoSuchFieldException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(TableFunctionTable.PROPERTY_PATH, "fake://test/path");
+        properties.put(TableFunctionTable.PROPERTY_FORMAT, "csv");
+
+        Field field = TableFunctionTable.class.getDeclaredField("autoDetectTypes");
+        field.setAccessible(true);
+
+        {
+            // Case 1: default
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(properties);
+                Assertions.assertTrue((Boolean) field.get(table));
+            });
+        }
+
+        {
+            // Case 2: auto_detect_types = false
+            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "false");
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(properties);
+                Assertions.assertFalse((Boolean) field.get(table));
+            });
+        }
+
+        {
+            // Case 3: auto_detect_types = true
+            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "true");
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(properties);
+                Assertions.assertTrue((Boolean) field.get(table));
+            });
+        }
+
+        {
+            // abnormal
+            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "notaboolean");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "Illegal value of auto_detect_types: notaboolean, only true/false allowed",
+                    () -> new TableFunctionTable(properties)
+            );
+        }
     }
 }

@@ -227,6 +227,8 @@ public class SRTThreadPoolServer extends TServer {
                 if (!stopped_) {
                     LOG.warn("Transport error occurred during acceptance of message.", ttx);
                 }
+            } catch (Throwable t) {
+                LOG.warn("Error occurred during acceptance of message.", t);
             }
         }
     }

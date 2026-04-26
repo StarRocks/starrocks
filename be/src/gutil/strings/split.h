@@ -43,13 +43,12 @@ using std::make_pair;
 using std::pair;
 #include <vector>
 using std::vector;
-#include <common/logging.h>
-
 #include <unordered_map>
 #include <unordered_set>
 
 #include "gutil/integral_types.h"
 #include "gutil/logging-inl.h"
+#include "gutil/logging.h"
 #include "gutil/strings/charset.h"
 #include "gutil/strings/split_internal.h"
 #include "gutil/strings/stringpiece.h"

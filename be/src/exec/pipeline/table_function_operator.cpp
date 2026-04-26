@@ -14,6 +14,8 @@
 
 #include "table_function_operator.h"
 
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
 void TableFunctionOperator::close(RuntimeState* state) {
     if (_table_function != nullptr && _table_function_state != nullptr) {
@@ -127,7 +129,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
 
     while (output_columns[0]->size() < max_chunk_size) {
         if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
-            _next_output_row < _table_function_result.second->get_data().back()) {
+            _next_output_row < _table_function_result.second->immutable_data().back()) {
             _copy_result(output_columns, max_chunk_size);
         } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
             RETURN_IF_ERROR(_process_table_function(state));
@@ -138,7 +140,10 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
         }
     }
 
-    // Just return the chunk whether its full or not in order to keep the semantics of pipeline
+    // Just return the chunk whether it's full or not in order to keep the semantics of pipeline
+    for (const auto& column : output_columns) {
+        RETURN_IF_ERROR(column->capacity_limit_reached());
+    }
     return _build_chunk(output_columns);
 }
 
@@ -202,12 +207,14 @@ Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector
 
 void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_size) {
     DCHECK(_table_function_result.second->size() > 1 &&
-           _next_output_row < _table_function_result.second->get_data().back());
+           _next_output_row < _table_function_result.second->immutable_data().back());
     DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
     uint32_t curr_output_size = columns[0]->size();
     const auto& fn_result_cols = _table_function_result.first;
     const auto& offsets_col = _table_function_result.second;
     const auto offsets_data = offsets_col->immutable_data();
+    uint32_t fn_result_start = _next_output_row;
+    uint32_t fn_result_count = 0;
     while (curr_output_size < max_output_size && _next_output_row < offsets_data.back()) {
         uint32_t start = _next_output_row;
         uint32_t end = offsets_data[_next_output_row_offset + 1];
@@ -226,25 +233,27 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
                 Datum value = input_column_ptr->get(_input_index_of_first_result + _next_output_row_offset);
                 if (value.is_null()) {
                     DCHECK(columns[i]->is_nullable());
-                    down_cast<NullableColumn*>(columns[i].get())->append_nulls(copy_rows);
+                    down_cast<NullableColumn*>(columns[i]->as_mutable_raw_ptr())->append_nulls(copy_rows);
                 } else {
-                    columns[i]->append_value_multiple_times(&value, copy_rows);
-                }
-            }
-
-            // Build table function result
-            if (_fn_result_required) {
-                for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-                    columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+                    columns[i]->as_mutable_raw_ptr()->append_value_multiple_times(&value, copy_rows);
                 }
             }
         }
 
         curr_output_size += copy_rows;
         _next_output_row += copy_rows;
+        fn_result_count += copy_rows;
         DCHECK_LE(start + copy_rows, end);
         if (start + copy_rows == end) {
             _next_output_row_offset++;
+        }
+    }
+
+    // Build table function result
+    if (_fn_result_required) {
+        for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+            columns[_outer_slots.size() + i]->as_mutable_raw_ptr()->append(*(fn_result_cols[i]), fn_result_start,
+                                                                           fn_result_count);
         }
     }
 }

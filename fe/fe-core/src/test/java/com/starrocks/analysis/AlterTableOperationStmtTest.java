@@ -16,15 +16,15 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
 import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -46,6 +46,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -68,11 +70,10 @@ public class AlterTableOperationStmtTest {
 
     @BeforeEach
     public void setUp(@Mocked MetadataMgr metadataMgr,
-                      @Mocked CatalogMgr catalogMgr,
-                      @Mocked Database database) throws Exception {
+                      @Mocked CatalogMgr catalogMgr) throws Exception {
         Table icebergTable = new IcebergTable(1, "test_table", "iceberg_catalog", "iceberg_catalog",
                 "iceberg_db", "test_table", "",
-                List.of(new Column("k1", Type.INT, true), new Column("partition_date", Type.DATE, true)),
+                List.of(new Column("k1", IntegerType.INT, true), new Column("partition_date", DateType.DATE, true)),
                 null, Maps.newHashMap());
 
         new Expectations() {
@@ -83,10 +84,6 @@ public class AlterTableOperationStmtTest {
 
                 GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = catalogMgr;
-                minTimes = 0;
-
-                metadataMgr.getDb(anyLong);
-                result = database;
                 minTimes = 0;
 
                 metadataMgr.getTemporaryTable((UUID)any, anyString, anyLong, anyString);
@@ -203,6 +200,15 @@ public class AlterTableOperationStmtTest {
     }
 
     @Test
+    public void testRewriteManifestsProcedure() {
+        String sql = "ALTER TABLE iceberg_catalog.iceberg_db.test_table EXECUTE rewrite_manifests()";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertInstanceOf(AlterTableStmt.class, stmt);
+        AlterTableStmt alterStmt = (AlterTableStmt) stmt;
+        Assertions.assertEquals("test_table", alterStmt.getTableName());
+    }
+
+    @Test
     public void testRewriteDataFilesProcedureWithWhereClause(@Mocked IcebergTable icebergTable) {
         new MockUp<ExpressionAnalyzer>() {
             @Mock
@@ -214,7 +220,7 @@ public class AlterTableOperationStmtTest {
             @Mock
             public ScalarOperator translate(Expr expr, ExpressionMapping expressionMapping,
                                             ColumnRefFactory columnRefFactory) {
-                return new BinaryPredicateOperator(BinaryType.GE, new ColumnRefOperator(1, Type.DATE, "partition_date",
+                return new BinaryPredicateOperator(BinaryType.GE, new ColumnRefOperator(1, DateType.DATE, "partition_date",
                         true),
                         ConstantOperator.createVarchar("2024-01-01"));
             }
@@ -222,9 +228,21 @@ public class AlterTableOperationStmtTest {
 
         new Expectations() {
             {
+                icebergTable.getTableProcedure(anyString);
+                result = RewriteDataFilesProcedure.getInstance();
+                minTimes = 0;
+
                 icebergTable.getPartitionColumnsIncludeTransformed();
-                result = List.of(new Column("k1", Type.INT, true),
-                        new Column("partition_date", Type.DATE, true));
+                result = List.of(new Column("k1", IntegerType.INT, true),
+                        new Column("partition_date", DateType.DATE, true));
+                minTimes = 0;
+
+                icebergTable.supportsOperation(TableOperation.ALTER);
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "iceberg_catalog";
                 minTimes = 0;
             }
         };
@@ -335,9 +353,11 @@ public class AlterTableOperationStmtTest {
 
         ExpireSnapshotsProcedure expireProc = ExpireSnapshotsProcedure.getInstance();
         Assertions.assertEquals("expire_snapshots", expireProc.getProcedureName());
-        Assertions.assertEquals(1, expireProc.getArguments().size());
+        Assertions.assertEquals(2, expireProc.getArguments().size());
         Assertions.assertEquals("older_than", expireProc.getArguments().get(0).getName());
         Assertions.assertFalse(expireProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("retain_last", expireProc.getArguments().get(1).getName());
+        Assertions.assertFalse(expireProc.getArguments().get(1).isRequired());
 
         FastForwardProcedure fastForwardProc = FastForwardProcedure.getInstance();
         Assertions.assertEquals("fast_forward", fastForwardProc.getProcedureName());
@@ -345,17 +365,25 @@ public class AlterTableOperationStmtTest {
 
         RemoveOrphanFilesProcedure removeOrphanProc = RemoveOrphanFilesProcedure.getInstance();
         Assertions.assertEquals("remove_orphan_files", removeOrphanProc.getProcedureName());
-        Assertions.assertEquals(1, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals(2, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals("older_than", removeOrphanProc.getArguments().get(0).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("location", removeOrphanProc.getArguments().get(1).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(1).isRequired());
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
-        Assertions.assertEquals(3, rewriteProc.getArguments().size());
+        Assertions.assertEquals(4, rewriteProc.getArguments().size());
 
         RollbackToSnapshotProcedure rollbackProc = RollbackToSnapshotProcedure.getInstance();
         Assertions.assertEquals("rollback_to_snapshot", rollbackProc.getProcedureName());
         Assertions.assertEquals(1, rollbackProc.getArguments().size());
         Assertions.assertEquals("snapshot_id", rollbackProc.getArguments().get(0).getName());
         Assertions.assertTrue(rollbackProc.getArguments().get(0).isRequired());
+
+        RewriteManifestsProcedure rewriteManifestsProc = RewriteManifestsProcedure.getInstance();
+        Assertions.assertEquals("rewrite_manifests", rewriteManifestsProc.getProcedureName());
+        Assertions.assertEquals(0, rewriteManifestsProc.getArguments().size());
     }
 
     @Test

@@ -29,7 +29,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
@@ -78,11 +77,14 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             "starmgr_meta_sync_process_time_total", Metric.MetricUnit.SECONDS,
             "The total number of seconds spent on meta sync by StarMgrMetaSyncer");
 
+    // Log a warning when getAllPartitionShardGroupId takes longer than this.
+    private static final long SLOW_COLLECTION_WARN_THRESHOLD_MS = 30_000L;
+
     // make sure the metrics are registered only once
     private static final AtomicBoolean IS_METRIC_REGISTERED = new AtomicBoolean(false);
 
     public StarMgrMetaSyncer() {
-        super("StarMgrMetaSyncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
+        super("star-mgr-meta-syncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
     }
 
     @Override
@@ -99,32 +101,55 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     @VisibleForTesting
     Set<Long> getAllPartitionShardGroupId() {
         HashSet<Long> groupIds = new HashSet<>();
+        long startMs = System.currentTimeMillis();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-            if (db == null) {
-                continue;
-            }
-            if (db.isSystemDatabase()) {
+            if (db == null || db.isSystemDatabase()) {
                 continue;
             }
 
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            // Snapshot the tables under an INTENTION_SHARED DB lock. IS blocks DROP TABLE
+            // (which takes DB WRITE across the whole remove-from-idToTable -> add-to-recycleBin
+            // sequence in Database#unprotectDropTable) so the snapshot cannot observe the
+            // transient window where a non-force dropped table is in neither place - missing
+            // such a table here would let deleteUnusedShardAndShardGroup erroneously reap its
+            // shard groups and break RECOVER TABLE. IS (unlike READ) does not block concurrent
+            // INTENTION_EXCLUSIVE table writers, so the snapshot stays cheap.
+            List<Table> tables;
+            Locker dbLocker = new Locker();
+            dbLocker.lockDatabase(db.getId(), LockType.INTENTION_SHARED);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getAllPartitionsIncludeRecycleBin((OlapTable) table)
-                                .stream()
-                                .map(Partition::getSubPartitions)
-                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
-                                .forEach(groupIds::addAll);
-                    }
-                }
+                tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                dbLocker.unLockDatabase(db.getId(), LockType.INTENTION_SHARED);
             }
+
+            // For each table, take a table-level READ lock under an INTENTION_SHARED DB lock
+            // so unrelated DB-level shared-lock acquirers are not stalled during the traversal.
+            for (Table table : tables) {
+                if (!table.isCloudNativeTableOrMaterializedView()) {
+                    continue;
+                }
+                long tableId = table.getId();
+                Locker locker = new Locker();
+                locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                try {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getAllPartitionsIncludeRecycleBin((OlapTable) table)
+                            .stream()
+                            .map(Partition::getSubPartitions)
+                            .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
+                            .forEach(groupIds::addAll);
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                }
+            }
+        }
+        long elapsedMs = System.currentTimeMillis() - startMs;
+        if (elapsedMs > SLOW_COLLECTION_WARN_THRESHOLD_MS) {
+            LOG.warn("getAllPartitionShardGroupId is slow: elapsed={}ms, dbCount={}, groupCount={}",
+                    elapsedMs, dbIds.size(), groupIds.size());
         }
         return groupIds;
     }
@@ -134,24 +159,58 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                                                 boolean isFileBundling) {
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
-        long pickBackendId = -1;
-        // group shards by be
-        for (long shardId : shardIds) {
-            try {
-                if (isFileBundling) {
-                    if (pickBackendId == -1) {
-                        ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource);
-                        if (cn == null) {
-                            throw new NoAliveBackendException("No available compute node found for the operation");
-                        }
-                        pickBackendId = cn.getId();
+
+        // Resolve all shard owners in a single batched RPC. The result serves both:
+        // - filebundling: collect candidate aggregator nodes (prefer a node that owns
+        //   at least one shard), then assign all shards to the chosen aggregator.
+        // - non-filebundling: group shards by their primary owner CN for per-node
+        //   tablet deletion.
+        // This avoids N per-shard getPrimaryComputeNodeIdByShard RPCs in either path.
+        Map<Long, List<Long>> shardToNodeIds = null;
+        try {
+            shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
+                    shardIds, computeResource.getWorkerGroupId());
+        } catch (Exception e) {
+            LOG.warn("Failed to batch-resolve shard owners for {} shards, falling back",
+                    shardIds.size(), e);
+        }
+
+        if (isFileBundling) {
+            // Collect candidate aggregator nodes from the batched result, then pick one.
+            Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
+            if (shardToNodeIds != null) {
+                for (List<Long> nodeIds : shardToNodeIds.values()) {
+                    if (nodeIds == null || nodeIds.isEmpty()) {
+                        continue;
                     }
-                } else {
-                    pickBackendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, computeResource.getWorkerGroupId());
+                    ComputeNode owner = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getBackendOrComputeNode(nodeIds.get(0));
+                    if (owner != null) {
+                        candidateAggregatorNodes.add(owner);
+                    }
                 }
-                shardIdsByBeMap.computeIfAbsent(pickBackendId, k -> Sets.newHashSet()).add(shardId);
-            } catch (StarRocksException ignored1) {
-                // ignore error
+            }
+            ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
+            if (cn != null) {
+                shardIdsByBeMap.put(cn.getId(), Sets.newHashSet(shardIds));
+            }
+        } else {
+            // Group shards by their primary owner CN.
+            for (long shardId : shardIds) {
+                try {
+                    long ownerId = -1;
+                    List<Long> nodeIds = (shardToNodeIds != null) ? shardToNodeIds.get(shardId) : null;
+                    if (nodeIds != null && !nodeIds.isEmpty()) {
+                        ownerId = nodeIds.get(0);
+                    } else {
+                        // Batched result missing this shard — fall back to per-shard RPC.
+                        ownerId = starOSAgent.getPrimaryComputeNodeIdByShard(
+                                shardId, computeResource.getWorkerGroupId());
+                    }
+                    shardIdsByBeMap.computeIfAbsent(ownerId, k -> Sets.newHashSet()).add(shardId);
+                } catch (StarRocksException ignored) {
+                    // ignore error
+                }
             }
         }
 
@@ -187,20 +246,26 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             try {
                 DeleteTabletResponse response = future.get();
                 Set<Long> shards = shardIdsByBeMap.get(entry.getKey());
-                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    String errorMsg = "";
-                    if (response.status != null && response.status.errorMsgs != null &&
-                            !response.status.errorMsgs.isEmpty()) {
-                        errorMsg = response.status.errorMsgs.get(0);
-                    }
-                    TStatusCode stCode = TStatusCode.findByValue(response.status.statusCode);
-                    LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
-                            nodeId, stCode, errorMsg, response.failedTablets);
+                if (response != null) {
+                    if (response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                        // preserve failedTablets and log error
+                        String errorMsg = "";
+                        TStatusCode stCode = TStatusCode.UNKNOWN;
+                        if (response.status != null && response.status.errorMsgs != null &&
+                                !response.status.errorMsgs.isEmpty()) {
+                            errorMsg = response.status.errorMsgs.get(0);
+                        }
+                        if (response.status != null) {
+                            stCode = TStatusCode.findByValue(response.status.statusCode);
+                        }
+                        LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
+                                nodeId, stCode, errorMsg, response.failedTablets);
 
-                    // ignore INVALID_ARGUMENT error, treat it as success
-                    if (stCode != TStatusCode.INVALID_ARGUMENT) {
-                        // preserve the shards that failed to delete, don't delete them from starMgr
-                        response.failedTablets.forEach(shards::remove);
+                        // ignore INVALID_ARGUMENT error, treat it as success
+                        if (stCode != TStatusCode.INVALID_ARGUMENT) {
+                            // preserve the shards that failed to delete, don't delete them from starMgr
+                            response.failedTablets.forEach(shards::remove);
+                        }
                     }
                     shardToDelete.addAll(shards);
                 }
@@ -257,6 +322,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                       shardGroupId);
             return false;
         }
+
+        if (GlobalStateMgr.getCurrentState().getStorageVolumeMgr().hasStorageVolumeBindAsVirtualGroup(shardGroupId)) {
+            LOG.debug("shard group {} can not be deleted for now, because it has been bind to storage volume",
+                    shardGroupId);
+            return false;
+        }
+
         return true;
     }
 
@@ -272,6 +344,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // Take this timestamp as reference, all ShardGroups created after this timestamp will be safe for sure.
         long creationExpireTime = System.currentTimeMillis() - Config.shard_group_clean_threshold_sec * 1000L;
 
+        // Keep in mind that the collected shardGroupId may not be complete, all the subsequent operations
+        // should tolerate inaccuracies in the list.
         Set<Long> groupIdFe = getAllPartitionShardGroupId();
         if (groupIdFe.size() > 100) {
             // Be a gentleman, avoid printing a long lists in log line.
@@ -468,7 +542,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        // Intensive path: IS on DB + READ on this table. We only need table-scoped
+        // consistency here (partition walk on one known table plus a flag flip);
+        // DROP TABLE / DROP DATABASE both take DB WRITE which still conflict with
+        // IS, so the manual re-check below is still sufficient to detect a drop
+        // that committed before we acquired the lock.
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
                 return false; // table might be dropped
@@ -480,11 +559,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     .forEach(physicalPartitions::addAll);
             table.setShardGroupChanged(false);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
 
         for (PhysicalPartition physicalPartition : physicalPartitions) {
-            locker.lockDatabase(db.getId(), LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             try {
                 // schema change might replace the shards in the original shard group
                 if (table.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -501,7 +580,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
                 // no need to check db/table/partition again, everything still works
                 for (MaterializedIndex materializedIndex :
-                        physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long groupId = materializedIndex.getShardGroupId();
                     Set<Long> starmgrShardIdsSet = null;
                     if (redundantGroupToShards.get(groupId) != null) {
@@ -532,7 +611,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
 
@@ -562,11 +641,17 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {
         // quick check
-        if (!GlobalStateMgr.getCurrentState().getColocateTableIndex().isLakeColocateTable(table.getId())) {
+        if (!GlobalStateMgr.getCurrentState().getColocateTableIndex().isMetaGroupColocateTable(table.getId())) {
             return;
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
+        // Intensive path: IS on DB + READ on this table. Despite the "update" name,
+        // the call below only reads olapTable.getShardGroupIds(); the real mutation
+        // is of ColocateTableIndex's internal maps (guarded by its own writeLock)
+        // and external StarOS state via updateMetaGroup(). DROP TABLE / DROP DATABASE
+        // both take DB WRITE which still conflicts with IS, so the re-check below
+        // still detects a drop that committed before we acquired the lock.
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
             // check db and table again
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId()) == null) {
@@ -578,7 +663,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true /* isJoin */,
                     null /* expectGroupId */);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
     }
 
@@ -595,6 +680,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        long newInterval = Config.star_mgr_meta_sync_interval_sec * 1000L;
+        if (newInterval > 0 && getInterval() != newInterval) {
+            setInterval(newInterval);
+        }
         long start = System.currentTimeMillis();
         acquireBackgroundComputeResource();
         deleteUnusedShardAndShardGroup();

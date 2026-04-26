@@ -74,7 +74,7 @@ public class RefreshTableStmtTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertTrue(stmt instanceof RefreshTableStmt);
         Assertions.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
-        Assertions.assertEquals(((RefreshTableStmt) stmt).getTableName().getTbl(), "table1");
+        Assertions.assertEquals("table1", ((RefreshTableStmt) stmt).getTableName());
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"k1=0\\/k2=1\", \"k1=1\\/k2=2\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);

@@ -173,6 +173,7 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
         auto* pool = state->obj_pool();
         ASSIGN_OR_RETURN(auto rfs, CrossJoinNode::rewrite_runtime_filter(pool, _rf_descs, one_row_chunk.get(),
                                                                          _rf_conjuncts_ctx));
+        RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, rfs));
         _rf_hub->set_collector(_plan_node_id,
                                std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeMembershipFilterList{}));
     } else {

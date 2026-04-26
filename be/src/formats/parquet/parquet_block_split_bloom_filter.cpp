@@ -14,7 +14,7 @@
 
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
 
-#include "util/debug_util.h"
+#include "common/util/debug_util.h"
 
 namespace starrocks {
 

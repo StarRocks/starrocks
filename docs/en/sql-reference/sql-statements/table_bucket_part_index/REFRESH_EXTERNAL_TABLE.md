@@ -7,7 +7,7 @@ displayed_sidebar: docs
 REFRESH EXTERNAL TABLE metadata cached in StarRocks. The metadata is from tables in data lakes. This statement is used in the following scenarios:
 
 - **External table**: When using a Hive external table or Hudi external table to query data in Apache Hive™ or Apache Hudi, you can execute this statement to update the metadata of a Hive table or Hudi table cached in StarRocks.
-- **External catalog**: When using an [external catalog](../../../data_source/catalog/catalog_overview.md) to query data in the corresponding data source, you can execute this statement to update the metadata cached in StarRocks.
+- **External catalog**: When using an [external catalog](../../../data_source/catalog/catalog_overview.md) (except for JDBC Catalog) to query data in the corresponding data source, you can execute this statement to update the metadata cached in StarRocks.
 
 > **NOTE**
 >

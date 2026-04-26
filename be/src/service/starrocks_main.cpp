@@ -32,7 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <aws/core/Aws.h>
 #include <gperftools/malloc_extension.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -42,35 +41,48 @@
 #endif
 
 #include <curl/curl.h>
+#include <gflags/gflags.h>
 #include <thrift/TOutput.h>
+
+#ifndef __APPLE__
+#include <aws/core/Aws.h>
+
+#include "fs/s3/poco_http_client_factory.h"
+#endif
 
 #include <boost/algorithm/string.hpp>
 
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
-#include "common/config.h"
-#include "common/daemon.h"
+#include "base/failpoint/fail_point.h"
+#include "base/path/path_util.h"
+#include "base/uid_util.h"
+#include "common/config_object_storage_fwd.h"
+#include "common/config_starlet_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/util/debug_util.h"
+#include "common/util/thrift_server.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/s3/poco_http_client_factory.h"
+#include "formats/orc/lzo_decompressor_registration.h"
+#include "fs/fs_provider_bootstrap.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "runtime/memory/roaring_hook.h"
-#include "service/backend_options.h"
+#include "service/daemon.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
-#include "util/debug_util.h"
-#include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_server.h"
-#include "util/uid_util.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
@@ -92,6 +104,7 @@ static void thrift_output(const char* x) {
 }
 } // namespace starrocks
 
+#ifndef __APPLE__
 static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
     Aws::Utils::Logging::LogLevel levels[] = {
             Aws::Utils::Logging::LogLevel::Off,   Aws::Utils::Logging::LogLevel::Fatal,
@@ -110,10 +123,22 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
     }
     return level;
 }
+#endif
 
 extern int meta_tool_main(int argc, char** argv);
 
 int main(int argc, char** argv) {
+    // Record the TP-relative offset of tls_thread_status as early as possible,
+    // before any thread is created (so the main thread's TLS layout is canonical).
+    // External profilers read g_tls_thread_status_tpoff from /proc/PID/mem.
+    starrocks::init_tls_thread_status_offset();
+
+    auto lzo_status = starrocks::register_orc_lzo_decompressor();
+    if (!lzo_status.ok()) {
+        fprintf(stderr, "fail to register ORC LZO decompressor: %s\n", lzo_status.to_string().c_str());
+        return 1;
+    }
+
     if (argc > 1 && strcmp(argv[1], "meta_tool") == 0) {
         return meta_tool_main(argc - 1, argv + 1);
     }
@@ -124,7 +149,8 @@ int main(int argc, char** argv) {
             puts(starrocks::get_build_version(false).c_str());
             exit(0);
         } else if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0) {
-            help(basename(argv[0]));
+            std::string program_name = starrocks::path_util::base_name(argv[0]);
+            help(program_name.c_str());
             exit(0);
         } else if (strcmp(argv[1], "--cn") == 0) {
             as_cn = true;
@@ -201,6 +227,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+#ifndef __APPLE__
     Aws::SDKOptions aws_sdk_options;
     // it is already initialized beforehead
     aws_sdk_options.httpOptions.initAndCleanupCurl = false;
@@ -217,6 +244,10 @@ int main(int argc, char** argv) {
     if (starrocks::config::enable_poco_client_for_aws_sdk) {
         Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
     }
+#endif
+
+    EXIT_IF_ERROR(starrocks::fs::install_builtin_file_system_providers());
+    LOG(INFO) << "file system provider registry init successfully";
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
@@ -258,11 +289,13 @@ int main(int argc, char** argv) {
     starrocks::start_be(paths, as_cn);
 
     if (starrocks::process_quick_exit_in_progress()) {
-        LOG(INFO) << "BE is shutting down，will exit quickly";
+        LOG(INFO) << "BE is shutting down, will exit quickly";
         exit(0);
     }
 
+#ifndef __APPLE__
     Aws::ShutdownAPI(aws_sdk_options);
+#endif
 
     return 0;
 }

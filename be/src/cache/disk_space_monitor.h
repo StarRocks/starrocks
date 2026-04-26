@@ -18,12 +18,13 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 
 #include "cache/cache_options.h"
-#include "cache/local_cache_engine.h"
+#include "cache/disk_cache/local_disk_cache_engine.h"
 #include "common/status.h"
+#include "common/system/disk_info.h"
 #include "fs/fs.h"
-#include "util/disk_info.h"
 
 namespace starrocks {
 
@@ -40,7 +41,7 @@ public:
 
         virtual dev_t device_id(const std::string& path);
 
-        virtual ~FileSystemWrapper() {}
+        virtual ~FileSystemWrapper() = default;
     };
 
     struct DiskStats {
@@ -67,7 +68,7 @@ public:
         size_t total_cache_usage = 0;
     };
 
-    DiskSpace(const std::string& path, std::shared_ptr<FileSystemWrapper> fs) : _path(path), _fs(fs) {}
+    DiskSpace(std::string path, std::shared_ptr<FileSystemWrapper> fs) : _path(std::move(path)), _fs(std::move(fs)) {}
 
     Status init_spaces(const std::vector<DirSpace>& dir_spaces);
 
@@ -118,8 +119,8 @@ private:
 
 class DiskSpaceMonitor {
 public:
-    DiskSpaceMonitor(LocalCacheEngine* cache);
-    DiskSpaceMonitor(LocalCacheEngine* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs);
+    DiskSpaceMonitor(LocalDiskCacheEngine* cache);
+    DiskSpaceMonitor(LocalDiskCacheEngine* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs);
     ~DiskSpaceMonitor();
 
     Status init(std::vector<DirSpace>* dir_spaces);
@@ -152,7 +153,7 @@ private:
 
     size_t _total_cache_usage = 0;
     size_t _total_cache_quota = 0;
-    LocalCacheEngine* _cache = nullptr;
+    LocalDiskCacheEngine* _cache = nullptr;
     std::shared_ptr<DiskSpace::FileSystemWrapper> _fs = nullptr;
 };
 

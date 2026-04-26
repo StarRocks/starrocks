@@ -25,20 +25,22 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.DateType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -80,7 +82,8 @@ public class SchemaChangeProcDir implements ProcDirInterface {
             return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
         }
         if (subExpr.getChild(1) instanceof DateLiteral) {
-            Long leftVal = (new DateLiteral((String) element, Type.DATETIME)).getLongValue();
+            LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
+            Long leftVal = new DateLiteral(elementDateTime, DateType.DATETIME).getLongValue();
             Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
             switch (binaryPredicate.getOp()) {
                 case EQ:
@@ -103,7 +106,7 @@ public class SchemaChangeProcDir implements ProcDirInterface {
         return true;
     }
 
-    public ProcResult fetchResultByFilter(HashMap<String, Expr> filter, ArrayList<OrderByPair> orderByPairs,
+    public ProcResult fetchResultByFilter(HashMap<String, Expr> filter, List<OrderByPair> orderByPairs,
                                           LimitElement limitElement) throws AnalysisException {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(schemaChangeHandler);

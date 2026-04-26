@@ -1,0 +1,25 @@
+-- name: test_alter_database_storage_volume @cloud
+-- create two storage volumes for testing
+CREATE STORAGE VOLUME IF NOT EXISTS sv_test01_${uuid0} type = s3 LOCATIONS = ('s3://${oss_bucket}/test_alter_db_storage_volume1') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="${oss_endpoint}", "aws.s3.region"="${oss_region}", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="true", "aws.s3.access_key" = "${oss_ak}", "aws.s3.secret_key" = "${oss_sk}");
+CREATE STORAGE VOLUME IF NOT EXISTS sv_test02_${uuid1} type = s3 LOCATIONS = ('s3://${oss_bucket}/test_alter_db_storage_volume2') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="${oss_endpoint}", "aws.s3.region"="${oss_region}", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="true", "aws.s3.access_key" = "${oss_ak}", "aws.s3.secret_key" = "${oss_sk}");
+-- create a database with storage volume set to sv_test01_${uuid0}
+CREATE DATABASE db${uuid0} PROPERTIES("storage_volume" = "sv_test01_${uuid0}");
+-- create table in the database
+CREATE TABLE db${uuid0}.t1 (a int, b int) DISTRIBUTED BY HASH(a) BUCKETS 1;
+-- expect the table inherits the database storage volume: sv_test01_${uuid0}
+SHOW CREATE TABLE db${uuid0}.t1;
+-- alter database, set its storage volume to sv_test02_${uuid1}
+ALTER DATABASE db${uuid0} SET("storage_volume" = "sv_test02_${uuid1}");
+-- create a new table in the database
+CREATE TABLE db${uuid0}.t2 (a int, b int) DISTRIBUTED BY HASH(a) BUCKETS 1;
+-- expect the table inherits the new storage volume: sv_test02_${uuid1}
+SHOW CREATE TABLE db${uuid0}.t2;
+-- expect the old table still use sv_test01_${uuid0}, not affected by the database storage volume change
+SHOW CREATE TABLE db${uuid0}.t1;
+-- cleanup
+ALTER DATABASE db${uuid0} SET("storage_volume" = "builtin_storage_volume");
+DROP DATABASE db${uuid0} FORCE;
+-- wait for FE to cleanup the databases and tables, try best waiting, may not be able to complete the database drop completely
+shell: sleep 5
+DROP STORAGE VOLUME sv_test01_${uuid0};
+DROP STORAGE VOLUME sv_test02_${uuid1};

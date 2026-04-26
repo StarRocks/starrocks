@@ -19,6 +19,7 @@
 #include <set>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/map_column.h"
 #include "common/logging.h"
 
@@ -41,12 +42,12 @@ DIAGNOSTIC_POP
 #include <arrow/memory_pool.h>
 #include <arrow/pretty_print.h>
 #include <column/chunk.h>
-#include <column/type_traits.h>
 #include <exec/arrow_type_traits.h>
 
+#include "base/types/int128.h"
 #include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "storage/tablet_schema_helper.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 struct StarRocksColumnToArrowTest : public testing::Test {};
@@ -66,7 +67,7 @@ void compare_arrow_value(const RunTimeCppType<LT>& datum, const ArrowTypeIdToArr
     } else if constexpr (lt_is_float<LT> || (lt_is_integer<LT> && !lt_is_largeint<LT>)) {
         ASSERT_EQ(data_array->Value(i), datum);
     } else if constexpr (lt_is_largeint<LT>) {
-        ASSERT_EQ(data_array->GetString(i), LargeIntValue::to_string(datum));
+        ASSERT_EQ(data_array->GetString(i), int128_to_string(datum));
     } else if constexpr (lt_is_string<LT> || lt_is_date_or_datetime<LT>) {
         ASSERT_EQ(data_array->GetString(i), datum.to_string());
     } else if constexpr (lt_is_hll<LT>) {
@@ -626,8 +627,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     convert_to_arrow(struct_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
-                                                       R"([
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, R"([
                         {"id": 1, "name": "test1"},
                         {"id": null, "name": "test2"},
                         {"id": 2, "name": null},
@@ -662,8 +662,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::shared_ptr<arrow::Array> expect_array;
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
-                                                       R"([
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, R"([
                         {"id": 1, "name": "test1"},
                         null,
                         {"id": null, "name": "test2"},
@@ -773,14 +772,14 @@ TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
     auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
     // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]
     column->append_datum(
-            DatumArray{DatumStruct{1, DatumMap{{11, (Slice) "test11"}, {111, (Slice) "test111"}}}, Datum()});
+            DatumArray{Datum(DatumStruct{1, DatumMap{{11, (Slice) "test11"}, {111, (Slice) "test111"}}}), Datum()});
     // []
     column->append_datum(DatumArray());
     // [{"id": 2, "map": null}, {"id": null, "map": {33:"test33"},{333:null}}]
-    column->append_datum(DatumArray{DatumStruct{2, Datum()},
-                                    DatumStruct{Datum(), DatumMap{{33, (Slice) "test33"}, {333, Datum()}}}});
+    column->append_datum(DatumArray{Datum(DatumStruct{2, Datum()}),
+                                    Datum(DatumStruct{Datum(), DatumMap{{33, (Slice) "test33"}, {333, Datum()}}})});
     // [{"id": 4, "map": {}}}]
-    column->append_datum(DatumArray{DatumStruct{4, DatumMap{}}});
+    column->append_datum(DatumArray{Datum(DatumStruct{4, DatumMap{}})});
     // null
     column->append_nulls(1);
 

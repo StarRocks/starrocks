@@ -97,6 +97,7 @@ public class FragmentInstanceExecState {
     private final ComputeNode worker;
     private final TNetworkAddress address;
     private final long lastMissingHeartbeatTime;
+    private final long lastStartTime;
 
     private FragmentInstance fragmentInstance;
 
@@ -111,7 +112,7 @@ public class FragmentInstanceExecState {
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
         profile.addInfoString("InstanceId", instanceId);
 
-        return new FragmentInstanceExecState(null, null, 0, fragmentInstanceId, 0, null, profile, null, null, -1);
+        return new FragmentInstanceExecState(null, null, 0, fragmentInstanceId, 0, null, profile, null, null, -1, -1);
     }
 
     public static FragmentInstanceExecState createExecution(JobSpec jobSpec,
@@ -131,7 +132,7 @@ public class FragmentInstanceExecState {
                 request.params.getFragment_instance_id(), request.getBackend_num(),
                 request,
                 profile,
-                worker, address, worker.getLastMissingHeartbeatTime());
+                worker, address, worker.getLastMissingHeartbeatTime(), worker.getLastStartTime());
     }
 
     private FragmentInstanceExecState(JobSpec jobSpec,
@@ -143,7 +144,8 @@ public class FragmentInstanceExecState {
                                       RuntimeProfile profile,
                                       ComputeNode worker,
                                       TNetworkAddress address,
-                                      long lastMissingHeartbeatTime) {
+                                      long lastMissingHeartbeatTime,
+                                      long lastStartTime) {
         this.jobSpec = jobSpec;
         // fake fragment instance exec state
         if (jobSpec == null) {
@@ -161,6 +163,7 @@ public class FragmentInstanceExecState {
         this.address = address;
         this.worker = worker;
         this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
+        this.lastStartTime = lastStartTime;
     }
 
     public void serializeRequest() {
@@ -171,6 +174,14 @@ public class FragmentInstanceExecState {
         } catch (TException ignore) {
             // throw exception means serializedRequest will be empty, and then we will treat it as not serialized
         }
+    }
+
+    public void changeStateIntoDeploying() {
+        transitionState(State.CREATED, State.DEPLOYING);
+    }
+
+    public void setDeployFuture(Future<PExecPlanFragmentResult> deployFuture) {
+        this.deployFuture = deployFuture;
     }
 
     /**
@@ -363,16 +374,17 @@ public class FragmentInstanceExecState {
     }
 
     /**
-     * Cancel the fragment instance.
+     * Cancel the fragment instance with error message.
      *
      * @param cancelReason The cancel reason.
+     * @param errorMessage The detailed error message (used for INTERNAL_ERROR).
      * @return true if cancel succeeds. Otherwise, return false.
      */
-    public synchronized boolean cancelFragmentInstance(PPlanFragmentCancelReason cancelReason) {
+    public synchronized boolean cancelFragmentInstance(PPlanFragmentCancelReason cancelReason, String errorMessage) {
         if (LOG.isDebugEnabled()) {
             LOG.debug(
-                    "cancelRemoteFragments state={}  backend: {}, fragment instance id={}, reason: {}",
-                    state, worker.getId(), DebugUtil.printId(instanceId), cancelReason.name());
+                    "cancelRemoteFragments state={}  backend: {}, fragment instance id={}, reason: {}, error: {}",
+                    state, worker.getId(), DebugUtil.printId(instanceId), cancelReason.name(), errorMessage);
         }
 
         switch (state) {
@@ -391,7 +403,7 @@ public class FragmentInstanceExecState {
         try {
             BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                     jobSpec.getQueryId(), instanceId, cancelReason,
-                    jobSpec.isEnablePipeline());
+                    jobSpec.isEnablePipeline(), errorMessage);
         } catch (RpcException e) {
             LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                     brpcAddress.getPort(), e);
@@ -453,7 +465,13 @@ public class FragmentInstanceExecState {
     }
 
     public boolean isBackendStateHealthy() {
-        if (worker.getLastMissingHeartbeatTime() > lastMissingHeartbeatTime) {
+        // There are two scenarios:
+        // 1. heartbeat is ok, but `lastStartTime` updated, it means the backend is really restarted. we use `lastStartTime`
+        // to detect backend restart while`heartbeat_retry_times` hasn't been exceeded, in which case only checking
+        // `lastMissingHeartbeatTime` is not enough.
+        // 2. heartbeat failed after `heartbeat_retry_times` times, the `lastMissingHeartbeatTime` will be updated for
+        // that backend, we will treat this case as backend un-responsible and make the query fail fast
+        if (worker.getLastStartTime() > lastStartTime || worker.getLastMissingHeartbeatTime() > lastMissingHeartbeatTime) {
             LOG.warn("backend {} is down while joining the coordinator. job id: {}", worker.getId(),
                     jobSpec.getLoadJobId());
             return false;

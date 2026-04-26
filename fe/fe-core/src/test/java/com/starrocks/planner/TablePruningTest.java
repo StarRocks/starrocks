@@ -27,22 +27,23 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.connectContext;
 
 public class TablePruningTest extends TablePruningTestBase {
     @BeforeAll
     public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
-        FeConstants.runningUnitTest = true;
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
                 .useDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -443,27 +444,38 @@ public class TablePruningTest extends TablePruningTestBase {
                 "E",
                 "FI",
                 "FII");
-        List<String> predicates = Lists.newArrayList(
-                "A0.a_pk = A1.a_pk",
-                "A0.a_pk = A2.a_pk",
-                "A2.a_pk = D0.d_pk",
-                "D0.d_pk = D1.d_pk",
-                "D0.d_pk = D2.d_pk",
-                "A0.a_b_fk = B.b_pk",
-                "B.b_ci_fk = CI.ci_pk",
-                "B.b_cii_fk0 = CII.cii_pk0",
-                "B.b_cii_fk1 = CII.cii_pk1",
-                "D0.d_e_fk = E.e_pk",
-                "E.e_fi_fk = FI.fi_pk",
-                "E.e_fii_fk0 = FII.fii_pk0",
-                "E.e_fii_fk1 = FII.fii_pk1",
-                "D2.d_c3>100"
-        );
+
         Object[][] testCases = new Object[][] {
                 {"avg(A0.a_c0+A1.a_c1), sum(A2.a_c2), max(B.b_pk), min(D0.d_c0), min(D1.d_c1)", "", 1, 1},
                 {"A0.a_c0+A1.a_c1, A2.a_c2, B.b_pk, D0.d_c0, D1.d_c1", "limit 1", 1, 1},
                 {"sum(FII.fii_c0), sum(FII.fii_c0+1)", "limit 1", 1, 1},
                 {"sum(FII.fii_c0), sum(CII.cii_c0)", "limit 1", 1, 1, 1},
+        };
+        String[] whereClauses = new String[] {
+                "A0.a_pk = A2.a_pk AND A0.a_pk = A1.a_pk AND E.e_fii_fk1 = FII.fii_pk1 AND D0.d_e_fk = E.e_pk " +
+                        "AND D0.d_pk = D2.d_pk AND A2.a_pk = D0.d_pk AND D0.d_pk = D1.d_pk AND A0.a_b_fk = B.b_pk " +
+                        "AND B.b_cii_fk1 = CII.cii_pk1 AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk0 = CII.cii_pk0 " +
+                        "AND D2.d_c3>100 AND E.e_fi_fk = FI.fi_pk AND E.e_fii_fk0 = FII.fii_pk0",
+                "A0.a_pk = A1.a_pk AND D0.d_pk = D1.d_pk AND A0.a_pk = A2.a_pk AND D0.d_pk = D2.d_pk " +
+                        "AND D0.d_e_fk = E.e_pk AND A2.a_pk = D0.d_pk AND D2.d_c3>100 AND A0.a_b_fk = B.b_pk " +
+                        "AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk1 = CII.cii_pk1 AND B.b_cii_fk0 = CII.cii_pk0 " +
+                        "AND E.e_fii_fk0 = FII.fii_pk0 AND E.e_fi_fk = FI.fi_pk AND E.e_fii_fk1 = FII.fii_pk1",
+                "A0.a_pk = A1.a_pk AND E.e_fii_fk0 = FII.fii_pk0 AND A0.a_b_fk = B.b_pk AND A0.a_pk = A2.a_pk " +
+                        "AND B.b_cii_fk0 = CII.cii_pk0 AND B.b_cii_fk1 = CII.cii_pk1 AND D2.d_c3>100 " +
+                        "AND B.b_ci_fk = CI.ci_pk AND D0.d_pk = D1.d_pk AND A2.a_pk = D0.d_pk " +
+                        "AND E.e_fi_fk = FI.fi_pk AND D0.d_pk = D2.d_pk AND D0.d_e_fk = E.e_pk " +
+                        "AND E.e_fii_fk1 = FII.fii_pk1",
+                "A0.a_pk = A1.a_pk AND A0.a_pk = A2.a_pk AND D2.d_c3>100 AND A2.a_pk = D0.d_pk " +
+                        "AND D0.d_pk = D1.d_pk AND D0.d_e_fk = E.e_pk AND E.e_fi_fk = FI.fi_pk " +
+                        "AND D0.d_pk = D2.d_pk AND E.e_fii_fk0 = FII.fii_pk0 AND A0.a_b_fk = B.b_pk " +
+                        "AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk1 = CII.cii_pk1 AND B.b_cii_fk0 = CII.cii_pk0 " +
+                        "AND E.e_fii_fk1 = FII.fii_pk1",
+                "A0.a_pk = A1.a_pk AND A0.a_pk = A2.a_pk AND D0.d_pk = D1.d_pk AND D2.d_c3>100 " +
+                        "AND A2.a_pk = D0.d_pk AND A0.a_b_fk = B.b_pk AND D0.d_pk = D2.d_pk " +
+                        "AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk0 = CII.cii_pk0 AND D0.d_e_fk = E.e_pk " +
+                        "AND B.b_cii_fk1 = CII.cii_pk1 AND E.e_fi_fk = FI.fi_pk AND E.e_fii_fk0 = FII.fii_pk0 " +
+                        "AND E.e_fii_fk1 = FII.fii_pk1",
+
         };
         String sqlFmt = "select %s from %s where %s %s";
         for (Object[] tc : testCases) {
@@ -472,12 +484,8 @@ public class TablePruningTest extends TablePruningTestBase {
             int rboNumHashJoins = (Integer) tc[2];
             int finalNmHashJoins = (Integer) tc[3];
 
-            for (int i = 0; i < 10; ++i) {
-                String fromClause =
-                        tables.stream().sorted((a, b) -> new Random().nextInt(3) - 1)
-                                .collect(Collectors.joining(",\n"));
-                String whereClause = predicates.stream().sorted((a, b) -> new Random().nextInt(3) - 1)
-                        .collect(Collectors.joining("\nAND "));
+            for (String whereClause : whereClauses) {
+                String fromClause = tables.stream().collect(Collectors.joining(",\n"));
                 String sql = String.format(sqlFmt, selectItems, fromClause, whereClause, extraLimit);
                 checkHashJoinCountWithBothRBOAndCBOLessThan(sql, 12);
             }
@@ -852,14 +860,20 @@ public class TablePruningTest extends TablePruningTestBase {
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 10  PROPERTIES (\"replication_num\" = \"1\");";
         starRocksAssert.withTable(tabAA);
         starRocksAssert.withTable(tabBB);
-        starRocksAssert.alterTableProperties(
-                "alter table AA set(\"foreign_key_constraints\" = \"(b_id) REFERENCES BB(id)\");");
-        String sql = "select AA.b_id, BB.id from AA inner join BB on AA.b_id = BB.id";
-        ctx.getSessionVariable().setEnableCboTablePrune(true);
-        String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-        Assertions.assertTrue(plan.contains("CLONE"), plan);
-        starRocksAssert.dropTable("AA");
-        starRocksAssert.dropTable("BB");
+        final boolean prev = ctx.getSessionVariable().isEnableGlobalLateMaterialization();
+        try {
+            starRocksAssert.alterTableProperties(
+                    "alter table AA set(\"foreign_key_constraints\" = \"(b_id) REFERENCES BB(id)\");");
+            String sql = "select AA.b_id, BB.id from AA inner join BB on AA.b_id = BB.id";
+            ctx.getSessionVariable().setEnableCboTablePrune(true);
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
+            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            Assertions.assertTrue(plan.contains("CLONE"), plan);
+        } finally {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(prev);
+            starRocksAssert.dropTable("AA");
+            starRocksAssert.dropTable("BB");
+        }
     }
 
     @Test
@@ -883,15 +897,22 @@ public class TablePruningTest extends TablePruningTestBase {
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 10  PROPERTIES (\"replication_num\" = \"1\");";
         starRocksAssert.withTable(tabAA);
         starRocksAssert.withTable(tabBB);
-        starRocksAssert.alterTableProperties(
-                "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id)\");");
-        final String sql = "select AA.id2, BB.id from AA inner join BB on AA.id2 = BB.id";
-        final String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+        final boolean prev = ctx.getSessionVariable().isEnableGlobalLateMaterialization();
+        try {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
+            starRocksAssert.alterTableProperties(
+                    "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id)\");");
+            final String sql = "select AA.id2, BB.id from AA inner join BB on AA.id2 = BB.id";
+            final String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
 
-        PlanTestBase.assertNotContains(plan, "BB");
-        PlanTestBase.assertContains(plan, "CLONE");
-        starRocksAssert.dropTable("AA");
-        starRocksAssert.dropTable("BB");
+            PlanTestBase.assertNotContains(plan, "BB");
+            PlanTestBase.assertContains(plan, "CLONE");
+        } finally {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(prev);
+            starRocksAssert.dropTable("AA");
+            starRocksAssert.dropTable("BB");
+        }
     }
 
     @Test
@@ -929,23 +950,31 @@ public class TablePruningTest extends TablePruningTestBase {
         // add non primary key foreign key constraints should be ok
         starRocksAssert.alterTableProperties(
                 "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id2)\");");
-        // test table prune with non-primary keys
-        {
-            final String sql = "select AA.id2, BB.id2 from AA inner join BB on AA.id2 = BB.id2";
-            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-            PlanTestBase.assertNotContains(plan, "BB");
-            PlanTestBase.assertContains(plan, "CLONE");
+        final boolean prev = ctx.getSessionVariable().isEnableGlobalLateMaterialization();
+
+        try {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
+            // test table prune with non-primary keys
+            {
+                final String sql = "select AA.id2, BB.id2 from AA inner join BB on AA.id2 = BB.id2";
+                String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+                PlanTestBase.assertNotContains(plan, "BB");
+                PlanTestBase.assertContains(plan, "CLONE");
+            }
+
+            // test not table prune with non-fks
+            {
+                String sql = "select AA.id, BB.id from AA inner join BB on AA.id = BB.id";
+                String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+                PlanTestBase.assertContains(plan, "BB");
+                PlanTestBase.assertNotContains(plan, "CLONE");
+            }
+        } finally {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(prev);
+            starRocksAssert.dropTable("AA");
+            starRocksAssert.dropTable("BB");
         }
 
-        // test not table prune with non-fks
-        {
-            String sql = "select AA.id, BB.id from AA inner join BB on AA.id = BB.id";
-            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-            PlanTestBase.assertContains(plan, "BB");
-            PlanTestBase.assertNotContains(plan, "CLONE");
-        }
-        starRocksAssert.dropTable("AA");
-        starRocksAssert.dropTable("BB");
     }
 
     @Test

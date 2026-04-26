@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerDefault() throws Exception {
+        Tracers.close();
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();

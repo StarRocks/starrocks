@@ -90,7 +90,7 @@ public class CompactionScheduler extends Daemon {
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
                         @NotNull String disableIdsStr) {
-        super("COMPACTION_DISPATCH", LOOP_INTERVAL_MS);
+        super("compaction-dispatch", LOOP_INTERVAL_MS);
         this.compactionManager = compactionManager;
         this.systemInfoService = systemInfoService;
         this.transactionMgr = transactionMgr;
@@ -337,7 +337,7 @@ public class CompactionScheduler extends Daemon {
 
             // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
             // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
-            txnId = beginTransaction(partitionIdentifier, info.computeResource);
+            txnId = beginTransaction(partitionIdentifier, partition, info.computeResource);
 
             partition.setMinRetainVersion(currentVersion);
 
@@ -357,13 +357,13 @@ public class CompactionScheduler extends Daemon {
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
-                        partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId());
+                        partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId(), table);
                 task.sendRequest();
                 job.setAggregateTask(task);
                 LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
-                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
+                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(), table);
                 for (CompactionTask task : tasks) {
                     task.sendRequest();
                 }
@@ -385,9 +385,14 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
+            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, OlapTable table)
             throws StarRocksException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
+
+        // Get parallel compaction configuration from table property
+        // maxParallel > 0 means parallel compaction is enabled
+        int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
+
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
@@ -405,6 +410,18 @@ public class CompactionScheduler extends Daemon {
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
 
+            // Set parallel compaction configuration if enabled via table property
+            // maxParallel > 0 means parallel compaction is enabled
+            if (maxParallel > 0) {
+                com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
+                parallelConfig.enableParallel = true;
+                parallelConfig.maxParallelPerTablet = maxParallel;
+                // maxBytesPerSubtask is controlled by BE config lake_compaction_max_bytes_per_subtask
+                // Set to 0 to let BE use its own config
+                parallelConfig.maxBytesPerSubtask = 0L;
+                request.parallelConfig = parallelConfig;
+            }
+
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
         }
@@ -413,19 +430,30 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private CompactionTask createAggregateCompactionTask(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource, long partitionId)
-            throws StarRocksException, RpcException {
+            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource, long partitionId,
+            OlapTable table) throws StarRocksException, RpcException {
         // 1. build AggregateCompactRequest
         AggregateCompactRequest aggRequest = new AggregateCompactRequest();
         aggRequest.requests = Lists.newArrayList();
         aggRequest.computeNodes = Lists.newArrayList();
         aggRequest.partitionId = partitionId;
 
+        // Get parallel compaction configuration from table property
+        // maxParallel > 0 means parallel compaction is enabled
+        int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
+
+        // Track the candidate aggregator nodes (those that actually own tablets in the
+        // batch). We prefer one of them as aggregator so the BE side can resolve the
+        // first tablet id locally through the staros worker cache when deriving the
+        // combined_txn_log / bundle_tablet_metadata file path.
+        List<ComputeNode> candidateAggregatorNodes = Lists.newArrayList();
+
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
                 throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
             }
+            candidateAggregatorNodes.add(node);
             ComputeNodePB nodePB = new ComputeNodePB();
             nodePB.setHost(node.getHost());
             nodePB.setBrpcPort(node.getBrpcPort());
@@ -441,14 +469,24 @@ public class CompactionScheduler extends Daemon {
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             request.skipWriteTxnlog = true;
 
+            // Set parallel compaction configuration if enabled via table property
+            // maxParallel > 0 means parallel compaction is enabled
+            if (maxParallel > 0) {
+                com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
+                parallelConfig.enableParallel = true;
+                parallelConfig.maxParallelPerTablet = maxParallel;
+                // maxBytesPerSubtask is controlled by BE config lake_compaction_max_bytes_per_subtask
+                // Set to 0 to let BE use its own config
+                parallelConfig.maxBytesPerSubtask = 0L;
+                request.parallelConfig = parallelConfig;
+            }
+
             aggRequest.requests.add(request);
             aggRequest.computeNodes.add(nodePB);
         }
 
-        // 2. pick aggregator node and build lake serivce
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        LakeAggregator aggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
+        // 2. pick aggregator node and build lake service
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }
@@ -460,7 +498,7 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition, ComputeResource computeResource) {
-        List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        List<MaterializedIndex> visibleIndexes = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -478,8 +516,9 @@ public class CompactionScheduler extends Daemon {
         return beToTablets;
     }
 
-    // REQUIRE: has acquired the exclusive lock of Database.
-    protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource)
+    // REQUIRE: has acquired the read lock of Database.
+    protected long beginTransaction(PartitionIdentifier partition, PhysicalPartition physicalPartition,
+            ComputeResource computeResource)
             throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
@@ -490,8 +529,21 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
 
-        return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
+        long txnId = transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
                 loadJobSourceType, Config.lake_compaction_default_timeout_second, computeResource);
+
+        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // not the latest (which may change due to tablet split).
+        TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
+        if (txnState != null) {
+            List<Long> indexIds = physicalPartition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)
+                    .stream().map(MaterializedIndex::getId)
+                    .collect(Collectors.toList());
+            txnState.addPartitionLoadedIndexes(tableId, physicalPartition.getId(), indexIds);
+        }
+
+        return txnId;
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)

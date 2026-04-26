@@ -36,6 +36,7 @@ OPTS=$(getopt \
     -l numa: \
     -l 'check_mem_leak' \
     -l 'jemalloc_debug' \
+    -l 'enable-profile:' \
 -- "$@")
 
 eval set -- "$OPTS"
@@ -48,6 +49,7 @@ RUN_LOG_CONSOLE=0
 RUN_META_TOOL=0
 RUN_CHECK_MEM_LEAK=0
 RUN_JEMALLOC_DEBUG=0
+ENABLE_PROFILE=0
 
 while true; do
     case "$1" in
@@ -59,6 +61,7 @@ while true; do
         --meta_tool) RUN_META_TOOL=1 ; shift ;;
         --check_mem_leak) RUN_CHECK_MEM_LEAK=1 ; shift ;;
         --jemalloc_debug) RUN_JEMALLOC_DEBUG=1 ; shift ;;
+        --enable-profile) ENABLE_PROFILE=$2 ; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -81,24 +84,6 @@ fi
 
 if [ $? -ne 0 ]; then
     exit 1
-fi
-
-# enable jemalloc
-JEMALLOC_LIB=$STARROCKS_HOME/lib/libjemalloc.so
-ln -s -f $STARROCKS_HOME/lib/libjemalloc.so.2 $JEMALLOC_LIB
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
-
-# Set JEMALLOC_CONF environment variable if not already set
-if [[ -z "$JEMALLOC_CONF" ]]; then
-    # JEMALLOC enable DEBUG 
-    if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
-        ln -s -f $STARROCKS_HOME/lib/libjemalloc-dbg.so.2 $JEMALLOC_LIB
-        export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
-    elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
-        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
-    else
-        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
-    fi
 fi
 
 # enable coredump when BE build with ASAN
@@ -159,6 +144,27 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 
 # ================= native section =====================
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+
+
+# ================= jemalloc section =====================
+# Enable jemalloc and set LD_LIBRARY_PATH based on mode
+# Note: This must come after other LD_LIBRARY_PATH configuration to ensure jemalloc paths take precedence
+if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc-dbg:$LD_LIBRARY_PATH
+else
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc:$LD_LIBRARY_PATH
+fi
+
+# Set JEMALLOC_CONF environment variable if not already set
+if [[ -z "$JEMALLOC_CONF" ]]; then
+    if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
+        export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
+    elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
+    else
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+    fi
+fi
 
 
 # ====== handle meta_tool sub command before any modification change
@@ -227,6 +233,11 @@ echo "Run with JEMALLOC_CONF: '$JEMALLOC_CONF'"
 
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${START_BE_CMD} "$@" </dev/null &
+    
+    if [ ${ENABLE_PROFILE} -eq 1 ]; then
+        ${STARROCKS_HOME}/bin/collect_be_profile.sh --daemon
+        echo "Profile collection daemon started"
+    fi
 else
     exec ${START_BE_CMD} "$@" </dev/null
 fi

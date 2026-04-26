@@ -16,6 +16,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/string/array_view.hpp"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -24,7 +25,6 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
-#include "util/array_view.hpp"
 
 namespace starrocks {
 
@@ -293,7 +293,7 @@ Status MergeCursorsCascade::consume_all_with_limit(const ChunkConsumer& consumer
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
                                    std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output) {
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
-    return merger.consume_all(std::move(output));
+    return merger.consume_all(output);
 }
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
@@ -302,7 +302,7 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());
-    return merger.consume_all(std::move(consumer));
+    return merger.consume_all(consumer);
 }
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
@@ -311,7 +311,7 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());
-    return merger.consume_all_with_limit(std::move(consumer), limit);
+    return merger.consume_all_with_limit(consumer, limit);
 }
 
 } // namespace starrocks

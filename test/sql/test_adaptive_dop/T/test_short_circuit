@@ -241,3 +241,7 @@ from
     join w_empty tt6 on tt1.k1=tt6.k1;
 
 ADMIN DISABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
+
+CLEANUP {
+    ADMIN DISABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
+} END CLEANUP

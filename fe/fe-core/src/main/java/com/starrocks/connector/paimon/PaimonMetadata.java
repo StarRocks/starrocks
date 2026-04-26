@@ -19,17 +19,25 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrDeltaStats;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
@@ -41,14 +49,25 @@ import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.KeyPartitionRef;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.CoreOptions;
+import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
@@ -62,6 +81,8 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.stats.ColStats;
+import org.apache.paimon.table.DataTable;
+import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
@@ -74,13 +95,21 @@ import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.PartitionPathUtils;
+import org.apache.paimon.utils.SnapshotManager;
+import org.apache.paimon.utils.StringUtils;
+import org.apache.paimon.utils.TagManager;
+import org.apache.paimon.view.View;
+import org.apache.paimon.view.ViewImpl;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -91,11 +120,13 @@ import java.util.stream.Collectors;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
+import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
 
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
 
     public static final String PAIMON_PARTITION_NULL_VALUE = "null";
+    private static final String VIEW_DIALECTS_KEY = "starrocks";
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
@@ -103,7 +134,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
-    private final Map<String, Partition> partitionInfos = new ConcurrentHashMap<>();
+    private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
+    private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -126,9 +158,50 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
         try {
-            return paimonNativeCatalog.listTables(dbName);
+            List<String> tableIdentifiers = paimonNativeCatalog.listTables(dbName);
+            List<String> viewIdentifiers = paimonNativeCatalog.listViews(dbName);
+            if (!viewIdentifiers.isEmpty()) {
+                tableIdentifiers.addAll(viewIdentifiers);
+            }
+            return tableIdentifiers;
         } catch (Catalog.DatabaseNotExistException e) {
             throw new StarRocksConnectorException("Database %s not exists", dbName);
+        }
+    }
+
+    @Override
+    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String viewName = stmt.getTable();
+        String viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt).getInlineViewDef();
+        RowType rowType = ColumnTypeConverter.toPaimonRowType(stmt.getColumns());
+        Identifier identifier = new org.apache.paimon.catalog.Identifier(dbName, viewName);
+        Map<String, String> dialects = new HashMap<>(1);
+        dialects.put(VIEW_DIALECTS_KEY, viewDefinition);
+        View view = new ViewImpl(identifier, rowType.getFields(), viewDefinition, dialects, stmt.getComment(), new HashMap<>());
+        try {
+            paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isSetIfNotExists());
+        } catch (Catalog.ViewAlreadyExistException | Catalog.DatabaseNotExistException e) {
+            throw new DdlException("Paimon createView error: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        Table paimonTable = getTable(context, stmt.getDbName(), stmt.getTableName());
+        if (paimonTable == null) {
+            return;
+        }
+        try {
+            if (paimonTable.isPaimonView()) {
+                paimonNativeCatalog.dropView(new Identifier(dbName, tableName), stmt.isForceDrop());
+                return;
+            }
+            paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
+        } catch (Exception e) {
+            throw new DdlException("Paimon error: " + e.getMessage(), e);
         }
     }
 
@@ -136,6 +209,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         Identifier identifier = new Identifier(databaseName, tableName);
         org.apache.paimon.table.Table paimonTable;
         RowType dataTableRowType;
+        if (!this.partitionInfos.containsKey(identifier)) {
+            this.partitionInfos.put(identifier, new ConcurrentHashMap<>());
+        }
         try {
             paimonTable = this.paimonNativeCatalog.getTable(identifier);
             dataTableRowType = paimonTable.rowType();
@@ -154,29 +230,31 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
+            boolean partitionLegacyName = getPartitionLegacyName(paimonTable);
             for (org.apache.paimon.partition.Partition partition : partitions) {
                 String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
-                String[] partitionValues = Arrays.stream(partitionPath.split("/"))
-                        .map(part -> part.split("=")[1])
-                        .toArray(String[]::new);
-                Partition srPartition = getPartition(partition.recordCount(),
-                        partition.fileSizeInBytes(), partition.fileCount(),
-                        partitionColumnNames, partitionColumnTypes, partitionValues,
-                        Timestamp.fromEpochMillis(partition.lastFileCreationTime()));
-                this.partitionInfos.put(srPartition.getPartitionName(), srPartition);
+                String[] partitionValues =
+                        Arrays.stream(partitionPath.split("/")).map(part -> part.split("=")[1]).toArray(String[]::new);
+                Partition srPartition =
+                        getPartition(partition, partitionColumnNames, partitionColumnTypes, partitionValues, partitionLegacyName);
+                this.partitionInfos.get(identifier).put(srPartition.getPartitionName(), srPartition);
             }
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
         }
     }
 
-    private Partition getPartition(Long recordCount,
-                                   Long fileSizeInBytes,
-                                   Long fileCount,
+    private boolean getPartitionLegacyName(org.apache.paimon.table.Table paimonTable) {
+        String partitionLegacyName = paimonTable.options().get(CoreOptions.PARTITION_GENERATE_LEGACY_NAME.key());
+        //If the user does not explicitly set this option, the result is null,but its default value is true.
+        return StringUtils.isEmpty(partitionLegacyName) || Boolean.parseBoolean(partitionLegacyName);
+    }
+
+    private Partition getPartition(org.apache.paimon.partition.Partition partition,
                                    List<String> partitionColumnNames,
                                    List<DataType> partitionColumnTypes,
                                    String[] partitionValues,
-                                   Timestamp lastUpdateTime) {
+                                   boolean partitionLegacyName) {
         if (partitionValues.length != partitionColumnNames.size()) {
             String errorMsg = String.format("The length of partitionValues %s is not equal to " +
                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
@@ -187,7 +265,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (int i = 0; i < partitionValues.length; i++) {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
-            if (partitionColumnTypes.get(i) instanceof DateType) {
+            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName) {
                 value = DateTimeUtils.formatDate(Integer.parseInt(value));
             }
             sb.append(column).append("=").append(value);
@@ -195,9 +273,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         sb.deleteCharAt(sb.length() - 1);
         String partitionName = sb.toString();
-
+        Timestamp lastUpdateTime = Timestamp.fromEpochMillis(partition.lastFileCreationTime());
         return new Partition(partitionName, convertToSystemDefaultTime(lastUpdateTime),
-                recordCount, fileSizeInBytes, fileCount);
+                partition.recordCount(), partition.fileSizeInBytes(), partition.fileCount());
     }
 
     private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
@@ -208,9 +286,14 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
+        Identifier identifier = new Identifier(databaseName, tableName);
         updatePartitionInfo(databaseName, tableName);
-        return new ArrayList<>(this.partitionInfos.keySet());
+        if (this.partitionInfos.get(identifier) == null) {
+            return Lists.newArrayList();
+        }
+        return new ArrayList<>(this.partitionInfos.get(identifier).keySet());
     }
 
     @Override
@@ -241,17 +324,10 @@ public class PaimonMetadata implements ConnectorMetadata {
             paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Paimon table {}.{} does not exist.", dbName, tblName, e);
-            return null;
+            return getView(dbName, tblName);
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
-        ArrayList<Column> fullSchema = new ArrayList<>(fields.size());
-        for (DataField field : fields) {
-            String fieldName = field.name();
-            DataType type = field.type();
-            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true, field.description());
-            fullSchema.add(column);
-        }
+        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {
             comment = paimonNativeTable.comment().get();
@@ -260,6 +336,162 @@ public class PaimonMetadata implements ConnectorMetadata {
         table.setComment(comment);
         tables.put(identifier, table);
         return table;
+    }
+
+    public Table getView(String dbName, String viewName) {
+        Identifier identifier = new Identifier(dbName, viewName);
+        if (tables.containsKey(identifier)) {
+            return tables.get(identifier);
+        }
+        org.apache.paimon.view.View paimonNativeView;
+        try {
+            paimonNativeView = paimonNativeCatalog.getView(new Identifier(dbName, viewName));
+        } catch (Catalog.ViewNotExistException e) {
+            LOG.error("Paimon view {}.{} does not exist.", dbName, viewName, e);
+            return null;
+        }
+        PaimonView view = getPaimonView(this.catalogName, dbName, viewName, paimonNativeView);
+        tables.put(identifier, view);
+        return view;
+    }
+
+    private PaimonView getPaimonView(String catalogName, String dbName, String viewName, View paimonNativeView) {
+        List<DataField> fields = paimonNativeView.rowType().getFields();
+        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
+        String comment = "";
+        Optional<String> commentOptional = paimonNativeView.comment();
+        if (commentOptional.isPresent()) {
+            comment = commentOptional.get();
+        }
+        String query;
+        if (paimonNativeView.dialects().containsKey(VIEW_DIALECTS_KEY)) {
+            query = paimonNativeView.dialects().get(VIEW_DIALECTS_KEY);
+        } else {
+            query = paimonNativeView.query();
+        }
+        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                catalogName, dbName, viewName, fullSchema, query);
+        view.setComment(comment);
+        return view;
+    }
+
+    @Override
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
+        PaimonTable paimonTable = (PaimonTable) table;
+        Optional<Long> start = startVersion.map(v -> getSnapshotIdFromVersion(paimonTable.getNativeTable(), v));
+        Optional<Long> end = endVersion.map(v -> getSnapshotIdFromVersion(paimonTable.getNativeTable(), v));
+        if (start.isEmpty() && end.isEmpty()) {
+            long snapshotId = -1L;
+            try {
+                if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
+                    snapshotId = paimonTable.getNativeTable().latestSnapshot().get().id();
+                }
+            } catch (Exception e) {
+                // System table does not have snapshotId, ignore it.
+                LOG.warn("Cannot get snapshot because {}", e.getMessage());
+            }
+            return TvrTableSnapshot.of(Optional.of(snapshotId));
+        } else {
+            return TvrTableDelta.of(start, end);
+        }
+    }
+
+    public long getSnapshotIdFromVersion(org.apache.paimon.table.Table table, ConnectorTableVersion version) {
+        switch (version.getPointerType()) {
+            case TEMPORAL: //specify timestamp
+                return getSnapshotIdFromTemporalVersion(table, version.getConstantOperator());
+            case VERSION: //specify snapshotId、branch、tag
+                return getTargetSnapshotIdFromVersion(table, version.getConstantOperator());
+            case UNKNOWN:
+            default:
+                throw new StarRocksConnectorException("Unknown version type %s", version.getPointerType());
+        }
+    }
+
+    private long getSnapshotIdFromTemporalVersion(org.apache.paimon.table.Table table, ConstantOperator version) {
+        long snapshotId = -1L;
+        try {
+            if (version.getType() != com.starrocks.type.DateType.DATETIME &&
+                    version.getType() != com.starrocks.type.DateType.DATE &&
+                    version.getType() != com.starrocks.type.VarcharType.VARCHAR) {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.type.DateType.DATETIME);
+            if (timestampVersion.isEmpty()) {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+            LocalDateTime time = timestampVersion.get().getDatetime();
+            long epochMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+            SnapshotManager snapshotManager = ((DataTable) table).snapshotManager();
+            Snapshot snapshot = snapshotManager.earlierOrEqualTimeMills(epochMillis);
+            if (snapshot != null) {
+                snapshotId = snapshot.id();
+            } else {
+                throw new StarRocksConnectorException("No version history table %s at or before %s",
+                        table.fullName(), time);
+            }
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Invalid temporal version [%s]", version, e);
+        }
+        return snapshotId;
+    }
+
+    private long getTargetSnapshotIdFromVersion(org.apache.paimon.table.Table table, ConstantOperator version) {
+        long snapshotId = -1L;
+        //specify snapshotId
+        if (version.getType() == com.starrocks.type.IntegerType.TINYINT ||
+                version.getType() == com.starrocks.type.IntegerType.SMALLINT ||
+                version.getType() == com.starrocks.type.IntegerType.INT ||
+                version.getType() == com.starrocks.type.IntegerType.BIGINT) {
+            snapshotId = version.castTo(com.starrocks.type.IntegerType.BIGINT).get().getBigint();
+            if (!((DataTable) table).snapshotManager().snapshotExists(snapshotId)) {
+                throw new StarRocksConnectorException("%s does not include snapshot: %s",
+                        table.fullName(), snapshotId);
+            }
+            //specify branch、tag
+        } else if (version.getType() == com.starrocks.type.VarcharType.VARCHAR) {
+            String refName = version.getVarchar().toLowerCase();
+            String[] refNameParts = refName.split(":");
+            org.apache.paimon.table.Table paimonTable;
+            if (refNameParts.length == 2 &&
+                    (refNameParts[0].equals("branch") || refNameParts[0].equals("tag"))) {
+                if (refNameParts[0].equals("branch")) {
+                    //if branch, format like branch:b_1, return the latest snapshot of the branch
+                    String[] tableFullName = table.fullName().split("\\.");
+                    Identifier identifier = new Identifier(tableFullName[0], tableFullName[1], refNameParts[1]);
+                    branch.set(identifier.getBranchNameOrDefault());
+                    try {
+                        paimonTable = paimonNativeCatalog.getTable(identifier);
+                    } catch (Catalog.TableNotExistException e) {
+                        throw new StarRocksConnectorException("%s does not include branch: %s",
+                                table.fullName(), refNameParts[1]);
+                    }
+                    snapshotId = paimonTable.latestSnapshot().isPresent() ? paimonTable.latestSnapshot().get().id() : -1L;
+                } else {
+                    //if tag, format like tag:t_1, return the snapshot that the tag referenced
+                    TagManager tagManager =  ((DataTable) table).tagManager();
+                    if (!tagManager.tagExists(refNameParts[1])) {
+                        throw new StarRocksConnectorException("%s does not include tag: %s",
+                                table.fullName(), refNameParts[1]);
+                    }
+                    snapshotId = tagManager.tagObjects().stream()
+                            .filter(p -> p.getValue().equals(refNameParts[1]))
+                            .map(p -> p.getKey().id())
+                            .findFirst()
+                            .get();
+                }
+            } else {
+                throw new StarRocksConnectorException("Please input correct format like branch:branch_name or tag:tag_name");
+            }
+        } else {
+            throw new StarRocksConnectorException("Unsupported type for table version: " + version);
+        }
+
+        return snapshotId;
     }
 
     @Override
@@ -273,34 +505,145 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        PaimonTable paimonTable = (PaimonTable) table;
+        Optional<Long> snapshotId = paimonTable.getNativeTable().latestSnapshot().map(snapshot -> snapshot.id());
+        return TvrTableSnapshot.of(snapshotId);
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        if (fromSnapshotExclusive.equals(toSnapshotInclusive)) {
+            return Collections.emptyList();
+        }
+        // fromSnapshotExclusive can be empty, but toSnapshotInclusive must have a valid snapshot ID
+        final long fromSnapshotIdExclusive = fromSnapshotExclusive.getSnapshotId();
+        final long toSnapshotIdInclusive =
+                toSnapshotInclusive.end().orElseThrow(() -> new StarRocksConnectorException(
+                        "toSnapshotInclusive must have a valid snapshot ID"));
+        final PaimonTable paimonTable = (PaimonTable) table;
+        final org.apache.paimon.table.Table paimonNativeTable = paimonTable.getNativeTable();
+        if (paimonNativeTable instanceof org.apache.paimon.table.DataTable) {
+            org.apache.paimon.table.DataTable paimonDataTable = (org.apache.paimon.table.DataTable) paimonNativeTable;
+            SnapshotManager snapshotManager = new SnapshotManager(paimonNativeTable.fileIO(),
+                    paimonDataTable.location(), null, null, null);
+            // the result is ensured to sort by snapshot id
+            Iterator<Snapshot> iterator = snapshotManager.snapshotsWithinRange(
+                    Optional.of(toSnapshotIdInclusive),
+                    Optional.of(fromSnapshotIdExclusive)
+            );
+            List<TvrTableDeltaTrait> result = new ArrayList<>();
+            Snapshot lastSnapshot = null;
+            while (iterator.hasNext()) {
+                Snapshot currentSnapshot = iterator.next();
+                if (lastSnapshot != null) {
+                    long lastRecordCount = lastSnapshot.totalRecordCount();
+                    long currentRecordCount = currentSnapshot.totalRecordCount();
+                    long deltaRecordCount = currentRecordCount - lastRecordCount;
+                    TvrTableDelta delta = TvrTableDelta.of(lastSnapshot.id(), currentSnapshot.id());
+                    TvrDeltaStats stats = TvrDeltaStats.of(deltaRecordCount, 0L);
+                    if (currentSnapshot.commitKind() == Snapshot.CommitKind.APPEND) {
+                        result.add(TvrTableDeltaTrait.ofMonotonic(delta, stats));
+                    } else {
+                        result.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
+                    }
+                } else {
+                    // if start snapshot is min, add it into result
+                    if (fromSnapshotExclusive.isEmpty()) {
+                        long currentRecordCount = currentSnapshot.totalRecordCount();
+                        TvrTableDelta delta = TvrTableDelta.of(fromSnapshotIdExclusive, currentSnapshot.id());
+                        TvrDeltaStats stats = TvrDeltaStats.of(currentRecordCount, 0L);
+                        if (currentSnapshot.commitKind() == Snapshot.CommitKind.APPEND) {
+                            result.add(TvrTableDeltaTrait.ofMonotonic(delta, stats));
+                        } else {
+                            result.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
+                        }
+                    } else {
+                        // ensure this snapshot id is equal to from
+                        if (currentSnapshot.id() != fromSnapshotIdExclusive) {
+                            throw new SemanticException(String.format("Expect from snapshot id:%s, but got:%s",
+                                    fromSnapshotIdExclusive, currentSnapshot.id()));
+                        }
+                    }
+                }
+                lastSnapshot = currentSnapshot;
+            }
+            return result;
+        } else {
+            throw new SemanticException("Incremental read unsupported table type: " + paimonNativeTable.getClass());
+        }
+    }
+
+    /**
+     * If tvrVersionRange is present, build an incremental scan from start snapshot to end snapshot.
+     * @param nativeTable paimon native table
+     * @param tvrVersionRange input tvrVersionRange
+     * @return a native paimon table with
+     */
+    private org.apache.paimon.table.Table getNativeTable(org.apache.paimon.table.Table nativeTable,
+                                                         TvrVersionRange tvrVersionRange) {
+        Map<String, String> dynamicOptions = new HashMap<>();
+        if (tvrVersionRange != null && tvrVersionRange.start().isPresent()
+                && tvrVersionRange.end().isPresent()) {
+            // Build dynamic options for incremental-between
+            TvrTableDelta tableDelta = (TvrTableDelta) tvrVersionRange;
+            long startSnapshotId = tableDelta.start().get();
+            long endSnapshotId = tableDelta.end().get();
+            dynamicOptions.put("incremental-between", startSnapshotId + "," + endSnapshotId);
+            dynamicOptions.put("incremental-between-scan-mode", "auto");
+        }
+        return nativeTable.copy(dynamicOptions);
+    }
+
+    @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
-        long latestSnapshotId = -1L;
-        try {
-            if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
-                latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+        long snapshotId = -1L;
+        String currentBranch = branch.get();
+        branch.remove();
+        Identifier identifier = new Identifier(paimonTable.getCatalogDBName(),
+                paimonTable.getCatalogTableName(), currentBranch);
+        if (!new Identifier(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName()).isSystemTable()) {
+            try {
+                paimonTable.setPaimonNativeTable(paimonNativeCatalog.getTable(identifier));
+            } catch (Catalog.TableNotExistException e) {
+                throw new StarRocksConnectorException("%s does not include branch: %s",
+                        paimonTable.getCatalogTableName(), currentBranch);
             }
-        } catch (Exception e) {
-            // System table does not have snapshotId, ignore it.
-            LOG.warn("Cannot get snapshot because {}", e.getMessage());
         }
+        TvrVersionRange tvrVersionRange = params.getTableVersionRange();
+        snapshotId = tvrVersionRange.end().isPresent() ? tvrVersionRange.end().get() : -1L;
+
+        Map<String, String> options = new HashMap<>();
+        options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+
+        org.apache.paimon.table.Table paimonNativeTable = getNativeTable(paimonTable.getNativeTable(),
+                tvrVersionRange).copy(options);
+
+        GetRemoteFilesParams copyParams = params.copy();
+        copyParams.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
+
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
-                paimonTable.getCatalogTableName(), latestSnapshotId, params.getPredicate());
+                paimonTable.getCatalogTableName(), copyParams);
+
         if (!paimonSplits.containsKey(filter)) {
-            ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
+            ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
                     && onlyHasPartitionPredicate(table, params.getPredicate());
             readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
+
             if (pruneManifestsByLimit) {
                 readBuilder = readBuilder.withLimit((int) params.getLimit());
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
-            List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
+            List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
@@ -386,13 +729,13 @@ public class PaimonMetadata implements ConnectorMetadata {
 
             Statistics.Builder builder = Statistics.builder();
             if (!session.getSessionVariable().enablePaimonColumnStatistics()) {
-                return defaultStatistics(columns, table, predicate, limit);
+                return defaultStatistics(columns, table, predicate, limit, versionRange);
             }
-            org.apache.paimon.table.Table nativeTable = ((PaimonTable) table).getNativeTable();
+            org.apache.paimon.table.Table nativeTable = getNativeTable(((PaimonTable) table).getNativeTable(), versionRange);
             Optional<org.apache.paimon.stats.Statistics> statistics = nativeTable.statistics();
             if (!statistics.isPresent() || statistics.get().colStats() == null
                     || !statistics.get().mergedRecordCount().isPresent()) {
-                return defaultStatistics(columns, table, predicate, limit);
+                return defaultStatistics(columns, table, predicate, limit, versionRange);
             }
             long rowCount = statistics.get().mergedRecordCount().getAsLong();
             builder.setOutputRowCount(rowCount);
@@ -405,14 +748,15 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     private Statistics defaultStatistics(Map<ColumnRefOperator, Column> columns, Table table, ScalarOperator predicate,
-                                         long limit) {
+                                         long limit, TvrVersionRange versionRange) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
         GetRemoteFilesParams params =
-                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate)
+                        .setTableVersionRange(versionRange).setFieldNames(fieldNames).setLimit(limit).build();
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
@@ -425,7 +769,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         return builder.build();
 
     }
-
 
     private ColumnStatistic buildColumnStatistic(Column column, Map<String, ColStats<?>> colStatsMap,
                                                  long rowCount) {
@@ -464,7 +807,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                 builder.setNullsFraction(0);
             }
 
-            builder.setAverageRowSize(colStats.nullCount().isPresent() ? colStats.nullCount().getAsLong() : 1);
+            builder.setAverageRowSize(colStats.avgLen().isPresent()
+                    ? colStats.avgLen().getAsLong() : column.getType().getTypeSize());
 
             if (colStats.distinctCount().isPresent()) {
                 builder.setDistinctValuesCount(colStats.distinctCount().getAsLong());
@@ -549,8 +893,94 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) {
+        String dbName = truncateTableStmt.getDbName();
+        String tableName = truncateTableStmt.getTblName();
+        Identifier identifier = new Identifier(dbName, tableName);
+
+        org.apache.paimon.table.Table paimonTable;
+        try {
+            paimonTable = paimonNativeCatalog.getTable(identifier);
+        } catch (Catalog.TableNotExistException e) {
+            throw new StarRocksConnectorException("Failed to truncate paimon table: %s.%s, table does not exist",
+                    dbName, tableName);
+        }
+
+        String user = context.getCurrentUserIdentity() != null
+                ? context.getCurrentUserIdentity().getUser() : "None";
+
+        LOG.info("Truncating paimon table: {}.{}, triggered by user: {}", dbName, tableName, user);
+
+        try (BatchTableCommit commit = paimonTable.newBatchWriteBuilder().newCommit()) {
+            if (truncateTableStmt instanceof TruncateTablePartitionStmt partitionStmt) {
+                if (paimonTable.partitionKeys().isEmpty()) {
+                    throw new StarRocksConnectorException("Table [%s.%s] is not partitioned, " +
+                            "cannot truncate partitions", dbName, tableName);
+                }
+
+                KeyPartitionRef partitionRef = partitionStmt.getKeyPartitionRef();
+                List<String> partitionColNames = partitionRef.getPartitionColNames();
+                List<String> tablePartitionKeys = paimonTable.partitionKeys();
+                
+                if (partitionColNames.stream().anyMatch(p -> !tablePartitionKeys.contains(p))) {
+                    throw new StarRocksConnectorException("Partition names in partition spec do not match " +
+                            "table partition columns for table [%s.%s]", dbName, tableName);
+                }
+
+                Map<String, String> partitionMap = buildPartitionMap(partitionRef);
+
+                if (partitionMap.isEmpty()) {
+                    throw new StarRocksConnectorException("Partition specification is empty for truncate operation");
+                }
+
+                commit.truncatePartitions(Collections.singletonList(partitionMap));
+                LOG.info("Successfully truncated partitions of paimon table: {}.{}, partitions: {}, user: {}",
+                        dbName, tableName, partitionMap, user);
+            } else {
+                commit.truncateTable();
+                LOG.info("Successfully truncated paimon table: {}.{}, user: {}", dbName, tableName, user);
+            }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("Failed to truncate paimon table: {}.{}", dbName, tableName, e);
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to truncate paimon table: {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException("Failed to truncate paimon table: %s.%s, error: %s",
+                    dbName, tableName, e.getMessage());
+        }
+
+        Table table = tables.get(identifier);
+        if (table != null) {
+            refreshTable(dbName, table, null, true);
+        }
+    }
+
+    private Map<String, String> buildPartitionMap(KeyPartitionRef partitionRef) {
+        Map<String, String> partitionMap = new HashMap<>();
+        List<String> partitionColNames = partitionRef.getPartitionColNames();
+        List<Expr> partitionColValues = partitionRef.getPartitionColValues();
+
+        for (int i = 0; i < partitionColNames.size(); i++) {
+            String colName = partitionColNames.get(i);
+            Expr valueExpr = partitionColValues.get(i);
+
+            if (!(valueExpr instanceof LiteralExpr)) {
+                throw new StarRocksConnectorException(
+                        "Partition value must be a literal expression, got: %s",
+                        valueExpr.getClass().getSimpleName());
+            }
+
+            String colValue = ((LiteralExpr) valueExpr).getStringValue();
+            partitionMap.put(colName, colValue);
+        }
+
+        return partitionMap;
+    }
+
+    @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         PaimonTable paimonTable = (PaimonTable) table;
+        Identifier identifier = new Identifier(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
         List<PartitionInfo> result = new ArrayList<>();
         if (table.isUnPartitioned()) {
 
@@ -559,12 +989,13 @@ public class PaimonMetadata implements ConnectorMetadata {
                     null, null));
             return result;
         }
+        Map<String, Partition> partitionInfo = this.partitionInfos.get(identifier);
         for (String partitionName : partitionNames) {
-            if (this.partitionInfos.get(partitionName) == null) {
+            if (partitionInfo == null || partitionInfo.get(partitionName) == null) {
                 this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
             }
-            if (this.partitionInfos.get(partitionName) != null) {
-                result.add(this.partitionInfos.get(partitionName));
+            if (partitionInfo.get(partitionName) != null) {
+                result.add(partitionInfo.get(partitionName));
             } else {
                 LOG.warn("Cannot find the paimon partition info: {}", partitionName);
             }

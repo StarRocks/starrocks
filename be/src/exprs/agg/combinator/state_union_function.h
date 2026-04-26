@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "base/bit/bit_util.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
@@ -41,13 +42,13 @@ public:
         DCHECK(_function != nullptr);
     }
 
-    ~StateUnionFunction() {
+    ~StateUnionFunction() override {
         if (_nested_ctx != nullptr) {
             delete _nested_ctx;
         }
     }
 
-    virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) override {
         _nested_ctx =
                 FunctionContext::create_context(context->state(), context->mem_pool(),
                                                 _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
@@ -72,7 +73,7 @@ public:
 
         auto chunk_size = columns[0]->size();
         auto align_size = _function->alignof_size();
-        auto state_size = align_to(_function->size(), align_size);
+        auto state_size = BitUtil::round_up(_function->size(), align_size);
         auto result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
         // allocate the agg_state
         AlignedMemoryGuard guard(align_size, state_size);
@@ -86,7 +87,7 @@ public:
             std::vector<Column*> data_columns;
             data_columns.reserve(new_columns.size());
             for (size_t i = 0; i < new_columns.size(); i++) {
-                data_columns.emplace_back(ColumnHelper::get_data_column(new_columns[i].get()));
+                data_columns.emplace_back(ColumnHelper::get_data_column(new_columns[i]->as_mutable_raw_ptr()));
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 _function->create(_nested_ctx, agg_state);

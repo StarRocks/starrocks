@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -27,6 +26,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
@@ -35,6 +35,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -87,7 +89,6 @@ public class UserVariable extends SetListItem {
         return isFromHint;
     }
 
-    @Override
     public String toSql() {
         return AstToSQLBuilder.toSQL(unevaluatedExpression);
     }
@@ -128,7 +129,7 @@ public class UserVariable extends SetListItem {
 
         // process null value
         if (lengthOffset == -1) {
-            return NullLiteral.create(Type.VARCHAR);
+            return NullLiteral.create(VarcharType.VARCHAR);
         }
 
         String value;
@@ -141,12 +142,12 @@ public class UserVariable extends SetListItem {
 
         //JSON type will be stored as string type
         if (targetType.isJsonType()) {
-            targetType = Type.VARCHAR;
+            targetType = VarcharType.VARCHAR;
         }
 
         if (targetType.isScalarType()) {
             try {
-                return LiteralExpr.create(value, targetType);
+                return LiteralExprFactory.create(value, targetType);
             } catch (AnalysisException e) {
                 throw new SemanticException("Unsupported string value: %s to type: %s", value, targetType);
             }

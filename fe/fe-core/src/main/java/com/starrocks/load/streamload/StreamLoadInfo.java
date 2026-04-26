@@ -17,6 +17,7 @@ package com.starrocks.load.streamload;
 import com.google.common.collect.Lists;
 import com.google.re2j.Pattern;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
@@ -30,12 +31,13 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -46,11 +48,10 @@ import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.List;
 import java.util.Optional;
-
-import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
 public class StreamLoadInfo {
 
@@ -64,6 +65,7 @@ public class StreamLoadInfo {
     private boolean stripOuterArray;
     private String jsonPaths;
     private String jsonRoot;
+    private TEnvelopeType envelope = TEnvelopeType.NONE;
 
     // optional
     private List<ImportColumnDesc> columnExprDescs = Lists.newArrayList();
@@ -235,6 +237,14 @@ public class StreamLoadInfo {
         this.jsonRoot = jsonRoot;
     }
 
+    public TEnvelopeType getEnvelope() {
+        return envelope;
+    }
+
+    public void setEnvelope(TEnvelopeType envelope) {
+        this.envelope = envelope;
+    }
+
     public boolean isPartialUpdate() {
         return partialUpdate;
     }
@@ -280,21 +290,19 @@ public class StreamLoadInfo {
     }
 
     public static StreamLoadInfo fromHttpStreamLoadRequest(
-            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params)
+            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params, CRAcquireContext acquireContext)
             throws StarRocksException {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
                 params.getFileType().orElse(TFileType.FILE_STREAM),
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
         streamLoadInfo.setOptionalFromStreamLoad(params);
-        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
 
         // acquire compute resource from warehouse
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
         streamLoadInfo.setComputeResource(computeResource);
         LOG.info("Acquired compute resource for stream load, warehouse: {}, resource: {}",
-                warehouseName, computeResource);
+                acquireContext.getWarehouseId(), computeResource);
 
         return streamLoadInfo;
     }
@@ -377,6 +385,23 @@ public class StreamLoadInfo {
             params.getStripOuterArray().ifPresent(value -> stripOuterArray = value);
         }
 
+        Optional<TEnvelopeType> envelopeOpt = params.getEnvelope();
+        if (envelopeOpt.isPresent() && envelopeOpt.get() != TEnvelopeType.NONE) {
+            if (formatType != TFileFormatType.FORMAT_JSON) {
+                throw new StarRocksException(
+                        StreamLoadHttpHeader.HTTP_ENVELOPE + " can only be specified when format is json");
+            }
+            if (!Strings.isNullOrEmpty(jsonRoot)) {
+                throw new StarRocksException(
+                        StreamLoadHttpHeader.HTTP_JSONROOT + " cannot be specified when envelope is set");
+            }
+            if (stripOuterArray) {
+                throw new StarRocksException(
+                        StreamLoadHttpHeader.HTTP_STRIP_OUTER_ARRAY + " cannot be specified when envelope is set");
+            }
+            envelope = envelopeOpt.get();
+        }
+
         params.getTransmissionCompressionType().ifPresent(
                 value -> compressionType = CompressionUtils.findTCompressionByName(value));
         params.getLoadDop().ifPresent(value -> loadParallelRequestNum = value);
@@ -433,6 +458,9 @@ public class StreamLoadInfo {
             jsonRoot = routineLoadJob.getJsonRoot();
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
+        if (routineLoadJob.getEnvelope().equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)) {
+            envelope = TEnvelopeType.DEBEZIUM;
+        }
         partialUpdate = routineLoadJob.isPartialUpdate();
         partialUpdateMode = TPartialUpdateMode.ROW_MODE;
         if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.EXEC_MEM_LIMIT)) {

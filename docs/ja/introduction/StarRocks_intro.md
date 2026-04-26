@@ -6,18 +6,18 @@ displayed_sidebar: docs
 
 import FeatureList from '/src/components/Features/index.js'
 
-StarRocks は次世代の高性能分析データウェアハウスであり、リアルタイムで多次元かつ高い同時実行性を持つデータ分析を可能にします。StarRocks は MPP アーキテクチャを持ち、完全にベクトル化された実行エンジン、リアルタイム更新をサポートする列指向（カラムナ）ストレージエンジンを備えており、完全にカスタマイズされたコストベースオプティマイザ (CBO)、インテリジェントなマテリアライズドビューなどの豊富な機能を搭載しています。StarRocks は、さまざまなデータソースからのリアルタイムおよびバッチデータ取り込みをサポートします。また、データレイクに保存されたデータをゼロデータ移行で直接分析することも可能です。
+StarRocks は、リアルタイム、多次元、および高度な並行データ分析を可能にする、次世代の高性能分析データウェアハウスです。StarRocks は MPP アーキテクチャを持ち、完全にベクトル化された実行エンジン、リアルタイム更新をサポートする列指向（カラムナ）ストレージエンジンを搭載し、完全にカスタマイズされたコストベースオプティマイザ（CBO）、インテリジェントなマテリアライズドビューなど、豊富な機能セットによって強化されています。StarRocks は、さまざまなデータソースからのリアルタイムおよびバッチのデータ取り込みをサポートしています。また、データの移行なしにデータレイクに保存されているデータを直接分析することもできます。
 
-StarRocks は MySQL プロトコルと互換性があり、MySQL クライアントや一般的な BI ツールを使用して簡単に接続できます。StarRocks は非常にスケーラブルで、可用性が高く、メンテナンスも容易です。リアルタイム分析、アドホッククエリ、データレイク分析など、さまざまな OLAP シナリオで広く採用されています。
+StarRocks は MySQL プロトコルと互換性があり、MySQL クライアントや一般的な BI ツールを使用して簡単に接続できます。StarRocks は、高拡張性、高可用性があり、保守が容易です。リアルタイム分析、アドホッククエリ、データレイク分析など、さまざまな OLAP シナリオを強化し、業界で広く採用されています。
 
-[StarRocks](https://github.com/StarRocks/starrocks/tree/main) は Apache 2.0 ライセンスの下で提供されており、StarRocks GitHub リポジトリで利用可能です（[StarRocks ライセンス](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)を参照）。StarRocks は (i) サードパーティのソフトウェアライブラリからリンクまたは関数を呼び出しており、そのライセンスはフォルダ [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary) にあります。また、(ii) サードパーティのソフトウェアコードを組み込んでおり、そのライセンスはフォルダ [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses) にあります。
+[StarRocks](https://github.com/StarRocks/starrocks/tree/main) は Apache 2.0 の下でライセンスされており、StarRocks GitHub リポジトリで入手できます（[StarRocks license](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt) を参照）。StarRocks は、(i) サードパーティ製ソフトウェアライブラリの関数にリンクまたは呼び出しを行います。これらのライセンスは [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary) フォルダにあります。(ii) サードパーティ製ソフトウェアコードを組み込んでいます。これらのライセンスは [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses) フォルダにあります。
 
-一般的な質問をするには、私たちの [ウェブフォーラム](https://forum.starrocks.io/) に参加してください。チャットには [Slack チャンネル](https://try.starrocks.com/join-starrocks-on-slack) に参加してください。コミュニティニュースについては、[StarRocks.io ブログ](https://www.starrocks.io/blog) をご覧ください。また、[LinkedIn](https://www.linkedin.com/company/starrocks) で私たちをフォローして、新機能、イベント、共有に関する最新情報を入手してください。
+一般的な質問やチャットについては、[Slack channel](https://try.starrocks.com/join-starrocks-on-slack) にご参加ください。コミュニティのニュースについては、[StarRocks.io Blog](https://www.starrocks.io/blog) をお読みください。また、[LinkedIn](https://www.linkedin.com/company/starrocks) でフォローして、新機能、イベント、共有に関する最新情報を入手することもできます。
 
 ---
 
 ### 人気のトピック
 
-<FeatureList language="Japanese" />
+<FeatureList language="English" />
 
 ---

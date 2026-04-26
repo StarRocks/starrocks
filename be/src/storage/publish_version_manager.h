@@ -20,8 +20,8 @@
 #include <set>
 
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/MasterService_types.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

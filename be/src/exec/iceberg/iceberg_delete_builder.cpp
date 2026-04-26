@@ -17,12 +17,13 @@
 #include <storage/chunk_helper.h>
 
 #include "column/vectorized_fwd.h"
-#include "exec/iceberg/iceberg_delete_file_iterator.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -138,7 +139,9 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
 
     while (true) {
-        ChunkPtr chunk = ChunkHelper::new_chunk(slot_descriptors, _runtime_state->chunk_size());
+        ASSIGN_OR_RETURN(ChunkPtr chunk,
+                         ChunkHelper::new_chunk_checked(slot_descriptors, _runtime_state->chunk_size()));
+
         Status status = reader->get_next(&chunk);
         if (status.is_end_of_file()) {
             break;
@@ -220,8 +223,7 @@ SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& m
     desc.__set_colName(meta.col_name);
     desc.__set_slotIdx(meta.id);
     desc.__set_isMaterialized(true);
-    desc.__set_nullIndicatorByte(0);
-    desc.__set_nullIndicatorBit(-1);
+    desc.__set_isNullable(true);
 
     return {desc};
 }
@@ -326,11 +328,11 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
                 ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
 
         const io::CacheInputStream::Stats& stats = cache_input_stream->stats();
-        COUNTER_UPDATE(datacache_read_counter, stats.read_cache_count);
-        COUNTER_UPDATE(datacache_read_bytes, stats.read_cache_bytes);
+        COUNTER_UPDATE(datacache_read_counter, stats.read_block_cache_count);
+        COUNTER_UPDATE(datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(datacache_read_mem_bytes, stats.read_mem_cache_bytes);
         COUNTER_UPDATE(datacache_read_disk_bytes, stats.read_disk_cache_bytes);
-        COUNTER_UPDATE(datacache_read_timer, stats.read_cache_ns);
+        COUNTER_UPDATE(datacache_read_timer, stats.read_block_cache_ns);
         COUNTER_UPDATE(datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(datacache_skip_read_bytes, stats.skip_read_cache_bytes);
         COUNTER_UPDATE(datacache_read_peer_bytes, stats.read_peer_cache_bytes);
@@ -338,9 +340,9 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
         COUNTER_UPDATE(datacache_read_peer_timer, stats.read_peer_cache_ns);
         COUNTER_UPDATE(datacache_skip_read_peer_counter, stats.skip_read_peer_cache_count);
         COUNTER_UPDATE(datacache_skip_read_peer_bytes, stats.skip_read_peer_cache_bytes);
-        COUNTER_UPDATE(datacache_write_counter, stats.write_cache_count);
-        COUNTER_UPDATE(datacache_write_bytes, stats.write_cache_bytes);
-        COUNTER_UPDATE(datacache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(datacache_write_counter, stats.write_block_cache_count);
+        COUNTER_UPDATE(datacache_write_bytes, stats.write_block_cache_bytes);
+        COUNTER_UPDATE(datacache_write_timer, stats.write_block_cache_ns);
         COUNTER_UPDATE(datacache_write_fail_counter, stats.write_cache_fail_count);
         COUNTER_UPDATE(datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(datacache_read_block_buffer_counter, stats.read_block_buffer_count);

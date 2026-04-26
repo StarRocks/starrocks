@@ -7,7 +7,7 @@ sidebar_position: 10
 
 Create and manage users using the native authentication within StarRocks through SQL commands.
 
-StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP, OpenID Connect, and OAuth 2.0. For more instructions, see [Authenticate with Security Integration](./security_integration.md).
+StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP. For more instructions, see [Authenticate with Security Integration](./security_integration.md).
 
 :::note
 
@@ -148,6 +148,12 @@ You can view the property of a user using [SHOW PROPERTY](../../../sql-reference
 The following example shows the property of the user `jack`:
 
 ```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
+SHOW PROPERTY FOR 'jack';
+```
+
+Or to view a specific property:
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 ```
 

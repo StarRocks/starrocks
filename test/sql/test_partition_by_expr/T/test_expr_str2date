@@ -1,4 +1,4 @@
--- name: test_expr_str2date
+-- name: test_expr_str2date @native
 CREATE TABLE partition_str2date (
         create_time varchar(100),
         sku_id varchar(100),

@@ -48,11 +48,11 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.HdfsUtil.HdfsReader;
 import com.starrocks.fs.HdfsUtil.HdfsWriter;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCheckPathExistResponse;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
@@ -107,7 +107,7 @@ public class BlobStorage implements Writable {
     @SerializedName("hasBroker")
     private boolean hasBroker;
     @SerializedName("brokerDesc")
-    private BrokerDesc brokerDesc; // for non broker operation only
+    private BrokerPropertiesPersistInfo brokerPersistInfo; // for non broker operation only
 
     private BlobStorage() {
         // for persist
@@ -124,7 +124,7 @@ public class BlobStorage implements Writable {
         this.properties = properties;
         this.hasBroker = hasBroker;
         if (!hasBroker) {
-            brokerDesc = new BrokerDesc(properties);
+            brokerPersistInfo = new BrokerPropertiesPersistInfo("", properties);
         }
         if (this.brokerName == null) {
             this.brokerName = "";
@@ -323,7 +323,7 @@ public class BlobStorage implements Writable {
 
         long start = System.currentTimeMillis();
         // 1. open remote file
-        HdfsReader reader = HdfsUtil.openHdfsReader(remoteFilePath, brokerDesc);
+        HdfsReader reader = HdfsUtil.openHdfsReader(remoteFilePath, this.properties);
         if (reader == null) {
             return new Status(ErrCode.COMMON_ERROR, "fail to open reader for " + remoteFilePath);
         }
@@ -436,7 +436,7 @@ public class BlobStorage implements Writable {
     public Status directUploadWithoutBroker(String content, String remoteFile) {
         Status status = Status.OK;
         try {
-            HdfsUtil.writeFile(content.getBytes(StandardCharsets.UTF_8), remoteFile, brokerDesc);
+            HdfsUtil.writeFile(content.getBytes(StandardCharsets.UTF_8), remoteFile, this.properties);
         } catch (StarRocksException e) {
             status = new Status(ErrCode.BAD_CONNECTION, "write exception: " + e.getMessage());
         }
@@ -571,7 +571,7 @@ public class BlobStorage implements Writable {
 
         Status status = Status.OK;
 
-        HdfsWriter writer = HdfsUtil.openHdfsWriter(remotePath, brokerDesc);
+        HdfsWriter writer = HdfsUtil.openHdfsWriter(remotePath, this.properties);
         if (writer == null) {
             return new Status(ErrCode.COMMON_ERROR, "fail to open writer for " + remotePath);
         }
@@ -656,7 +656,7 @@ public class BlobStorage implements Writable {
         long start = System.currentTimeMillis();
 
         try {
-            HdfsUtil.rename(origFilePath, destFilePath, brokerDesc);
+            HdfsUtil.rename(origFilePath, destFilePath, this.properties);
         } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to rename " + origFilePath + " to " + destFilePath + ", msg: " + e.getMessage());
@@ -701,7 +701,7 @@ public class BlobStorage implements Writable {
 
     public Status deleteWithoutBroker(String remotePath) {
         try {
-            HdfsUtil.deletePath(remotePath, this.brokerDesc);
+            HdfsUtil.deletePath(remotePath, this.properties);
             LOG.info("finished to delete remote path {}.", remotePath);
         } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
@@ -755,7 +755,7 @@ public class BlobStorage implements Writable {
     public Status listWithoutBroker(String remotePath, List<RemoteFile> result) {
         try {
             List<TBrokerFileStatus> fileStatus = Lists.newArrayList();
-            HdfsUtil.parseFile(remotePath, this.brokerDesc, fileStatus, false, true);
+            HdfsUtil.parseFile(remotePath, this.properties, fileStatus, false, true);
             for (TBrokerFileStatus tFile : fileStatus) {
                 RemoteFile file = new RemoteFile(tFile.path, !tFile.isDir, tFile.size);
                 result.add(file);
@@ -808,7 +808,7 @@ public class BlobStorage implements Writable {
 
     public Status checkPathExistWithoutBroker(String remotePath) {
         try {
-            boolean exist = HdfsUtil.checkPathExist(remotePath, this.brokerDesc);
+            boolean exist = HdfsUtil.checkPathExist(remotePath, this.properties);
             if (!exist) {
                 return new Status(ErrCode.NOT_FOUND, "remote path does not exist: " + remotePath);
             }

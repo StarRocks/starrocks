@@ -19,10 +19,14 @@
 #include <limits>
 #include <utility>
 
+#include "base/container/fixed_hash_map.h"
+#include "base/failpoint/fail_point.h"
+#include "base/phmap/phmap.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/aggregate/agg_hash_set.h"
@@ -31,10 +35,10 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
-#include "util/fixed_hash_map.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
+
+DECLARE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
 
 using AggDataPtr = uint8_t*;
 template <typename T>
@@ -96,17 +100,8 @@ using SliceAggTwoLevelHashMap =
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
 template <typename T>
-concept HasImmutableData = requires(T t) {
-    {t.immutable_data()};
-};
-
-template <typename T>
 auto get_immutable_data(T* obj) {
-    if constexpr (HasImmutableData<T>) {
-        return obj->immutable_data();
-    } else {
-        return obj->get_proxy_data();
-    }
+    return obj->immutable_data();
 }
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
@@ -169,47 +164,55 @@ struct AggHashMapWithKey {
     template <AllocFunc<Impl> Func>
     void build_hash_map(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                         Buffer<AggDataPtr>* agg_states) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         ExtraAggParam extra;
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 
     template <AllocFunc<Impl> Func>
     void build_hash_map_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                        Func&& allocate_func, Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 
     template <AllocFunc<Impl> Func>
     void build_hash_map_with_limit(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                                    Buffer<AggDataPtr>* agg_states, Filter* not_founds, size_t limit) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         extra.limits = limit;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 
     template <AllocFunc<Impl> Func>
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                       Filter* not_founds) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 };
 
@@ -350,6 +353,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 DCHECK(not_founds);
                 _find_key((*agg_states)[i], (*not_founds)[i], key);
             }
+            FAIL_POINT_TRIGGER_EXECUTE(aggregate_build_hash_map_bad_alloc, {
+                if (i > 0) throw std::bad_alloc();
+            });
         }
     }
 
@@ -418,10 +424,10 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    void insert_keys_to_columns(const ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         if constexpr (is_nullable) {
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-            auto* column = down_cast<ColumnType*>(nullable_column->mutable_data_column());
+            auto* column = down_cast<ColumnType*>(nullable_column->data_column_raw_ptr());
             column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
             nullable_column->null_column_data().resize(chunk_size);
         } else {
@@ -638,11 +644,11 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         if constexpr (is_nullable) {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-            auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
+            auto* column = down_cast<BinaryColumn*>(nullable_column->data_column_raw_ptr());
             keys.resize(chunk_size);
             column->append_strings(keys.data(), keys.size());
             nullable_column->null_column_data().resize(chunk_size);
@@ -735,13 +741,13 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
                 } else {
-                    _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                    _find_key((*agg_states)[i], (*not_founds)[i], key);
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 _emplace_key(key, pool, allocate_func, (*agg_states)[i],
                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                _find_key((*agg_states)[i], (*not_founds)[i], key);
             }
         }
     }
@@ -880,7 +886,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         return max_size;
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         // When GroupBy has multiple columns, the memory is serialized by row.
         // If the length of a row is relatively long and there are multiple columns,
         // deserialization by column will cause the memory locality to deteriorate,
@@ -1074,7 +1080,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         DCHECK(fixed_byte_size != -1);
         tmp_slices.reserve(chunk_size);
 
@@ -1237,7 +1243,7 @@ struct AggHashMapWithCompressedKeyFixedSize
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         bitcompress_deserialize(key_columns, bases, offsets, used_bits, chunk_size, sizeof(FixedSizeSliceKey),
                                 keys.data());
     }

@@ -22,7 +22,23 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 
+namespace starrocks {
+class TabletSchema;
+class TabletMetadataPB;
+class SlotDescriptor;
+namespace lake {
+class TabletManager;
+}
+} // namespace starrocks
+
 namespace starrocks::connector {
+
+// Check if all PK columns are in the selected slots. Used by CACHE SELECT to
+// decide whether to warm up persistent index SST files.
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots);
+
+// Warm up persistent index SST files for cloud-native PK tables.
+Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr);
 
 class LakeConnector final : public Connector {
 public:
@@ -55,6 +71,13 @@ public:
         _reader->get_split_tasks(split_tasks);
     }
 
+    // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
+    // generates predicates by ScanConjunctsManager, so skip parse_runtime_filters to make the parse logic is consistent
+    // to the share-nothing mode.
+    Status parse_runtime_filters(RuntimeState* state) override { return Status::OK(); }
+
+    TabletSchemaCSPtr TEST_tablet_schema() const { return _tablet_schema; }
+
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
@@ -66,9 +89,11 @@ private:
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
-    void update_counter();
+    void update_counter(RuntimeState* state);
 
     Status _extend_schema_by_access_paths();
+    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                          const ColumnAccessPath* path);
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -127,6 +152,9 @@ private:
     RuntimeProfile::Counter* _pred_filter_counter = nullptr;
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_input_rows = nullptr;
+    RuntimeProfile::Counter* _rf_pred_output_rows = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
@@ -140,6 +168,8 @@ private:
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _seg_metadata_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _segs_metadata_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;
@@ -150,6 +180,18 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+
+    // Gin filter Statistics
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_prefix_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
+
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
@@ -182,9 +224,6 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-
-    RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
-    RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;
 };
 
 // ================================
@@ -193,15 +232,14 @@ class LakeDataSourceProvider final : public DataSourceProvider {
 public:
     friend class LakeDataSource;
     LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    ~LakeDataSourceProvider() override = default;
+    ~LakeDataSourceProvider() override;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     Status init(ObjectPool* pool, RuntimeState* state) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
-    // always enable shared scan for cloud native table
-    bool always_shared_scan() const override { return true; }
+    bool always_shared_scan() const override { return false; }
 
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
@@ -210,6 +248,7 @@ public:
 
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
+    lake::TabletManager* tablet_manager() const { return _tablet_manager; }
 
     // possiable physical distribution optimize of data source
     bool sorted_by_keys_per_tablet() const override {
@@ -218,6 +257,9 @@ public:
     bool output_chunk_by_bucket() const override {
         return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
     }
+
+    size_t next_uniq_id() const { return starrocks::next_uniq_id(_t_lake_scan_node); }
+
     bool is_asc_hint() const override {
         if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
             return _t_lake_scan_node.output_asc_hint;
@@ -242,7 +284,7 @@ protected:
     const TLakeScanNode _t_lake_scan_node;
 
     // for ut
-    lake::TabletManager* _tablet_manager;
+    lake::TabletManager* _tablet_manager = nullptr;
 
     bool _could_split = false;
     bool _could_split_physically = false;
@@ -254,6 +296,13 @@ private:
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
+
+    // Partition conjuncts used for BE-side dynamic partition pruning. Distinct from the
+    // inherited `_partition_exprs` in DataSourceProvider which stores bucket expressions.
+    std::vector<ExprContext*> _partition_conjunct_ctxs;
+    // RuntimeState captured during init(); used by the destructor to close
+    // _partition_conjunct_ctxs without reaching back through _scan_node.
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::connector

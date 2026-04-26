@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import org.slf4j.helpers.MessageFormatter;
 
 import java.util.List;
+import java.util.function.Function;
 
 public class OptimizerTraceUtil {
     public static void logOptExpression(String format, OptExpression optExpression) {
@@ -45,7 +46,7 @@ public class OptimizerTraceUtil {
 
     public static void logMVPrepare(ConnectContext ctx, MaterializedView mv,
                                     String format, Object... object) {
-        Tracers.log(Tracers.Module.MV, input -> {
+        traceLogMVSafe(input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
             Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
             return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
@@ -54,7 +55,7 @@ public class OptimizerTraceUtil {
 
     public static void logMVPrepare(Tracers tracers, ConnectContext ctx, MaterializedView mv,
                                     String format, Object... object) {
-        Tracers.log(tracers, Tracers.Module.MV, input -> {
+        traceLogMVSafe(tracers, input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
             Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
             return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
@@ -71,7 +72,7 @@ public class OptimizerTraceUtil {
 
     public static void logMVPrepare(MaterializedView mv,
                                     String format, Object... object) {
-        Tracers.log(Tracers.Module.MV, input -> {
+        traceLogMVSafe(input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
             Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
             return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
@@ -80,18 +81,54 @@ public class OptimizerTraceUtil {
 
     public static void logMVPrepare(Tracers tracers, MaterializedView mv,
                                     String format, Object... object) {
-        Tracers.log(tracers, Tracers.Module.MV, input -> {
+        traceLogMVSafe(tracers, input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
             Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
             return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
         });
     }
 
+    public static void logMVRewrite1(ConnectContext connectContext, String mvName, String format, Object... objects) {
+        if (connectContext == null || connectContext.getSessionVariable() == null ||
+                connectContext.getSessionVariable().getTraceLogLevel() < 1) {
+            return;
+        }
+        logMVRewrite(mvName, format, objects);
+    }
+
     public static void logMVRewrite(String mvName, String format, Object... objects) {
-        Tracers.log(Tracers.Module.MV, input -> {
+        traceLogMVSafe(input -> {
             String str = MessageFormatter.arrayFormat(format, objects).getMessage();
             return MessageFormatter.format("[MV TRACE] [REWRITE {}] {}", mvName, str).getMessage();
         });
+    }
+
+    /**
+     * Safe log for MV module, ignore any exception during logging.
+     */
+    private static void traceLogMVSafe(Function<Object[], String> func, Object... args) {
+        if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
+            return;
+        }
+        try {
+            Tracers.log(Tracers.Module.MV, func, args);
+        } catch (Exception e) {
+            // ignore log exception
+        }
+    }
+
+    /**
+     * Safe log for MV module, ignore any exception during logging.
+     */
+    private static void traceLogMVSafe(Tracers tracers, Function<Object[], String> func, Object... args) {
+        if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
+            return;
+        }
+        try {
+            Tracers.log(tracers, Tracers.Module.MV, func, args);
+        } catch (Exception e) {
+            // ignore log exception
+        }
     }
 
     /**
@@ -120,20 +157,25 @@ public class OptimizerTraceUtil {
     }
 
     public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
-        Tracers.log(Tracers.Module.MV, input -> {
+        logMVRewrite(mvContext, null, format, object);
+    }
+
+    public static void logMVRewrite(MaterializationContext mvContext, Rule rule, String format, Object... object) {
+        traceLogMVSafe(input -> {
             Object[] args = new Object[] {
+                    rule == null ? "" : rule.type().name(),
                     mvContext.getOptimizerContext().isInMemoPhase(),
                     mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE] [InMemo:{}] [{}] {}",
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] [{}] {}",
                     args).getMessage();
         });
     }
 
     public static void logMVRewrite(MvRewriteContext mvRewriteContext, String format, Object... object) {
         MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
-        Tracers.log(Tracers.Module.MV, input -> {
+        traceLogMVSafe(input -> {
             Object[] args = new Object[] {
                     mvRewriteContext.getRule().type().name(),
                     mvRewriteContext.getMaterializationContext().getOptimizerContext().isInMemoPhase(),
@@ -147,9 +189,9 @@ public class OptimizerTraceUtil {
 
     public static void logMVRewrite(OptimizerContext optimizerContext, Rule rule,
                                     String format, Object... object) {
-        Tracers.log(Tracers.Module.MV, input -> {
+        traceLogMVSafe(input -> {
             Object[] args = new Object[] {
-                    rule.type().name(),
+                    rule == null ? "" : rule.type().name(),
                     optimizerContext.isInMemoPhase(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
@@ -158,7 +200,7 @@ public class OptimizerTraceUtil {
     }
 
     public static void logMVRewriteRule(String ruleName, String format, Object... object) {
-        Tracers.log(Tracers.Module.MV, input -> {
+        traceLogMVSafe(input -> {
             Object[] args = new Object[] {
                     ruleName,
                     MessageFormatter.arrayFormat(format, object).getMessage()

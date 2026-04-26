@@ -28,7 +28,8 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.uber.m3.util.ImmutableMap;
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -169,6 +170,32 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
+    public void testConnectorSinkShuffleModeVariables() {
+        analyzeSuccess("set connector_sink_shuffle_mode = 'auto'");
+        analyzeSuccess("set connector_sink_shuffle_mode = 'force'");
+        analyzeSuccess("set connector_sink_shuffle_mode = 'never'");
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            com.starrocks.sql.ast.StatementBase stmt = AnalyzeTestUtil.parseSql(
+                    "set connector_sink_shuffle_mode = 'unknown'");
+            Analyzer.analyze(stmt, connectContext);
+        });
+
+        analyzeSuccess("set connector_sink_shuffle_partition_threshold = 1");
+        analyzeFail("set connector_sink_shuffle_partition_threshold = 0",
+                "connector_sink_shuffle_partition_threshold must be equal or greater than 1");
+
+        analyzeSuccess("set connector_sink_shuffle_partition_node_ratio = 0.1");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 0",
+                "connector_sink_shuffle_partition_node_ratio should be a positive finite number");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 'NaN'",
+                "connector_sink_shuffle_partition_node_ratio should be a positive finite number");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 'Infinity'",
+                "connector_sink_shuffle_partition_node_ratio should be a positive finite number");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 'abc'",
+                "failed to parse connector_sink_shuffle_partition_node_ratio");
+    }
+
+    @Test
     public void testSetNames() {
         String sql = "SET NAMES 'utf8mb4' COLLATE 'bogus'";
         analyzeSuccess(sql);
@@ -211,27 +238,23 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
     }
 
+    /**
+     * Mock up {@link ResourceGroupMgr#chooseResourceGroupByID(long)}.
+     */
     @Test
     public void testSetResourceGroupID() {
         long rg1ID = 1;
         TWorkGroup rg1 = new TWorkGroup();
         rg1.setId(rg1ID);
         ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByID(rg1ID);
-                result = rg1;
-            }
 
-            {
-                mgr.chooseResourceGroupByID(anyLong);
-                result = null;
-            }
-
-            {
-                mgr.createBuiltinResourceGroupsIfNotExist();
-                result = null;
-                minTimes = 0;
+        new MockUp<ResourceGroupMgr>() {
+            @Mock
+            public TWorkGroup chooseResourceGroupByID(long wgID) {
+                if (wgID == rg1ID) {
+                    return rg1;
+                }
+                return null;
             }
         };
 

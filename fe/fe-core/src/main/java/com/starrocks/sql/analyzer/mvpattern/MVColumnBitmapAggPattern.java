@@ -15,10 +15,10 @@
 package com.starrocks.sql.analyzer.mvpattern;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.Type;
 
 import static com.starrocks.catalog.FunctionSet.BITMAP_AGG_TYPE;
 
@@ -30,7 +30,7 @@ public class MVColumnBitmapAggPattern implements MVColumnPattern {
             return false;
         }
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
-        String fnNameString = fnExpr.getFnName().getFunction();
+        String fnNameString = fnExpr.getFunctionName();
         if (!fnNameString.equalsIgnoreCase(FunctionSet.BITMAP_AGG)) {
             return false;
         }

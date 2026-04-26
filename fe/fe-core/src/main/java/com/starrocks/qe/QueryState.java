@@ -64,6 +64,7 @@ public class QueryState {
 
     public enum ErrType {
         ANALYSIS_ERR,
+        BLACKLISTED,
         IGNORE_ERR,
 
         INTERNAL_ERR,
@@ -129,6 +130,12 @@ public class QueryState {
         this.stateType = MysqlStateType.ERR;
         this.setMsg(errorMsg);
         isFinished = true;
+    }
+
+    public void resetError() {
+        this.stateType = MysqlStateType.OK;
+        this.errorCode = null;
+        this.errorMessage = null;
     }
 
     public boolean isError() {

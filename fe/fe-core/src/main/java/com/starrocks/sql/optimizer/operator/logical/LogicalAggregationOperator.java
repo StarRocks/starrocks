@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -37,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -63,6 +63,21 @@ public class LogicalAggregationOperator extends LogicalOperator {
     private List<ColumnRefOperator> partitionByColumns;
 
     private DataSkewInfo distinctColumnDataSkew = null;
+
+    // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
+    // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
+    private boolean topNLocalAgg = false;
+
+    // only used in streaming aggregate
+    // eg: select distinct a from table limit 100;
+    // In this query, we can push the LIMIT down to the streaming distinct operator.
+    // However, no LIMIT should be inserted between the global and local operators.
+    // may cause incorrect final results, because the LIMIT between the local-distinct and global-distinct
+    // operators can truncate overlapping data produced by the local-distinct stage.
+    private long localLimit = DEFAULT_LIMIT;
+
+    // TopN information for filtering group by data during aggregation
+    private LogicalTopNOperator.TopNSortInfo aggTopnSortInfo = null;
 
     // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
     // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
@@ -110,6 +125,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return isSplit;
     }
 
+    public void setSplit(boolean split) {
+        isSplit = split;
+    }
+
     public void setOnlyLocalAggregate() {
         isSplit = false;
     }
@@ -132,6 +151,22 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public DataSkewInfo getDistinctColumnDataSkew() {
         return distinctColumnDataSkew;
+    }
+
+    public boolean isTopNLocalAgg() {
+        return topNLocalAgg;
+    }
+
+    public void setTopNLocalAgg(boolean topNLocalAgg) {
+        this.topNLocalAgg = topNLocalAgg;
+    }
+
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
+    public LogicalTopNOperator.TopNSortInfo getAggTopnSortInfo() {
+        return aggTopnSortInfo;
     }
 
     public boolean checkGroupByCountDistinct() {
@@ -261,12 +296,15 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return isSplit == that.isSplit &&
                 type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupingKeys, that.groupingKeys) &&
-                Objects.equals(partitionByColumns, that.partitionByColumns);
+                Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                topNLocalAgg == that.topNLocalAgg &&
+                Objects.equals(aggTopnSortInfo, that.aggTopnSortInfo);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns);
+        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns, topNLocalAgg,
+                aggTopnSortInfo);
     }
 
     public static Builder builder() {
@@ -299,6 +337,9 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.aggregations = aggregationOperator.aggregations;
             builder.isSplit = aggregationOperator.isSplit;
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
+            builder.topNLocalAgg = aggregationOperator.topNLocalAgg;
+            builder.localLimit = aggregationOperator.localLimit;
+            builder.aggTopnSortInfo = aggregationOperator.aggTopnSortInfo;
             return this;
         }
 
@@ -310,6 +351,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
         public Builder setGroupingKeys(
                 List<ColumnRefOperator> groupingKeys) {
             builder.groupingKeys = ImmutableList.copyOf(groupingKeys);
+            return this;
+        }
+
+        public Builder setLocalLimit(long localLimit) {
+            builder.localLimit = localLimit;
             return this;
         }
 
@@ -340,6 +386,16 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
         public DataSkewInfo getDistinctColumnDataSkew() {
             return builder.distinctColumnDataSkew;
+        }
+
+        public Builder setTopNLocalAgg(boolean topNLocalAgg) {
+            builder.topNLocalAgg = topNLocalAgg;
+            return this;
+        }
+
+        public Builder setAggTopnSortInfo(LogicalTopNOperator.TopNSortInfo aggTopnSortInfo) {
+            builder.aggTopnSortInfo = aggTopnSortInfo;
+            return this;
         }
     }
 }

@@ -24,11 +24,21 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "gutil/port.h"
+
+// Fix for ulong type on macOS
+#ifdef __APPLE__
+#ifndef HAVE_ULONG
+#define HAVE_ULONG 1
+typedef unsigned long ulong;
+#endif
+#endif
+#include "base/time/timezone_hsscan.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -81,7 +91,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         }
     } else if (v1->is_nullable()) {
         auto v = ColumnHelper::as_column<NullableColumn>(v1);
-        auto& nulls = v->null_column()->get_data();
+        auto& nulls = v->immutable_null_column_data();
         auto& values = ColumnHelper::cast_to_raw<Type>(v->data_column())->get_data();
 
         auto null_column = NullColumn::create();
@@ -302,6 +312,12 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
 }
 
 static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
+
+StatusOr<ColumnPtr> TimeFunctions::current_timezone(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->state();
+    const std::string& timezone = state->timezone();
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(timezone, 1);
+}
 
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
@@ -731,7 +747,7 @@ Status TimeFunctions::to_tera_date_prepare(FunctionContext* context, FunctionCon
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -792,7 +808,7 @@ Status TimeFunctions::to_tera_timestamp_prepare(FunctionContext* context, Functi
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -1619,7 +1635,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
         }
 
         cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
-        int offset = ctz.lookup_offset(t).offset;
+        int offset = ctz.lookup(t).offset;
         int hour = impl_hour_from_unixtime(date + offset);
         result.append(hour);
     }
@@ -2343,7 +2359,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
                 result.append(ts);
             } else {
                 const Slice& fmt = fmt_viewer.value(i);
-                str_to_date_internal(&ts, fmt, str, &result);
+                RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
             }
         }
     }
@@ -2351,14 +2367,18 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
 }
 
 // uncommon approach to process string content, based on uncommon string format.
-void TimeFunctions::str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
-                                         ColumnBuilder<TYPE_DATETIME>* result) {
+Status TimeFunctions::str_to_date_internal(FunctionContext* context, TimestampValue* ts, const Slice& fmt,
+                                           const Slice& str, ColumnBuilder<TYPE_DATETIME>* result) {
     bool r = ts->from_uncommon_format_str(fmt.get_data(), fmt.get_size(), str.get_data(), str.get_size());
     if (r) {
         result->append(*ts);
-    } else {
-        result->append_null();
+        return Status::OK();
     }
+    if (context != nullptr && context->allow_throw_exception()) {
+        return Status::InvalidArgument("Fail to parse date");
+    }
+    result->append_null();
+    return Status::OK();
 }
 
 // Try to process string content, based on uncommon string format
@@ -2377,7 +2397,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context
             const Slice& str = str_viewer.value(i);
             const Slice& fmt = fmt_viewer.value(i);
             TimestampValue ts;
-            str_to_date_internal(&ts, fmt, str, &result);
+            RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
         }
     }
 
@@ -2552,7 +2572,7 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
 
     size_t num_rows = viewer.size();
     ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
-    builder.data_column()->reserve(num_rows, num_rows * patten_size);
+    builder.data_column_raw_ptr()->reserve(num_rows, num_rows * patten_size);
 
     for (int i = 0; i < num_rows; ++i) {
         if (viewer.is_null(i)) {
@@ -3892,6 +3912,39 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
         }
 
         builder.append(result.str());
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+constexpr static const int64_t MAX_TIME = 3023999L;
+
+static int64_t from_seconds_with_limit(int64_t time) {
+    if (time > MAX_TIME) {
+        return MAX_TIME;
+    }
+    if (time < -MAX_TIME) {
+        return -MAX_TIME;
+    }
+    return time;
+}
+
+StatusOr<ColumnPtr> TimeFunctions::sec_to_time(FunctionContext* context, const starrocks::Columns& columns) {
+    const auto& bigint_column = columns[0];
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto bigint_viewer = ColumnViewer<TYPE_BIGINT>(bigint_column);
+    const size_t size = bigint_column->size();
+    auto builder = ColumnBuilder<TYPE_TIME>(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (bigint_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+        auto time = static_cast<double>(from_seconds_with_limit(bigint_viewer.value(i)));
+        builder.append(time);
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));

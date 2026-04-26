@@ -157,6 +157,10 @@ public class SelectRelation extends QueryRelation {
         return predicate;
     }
 
+    public void setPredicate(Expr predicate) {
+        this.predicate = predicate;
+    }
+
     public Expr getHaving() {
         return having;
     }

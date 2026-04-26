@@ -25,7 +25,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 **PROPERTIES (Optional)**
 
-`storage_volume`: Specifies the name of the storage volume that is used to store the database in a shared-data cluster.
+`storage_volume`: Specifies the name of the storage volume that is used to store the database in a shared-data cluster. If not provided, the default storage volume will be attached to the database. The property can be changed via `ALTER DATABASE` statement.
 
 ## Examples
 
@@ -49,3 +49,4 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 - [SHOW DATABASES](SHOW_DATABASES.md)
 - [DESC](../table_bucket_part_index/DESCRIBE.md)
 - [DROP DATABASE](DROP_DATABASE.md)
+- [ALTER DATABASE](ALTER_DATABASE.md)

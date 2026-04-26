@@ -25,14 +25,26 @@ namespace starrocks {
 class Chunk;
 class Column;
 
+// MemTableSink defines the interface for flushing memtable data to persistent storage
 class MemTableSink {
 public:
     virtual ~MemTableSink() = default;
 
+    // Flush a chunk of data to the sink
+    // @param chunk: data to be flushed
+    // @param seg_info: output segment metadata
+    // @param eos: whether this is the end of the stream
+    // @param flush_data_size: output parameter for the size of flushed data
+    // @param slot_idx: slot index for tracking flush order in parallel flush scenarios.
+    //                  Used to ensure correct ordering when merging spilled blocks.
+    //                  Default -1 means slot tracking is not needed.
     virtual Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* seg_info = nullptr, bool eos = false,
-                               int64_t* flush_data_size = nullptr) = 0;
+                               int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) = 0;
+    // Flush a chunk with delete operations for primary key tables
+    // @param slot_idx: see flush_chunk() for details
     virtual Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info = nullptr,
-                                            bool eos = false, int64_t* flush_data_size = nullptr) = 0;
+                                            bool eos = false, int64_t* flush_data_size = nullptr,
+                                            int64_t slot_idx = -1) = 0;
 
     virtual int64_t txn_id() = 0;
     virtual int64_t tablet_id() = 0;

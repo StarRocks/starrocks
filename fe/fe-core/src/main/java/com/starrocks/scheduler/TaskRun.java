@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -39,6 +41,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,6 +74,8 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_VALUES = "PARTITION_VALUES";
     public static final String FORCE = "FORCE";
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    // Set on pinned-PCT batches only; value is the pinning job's START_TASK_RUN_ID.
+    public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
@@ -78,22 +83,25 @@ public class TaskRun implements Comparable<TaskRun> {
     // MV's task run can be generated from the last task run, those properties are not allowed to be copied from one task run
     // to another and must be only set specifically for each run but cannot be extended from the last task run.
     // eg: `FORCE` is only allowed to set in the first task run and cannot be copied into the following task run.
+    // `PINNED_REFRESH_JOB_ID` is re-set per batch based on pinning owner status — must not inherit.
     public static final Set<String> MV_UNCOPYABLE_PROPERTIES = ImmutableSet.of(
-            PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+            PARTITION_START, PARTITION_END, PARTITION_VALUES, PINNED_REFRESH_JOB_ID);
     // If there are many pending mv task runs, we can merge some of them by comparing the properties, those properties that are
     // used to check equality of task runs and we can ignore the other properties.
     // eg:
     // - `FORCE` is used to check equality of task runs because the refresh partitions are different for each task run.
     // - `PROPERTIES_WAREHOUSE`/`START_TASK_RUN_ID` is no need to check equality of task runs because they will not affect
     //  the task run's result.
+    // - `PINNED_REFRESH_JOB_ID` scopes merge isolation to pinned batches; pure PCT is unaffected.
     public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID);
     // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
     // and will ignore other properties in the task run history.
     // This should be only used in the task run history table and should not used for checking task run's real properties
     // because this is not a complete list of task run properties.
     public static final Set<String> RESERVED_HISTORY_TASK_RUN_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE, IS_TEST);
+            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE,
+            PINNED_REFRESH_JOB_ID, IS_TEST);
 
     public static final int INVALID_TASK_PROGRESS = -1;
 
@@ -196,6 +204,36 @@ public class TaskRun implements Comparable<TaskRun> {
         return isKilled;
     }
 
+    /**
+     * Get the execute timeout in seconds.
+     */
+    public int getExecuteTimeoutS() {
+        // if `query_timeout`/`insert_timeout` is set in the execute option, use it
+        int defaultTimeoutS = Config.task_runs_timeout_second;
+        if (properties != null) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                    try {
+                        int timeout = Integer.parseInt(entry.getValue());
+                        if (timeout > 0) {
+                            defaultTimeoutS = Math.max(timeout, defaultTimeoutS);
+                        }
+                    } catch (NumberFormatException e) {
+                        LOG.warn("invalid timeout value: {}, task run:{}", entry.getValue(), this);
+                    }
+                }
+            }
+        }
+        // The timeout of task run should not be longer than the ttl of task runs and task
+        return Math.min(Math.min(defaultTimeoutS, Config.task_runs_ttl_second), Config.task_ttl_second);
+    }
+
+    @VisibleForTesting
+    public void setStatus(TaskRunStatus status) {
+        this.status = status;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
@@ -257,12 +295,20 @@ public class TaskRun implements Comparable<TaskRun> {
         context.getState().reset();
         context.setQueryId(UUID.fromString(status.getQueryId()));
         context.setIsLastStmt(true);
+        context.setMultiStmt(false);
         context.resetSessionVariable();
-        switchUser(context);
+        // Preserve critical session variables from parent context if available
+        // This ensures that settings like enableSingleNodeSchedule are inherited
+        if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {
+            context.getSessionVariable().setEnableSingleNodeSchedule(
+                    parentRunCtx.getSessionVariable().enableSingleNodeSchedule());
+        }
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         context.setThreadLocalInfo();
+        // NOTE: The switchUser might depend on the thread-local context if it's LDAP user
+        switchUser(context);
         return context;
     }
 
@@ -311,6 +357,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
+        // Update status properties with the refreshed values (especially warehouse)
+        // so system tables show the correct information
+        if (status != null) {
+            status.setProperties(properties);
+        }
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -319,11 +370,15 @@ public class TaskRun implements Comparable<TaskRun> {
                 key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
             }
             String value = entry.getValue();
+            boolean set = false;
             try {
-                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true);
-            } catch (DdlException e) {
-                // not session variable
+                set = (runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true));
+            } catch (DdlException ignored) {
+            }
+            if (!set) {
                 taskRunContextProperties.put(key, properties.get(key));
+                // FIXME: it's too hack, don't pollute the session when setting variables
+                runCtx.getState().resetError();
             }
         }
         // set warehouse
@@ -365,6 +420,39 @@ public class TaskRun implements Comparable<TaskRun> {
     }
 
     public Constants.TaskRunState executeTaskRun() throws Exception {
+        try {
+            Constants.TaskRunState result = doExecuteTaskRun();
+            // clear the fail count
+            if (result != null && result.isSuccessState()) {
+                task.resetConsecutiveFailCount();
+            }
+            return result;
+        } catch (Exception e) {
+            task.incConsecutiveFailCount();
+            LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
+                    taskId, taskRunId, task.getConsecutiveFailCount(), e);
+            if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
+                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
+                LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                        task.getName(), task.getConsecutiveFailCount());
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.suspendTask(task, false);
+                String mvName = "";
+                MaterializedView mv = TaskBuilder.getMvFromTask(task);
+                if (mv != null) {
+                    // If the task is an mv task, inactive the mv
+                    AlterMVJobExecutor.inactiveForConsecutiveFailures(mv);
+                    mvName = mv.getName();
+                }
+                throw new StarRocksException(String.format("Task %s has continuously failed %d times " +
+                                "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
+                        task.getName(), task.getConsecutiveFailCount(), mvName), e);
+            }
+            throw e;
+        }
+    }
+
+    private Constants.TaskRunState doExecuteTaskRun() throws Exception {
         TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
@@ -480,7 +568,7 @@ public class TaskRun implements Comparable<TaskRun> {
         if (!Strings.isNullOrEmpty(task.getDefinition())) {
             // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH/4 which is defined in the TaskRunsSystemTable.java
             String query = LogUtil.removeLineSeparator(task.getDefinition());
-            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4));
+            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH - 1));
         }
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 

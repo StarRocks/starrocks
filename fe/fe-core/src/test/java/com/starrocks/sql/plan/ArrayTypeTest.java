@@ -90,8 +90,8 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(i_1, s_1, d_1) from adec";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR(65533)>), 3: s_1, " +
-                "CAST(4: d_1 AS ARRAY<VARCHAR(65533)>))");
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, " +
+                "CAST(4: d_1 AS ARRAY<VARCHAR>))");
 
         sql = "select concat(d_1, d_2) from adec";
         plan = getFragmentPlan(sql);
@@ -106,15 +106,15 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(i_1, s_1, d_1, d_2, d_3, d_4, d_5, d_6) from adec";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR(65533)>), 3: s_1, " +
-                "CAST(4: d_1 AS ARRAY<VARCHAR(65533)>), CAST(5: d_2 AS ARRAY<VARCHAR(65533)>), " +
-                "CAST(6: d_3 AS ARRAY<VARCHAR(65533)>), CAST(7: d_4 AS ARRAY<VARCHAR(65533)>), " +
-                "CAST(8: d_5 AS ARRAY<VARCHAR(65533)>), CAST(9: d_6 AS ARRAY<VARCHAR(65533)>))");
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, " +
+                "CAST(4: d_1 AS ARRAY<VARCHAR>), CAST(5: d_2 AS ARRAY<VARCHAR>), " +
+                "CAST(6: d_3 AS ARRAY<VARCHAR>), CAST(7: d_4 AS ARRAY<VARCHAR>), " +
+                "CAST(8: d_5 AS ARRAY<VARCHAR>), CAST(9: d_6 AS ARRAY<VARCHAR>))");
 
         sql = "select concat(v1, [1,2,3], s_1) from adec";
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2,3] AS ARRAY<VARCHAR>), 3: s_1)");
+                "['1','2','3'], 3: s_1)");
 
         sql = "select concat(1,2, [1,2])";
         plan = getFragmentPlan(sql);
@@ -122,13 +122,11 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(1,2, [1,2], 'a', 'b')";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'])");
+        assertContains(plan, "array_concat(['1'], ['2'], ['1','2'], ['a'], ['b'])");
 
         sql = "select concat(1,2, [1,2], 'a', 'b', 1.1)";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'], CAST([1.1] AS ARRAY<VARCHAR>)");
+        assertContains(plan, " array_concat(['1'], ['2'], ['1','2'], ['a'], ['b'], ['1.1'])");
 
         sql = "with t0 as (\n" +
                 "    select c1 from (values([])) as t(c1)\n" +
@@ -316,13 +314,10 @@ public class ArrayTypeTest extends PlanTestBase {
     }
 
     @Test
-    public void testArrayWindowFunction() {
+    public void testArrayWindowFunction() throws Exception {
         for (String fnName : Sets.newHashSet(AnalyticExpr.LASTVALUE, AnalyticExpr.FIRSTVALUE)) {
             String sql = String.format("select %s(v3) over() from tarray", fnName.toLowerCase());
-            Throwable exception = assertThrows(SemanticException.class, () ->
-                    getFragmentPlan(sql));
-            assertThat(exception.getMessage(), containsString(
-                    String.format("No matching function with signature: %s(array<bigint(20)>)", fnName.toLowerCase())));
+            getFragmentPlan(sql);
         }
     }
 
@@ -360,7 +355,7 @@ public class ArrayTypeTest extends PlanTestBase {
             String sql = "select array_append([[1,2,3]], [null])";
             String plan = getFragmentPlan(sql);
             assertContains(plan,
-                    "<slot 2> : array_append([[1,2,3]], CAST([NULL] AS ARRAY<TINYINT>))");
+                    "<slot 2> : array_append([[1,2,3]], [NULL])");
         }
         {
             starRocksAssert.withTable("create table test_literal_array_insert_t0(" +
@@ -483,8 +478,8 @@ public class ArrayTypeTest extends PlanTestBase {
         sql = "select array_intersect(d_3, s_1) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_intersect[(cast([6: d_3, ARRAY<DECIMAL128(25,19)>, false] " +
-                "as ARRAY<VARCHAR(65533)>), [3: s_1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
-                "result: ARRAY<VARCHAR(65533)>;");
+                "as ARRAY<VARCHAR>), [3: s_1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
+                "result: ARRAY<VARCHAR>;");
     }
 
     @Test
@@ -627,7 +622,7 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "arrays_overlap[(" +
                 "[3: s_1, ARRAY<VARCHAR(65533)>, true], " +
-                "cast([4: d_1, ARRAY<DECIMAL128(26,2)>, false] as ARRAY<VARCHAR(65533)>));");
+                "cast([4: d_1, ARRAY<DECIMAL128(26,2)>, false] as ARRAY<VARCHAR>));");
     }
 
     @Test
@@ -660,8 +655,8 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select array_append(s_1, 1.0) from adec;";
         plan = getVerboseExplain(sql);
-        assertCContains(plan, "array_append[([3: s_1, ARRAY<VARCHAR(65533)>, true], '1.0');" +
-                " args: INVALID_TYPE,VARCHAR; result: ARRAY<VARCHAR(65533)>;");
+        assertCContains(plan, "array_append[([3: s_1, ARRAY<VARCHAR(65533)>, true], '1.0');"
+                + " args: INVALID_TYPE,VARCHAR; result: ARRAY<VARCHAR>;");
 
         sql = "select array_contains(i_1, 'a') from adec;";
         plan = getVerboseExplain(sql);
@@ -730,11 +725,10 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select array_contains([null], null), array_position([null], null)";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  |  output columns:\n" +
-                "  |  2 <-> array_contains[([NULL], NULL); " +
-                "args: INVALID_TYPE,BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
-                "  |  3 <-> array_position[([NULL], NULL); " +
-                "args: INVALID_TYPE,BOOLEAN; result: INT; args nullable: true; result nullable: true]");
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> TRUE\n" +
+                "  |  3 <-> 1");
     }
 
     @Test
@@ -849,5 +843,16 @@ public class ArrayTypeTest extends PlanTestBase {
                 getFragmentPlan("select reverse(d_3) from adec256"));
         assertThat(exception.getMessage(), containsString("Array function 'reverse' is not supported for" +
                 " DECIMAL256 type"));
+    }
+
+    @Test
+    public void testArrayNull() throws Exception {
+        String sql = "with test_cte as (\n"
+                + "    select array<varchar>[] as some_array\n"
+                + ")\n"
+                + "select array_agg(some_array)\n"
+                + "from test_cte;";
+        String plan = getThriftPlan(sql);
+        assertContains(plan, "function_name:array_agg");
     }
 }

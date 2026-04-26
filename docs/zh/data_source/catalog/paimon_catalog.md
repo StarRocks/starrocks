@@ -24,6 +24,30 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 您只能使用 Paimon catalog 查询数据。您不能使用 Paimon catalog 删除、删除或插入数据到您的 Paimon 集群中。
 
+## Paimon to StarRocks data types
+
+| Paimon Type           | StarRocks Type              |
+|-----------------------|-----------------------------|
+| `BINARY`              | `VARBINARY`                 |
+| `VARBINARY`           | `VARBINARY`                 |
+| `CHAR`                | `CHAR(length)`              |
+| `VARCHAR`             | `VARCHAR`                   |
+| `BOOLEAN`             | `BOOLEAN`                   |
+| `DECIMAL`             | `DECIMAL(precision, scale)` |
+| `TINYINT`             | `TINYINT`                   |
+| `SMALLINT`            | `SMALLINT`                  |
+| `INT`                 | `INT`                       |
+| `BIGINT`              | `BIGINT`                    |
+| `FLOAT`               | `FLOAT`                     |
+| `DOUBLE`              | `DOUBLE`                    |
+| `DATE`                | `DATE`                      |
+| `TIME`                | `TIME`                      |
+| `TIMESTAMP`           | `DATETIME`                  |
+| `LocalZonedTimestamp` | `DATETIME`                  |
+| `ARRAY`               | `ARRAY<element_type>`       |
+| `MAP`                 | `MAP<key_type, value_type>` |
+| `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+
 ## 集成准备
 
 在创建 Paimon catalog 之前，请确保您的 StarRocks 集群可以与 Paimon 集群的存储系统和元存储集成。
@@ -265,6 +289,22 @@ Paimon catalog 的描述。此参数是可选的。
   | azure.adls2.oauth2_client_id       | 是       | 服务主体的客户端（应用程序）ID。                              |
   | azure.adls2.oauth2_client_secret   | 是       | 创建的新客户端（应用程序）密钥的值。                          |
   | azure.adls2.oauth2_client_endpoint | 是       | 服务主体或应用程序的 OAuth 2.0 令牌端点（v1）。               |
+
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -543,6 +583,21 @@ PROPERTIES
   );
   ```
 
+- 如果您选择 Workload Identity 身份验证方法，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - 如果您选择基于 VM 的身份验证方法，请运行如下命令：
@@ -671,7 +726,7 @@ DROP Catalog paimon_catalog_fs;
    USE <catalog_name>.<db_name>;
    ```
 
-3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

@@ -53,6 +53,10 @@ public:
 
     size_t memory_usage() const;
 
+    // Sample keys from the table for parallel compaction task splitting.
+    // Loading the index block, one key is sampled for every sample_interval_bytes worth of data.
+    Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
+
 private:
     struct Rep;
 

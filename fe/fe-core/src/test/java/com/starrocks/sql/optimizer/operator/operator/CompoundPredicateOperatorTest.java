@@ -18,7 +18,6 @@ package com.starrocks.sql.optimizer.operator.operator;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
@@ -28,6 +27,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -54,19 +56,19 @@ public class CompoundPredicateOperatorTest {
     }
 
     private static Stream<Arguments> compareOperatorList() {
-        ConstantOperator constA = new ConstantOperator(1, Type.INT);
-        ConstantOperator constB = new ConstantOperator("abc", Type.STRING);
+        ConstantOperator constA = new ConstantOperator(1, IntegerType.INT);
+        ConstantOperator constB = new ConstantOperator("abc", StringType.STRING);
 
-        ColumnRefOperator col1 = new ColumnRefOperator(1, Type.INT, "c1", false);
-        ColumnRefOperator col2 = new ColumnRefOperator(2, Type.INT, "c2", false);
-        ColumnRefOperator col3 = new ColumnRefOperator(3, Type.INT, "c3", false);
-        ColumnRefOperator col4 = new ColumnRefOperator(4, Type.STRING, "c4", false);
-        ColumnRefOperator col5 = new ColumnRefOperator(5, Type.STRING, "c5", false);
-        ColumnRefOperator col6 = new ColumnRefOperator(6, Type.BOOLEAN, "c6", false);
+        ColumnRefOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "c1", false);
+        ColumnRefOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "c2", false);
+        ColumnRefOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "c3", false);
+        ColumnRefOperator col4 = new ColumnRefOperator(4, StringType.STRING, "c4", false);
+        ColumnRefOperator col5 = new ColumnRefOperator(5, StringType.STRING, "c5", false);
+        ColumnRefOperator col6 = new ColumnRefOperator(6, BooleanType.BOOLEAN, "c6", false);
 
 
-        CallOperator call1 = new CallOperator(FunctionSet.SUM, Type.BIGINT, ImmutableList.of(constA));
-        CallOperator call2 = new CallOperator(FunctionSet.ADD, Type.BIGINT, ImmutableList.of(constA, constA));
+        CallOperator call1 = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, ImmutableList.of(constA));
+        CallOperator call2 = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, ImmutableList.of(constA, constA));
 
         BinaryPredicateOperator gt1 = new BinaryPredicateOperator(BinaryType.GT, col1, col2);
         BinaryPredicateOperator gt2 = new BinaryPredicateOperator(BinaryType.GT, col3, col4);

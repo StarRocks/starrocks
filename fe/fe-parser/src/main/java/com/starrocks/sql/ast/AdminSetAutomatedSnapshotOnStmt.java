@@ -14,23 +14,40 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AdminSetAutomatedSnapshotOnStmt extends DdlStmt {
     private final String storageVolumeName;
+    private final IntervalLiteral intervalLiteral;
+    private long intervalSeconds = 0;
 
-    public AdminSetAutomatedSnapshotOnStmt(String storageVolumeName) {
+    public AdminSetAutomatedSnapshotOnStmt(String storageVolumeName, IntervalLiteral intervalLiteral) {
         super(NodePosition.ZERO);
         this.storageVolumeName = storageVolumeName;
+        this.intervalLiteral = intervalLiteral;
     }
 
-    public AdminSetAutomatedSnapshotOnStmt(String storageVolumeName, NodePosition pos) {
+    public AdminSetAutomatedSnapshotOnStmt(String storageVolumeName, IntervalLiteral intervalLiteral, NodePosition pos) {
         super(pos);
         this.storageVolumeName = storageVolumeName;
+        this.intervalLiteral = intervalLiteral;
     }
 
     public String getStorageVolumeName() {
         return storageVolumeName;
+    }
+
+    public IntervalLiteral getIntervalLiteral() {
+        return intervalLiteral;
+    }
+
+    public long getIntervalSeconds() {
+        return intervalSeconds;
+    }
+
+    public void setIntervalSeconds(long intervalSeconds) {
+        this.intervalSeconds = intervalSeconds;
     }
 
     @Override

@@ -1,0 +1,13 @@
+-- name: test_insert_into_parquet_files_quick_fail
+set time_zone = '+0800'; -- invalid time zone format
+
+insert into files(
+    "path" = "file:///tmp",
+    "format" = "parquet")
+select NOW() as t;
+-- result:
+[REGEX]E: .*can not find cctz time zone .*
+-- !result
+set time_zone = '+08:00'; -- valid time zone format
+-- result:
+-- !result

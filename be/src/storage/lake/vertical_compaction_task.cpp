@@ -14,13 +14,21 @@
 
 #include "storage/lake/vertical_compaction_task.h"
 
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
@@ -28,19 +36,21 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
-#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
 Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
+    int64_t input_bytes = 0;
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
         _total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         // do not check `is_overlapped`, we want actual segment count here
         _context->stats->read_segment_count += rowset->num_segments();
+        // real input bytes, which need to remove deleted rows
+        input_bytes += rowset->data_size_after_deletion();
     }
 
     const auto& store_paths = ExecEnv::GetInstance()->store_paths();
@@ -54,6 +64,10 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
                                                                  true /** is compaction**/, _tablet_schema));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
+
+    if (should_enable_pk_index_eager_build(input_bytes)) {
+        writer->try_enable_pk_index_eager_build();
+    }
 
     std::vector<std::vector<uint32_t>> column_groups;
     CompactionUtils::split_column_into_groups(_tablet_schema->num_columns(), _tablet_schema->sort_key_idxes(),
@@ -107,7 +121,19 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     }
 
     LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
-              << ", statistics: " << _context->stats->to_json_stats();
+              << ", statistics: " << _context->stats->to_json_stats() << ", table_id: " << _context->table_id
+              << ", partition_id: " << _context->partition_id;
+
+    if (config::enable_tablet_write_log) {
+        int64_t begin_time = _context->start_time.load(std::memory_order_relaxed) * 1000; // Convert to ms
+        int64_t finish_time = UnixMillis();
+        collect_sst_stats(writer.get(), txn_log.get());
+        TabletWriteLogManager::instance()->add_compaction_log(
+                get_backend_id().value_or(0), _txn_id, _tablet.id(), _context->table_id, _context->partition_id,
+                _total_num_rows, input_bytes, writer->num_rows(), writer->data_size(),
+                _context->stats->read_segment_count, writer->segments().size(), 0, "vertical", begin_time, finish_time,
+                _sst_input_files, _sst_input_bytes, _sst_output_files, _sst_output_bytes);
+    }
 
     return Status::OK();
 }
@@ -170,6 +196,26 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+
+    // Apply range filter for range-split parallel compaction.
+    // Must apply to ALL column groups (key and non-key) so that segment iterators
+    // produce the same row subsets. The key group's heap_merge_iterator records
+    // RowSourceMasks, and non-key groups' mask_merge_iterator replays them.
+    // If only key group has range filter, non-key iterators read from row 0 while
+    // mask expects range-filtered rows, causing key-value misalignment.
+    if (_context->has_range_split) {
+        if (_context->has_lower_bound && !_context->range_start_key.empty()) {
+            reader_params.start_key = _context->range_start_key;
+            reader_params.range = _context->range_lower_inclusive ? TabletReaderParams::RangeStartOperation::GE
+                                                                  : TabletReaderParams::RangeStartOperation::GT;
+        }
+        if (_context->has_upper_bound && !_context->range_end_key.empty()) {
+            reader_params.end_key = _context->range_end_key;
+            reader_params.end_range = _context->range_upper_inclusive ? TabletReaderParams::RangeEndOperation::LE
+                                                                      : TabletReaderParams::RangeEndOperation::LT;
+        }
+    }
+
     RETURN_IF_ERROR(reader.open(reader_params));
 
     CompactionTaskStats prev_stats;
@@ -223,8 +269,11 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             source_masks->clear();
         }
 
-        _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                                  column_group_size);
+        if (_total_num_rows > 0 && column_group_size > 0) {
+            _context->progress.update(
+                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
+                    column_group_size);
+        }
         CompactionTaskStats temp_stats;
         temp_stats.collect(reader.stats());
         CompactionTaskStats diff_stats = temp_stats - prev_stats;
@@ -232,6 +281,9 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         prev_stats = temp_stats;
     }
     RETURN_IF_ERROR(writer->flush_columns());
+
+    // Close reader to ensure IO statistics are updated via SegmentIterator::_update_stats() before collecting
+    reader.close();
 
     CompactionTaskStats temp_stats;
     temp_stats.collect(reader.stats());

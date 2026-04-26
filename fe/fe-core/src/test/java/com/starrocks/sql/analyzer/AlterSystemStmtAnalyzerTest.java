@@ -18,6 +18,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -33,12 +34,11 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.net.InetAddress;
 import java.util.List;
@@ -61,32 +61,26 @@ public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @Mocked
-    InetAddress addr1;
-
-    private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) {
-                return addr1;
-            }
-        };
-    }
-
     @Test
     public void testVisitModifyBackendClause() {
-        mockNet();
-        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
-        Void result = visitor.visitModifyBackendClause(clause, null);
+        InetAddress mockAddr = Mockito.mock(InetAddress.class);
+        try (MockedStatic<InetAddress> mocked = Mockito.mockStatic(InetAddress.class)) {
+            mocked.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(mockAddr);
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
+            Void result = visitor.visitModifyBackendClause(clause, null);
+        }
     }
 
     @Test
     public void testVisitModifyFrontendHostClause() {
-        mockNet();
-        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
-        Void result = visitor.visitModifyFrontendHostClause(clause, null);
+        InetAddress mockAddr = Mockito.mock(InetAddress.class);
+        try (MockedStatic<InetAddress> mocked = Mockito.mockStatic(InetAddress.class)) {
+            mocked.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(mockAddr);
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
+            Void result = visitor.visitModifyFrontendHostClause(clause, null);
+        }
     }
 
     @Test
@@ -185,16 +179,17 @@ public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
         // test replay
         NodeMgr nodeMgrFollower = new NodeMgr();
         nodeMgrFollower.load(initialImage.getMetaBlockReader());
-        Backend persistentState =
-                (Backend) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
-        nodeMgrFollower.getClusterInfo().updateInMemoryStateBackend(persistentState);
+        UpdateBackendInfo info =
+                (UpdateBackendInfo) UtFrameUtils.PseudoJournalReplayer
+                        .replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        nodeMgrFollower.getClusterInfo().replayBackendStateChange(info);
         Assertions.assertEquals("{c=d}",
-                nodeMgrFollower.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+                nodeMgrFollower.getClusterInfo().getBackend(info.getId()).getLocation().toString());
 
         // test restart
         NodeMgr nodeMgrLeader = new NodeMgr();
         nodeMgrLeader.load(finalImage.getMetaBlockReader());
         Assertions.assertEquals("{c=d}",
-                nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+                nodeMgrLeader.getClusterInfo().getBackend(info.getId()).getLocation().toString());
     }
 }

@@ -16,6 +16,7 @@
 
 #include <future>
 
+#include "base/url_coding.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
@@ -24,7 +25,9 @@
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-#include "util/url_coding.h"
+#include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -37,9 +40,12 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
                              std::move(partition_chunk_writer_factory), state, true) {}
 
 void FileChunkSink::callback_on_commit(const CommitResult& result) {
-    _rollback_actions.push_back(std::move(result.rollback_action));
+    _rollback_actions.push_back(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
     }
 }
 
@@ -47,25 +53,30 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    std::shared_ptr<FileSystem> fs =
+            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
+
+    auto normalized_format = normalize_format_name(ctx->format);
+    ASSIGN_OR_RETURN(std::string file_suffix, build_canonical_file_suffix(normalized_format, ctx->compression_type));
+
     auto location_provider = std::make_shared<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
-            boost::to_lower_copy(ctx->format));
+            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, file_suffix);
 
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
-    if (boost::iequals(ctx->format, formats::PARQUET)) {
+    if (normalized_format == formats::PARQUET) {
         file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
+                fs, ctx->compression_type, ctx->options, ctx->column_names,
+                std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(std::move(column_evaluators)),
                 std::nullopt, ctx->executor, runtime_state);
-    } else if (boost::iequals(ctx->format, formats::ORC)) {
+    } else if (normalized_format == formats::ORC) {
         file_writer_factory = std::make_shared<formats::ORCFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
-    } else if (boost::iequals(ctx->format, formats::CSV)) {
+                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
+                runtime_state);
+    } else if (normalized_format == formats::CSV) {
         file_writer_factory = std::make_shared<formats::CSVFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
+                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
+                runtime_state);
     } else {
         file_writer_factory = std::make_shared<formats::UnknownFileWriterFactory>(ctx->format);
     }
@@ -80,10 +91,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
     // Disable the load spill for file sink temperarily
     if (/* config::enable_connector_sink_spill */ false) {
+        auto* query_execution_services = runtime_state->query_execution_services();
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
+                        fs,
                         ctx->fragment_context,
+                        query_execution_services->runtime->connector_sink_spill_executor,
                         nullptr,
                         nullptr});
         partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);

@@ -16,7 +16,7 @@
 
 #include "common/status.h"
 #include "parquet/schema.h"
-#include "runtime/descriptors.h"
+#include "runtime/descriptors_fwd.h"
 
 namespace starrocks {
 

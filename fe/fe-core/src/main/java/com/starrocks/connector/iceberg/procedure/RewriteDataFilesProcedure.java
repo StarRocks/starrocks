@@ -14,15 +14,26 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.metric.ConnectorMetricsMgr;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
+import org.apache.iceberg.BaseTable;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
@@ -42,9 +53,11 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
     private static final String REWRITE_ALL = "rewrite_all";
     private static final String MIN_FILE_SIZE_BYTES = "min_file_size_bytes";
     private static final String BATCH_SIZE = "batch_size";
+    private static final String BATCH_PARALLELISM = "batch_parallelism";
 
     private static final long DEFAULT_MIN_FILE_SIZE_BYTES = 256L * 1024 * 1024;
     private static final long DEFAULT_BATCH_SIZE = 10L * 1024 * 1024 * 1024;
+    private static final long DEFAULT_BATCH_PARALLELISM = 1L;
 
     private static final RewriteDataFilesProcedure INSTANCE = new RewriteDataFilesProcedure();
 
@@ -56,46 +69,58 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 Arrays.asList(
-                        new NamedArgument(REWRITE_ALL, Type.BOOLEAN, false),
-                        new NamedArgument(MIN_FILE_SIZE_BYTES, Type.BIGINT, false),
-                        new NamedArgument(BATCH_SIZE, Type.BIGINT, false)
+                        new NamedArgument(REWRITE_ALL, BooleanType.BOOLEAN, false),
+                        new NamedArgument(MIN_FILE_SIZE_BYTES, IntegerType.BIGINT, false),
+                        new NamedArgument(BATCH_SIZE, IntegerType.BIGINT, false),
+                        new NamedArgument(BATCH_PARALLELISM, IntegerType.BIGINT, false)
                 ),
                 IcebergTableOperation.REWRITE_DATA_FILES
         );
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
-        if (args.size() > 3) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+        if (args.size() > 4) {
             throw new StarRocksConnectorException("invalid args. only support `rewrite_all`, " +
-                    "`min_file_size_bytes` and `batch_size` in the rewrite data files operation");
+                    "`min_file_size_bytes`, `batch_size` and `batch_parallelism` in the rewrite data files operation");
         }
 
         boolean rewriteAll = args.get(REWRITE_ALL) != null && args.get(REWRITE_ALL)
-                .castTo(Type.BOOLEAN)
+                .castTo(BooleanType.BOOLEAN)
                 .map(ConstantOperator::getBoolean)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected BOOLEAN",
                         REWRITE_ALL));
         long minFileSizeBytes = args.get(MIN_FILE_SIZE_BYTES) != null ? args.get(MIN_FILE_SIZE_BYTES)
-                .castTo(Type.BIGINT)
+                .castTo(IntegerType.BIGINT)
                 .map(ConstantOperator::getBigint)
                 .filter(v -> v > 0)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         MIN_FILE_SIZE_BYTES))
                 : DEFAULT_MIN_FILE_SIZE_BYTES;
         long batchSize = args.get(BATCH_SIZE) != null ? args.get(BATCH_SIZE)
-                .castTo(Type.BIGINT)
+                .castTo(IntegerType.BIGINT)
                 .map(ConstantOperator::getBigint)
                 .filter(v -> v > 0)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         BATCH_SIZE))
                 : DEFAULT_BATCH_SIZE;
+        long batchParallelism = args.get(BATCH_PARALLELISM) != null ? args.get(BATCH_PARALLELISM)
+                .castTo(IntegerType.BIGINT)
+                .map(ConstantOperator::getBigint)
+                .filter(v -> v > 0)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
+                        BATCH_PARALLELISM))
+                : DEFAULT_BATCH_PARALLELISM;
 
         AlterTableStmt stmt = context.stmt();
         Expr partitionFilter = context.clause().getWhere();
         String catalogName = context.stmt().getCatalogName();
         String dbName = context.stmt().getDbName();
         String tableName = context.stmt().getTableName();
+        long startMs = System.currentTimeMillis();
+        boolean success = false;
+        String failureReason = ConnectorMetricsMgr.classifyFailReason((String) null);
+        IcebergRewriteDataJob.RewriteMetrics metrics = IcebergRewriteDataJob.RewriteMetrics.EMPTY;
 
         VelocityContext velCtx = new VelocityContext();
         velCtx.put("catalogName", catalogName);
@@ -109,30 +134,123 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
             for (SlotRef slot : slots) {
                 slot.setTblName(new TableName(dbName, tableName));
             }
-            partitionFilterSql = partitionFilter.toSql();
+            partitionFilterSql = ExprToSql.toSql(partitionFilter);
         }
         velCtx.put("partitionFilterSql", partitionFilterSql);
-        VelocityEngine defaultVelocityEngine = new VelocityEngine();
-        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
-        StringWriter writer = new StringWriter();
-        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
-                "INSERT INTO $catalogName.$dbName.$tableName" +
-                        " SELECT * FROM $catalogName.$dbName.$tableName" +
-                        " #if ($partitionFilterSql)" +
-                        " WHERE $partitionFilterSql" +
-                        " #end"
-        );
-        String executeStmt = writer.toString();
-        IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll,
-                minFileSizeBytes, batchSize, context.context(), stmt);
+
+        org.apache.iceberg.Table nativeTable = context.table();
+        SessionVariable sessionVariable = context.context().getSessionVariable();
+        boolean isV3Table = nativeTable instanceof BaseTable
+                && ((BaseTable) nativeTable).operations().current().formatVersion() >= 3;
+        boolean writeRowLineage = isV3Table && (sessionVariable == null
+                || sessionVariable.getEnableIcebergCompactionWithRowLineage());
+        long durationMs = 0L;
         try {
+            IcebergRewriteDataJob job = newRewriteJob(velCtx, writeRowLineage, rewriteAll,
+                    minFileSizeBytes, batchSize, batchParallelism, context.context(), stmt);
             job.prepare();
-            job.execute();
+            metrics = job.execute();
+            success = true;
         } catch (Exception e) {
+            failureReason = ConnectorMetricsMgr.classifyFailReason(e);
             LOGGER.error("failed to rewrite data files for iceberg table {}.{}",
                     stmt.getDbName(), stmt.getTableName(), e);
             throw new StarRocksConnectorException("execute rewrite data files for iceberg table %s.%s failed: %s",
                     stmt.getDbName(), stmt.getTableName(), e.getMessage(), e);
+        } finally {
+            durationMs = Math.max(0, System.currentTimeMillis() - startMs);
+            recordManualCompactionMetrics(success, durationMs, metrics, failureReason);
         }
+        return getRewriteResult(context, metrics, durationMs);
+    }
+
+    private IcebergRewriteDataJob newRewriteJob(VelocityContext velCtx, boolean writeRowLineage, boolean rewriteAll,
+                                                long minFileSizeBytes, long batchSize, long batchParallelism,
+                                                ConnectContext context, AlterTableStmt stmt) {
+        return new IcebergRewriteDataJob(buildInsertSelectSql(velCtx, writeRowLineage), rewriteAll,
+                minFileSizeBytes, batchSize, batchParallelism, writeRowLineage, context, stmt);
+    }
+
+    private String buildInsertSelectSql(VelocityContext velCtx, boolean writeRowLineage) {
+        VelocityEngine defaultVelocityEngine = new VelocityEngine();
+        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+        StringWriter writer = new StringWriter();
+        if (writeRowLineage) {
+            defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
+                    "INSERT INTO $catalogName.$dbName.$tableName" +
+                            " SELECT *, _row_id, _last_updated_sequence_number" +
+                            " FROM $catalogName.$dbName.$tableName" +
+                            " #if ($partitionFilterSql)" +
+                            " WHERE $partitionFilterSql" +
+                            " #end");
+        } else {
+            defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
+                    "INSERT INTO $catalogName.$dbName.$tableName" +
+                            " SELECT * FROM $catalogName.$dbName.$tableName" +
+                            " #if ($partitionFilterSql)" +
+                            " WHERE $partitionFilterSql" +
+                            " #end");
+        }
+        return writer.toString();
+    }
+
+    private ShowResultSet getRewriteResult(IcebergTableProcedureContext context, 
+                                                            IcebergRewriteDataJob.RewriteMetrics metrics,
+                                                            long durationMs) {
+        ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
+                .column("db_name", TypeFactory.createVarcharType(128))
+                .column("table_name", TypeFactory.createVarcharType(128))
+                .column("input_data_files", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("output_data_files", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("removed_delete_files", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("duration_ms", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("status", TypeFactory.createVarcharType(128))
+                .build();
+        List<List<String>> rows = new ArrayList<>();
+        rows.add(Arrays.asList(
+                context.stmt().getDbName(),
+                context.stmt().getTableName(),
+                String.valueOf(metrics.getRewrittenDataFilesCount()),
+                String.valueOf(metrics.getAddedDataFilesCount()),
+                String.valueOf(metrics.getRewrittenDeleteFilesCount()),
+                String.valueOf(durationMs),
+                "success"
+        ));
+        String message = String.format(
+                "Iceberg compaction finished [%s.%s]: input_data_files=%d, output_data_files=%d, " +
+                        "removed_delete_files=%d, duration_ms=%d",
+                context.stmt().getDbName(),
+                context.stmt().getTableName(),
+                metrics.getRewrittenDataFilesCount(),
+                metrics.getAddedDataFilesCount(),
+                metrics.getRewrittenDeleteFilesCount(),
+                durationMs);
+        Tracers.record(Tracers.Module.EXTERNAL,
+                String.format("ICEBERG.RewriteDataFiles.%s.%s", context.stmt().getDbName(), context.stmt().getTableName()),
+                message);
+        context.context().getState().setOk(0, 0, message);
+        return new ShowResultSet(metaData, rows);
+    }
+
+    private void recordManualCompactionMetrics(boolean success, long durationMs,
+                                               IcebergRewriteDataJob.RewriteMetrics metrics, String failureReason) {
+        String compactionType = "manual";
+        if (success) {
+            ConnectorMetricsMgr.increaseCompactionTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, compactionType);
+        } else {
+            ConnectorMetricsMgr.increaseCompactionTotal(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    "failed", failureReason, compactionType);
+        }
+        ConnectorMetricsMgr.increaseCompactionDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                durationMs, compactionType);
+        if (!success) {
+            return;
+        }
+        ConnectorMetricsMgr.increaseCompactionInputFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                metrics.getRewrittenDataFilesCount(), compactionType);
+        ConnectorMetricsMgr.increaseCompactionOutputFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                metrics.getAddedDataFilesCount(), compactionType);
+        ConnectorMetricsMgr.increaseCompactionRemovedDeleteFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                metrics.getRewrittenDeleteFilesCount(), compactionType);
     }
 }

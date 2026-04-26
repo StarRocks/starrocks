@@ -105,6 +105,16 @@ public:
         return join_path(segment_root_location(tablet_id), delvec_name);
     }
 
+    // Construct full remote storage path for Lake Compaction Rows Mapper file
+    // WHY: lcrm files are stored alongside segments in the tablet's segment root on remote
+    // storage (S3/HDFS). This ensures they're subject to the same lifecycle management,
+    // access patterns, and storage policies as other tablet data files.
+    // CONSISTENCY: Using segment_root_location maintains path consistency with delvec and
+    // SST files, simplifying storage management and backup/restore operations.
+    std::string lcrm_location(int64_t tablet_id, std::string_view crm_name) const {
+        return join_path(segment_root_location(tablet_id), crm_name);
+    }
+
     std::string sst_location(int64_t tablet_id, std::string_view sst_name) const {
         return join_path(segment_root_location(tablet_id), sst_name);
     }
@@ -113,7 +123,7 @@ public:
         return join_path(root_location(tablet_id), schema_filename(schema_id));
     }
 
-private:
+protected:
     static std::string join_path(std::string_view parent, std::string_view child) {
         return fmt::format("{}/{}", parent, child);
     }

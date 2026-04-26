@@ -25,6 +25,10 @@
             <artifactId>fe-grammar</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-type</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4-runtime</artifactId>
         </dependency>

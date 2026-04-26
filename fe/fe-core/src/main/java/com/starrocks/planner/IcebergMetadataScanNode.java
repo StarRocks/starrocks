@@ -138,7 +138,6 @@ public class IcebergMetadataScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
 
         String explainString = getExplainString(conjuncts);
-        LOG.info("Explain string: " + explainString);
         tHdfsScanNode.setSql_predicates(explainString);
 
         tHdfsScanNode.setSerialized_table(serializedTable);
@@ -147,6 +146,8 @@ public class IcebergMetadataScanNode extends ScanNode {
         tHdfsScanNode.setMetadata_table_type(metadataTableType.name());
 
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

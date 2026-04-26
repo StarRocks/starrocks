@@ -11,6 +11,22 @@ select adddate('2023-10-31 23:59:59', INTERVAL 1 YEAR);
 -- result:
 2024-10-31 23:59:59
 -- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 YEAR * 2);
+-- result:
+2025-10-31 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', 2 * INTERVAL 1 YEAR);
+-- result:
+2025-10-31 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 2 YEAR / 2);
+-- result:
+2024-10-31 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', 2 / INTERVAL 2 YEAR);
+-- result:
+E: (1064, 'Getting syntax error. Detail message: Do not support Expr divide IntervalLiteral syntax.')
+-- !result
 select adddate('2023-10-31 23:59:59', INTERVAL 100 YEAR);
 -- result:
 2123-10-31 23:59:59

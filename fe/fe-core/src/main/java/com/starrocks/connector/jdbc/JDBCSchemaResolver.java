@@ -20,10 +20,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.Type;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -35,6 +36,20 @@ import java.util.Map;
 public abstract class JDBCSchemaResolver {
 
     boolean supportPartitionInformation = false;
+    protected String[] defaultTableTypes = new String[] {"TABLE", "VIEW"};
+
+    /**
+     * Get the query timeout in seconds for JDBC statement execution.
+     *
+     * For jdbc_query_timeout_ms > 0, uses Math.ceil to round up sub-second values to minimum 1 second,
+     * because 0 is a special value meaning "no timeout limit".
+     * It is reasonable because sub-second query timeouts are uncommon in practice.
+     *
+     * @return query timeout in seconds
+     */
+    protected int getQueryTimeoutSeconds() {
+        return (int) Math.ceil(Config.jdbc_query_timeout_ms / 1000.0);
+    }
 
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
@@ -42,7 +57,7 @@ public abstract class JDBCSchemaResolver {
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_SCHEM");
                 // skip internal schemas
-                if (!schemaName.equalsIgnoreCase("information_schema")) {
+                if (!isInternalSchema(schemaName)) {
                     schemaNames.add(schemaName);
                 }
             }
@@ -52,9 +67,47 @@ public abstract class JDBCSchemaResolver {
         }
     }
 
+    /**
+     * Check if a schema is an internal system schema that should be hidden from users.
+     * Subclasses can override this method to define their own internal schemas.
+     *
+     * @param schemaName the schema name to check
+     * @return true if the schema is an internal system schema, false otherwise
+     */
+    protected boolean isInternalSchema(String schemaName) {
+        return schemaName.equalsIgnoreCase("information_schema");
+    }
+
+    /**
+     * Check if a database/schema exists in the external JDBC system.
+     *
+     * @param connection JDBC connection
+     * @param dbName database name to check
+     * @return true if database exists, false otherwise
+     * @throws SQLException if a database access error occurs
+     */
+    public boolean databaseExists(Connection connection, String dbName) throws SQLException {
+        // Skip internal schemas to maintain consistency with listSchemas()
+        if (isInternalSchema(dbName)) {
+            return false;
+        }
+        try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
+            while (resultSet.next()) {
+                String schemaName = resultSet.getString("TABLE_SCHEM");
+                if (schemaName.equals(dbName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(dbName, null, null,
-                new String[] {"TABLE", "VIEW"});
+        return connection.getMetaData().getTables(dbName, null, null, defaultTableTypes);
+    }
+
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(dbName, null, tblName, defaultTableTypes);
     }
 
     public ResultSet getColumns(Connection connection, String dbName, String tblName) throws SQLException {
@@ -71,6 +124,30 @@ public abstract class JDBCSchemaResolver {
         return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, properties);
     }
 
+    /**
+     * Get table comment from JDBC metadata, typically from the "REMARKS" column of DatabaseMetaData#getTables().
+     *
+     * <p>Notes:
+     * - Some JDBC drivers don't support REMARKS or may throw SQLException when accessing it.
+     * - Some drivers return empty REMARKS unless certain connection properties are enabled.
+     */
+    public String getTableComment(Connection connection, String dbName, String tblName) {
+        try (ResultSet resultSet = getTables(connection, dbName, tblName)) {
+            if (!resultSet.next()) {
+                return "";
+            }
+            try {
+                String remarks = resultSet.getString("REMARKS");
+                return remarks != null ? remarks : "";
+            } catch (SQLException ignored) {
+                // ignore
+            }
+        } catch (SQLException ignored) {
+            // ignore
+        }
+        return "";
+    }
+
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
         return Lists.newArrayList();
     }
@@ -84,12 +161,22 @@ public abstract class JDBCSchemaResolver {
     }
 
     public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {
+        return convertToSRTable(columnSet, null);
+    }
+
+    public List<Column> convertToSRTable(ResultSet columnSet, Map<String, Integer> originalJdbcTypes) throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         while (columnSet.next()) {
-            Type type = convertColumnType(columnSet.getInt("DATA_TYPE"),
+            int dataType = columnSet.getInt("DATA_TYPE");
+            String columnName = columnSet.getString("COLUMN_NAME");
+            Type type = convertColumnType(dataType,
                     columnSet.getString("TYPE_NAME"),
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
+
+            if (originalJdbcTypes != null) {
+                originalJdbcTypes.put(columnName.toLowerCase(java.util.Locale.ROOT), dataType);
+            }
 
             String comment = "";
             // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
@@ -99,7 +186,7 @@ public abstract class JDBCSchemaResolver {
                 }
             } catch (SQLException ignored) { }
 
-            fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
+            fullSchema.add(new Column(columnName, type,
                     columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
         }
         return fullSchema;

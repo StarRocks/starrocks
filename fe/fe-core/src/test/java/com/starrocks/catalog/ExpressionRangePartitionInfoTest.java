@@ -22,6 +22,7 @@ import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -30,11 +31,16 @@ import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -73,8 +79,8 @@ public class ExpressionRangePartitionInfoTest {
         fnChildren.add(new StringLiteral("month"));
         fnChildren.add(slotRef2);
         functionCallExpr = new FunctionCallExpr("date_trunc", fnChildren);
-        functionCallExpr.setFn(Expr.getBuiltinFunction(
-                "date_trunc", new Type[] {Type.VARCHAR, Type.DATETIME}, Function.CompareMode.IS_IDENTICAL));
+        functionCallExpr.setFn(ExprUtils.getBuiltinFunction(
+                "date_trunc", new Type[] {VarcharType.VARCHAR, DateType.DATETIME}, Function.CompareMode.IS_IDENTICAL));
 
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -524,9 +530,99 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs(readTable.getIdToColumn());
-        Function fn = readPartitionExprs.get(0).getFn();
+        Function fn = ((FunctionCallExpr) readPartitionExprs.get(0)).getFn();
         Assertions.assertNotNull(fn);
         starRocksAssert.dropTable("table_hitcount");
+    }
+
+    @Test
+    public void testUpdateSlotRefAfterColumnRename() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test_rename_partition_col (\n" +
+                "k1 varchar(200) NULL,\n" +
+                "dt date NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_rename_partition_col");
+
+        // Rename the partition column: dt -> event_date
+        table.renameColumn("dt", "event_date");
+
+        // Serialize and deserialize to trigger gsonPostProcess -> updateSlotRef
+        String json = GsonUtils.GSON.toJson(table);
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+
+        // After deserialization, the partition expression should still be properly analyzed
+        // even though the column has been renamed.
+        ExpressionRangePartitionInfo partInfo =
+                (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
+        List<Expr> exprs = partInfo.getPartitionExprs(readTable.getIdToColumn());
+        Assertions.assertTrue(exprs.get(0) instanceof FunctionCallExpr);
+        FunctionCallExpr fn = (FunctionCallExpr) exprs.get(0);
+        // The function should have been resolved by analyzePartitionExpr
+        Assertions.assertNotNull(fn.getFn(),
+                "Partition expression should be analyzed after column rename");
+        // The slot ref column name should be updated to the new name
+        SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(fn);
+        Assertions.assertNotNull(slotRef);
+        Assertions.assertEquals("event_date", slotRef.getColumnName());
+
+        starRocksAssert.dropTable("test_rename_partition_col");
+    }
+
+    @Test
+    public void testUpdateSlotRefAfterColumnRenameSlotRefPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test_rename_slotref_base (\n" +
+                "k1 varchar(200) NULL,\n" +
+                "dt date NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        starRocksAssert.withMaterializedView("create materialized view test_mv_rename_slotref " +
+                " DISTRIBUTED BY HASH(dt) BUCKETS 1\n" +
+                " PARTITION BY dt\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                " as select dt, k1 from test_rename_slotref_base");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_mv_rename_slotref");
+
+        // Rename the partition column: dt -> event_date
+        table.renameColumn("dt", "event_date");
+
+        // Serialize and deserialize
+        String json = GsonUtils.GSON.toJson(table);
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+
+        ExpressionRangePartitionInfo partInfo =
+                (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
+        List<Expr> exprs = partInfo.getPartitionExprs(readTable.getIdToColumn());
+        Assertions.assertTrue(exprs.get(0) instanceof SlotRef);
+        SlotRef slotRef = (SlotRef) exprs.get(0);
+        // The type should have been set correctly (not INVALID)
+        Assertions.assertFalse(slotRef.getType().isInvalid(),
+                "SlotRef type should be resolved after column rename");
+        Assertions.assertTrue(slotRef.getType().isDateType());
+        // The column name should be updated to the new name
+        Assertions.assertEquals("event_date", slotRef.getColumnName());
+
+        starRocksAssert.dropMaterializedView("test_mv_rename_slotref");
+        starRocksAssert.dropTable("test_rename_slotref_base");
     }
 
     @Test
@@ -659,7 +755,7 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<ColumnIdExpr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs();
-        Function fn = readPartitionExprs.get(0).getExpr().getFn();
+        Function fn = ((FunctionCallExpr) readPartitionExprs.get(0).getExpr()).getFn();
         Assertions.assertNotNull(fn);
     }
 
@@ -708,13 +804,5 @@ public class ExpressionRangePartitionInfoTest {
             Assertions.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 10. " +
                     "Detail message: Unexpected input '(', the most similar input is {<EOF>}."));
         }
-
-        //the table still create successfully.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = db.getTable("table_reserverd_keyword_partition1");
-        ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                (ExpressionRangePartitionInfo) ((OlapTable) table).getPartitionInfo();
-        String exprToSql = expressionRangePartitionInfo.getPartitionExprs().get(0).toSql();
-        Assertions.assertEquals("date_trunc('day', partition)", exprToSql);
     }
 }

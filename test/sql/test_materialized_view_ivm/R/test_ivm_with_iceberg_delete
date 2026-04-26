@@ -1,0 +1,405 @@
+-- name: test_ivm_with_iceberg_delete
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t2 (
+  id int,
+  val string
+);
+-- result:
+-- !result
+insert into t1 values
+  ('a', 1, '2023-12-01'), ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'), ('b', 4, '2023-12-02'),
+  ('c', 5, '2023-12-03'), ('c', 6, '2023-12-03'),
+  ('d', 7, '2023-12-04'), ('d', 8, '2023-12-04');
+-- result:
+-- !result
+insert into t2 values (1,'x'), (2,'y'), (3,'z'), (5,'p'), (7,'q');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+-- result:
+mv-397534
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+-- result:
+a	1	2023-12-01
+a	2	2023-12-01
+b	3	2023-12-02
+b	4	2023-12-02
+c	5	2023-12-03
+c	6	2023-12-03
+d	7	2023-12-04
+d	8	2023-12-04
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('e', 9, '2023-12-05');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+-- result:
+a	1	2023-12-01
+a	2	2023-12-01
+b	3	2023-12-02
+b	4	2023-12-02
+c	5	2023-12-03
+c	6	2023-12-03
+d	7	2023-12-04
+d	8	2023-12-04
+e	9	2023-12-05
+-- !result
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 2;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+-- result:
+a	1	2023-12-01
+b	3	2023-12-02
+b	4	2023-12-02
+c	5	2023-12-03
+c	6	2023-12-03
+d	7	2023-12-04
+d	8	2023-12-04
+e	9	2023-12-05
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('f', 10, '2023-12-06');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+-- result:
+a	1	2023-12-01
+b	3	2023-12-02
+b	4	2023-12-02
+c	5	2023-12-03
+c	6	2023-12-03
+d	7	2023-12-04
+d	8	2023-12-04
+e	9	2023-12-05
+f	10	2023-12-06
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT dt, sum(col_int) AS sum_col_int, count(col_int) AS cnt
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   WHERE col_int > 3
+   GROUP BY dt;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+-- result:
+mv-397616
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-02	4	1
+2023-12-03	11	2
+2023-12-04	15	2
+2023-12-05	9	1
+2023-12-06	10	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('g', 10, '2023-12-07');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-02	4	1
+2023-12-03	11	2
+2023-12-04	15	2
+2023-12-05	9	1
+2023-12-06	10	1
+2023-12-07	10	1
+-- !result
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-02	4	1
+2023-12-03	11	2
+2023-12-04	15	2
+2023-12-05	9	1
+2023-12-06	10	1
+2023-12-07	10	1
+-- !result
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 5;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-02	4	1
+2023-12-03	6	1
+2023-12-04	15	2
+2023-12-05	9	1
+2023-12-06	10	1
+2023-12-07	10	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('h', 11, '2023-12-08');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-02	4	1
+2023-12-03	6	1
+2023-12-04	15	2
+2023-12-05	9	1
+2023-12-06	10	1
+2023-12-07	10	1
+2023-12-08	11	1
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT t1.dt, t1.col_str, t2.val
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 t1
+   JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 t2 ON t1.col_int = t2.id;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+-- result:
+mv-397732
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+-- result:
+2023-12-02	b	z
+2023-12-04	d	q
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('i', 3, '2023-12-09');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+-- result:
+2023-12-02	b	z
+2023-12-04	d	q
+2023-12-09	i	z
+-- !result
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int IN (3, 7);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('j', 2, '2023-12-10');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+-- result:
+2023-12-10	j	y
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+-- result:
+mv-397877
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE dt = '2023-12-04';
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT count(*) FROM test_mv1 WHERE dt = '2023-12-04';
+-- result:
+0
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt <= '2023-12-05' ORDER BY col_str, col_int, dt;
+-- result:
+b	4	2023-12-02
+c	6	2023-12-03
+e	9	2023-12-05
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('new_d', 99, '2023-12-04');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt = '2023-12-04' ORDER BY col_str, col_int;
+-- result:
+new_d	99	2023-12-04
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('new_e', 100, '2023-12-11');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt IN ('2023-12-04', '2023-12-11') ORDER BY col_str, col_int, dt;
+-- result:
+new_d	99	2023-12-04
+new_e	100	2023-12-11
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "incremental")
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+-- result:
+mv-398032
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 2;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+FAILED
+-- !result
+SELECT ERROR_MESSAGE LIKE '%not append-only%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+1
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

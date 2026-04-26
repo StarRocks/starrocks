@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 
-#include "date_value.h"
 #include "gutil/strings/substitute.h"
-#include "types/timestamp_value.h"
 
 namespace starrocks {
 
@@ -115,10 +113,7 @@ bool DateValue::from_string(const char* date_str, size_t len) {
         return false;
     }
 
-    if (!date::check(year, month, day)) {
-        return false;
-    }
-
+    // Validation is already performed in from_string_to_date
     from_date(year, month, day);
     return true;
 }

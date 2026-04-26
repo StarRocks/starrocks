@@ -16,17 +16,16 @@ package com.starrocks.sql.spm;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -35,6 +34,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Comparator;
@@ -64,13 +66,13 @@ public class SPMFunctions {
     private static final Set<String> CONTAIN_VALUES_FUNCTIONS = Set.of(CONST_LIST_FUNC, CONST_VAR_FUNC);
 
     public static Function getSPMFunction(FunctionCallExpr expr, List<Type> argsTypes) {
-        if (!SPM_FUNCTIONS.contains(StringUtils.lowerCase(expr.getFnName().getFunction()))) {
+        if (!SPM_FUNCTIONS.contains(StringUtils.lowerCase(expr.getFunctionName()))) {
             return null;
         }
         if (expr.getChildren().stream().anyMatch(p -> !p.isConstant())) {
             throw new SemanticException("spm function's parameters must be const");
         }
-        return getSPMFunction(expr.getFnName().getFunction(), Type.NULL, argsTypes);
+        return getSPMFunction(expr.getFunctionName(), NullType.NULL, argsTypes);
     }
 
     private static Function getSPMFunction(String fnName, Type type, List<Type> argsTypes) {
@@ -92,7 +94,7 @@ public class SPMFunctions {
             if (argsTypes.size() != 3) {
                 throw new SemanticException("spm function _spm_const_range must have three parameters");
             }
-            if (!ScalarType.canCastTo(argsTypes.get(1), argsTypes.get(2))) {
+            if (!TypeManager.canCastTo(argsTypes.get(1), argsTypes.get(2))) {
                 throw new SemanticException("spm function _spm_const_range min/max type must be same");
             }
         } else if (CONST_ENUM_FUNC.equalsIgnoreCase(fnName)) {
@@ -101,7 +103,7 @@ public class SPMFunctions {
             }
             Type type1 = argsTypes.get(1);
             for (int i = 2; i < argsTypes.size(); i++) {
-                if (!ScalarType.canCastTo(argsTypes.get(i), type1)) {
+                if (!TypeManager.canCastTo(argsTypes.get(i), type1)) {
                     throw new SemanticException("spm function _spm_const_enum enum type must be same");
                 }
             }
@@ -110,11 +112,11 @@ public class SPMFunctions {
     }
 
     public static FunctionCallExpr newFunc(String func, long placeholderID, List<Expr> input) {
-        List<Expr> children = Lists.newArrayList(new IntLiteral(placeholderID, Type.BIGINT));
+        List<Expr> children = Lists.newArrayList(new IntLiteral(placeholderID, IntegerType.BIGINT));
         children.addAll(input);
         FunctionCallExpr expr = new FunctionCallExpr(func, children);
-        expr.setFn(getSPMFunction(func, Type.NULL, children.stream().map(Expr::getType).toList()));
-        expr.setType(Type.NULL);
+        expr.setFn(getSPMFunction(func, NullType.NULL, children.stream().map(Expr::getType).toList()));
+        expr.setType(NullType.NULL);
         return expr;
     }
 
@@ -123,7 +125,7 @@ public class SPMFunctions {
             expr = expr.getChild(1);
         }
         return (expr instanceof FunctionCallExpr)
-                && SPM_FUNCTIONS.contains(((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase());
+                && SPM_FUNCTIONS.contains(((FunctionCallExpr) expr).getFunctionName().toLowerCase());
     }
 
     public static boolean isSPMFunctions(ScalarOperator operator) {
@@ -141,9 +143,9 @@ public class SPMFunctions {
         CallOperator call = (CallOperator) operator;
         call.setType(type);
         List<Type> argTypes = Lists.newArrayList();
-        argTypes.add(Type.BIGINT);
-        if (!call.getChild(0).getType().equals(Type.BIGINT)) {
-            call.setChild(0, new CastOperator(Type.BIGINT, call.getChild(0)));
+        argTypes.add(IntegerType.BIGINT);
+        if (!call.getChild(0).getType().equals(IntegerType.BIGINT)) {
+            call.setChild(0, new CastOperator(IntegerType.BIGINT, call.getChild(0)));
         }
         for (int i = 1; i < call.getChildren().size(); i++) {
             call.setChild(i, new CastOperator(type, call.getChild(i)));
@@ -223,7 +225,7 @@ public class SPMFunctions {
     }
 
     private static boolean checkParameters(FunctionCallExpr spmExpr, List<Expr> checkParameters) {
-        String fn = spmExpr.getFnName().getFunction();
+        String fn = spmExpr.getFunctionName();
         try {
             Expr checkExpr;
             if (CONST_RANGE_FUNC.equalsIgnoreCase(fn)) {
@@ -231,12 +233,12 @@ public class SPMFunctions {
                 Expr max = spmExpr.getChild(2);
                 List<Expr> values = checkParameters.stream()
                         .map(p -> (Expr) new BetweenPredicate(p, min, max, false)).toList();
-                checkExpr = CompoundPredicate.compoundAnd(values);
+                checkExpr = ExprUtils.compoundAnd(values);
             } else if (CONST_ENUM_FUNC.equalsIgnoreCase(fn)) {
                 List<Expr> values = spmExpr.getChildren().stream().skip(1).toList();
                 List<Expr> inPredicates = checkParameters.stream()
                         .map(p -> (Expr) new InPredicate(p, values, false)).toList();
-                checkExpr = CompoundPredicate.compoundAnd(inPredicates);
+                checkExpr = ExprUtils.compoundAnd(inPredicates);
             } else {
                 return false;
             }
@@ -256,7 +258,7 @@ public class SPMFunctions {
         if (!other.isConstant()) {
             return false;
         }
-        String fn = spmExpr.getFnName().getFunction();
+        String fn = spmExpr.getFunctionName();
         if (CONTAIN_VALUES_FUNCTIONS.contains(fn)) {
             return true;
         }
@@ -268,7 +270,7 @@ public class SPMFunctions {
             return false;
         }
         FunctionCallExpr spmFunc = (FunctionCallExpr) spmIn.getChild(1);
-        String fn = spmFunc.getFnName().getFunction();
+        String fn = spmFunc.getFunctionName();
         if (CONST_LIST_FUNC.equalsIgnoreCase(fn)) {
             return true;
         }

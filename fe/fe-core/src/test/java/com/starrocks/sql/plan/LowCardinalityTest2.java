@@ -19,6 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
+import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeInfo;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -165,12 +166,37 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `low_card_t3` (\n" +
+                "  `d_date` date ,\n" +
+                "  `c_user` varchar(50) ,\n" +
+                "  `c_dept` varchar(50) ,\n" +
+                "  `c_par` varchar(50) ,\n" +
+                "  `c_nodevalue` varchar(50) ,\n" +
+                "  `c_brokername` varchar(50) ,\n" +
+                "  `f_asset` decimal128(20, 5) ,\n" +
+                "  `f_asset_zb` decimal128(20, 5) ,\n" +
+                "  `f_managerfee` decimal128(20, 5) ,\n" +
+                "  `fee_zb` decimal128(20, 5) ,\n" +
+                "  `cpc` int(11) \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`d_date`, `c_user`, `c_dept`, `c_par`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`d_date`, `c_user`, `c_dept`, `c_par`) BUCKETS 16 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
         connectContext.getSessionVariable().setEnableEliminateAgg(false);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @AfterAll
@@ -1160,16 +1186,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, plan, "  20:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 30: S_ADDRESS, 31: S_COMMENT\n" +
+                "  |  group by: 32: cast, 33: cast\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  \n" +
                 "  |----19:EXCHANGE\n" +
                 "  |    \n" +
-                "  16:EXCHANGE");
+                "  16:Decode\n" +
+                "  |  <dict id 38> : <string id 25>\n" +
+                "  |  <dict id 39> : <string id 26>\n" +
+                "  |  \n" +
+                "  15:EXCHANGE");
         assertContains(plan, plan, "Decode");
         plan = getThriftPlan(sql);
-        assertNotContains(plan.split("\n")[1], "query_global_dicts");
+        assertContains(plan.split("\n")[1], "query_global_dicts");
     }
 
     @Test
@@ -1270,119 +1300,103 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "select row_number() over( partition by L_COMMENT order by L_PARTKEY) as rm from lineitem" +
                 ") t where rm < 10";
         plan = getCostExplain(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, row_number[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
-                "  |  order by: [2: L_PARTKEY, INT, false] ASC");
-        assertContains(plan, "  3:Decode\n" +
-                "  |  <dict id 20> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC\n" +
-                "  |  analytic partition by: [20, INT, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  partition by: [20: L_COMMENT, INT, false] ");
-        assertContains(plan, "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [20: L_COMMENT, INT, false]\n" +
+                "  |  order by: [2: L_PARTKEY, INT, false] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // row number
         sql = "select * from (select L_COMMENT,l_quantity, row_number() over " +
                 "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, row_number[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
-                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
-        assertContains(plan, "  3:Decode\n" +
+        assertContains(plan, "  5:Decode\n" +
                 "  |  <dict id 19> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
-                "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  offset: 0");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // rank
         sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
                 "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
-                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
-        assertContains(plan, "  3:Decode\n" +
+        assertContains(plan, "  5:Decode\n" +
                 "  |  <dict id 19> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  type: RANK\n" +
-                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
-                "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // mul-column partition by
         sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
                 "(partition by L_COMMENT, l_shipmode order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false], [15: L_SHIPMODE, VARCHAR, false]\n" +
-                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
-        assertContains(plan, "  3:Decode\n" +
+        assertContains(plan, "  6:Decode\n" +
                 "  |  <dict id 19> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false], [15: L_SHIPMODE, VARCHAR, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  type: RANK\n" +
-                "  |  partition by: [19: L_COMMENT, INT, false] , [15: L_SHIPMODE, CHAR, false] \n" +
-                "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  offset: 0");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false], [15: L_SHIPMODE, VARCHAR, false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // partition column with expr
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_COMMENT order by S_NAME) FROM supplier_nullable";
         plan = getCostExplain(sql);
-        assertContains(plan, "  3:ANALYTIC\n" +
-                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [7: S_COMMENT, VARCHAR(101), false]\n" +
-                "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
-        assertContains(plan, "  2:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  <dict id 11> : <string id 7>");
-        assertContains(plan, "  1:SORT\n" +
-                "  |  order by: [11, INT, false] ASC, [2, VARCHAR, false] ASC\n" +
-                "  |  analytic partition by: [11, INT, false]");
+        assertContains(plan, "  4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  9 <-> [9: max(1: S_SUPPKEY), INT, true]\n" +
+                "  |  10 <-> [10: S_ADDRESS, INT, true]");
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); " +
+                "args: INT; result: INT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [11: S_COMMENT, INT, false]\n" +
+                "  |  order by: [2: S_NAME, VARCHAR, false] ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by concat(S_COMMENT, 'a') order by S_NAME) FROM supplier_nullable";
         plan = getCostExplain(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, max[([9: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [17: concat, VARCHAR, true]\n" +
-                "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
-        assertContains(plan, "  3:Decode\n" +
-                "  |  <dict id 20> : <string id 17>");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, max[([9: S_SUPPKEY, INT, false]); " +
+                "args: INT; result: INT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [20: concat, INT, true]\n" +
+                "  |  order by: [2: S_NAME, VARCHAR, false] ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
         assertContains(plan, "  2:SORT\n" +
                 "  |  order by: [20, INT, true] ASC, [2, VARCHAR, false] ASC\n" +
-                "  |  analytic partition by: [20, INT, true]");
+                "  |  analytic partition by: [20: concat, INT, true]");
+
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> [2: S_NAME, CHAR, false]\n" +
+                "  |  9 <-> [1: S_SUPPKEY, INT, false]\n" +
+                "  |  11 <-> [3: S_ADDRESS, VARCHAR, true]\n" +
+                "  |  20 <-> DictDefine([19: S_COMMENT, INT, false], [concat[(<place-holder>, 'a'); " +
+                "args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]])\n");
 
         // partition column is not dict column
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_NAME order by S_COMMENT) FROM supplier_nullable";
         plan = getCostExplain(sql);
-        assertContains(plan, "  3:ANALYTIC\n" +
-                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true], ]\n" +
+        assertContains(plan, "  4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  9 <-> [9: max(1: S_SUPPKEY), INT, true]\n" +
+                "  |  10 <-> [10: S_ADDRESS, INT, true]");
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); " +
+                "args: INT; result: INT; args nullable: false; result nullable: true], ]\n" +
                 "  |  partition by: [2: S_NAME, VARCHAR, false]\n" +
-                "  |  order by: [7: S_COMMENT, VARCHAR(101), false] ASC");
-        assertContains(plan, "  2:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  <dict id 11> : <string id 7>");
-        assertContains(plan, "  1:SORT\n" +
-                "  |  order by: [2, VARCHAR, false] ASC, [11, INT, false] ASC\n" +
-                "  |  analytic partition by: [2: S_NAME, VARCHAR, false]");
+                "  |  order by: [11: S_COMMENT, INT, false] ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // there is not DecodeNode
         sql = "SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/" +
@@ -1424,7 +1438,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         sql = "select count(t.a) from(select S_ADDRESS <=> 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("[3: S_ADDRESS, VARCHAR, false] <=> 'kks'"));
+        Assertions.assertTrue(plan.contains("DictDecode([11: S_ADDRESS, INT, false], [<place-holder> <=> 'kks'])"), plan);
 
         sql = "select S_ADDRESS not like '%key%' from supplier";
         plan = getVerboseExplain(sql);
@@ -1511,7 +1525,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String sql = "select t0.S_ADDRESS from (select S_ADDRESS, S_NATIONKEY from supplier_nullable limit 10) t0" +
                 " inner join supplier on t0.S_NATIONKEY = supplier.S_NATIONKEY;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  2:Decode\n" +
+        assertContains(plan, "  7:Decode\n" +
                 "  |  <dict id 17> : <string id 3>\n");
     }
 
@@ -1536,29 +1550,28 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         // window function with full order by
         sql = "select rank() over (order by S_ADDRESS) as rk from supplier_nullable";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, rank(), ]\n" +
-                "  |  order by: 3: S_ADDRESS ASC\n" +
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
+                "  |  order by: [10: S_ADDRESS, INT, true] ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                "  |  \n" +
-                "  3:Decode\n" +
-                "  |  <dict id 10> : <string id 3>");
+                "  |  cardinality: 1");
 
         // Decode node under sort node
         sql = "select S_ADDRESS, S_COMMENT from (select S_ADDRESS, " +
                 "S_COMMENT from supplier_nullable order by S_COMMENT limit 10) tb where S_ADDRESS = 'SS' order by S_ADDRESS ";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  5:SORT\n" +
-                "  |  order by: <slot 3> 3: S_ADDRESS ASC\n" +
+        assertContains(plan, "  4:SORT\n" +
+                "  |  order by: <slot 9> 9: S_ADDRESS ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
-                "  4:SELECT\n" +
-                "  |  predicates: 3: S_ADDRESS = 'SS'\n" +
-                "  |  \n" +
-                "  3:Decode\n" +
+                "  3:SELECT\n" +
+                "  |  predicates: DictDecode(9: S_ADDRESS, [<place-holder> = 'SS'])");
+        assertContains(plan, "  6:Decode\n" +
                 "  |  <dict id 9> : <string id 3>\n" +
-                "  |  <dict id 10> : <string id 7>");
+                "  |  <dict id 10> : <string id 7>\n" +
+                "  |  \n" +
+                "  5:MERGING-EXCHANGE");
     }
 
     @Test
@@ -1638,8 +1651,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan;
         sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
         plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  2:Project\n" +
-                "  |  <slot 15> : DictDecode(16: t1a, [<place-holder>])"), plan);
+        Assertions.assertTrue(plan.contains("  2:Project\n"
+                + "  |  <slot 16> : DictDecode(17: t1a, [<place-holder>])"), plan);
 
         // COW Case
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
@@ -1653,20 +1666,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "SELECT 'all', 'all', 'all', 'all' where 1 = 2 union all " +
                 "select distinct S_ADDRESS, S_SUPPKEY + 1, S_SUPPKEY + 1, S_ADDRESS + 1 from supplier;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  <slot 20> : DictDecode(24: S_ADDRESS, [<place-holder>])\n" +
-                "  |  <slot 21> : 25: cast\n" +
-                "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  <slot 23> : CAST(DictDecode(24: S_ADDRESS, [CAST(<place-holder> AS DOUBLE)]) + 1.0 AS VARCHAR)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 25> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 24: S_ADDRESS, 15: expr\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 15> : CAST(7: S_SUPPKEY AS BIGINT) + 1\n" +
-                "  |  <slot 24> : 24: S_ADDRESS");
+        assertContains(plan, "  3:Project\n"
+                + "  |  <slot 20> : DictDecode(24: S_ADDRESS, [<place-holder>])\n"
+                + "  |  <slot 21> : 25: cast\n"
+                + "  |  <slot 22> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  <slot 23> : CAST(DictDecode(24: S_ADDRESS, [CAST(<place-holder> AS DOUBLE)]) + 1.0 AS VARCHAR)\n"
+                + "  |  common expressions:\n"
+                + "  |  <slot 25> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  \n"
+                + "  2:AGGREGATE (update finalize)\n"
+                + "  |  group by: 24: S_ADDRESS, 14: expr\n"
+                + "  |  \n"
+                + "  1:Project\n"
+                + "  |  <slot 14> : CAST(6: S_SUPPKEY AS BIGINT) + 1\n"
+                + "  |  <slot 24> : 24: S_ADDRESS");
 
     }
 
@@ -1681,7 +1694,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
 
-        Assertions.assertTrue(
+        Assertions.assertFalse(
                 plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1]"));
     }
 
@@ -1838,11 +1851,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "else 'a' end from supplier; ";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
-                "  |  <slot 9> : CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'test']) THEN 'a' " +
-                "WHEN 5: S_PHONE = 'b' THEN 'b' " +
-                "WHEN coalesce(DictDecode(10: S_ADDRESS, [<place-holder>]), 'c') = 'c' THEN 'c' " +
-                "ELSE 'a' END\n" +
-                "  |");
+                "  |  <slot 9> : CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'test']) THEN 'a' WHEN 5: " +
+                "S_PHONE = 'b' THEN 'b' WHEN DictDecode(10: S_ADDRESS, [coalesce(<place-holder>, 'c') = 'c']) THEN" +
+                " 'c' ELSE 'a' END");
 
         sql = "select case when s_address = 'test' then 'a' " +
                 "when s_phone = 'b' then 'b' " +
@@ -1865,8 +1876,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: supplier\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: ((5: S_PHONE = 'a') OR (coalesce(DictDecode(12: S_ADDRESS, [<place-holder>]), 'c') = 'c')) " +
-                "OR (DictDecode(12: S_ADDRESS, [<place-holder> = 'address']))");
+                "     PREDICATES: ((5: S_PHONE = 'a') OR (DictDecode(12: S_ADDRESS, [coalesce(<place-holder>, 'c') = " +
+                "'c']))) OR (DictDecode(12: S_ADDRESS, [<place-holder> = 'address']))");
 
         sql = "select count(*) from supplier where s_phone = 'a' or upper(s_address) = 'c' " +
                 "or s_address = 'address'";
@@ -2113,21 +2124,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "WHERE c_mr IN ('02', '03') AND D_DATE>concat(year(str_to_date('2023-03-26', '%Y-%m-%d'))-1, '1231') " +
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  0:UNION\n" +
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  12:Decode\n" +
+                "  |  <dict id 59> : <string id 40>\n" +
+                "  |  <dict id 60> : <string id 42>\n" +
+                "  |  <dict id 61> : <string id 43>\n" +
                 "  |  \n" +
-                "  |----12:Decode\n" +
-                "  |    |  <dict id 56> : <string id 36>\n" +
-                "  |    |  <dict id 57> : <string id 37>\n" +
-                "  |    |  <dict id 58> : <string id 38>\n" +
-                "  |    |  <dict id 59> : <string id 29>\n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----11:Decode\n" +
+                "  |    |  <dict id 62> : <string id 29>\n" +
                 "  |    |  \n" +
-                "  |    11:EXCHANGE\n" +
+                "  |    10:EXCHANGE\n" +
                 "  |    \n" +
-                "  6:Decode\n" +
-                "  |  <dict id 50> : <string id 2>\n" +
-                "  |  <dict id 51> : <string id 3>\n" +
-                "  |  <dict id 52> : <string id 4>\n" +
-                "  |  \n" +
                 "  5:EXCHANGE\n");
     }
 
@@ -2159,7 +2169,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "where l1 = 'BJ'";
         String plan = getFragmentPlan(sql);
         // TODO: rewrite physical operator
-        assertContains(plan, "  9:Decode\n" +
+        assertContains(plan, "  10:Decode\n" +
                 "  |  <dict id 22> : <string id 12>");
     }
 
@@ -2170,16 +2180,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "FROM supplier " +
                 "ORDER BY S_ADDRESS, S_COMMENT;\n";
 
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Decode\n" +
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  6:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  <dict id 11> : <string id 7>");
-        assertContains(plan, "  5:SORT\n" +
-                "  |  order by: <slot 3> 3: S_ADDRESS ASC, <slot 7> 7: S_COMMENT ASC\n" +
-                "  |  offset: 0");
-        assertContains(plan, "  1:SORT\n" +
-                "  |  order by: <slot 10> 10: S_ADDRESS ASC, <slot 11> 11: S_COMMENT ASC\n" +
-                "  |  offset: 0");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, first_value[([5: S_PHONE, VARCHAR, false]); " +
+                "args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true], ]\n" +
+                "  |  order by: [10: S_ADDRESS, INT, false] ASC, [11: S_COMMENT, INT, false] ASC\n" +
+                "  |  window: ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING");
     }
 
     @Test
@@ -2322,7 +2331,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
-    
+
     @Test
     public void testWindowFunction() throws Exception {
         String sql = "SELECT\n" +
@@ -2343,21 +2352,551 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "    ) t\n" +
                 "WHERE\n" +
                 "    t.row_num = 1;";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Decode\n" +
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  7:SELECT\n" +
+                "  |  predicates: 10: row_number() = 1\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  6:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [12: S_ADDRESS, INT, false]\n" +
+                "  |  order by: [12: S_ADDRESS, INT, false] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  9:Decode\n" +
                 "  |  <dict id 12> : <string id 3>\n" +
-                "  |  <dict id 13> : <string id 11>\n" +
+                "  |  <dict id 13> : <string id 9>");
+    }
+
+    @Test
+    public void testEnableLowCardinalityOptimizeForJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
+
+        String sql;
+        String plan;
+
+        try {
+            sql = "SELECT COUNT(distinct t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [broadcast] low_card_t1 t3 ON t1.c_dept = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  11:AGGREGATE (merge serialize)\n" +
+                            "  |  group by: [35: c_user, INT, true]",
+                    "  7:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [36: c_dept, INT, true] = [38: c_dept, INT, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [35: c_user, INT, true] = [37: c_user, INT, true]");
+
+            // Do not support shuffle.
+
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [shuffle] low_card_t1 t3 ON t1.c_dept = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  8:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                            "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [37: c_user, INT, true] = [38: c_user, INT, true]");
+
+            sql = "SELECT COUNT(distinct t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [shuffle] low_card_t1 t3 ON t1.c_user = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  13:AGGREGATE (update serialize)\n" +
+                            "  |  aggregate: count[([2: c_user, VARCHAR, true]); args: VARCHAR; " +
+                            "result: BIGINT; args nullable: true; result nullable: false]",
+                    "  8:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+
+            sql = "SELECT COUNT(1) FROM low_card_t2 t1 " +
+                    "JOIN [colocate] low_card_t2 t2 ON t1.d_date = t2.d_date and t1.c_mr = t2.c_mr";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  2:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (COLOCATE)\n" +
+                    "  |  colocate: true\n" +
+                    "  |  equal join conjunct: [1: d_date, DATE, false] = [6: d_date, DATE, false]\n" +
+                    "  |  equal join conjunct: [2: c_mr, VARCHAR, false] = [7: c_mr, VARCHAR, false]");
+
+            sql = "SELECT COUNT(1) FROM low_card_t2 t1 " +
+                    "JOIN [bucket] low_card_t2 t2 ON t1.d_date = t2.d_date and t1.c_mr = t2.c_mr";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  3:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                    "  |  equal join conjunct: [1: d_date, DATE, false] = [6: d_date, DATE, false]\n" +
+                    "  |  equal join conjunct: [2: c_mr, VARCHAR, false] = [7: c_mr, VARCHAR, false]");
+
+            // Both left and right keys in the ON equality condition must be low-cardinality column refs.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = CAST(t2.d_date as string)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: cast, VARCHAR(65533), true]");
+
+            // Low-cardinality columns cannot be DefineExpr.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = lower(t2.c_user) ";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: lower, VARCHAR, true]");
+
+            // Each low-cardinality column can participate in only one equality condition.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [broadcast] low_card_t1 t3 ON t1.c_user = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  7:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+
+            // Contains non-low-cardinality string columns.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user and t1.c_user = cast(t2.cpc as string)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: cast, VARCHAR(65533), true]");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testShuffleJoinWithDistributionCheck() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            String sql;
+            String plan;
+
+            // Test case 1: Shuffle join where the join column appears in parent node's output
+            sql = "SELECT max(t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [shuffle] low_card_t1 t2 ON t1.c_user = t2.c_user";
+            plan = getVerboseExplain(sql);
+            // The join should use original VARCHAR columns, not dictionary-encoded INT columns
+            assertContains(plan, "equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+            // No Global Dict Exprs because c_user is disabled for shuffle join
+            assertNotContains(plan, "Global Dict Exprs:");
+
+            // Test case 2: Shuffle join with multiple join columns in parent node's output
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [shuffle] low_card_t1 t2 ON t1.c_user = t2.c_user AND t1.c_dept = t2.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+            assertContains(plan, "equal join conjunct: [3: c_dept, VARCHAR, true] = [14: c_dept, VARCHAR, true]");
+            assertNotContains(plan, "Global Dict Exprs:");
+
+            // Test case 3: Mixed scenario - shuffle join on c_user, but aggregate on c_dept
+            // c_user should NOT use dictionary (shuffle join column)
+            // c_dept SHOULD use dictionary (not involved in shuffle join)
+            sql = "SELECT MIN(t1.c_dept), MAX(t2.c_dept) FROM low_card_t1 t1 " +
+                    "JOIN [shuffle] low_card_t1 t2 ON t1.c_user = t2.c_user";
+            plan = getVerboseExplain(sql);
+            // c_user should use VARCHAR (shuffle join column)
+            assertContains(plan, "equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+            assertContains(plan, "  9:Decode\n" +
+                    "  |  <dict id 27> : <string id 23>\n" +
+                    "  |  <dict id 28> : <string id 24>\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  8:AGGREGATE (merge finalize)\n" +
+                    "  |  aggregate: min[([27: min, INT, true]); args: INT; result: INT; " +
+                    "args nullable: true; result nullable: true], max[([28: max, INT, true]); " +
+                    "args: INT; result: INT; args nullable: true; result nullable: true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  7:EXCHANGE\n" +
+                    "     distribution type: GATHER\n" +
+                    "     cardinality: 1");
+
+            //Test case 4: context.outputStringColumns.isEmpty() is true for visitPhysicalJoin
+            sql = "SELECT t2.c_user, t4.c_dept FROM (select * from (select c_dept, c_user, first_value(c_user) " +
+                    "over(partition by c_user,c_dept order by c_dept) as rz from low_card_t3) t1 " +
+                    "where rz = '1') t2" +
+                    " JOIN [shuffle] (select * from (select c_dept, c_user, " +
+                    "first_value(c_user) over(partition by c_user,c_dept order by c_dept) as rnz " +
+                    "from low_card_t1) t3 where rnz = '1') t4 ON t2.c_user = t4.c_user and t2.c_dept = t4.c_dept;";
+            plan = getVerboseExplain(sql);
+            // Verify the execution plan don't contains Global Dict Exprs
+            assertNotContains(plan, "Global Dict Exprs:");
+            assertContains(plan, "  13:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  2 <-> [2: c_user, VARCHAR, true]\n" +
+                    "  |  15 <-> [15: c_dept, VARCHAR, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  12:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [14: c_user, VARCHAR, true]\n" +
+                    "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [15: c_dept, VARCHAR, true]\n" +
+                    "  |  build runtime filters:\n" +
+                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = false\n" +
+                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = false\n" +
+                    "  |  output columns: 2, 15\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  |----11:Project\n" +
+                    "  |    |  output columns:\n" +
+                    "  |    |  14 <-> [14: c_user, VARCHAR, true]\n" +
+                    "  |    |  15 <-> [15: c_dept, VARCHAR, true]\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    10:SELECT\n" +
+                    "  |    |  predicates: 24: first_value(14: c_user) = '1'\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    9:ANALYTIC\n" +
+                    "  |    |  functions: [, first_value[([14: c_user, VARCHAR, true]); args: VARCHAR; " +
+                    "result: VARCHAR; args nullable: true; result nullable: true], ]\n" +
+                    "  |    |  partition by: [14: c_user, VARCHAR, true], [15: c_dept, VARCHAR, true]\n" +
+                    "  |    |  order by: [15: c_dept, VARCHAR, true] ASC\n" +
+                    "  |    |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    8:SORT\n" +
+                    "  |    |  order by: [14, VARCHAR, true] ASC, [15, VARCHAR, true] ASC\n" +
+                    "  |    |  analytic partition by: [14: c_user, VARCHAR, true], [15: c_dept, VARCHAR, true]\n" +
+                    "  |    |  offset: 0\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    7:EXCHANGE\n" +
+                    "  |       distribution type: SHUFFLE\n" +
+                    "  |       partition exprs: [14: c_user, VARCHAR, true], [15: c_dept, VARCHAR, true]\n" +
+                    "  |       cardinality: 1\n" +
+                    "  |    \n" +
+                    "  5:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  2 <-> [2: c_user, VARCHAR, true]\n" +
+                    "  |  3 <-> [3: c_dept, VARCHAR, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  4:SELECT\n" +
+                    "  |  predicates: 12: first_value(2: c_user) = '1'\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  3:ANALYTIC\n" +
+                    "  |  functions: [, first_value[([2: c_user, VARCHAR, true]); args: VARCHAR; " +
+                    "result: VARCHAR; args nullable: true; result nullable: true], ]\n" +
+                    "  |  partition by: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
+                    "  |  order by: [3: c_dept, VARCHAR, true] ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  2:SORT\n" +
+                    "  |  order by: [2, VARCHAR, true] ASC, [3, VARCHAR, true] ASC\n" +
+                    "  |  analytic partition by: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
+                    "  |  offset: 0\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  probe runtime filters:\n" +
+                    "  |  - filter_id = 0, probe_expr = (2: c_user)\n" +
+                    "  |  - filter_id = 1, probe_expr = (3: c_dept)\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE\n" +
+                    "     distribution type: SHUFFLE\n" +
+                    "     partition exprs: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
+                    "     cardinality: 1");
+
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testUnionAll() throws Exception {
+        String sql = """
+                SELECT * FROM (
+                    SELECT
+                        S_ADDRESS
+                    FROM
+                        supplier
+                    UNION ALL
+                    SELECT
+                        C_USER
+                    FROM
+                        low_card_t1
+                ) T
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    24: DictDefine(22: S_ADDRESS, [<place-holder>])\n" +
+                "    25: DictDefine(22: S_ADDRESS, [<place-holder>])\n" +
+                "\n" +
+                "  6:Decode\n" +
+                "  |  <dict id 24> : <string id 21>\n" +
+                "  |  cardinality: 2\n" +
                 "  |  \n" +
-                "  2:SORT\n" +
-                "  |  order by: <slot 12> 12: S_ADDRESS ASC\n" +
-                "  |  analytic partition by: <slot 12> 12: S_ADDRESS\n" +
-                "  |  offset: 0\n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [24, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: cast, INT, true]\n" +
+                "  |      [23: c_user, INT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2");
+    }
+
+    @Test
+    public void testUnionDistinct() throws Exception {
+        String sql = """
+                SELECT * FROM (
+                    SELECT
+                        S_ADDRESS
+                    FROM
+                        supplier
+                    UNION DISTINCT
+                    SELECT
+                        C_USER
+                    FROM
+                        low_card_t1
+                ) T
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [21, VARCHAR(50), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [9: cast, VARCHAR, false]\n" +
+                "  |      [11: c_user, VARCHAR(50), true]", plan);
+    }
+
+    @Test
+    public void testUnionWithProjection() throws Exception {
+        String sql = """
+                WITH TB1 AS (
+                    (
+                        SELECT
+                            C_USER
+                        FROM
+                            low_card_t1
+                    )
+                    UNION ALL
+                    (
+                        SELECT
+                            C_USER
+                        FROM
+                            low_card_t1
+                    )
+                )
+                SELECT
+                    NULL
+                FROM
+                    TB1
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  24 <-> NULL\n" +
+                "  |  cardinality: 2\n" +
                 "  |  \n" +
-                "  1:PARTITION-TOP-N\n" +
-                "  |  partition by: 12: S_ADDRESS \n" +
-                "  |  partition limit: 1\n" +
-                "  |  order by: <slot 12> 12: S_ADDRESS ASC\n" +
-                "  |  pre agg functions: [, min(12: S_ADDRESS), ]\n" +
-                "  |  offset: 0");
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [27, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: c_user, INT, true]\n" +
+                "  |      [26: c_user, INT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2", plan);
+    }
+
+    @Test
+    public void testUnionWithProjection2() throws Exception {
+        String sql = """
+                WITH TB1 AS (
+                  SELECT
+                     C_USER
+                  FROM
+                    low_card_t1
+                ),
+                TB2 AS (
+                  (
+                    SELECT
+                      C_USER ,
+                      CAST(1 AS BIGINT) AS CI
+                    FROM
+                      TB1
+                  )
+                  UNION ALL
+                  (
+                    SELECT
+                      C_USER,
+                      CAST(2 AS BIGINT) AS CI
+                    FROM
+                      TB1
+                  )
+                )
+                SELECT
+                  C_USER,
+                  CASE CI WHEN  1  THEN C_USER ELSE  NULL  END
+                FROM
+                  TB2
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    41: DictDefine(39: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  8:Decode\n" +
+                "  |  <dict id 41> : <string id 36>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  7:Project\n" +
+                "  |  output columns:\n" +
+                "  |  38 <-> if[([37: cast, BIGINT, false] = 1, DictDecode([41: c_user, INT, true], " +
+                "[<place-holder>]), NULL); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR(50); args nullable: true;" +
+                " result nullable: true]\n" +
+                "  |  41 <-> [41: c_user, INT, true]\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [41, INT, true] | [37, BIGINT, false]\n" +
+                "  |  child exprs:\n" +
+                "  |      [39: c_user, INT, true] | [23: cast, BIGINT, false]\n" +
+                "  |      [40: c_user, INT, true] | [35: cast, BIGINT, false]", plan);
+    }
+
+    @Test
+    public void testUnionWithConstants() throws Exception {
+        String sql = """
+                  SELECT
+                      C_USER a, C_USER as b, C_USER as c
+                    FROM
+                      low_card_t1
+                  UNION ALL
+                  SELECT
+                    S_ADDRESS, 'zzz', NULL
+                  FROM
+                      supplier
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  8:Decode\n" +
+                "  |  <dict id 33> : <string id 27>\n" +
+                "  |  <dict id 31> : <string id 25>\n" +
+                "  |  <dict id 32> : <string id 26>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [31, INT, true] | [32, INT, true] | [33, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [28: c_user, INT, true] | [34: cast, INT, true] | [28: c_user, INT, true]\n" +
+                "  |      [30: cast, INT, true] | [35: expr, INT, false] | [36: expr, INT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  |----7:Project\n" +
+                "  |    |  output columns:\n" +
+                "  |    |  30 <-> [30: cast, INT, true]\n" +
+                "  |    |  35 <-> 2\n" +
+                "  |    |  36 <-> NULL", plan);
+    }
+
+    @Test
+    public void testUnionWithAllConstants() throws Exception {
+        String sql = """
+                  SELECT
+                      C_USER a, C_USER as b, C_USER as c
+                    FROM
+                      low_card_t1
+                  UNION ALL
+                  SELECT
+                    NULL, 'zzz', NULL
+                  FROM
+                      supplier
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [30, INT, true] | [31, INT, true] | [33, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
+                "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
+    }
+
+    @Test
+    public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
+        String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  <dict id 11> : <string id 9>\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, lead(10: S_ADDRESS, 1, NULL), ]\n" +
+                "  |  order by: 1: S_SUPPKEY ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING");
+    }
+
+    @Test
+    public void testCreateDecodeInfoDoesNotReturnSharedMutableSingleton() {
+        DecodeInfo empty1 = DecodeInfo.create();
+        DecodeInfo empty2 = DecodeInfo.create();
+
+        DecodeInfo d1 = empty1.createDecodeInfo();
+        d1.getDecodeStringColumns().union(new com.starrocks.sql.optimizer.base.ColumnRefSet(1));
+
+        DecodeInfo d2 = empty2.createDecodeInfo();
+        Assertions.assertTrue(d2.getOutputStringColumns().isEmpty());
+        Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
+        Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
+    }
+
+    @Test
+    public void testPhysicalFilter() throws Exception {
+        String sql = """
+                  SELECT *
+                  FROM (
+                    SELECT
+                      MAX(C_USER) OVER (PARTITION BY C_DEPT) max_user
+                    FROM
+                      low_card_t1
+                  ) cte
+                  WHERE max_user != 'abc'
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: DictDecode(15: max(2: c_user), [<place-holder> != 'abc'])\n" +
+                "  |  cardinality: 1", plan);
+    }
+
+    @Test
+    public void testCTEProduceAndConsume() throws Exception {
+        String sql = """
+                  WITH CTE AS (
+                    SELECT
+                      C_USER, C_DEPT
+                    FROM
+                      low_card_t1
+                  )
+                  SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+                    UPPER(T1.C_USER) s1
+                  FROM
+                    CTE AS T1 JOIN CTE AS T2 USING (C_DEPT)
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    36: DictDefine(35: c_user, [upper(<place-holder>)])\n" +
+                "    37: DictDefine(35: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  10:Decode\n" +
+                "  |  <dict id 36> : <string id 34>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  9:Project\n" +
+                "  |  output columns:\n" +
+                "  |  36 <-> DictDefine([37: c_user, INT, true], [upper[(<place-holder>); args: VARCHAR; result: " +
+                "VARCHAR; args nullable: true; result nullable: true]])\n" +
+                "  |  cardinality: 1", plan);
     }
 }
