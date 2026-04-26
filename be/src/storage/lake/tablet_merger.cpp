@@ -67,6 +67,7 @@ bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_fallback_not_supported_total(
 // metrics). Bumped from merge_sstables when an input sstable's post-merge
 // translation would land outside the merged metadata's rowset coverage.
 extern bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_needs_rebuild_total;
+extern bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_rebuild_failed_total;
 
 namespace starrocks::lake {
 
@@ -1311,22 +1312,127 @@ static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB
     return true;
 }
 
-// Rebuild a non-shared_rssid sstable for the merged tablet by reading every
-// key of the input sstable and applying per-key rssid translation:
-//   stored_rssid in shared_rssid_map → canonical_rssid (dedup'd source)
-//   otherwise                       → stored_rssid + ctx.rssid_offset
-// The output sstable is written to merged_tablet_id's sst directory with
-// rssid_offset=0 and shared_rssid unset — its keys directly carry the final
-// effective rssids, so the read path's translation logic stays a pass-through.
+// Tombstone (NullIndexValue) markers per persistent_index.h: a delete record
+// in IndexValuesWithVerPB carries rssid == UINT32_MAX && rowid == UINT32_MAX.
+constexpr uint32_t kRebuildNullRssid = std::numeric_limits<uint32_t>::max();
+constexpr uint32_t kRebuildNullRowid = std::numeric_limits<uint32_t>::max();
+
+// Pre-built per source-context map: stored rssid (in source's local id space)
+// -> the (rowset, seg_offset) that owns it. seg_offset is
+// get_rssid(rowset, j) - rowset->id() so it honors sparse
+// segment_metas.segment_idx. Built once per source ctx by the caller and
+// passed to remap_stored_rssid_for_rebuild for every key.
+struct SourceRssidEntry {
+    const RowsetMetadataPB* rowset;
+    uint32_t seg_offset;
+};
+using SourceRssidMap = std::unordered_map<uint32_t, SourceRssidEntry>;
+
+// Build the SourceRssidMap from a source TabletMetadataPB. Iterates each
+// rowset's segments via get_rssid() so sparse segment_metas.segment_idx is
+// reflected exactly (matches update_shared_rssid_map and build_rssid_coverage).
+static SourceRssidMap build_source_rssid_map(const TabletMetadataPB& metadata) {
+    SourceRssidMap m;
+    for (const auto& r : metadata.rowsets()) {
+        for (int seg_pos = 0; seg_pos < r.segments_size(); ++seg_pos) {
+            uint32_t rssid = get_rssid(r, seg_pos);
+            m[rssid] = SourceRssidEntry{&r, rssid - r.id()};
+        }
+    }
+    return m;
+}
+
+// Translate one stored rssid in a source sstable to its effective rssid in the
+// merged tablet's id space, deriving the answer from source-rowset lineage:
+//   1. Locate the (rowset, seg_offset) that owns stored_rssid in the source
+//      child's metadata via SourceRssidMap.
+//   2. Map the source rowset to merged metadata: shared_rssid_map (dedup'd)
+//      OR add_rowset offset (first occurrence). Effective = merged_rowset_id
+//      + seg_offset.
+//   3. Validate that the effective rssid is in covered_rssids — otherwise the
+//      dedup/add_rowset invariant has been broken and we surface Corruption.
 //
-// This is the Phase 2 core of Bug B. Called only when
-// sstable_translation_lands_in_metadata returns false; healthy sstables are
-// untouched and continue down the legacy offset projection path.
-StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(TabletManager* tablet_manager,
-                                                                      int64_t source_tablet_id,
-                                                                      int64_t merged_tablet_id,
-                                                                      const PersistentIndexSstablePB& input_pb,
-                                                                      const TabletMergeContext& ctx) {
+// Returns Corruption if stored_rssid does not have an owning rowset in source
+// metadata (the rowset has been compacted away in this child). The previous
+// behavior of silently producing ghost rssid via offset projection is
+// strictly worse; surface the inconsistency so MERGE publish retries / FE can
+// diagnose.
+//
+// Note: tombstones (NullIndexValue) MUST be filtered by the caller before
+// calling this helper. Tombstones are a legitimate persistent state and have
+// no source rowset; they pass through rebuild verbatim.
+//
+// Helper takes primitive inputs only (no TabletMergeContext) so it can be
+// unit-tested directly without constructing the merge context machinery.
+static StatusOr<uint32_t> remap_stored_rssid_for_rebuild(
+        uint32_t stored_rssid, const SourceRssidMap& source_rssid_to_rowset, int64_t rssid_offset,
+        const std::function<std::optional<uint32_t>(uint32_t)>& shared_rssid_lookup, int64_t source_tablet_id,
+        const std::unordered_set<uint32_t>& covered_rssids) {
+    auto it = source_rssid_to_rowset.find(stored_rssid);
+    if (it == source_rssid_to_rowset.end()) {
+        return Status::Corruption(fmt::format(
+                "rebuild_sstable: stored rssid {} has no owning (rowset, segment) in source child tablet {} "
+                "(offset={})",
+                stored_rssid, source_tablet_id, rssid_offset));
+    }
+    const RowsetMetadataPB* src = it->second.rowset;
+    uint32_t seg_offset = it->second.seg_offset;
+
+    uint32_t merged_rowset_id;
+    if (auto m = shared_rssid_lookup(src->id()); m.has_value()) {
+        merged_rowset_id = *m;
+    } else {
+        int64_t off = static_cast<int64_t>(src->id()) + rssid_offset;
+        if (off < 0 || off > std::numeric_limits<uint32_t>::max()) {
+            return Status::Corruption(fmt::format(
+                    "rebuild_sstable: rowset offset overflow src_rowset_id={} offset={}", src->id(), rssid_offset));
+        }
+        merged_rowset_id = static_cast<uint32_t>(off);
+    }
+    int64_t effective = static_cast<int64_t>(merged_rowset_id) + seg_offset;
+    if (effective < 0 || effective > std::numeric_limits<uint32_t>::max()) {
+        return Status::Corruption(fmt::format(
+                "rebuild_sstable: effective rssid overflow merged_rowset_id={} seg_offset={}", merged_rowset_id,
+                seg_offset));
+    }
+    if (covered_rssids.count(static_cast<uint32_t>(effective)) == 0) {
+        return Status::Corruption(fmt::format(
+                "rebuild_sstable: src rowset {} (seg_offset {}) -> merged rowset {} (effective {}) not in "
+                "covered_rssids; dedup/add_rowset invariant broken",
+                src->id(), seg_offset, merged_rowset_id, effective));
+    }
+    return static_cast<uint32_t>(effective);
+}
+
+// Rebuild a non-shared_rssid sstable for the merged tablet via source-lineage
+// remap. Returns:
+//   StatusOr<std::optional<PersistentIndexSstablePB>>:
+//     - OK with PB:  rebuild produced a fresh sstable (use it).
+//     - OK with nullopt: source iterator yielded zero keys; no sstable should
+//                        be added to merged metadata's sstable_meta.
+//     - !ok: rebuild failed (orphaned rssid, etc); merge_sstables propagates
+//            the error (no fallback to the broken offset path).
+//
+// Tombstones (kRebuildNullRssid + kRebuildNullRowid) are preserved verbatim.
+// Real entries are remapped via remap_stored_rssid_for_rebuild.
+//
+// max_rss_rowid derivation:
+//   - Real entries present  → max_remapped_rssid (high)
+//   - Any tombstone present → also include remapped(source max_rss_rowid >> 32)
+//                             as an ordering candidate; take max with
+//                             max_remapped_rssid. For tombstone-only sstables
+//                             whose source max was itself NullRssid, fall back
+//                             to *std::max_element(covered_rssids) so the
+//                             rebuilt sstable stays at the top of LSM order
+//                             (matching tombstone "delete-overrides-older"
+//                             intent).
+//   - low bits: kRebuildNullRowid if any tombstone in the sstable, else
+//               kRebuildNullRowid - 1 (matches KeyValueMerger convention at
+//               lake_persistent_index_key_value_merger.cpp:111).
+StatusOr<std::optional<PersistentIndexSstablePB>> rebuild_sstable_with_per_key_remap(
+        TabletManager* tablet_manager, int64_t source_tablet_id, int64_t merged_tablet_id,
+        const PersistentIndexSstablePB& input_pb, const TabletMergeContext& ctx,
+        const std::unordered_set<uint32_t>& covered_rssids) {
     auto* update_mgr = tablet_manager->update_mgr();
     if (update_mgr == nullptr) {
         return Status::InternalError("rebuild_sstable: update_mgr is null");
@@ -1366,15 +1472,17 @@ StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(TabletMana
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf.get());
 
-    // 3. Iterate input, remap each value's rssid per shared_rssid_map / offset,
-    //    and write the modified IndexValuesWithVerPB into the output sstable.
-    //    Multi-version values per key are preserved — every value gets its own
-    //    remap, no broad-stroke version overwrite (the failure mode of the
-    //    earlier shared_rssid attempt in PR #72177).
+    // Build source-rssid-to-rowset map once for this ctx.
+    SourceRssidMap source_rssid_to_rowset = build_source_rssid_map(*ctx.metadata());
+    auto shared_rssid_lookup = [&ctx](uint32_t rssid) { return ctx.shared_rssid_map_lookup(rssid); };
+
+    // 3. Iterate input, per-entry remap (preserving tombstones), write to output.
     sstable::ReadOptions ro;
     std::unique_ptr<sstable::Iterator> iter(reader->new_iterator(ro));
     iter->SeekToFirst();
-    uint32_t max_effective_rssid = 0;
+    uint32_t max_remapped_rssid = 0;
+    bool any_real_value_seen = false;
+    bool saw_any_tombstone = false;
     int64_t key_count = 0;
     while (iter->Valid()) {
         Slice key = iter->key();
@@ -1385,21 +1493,18 @@ StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(TabletMana
             return Status::Corruption("rebuild_sstable: failed to parse IndexValuesWithVerPB");
         }
         for (auto& v : *value_pb.mutable_values()) {
-            uint32_t stored_rssid = v.rssid();
-            uint32_t effective_rssid;
-            auto map_it = ctx.shared_rssid_map_lookup(stored_rssid);
-            if (map_it.has_value()) {
-                effective_rssid = *map_it;
-            } else {
-                int64_t off = static_cast<int64_t>(stored_rssid) + ctx.rssid_offset();
-                if (off < 0 || off > std::numeric_limits<uint32_t>::max()) {
-                    return Status::Corruption(fmt::format("rebuild_sstable: rssid overflow stored={} offset={}",
-                                                          stored_rssid, ctx.rssid_offset()));
-                }
-                effective_rssid = static_cast<uint32_t>(off);
+            // Tombstone (NullIndexValue): pass through verbatim, do NOT remap.
+            if (v.rssid() == kRebuildNullRssid && v.rowid() == kRebuildNullRowid) {
+                saw_any_tombstone = true;
+                continue;
             }
-            v.set_rssid(effective_rssid);
-            max_effective_rssid = std::max(max_effective_rssid, effective_rssid);
+            // Real entry: remap rssid via source-lineage helper.
+            ASSIGN_OR_RETURN(uint32_t new_rssid,
+                             remap_stored_rssid_for_rebuild(v.rssid(), source_rssid_to_rowset, ctx.rssid_offset(),
+                                                            shared_rssid_lookup, source_tablet_id, covered_rssids));
+            v.set_rssid(new_rssid);
+            any_real_value_seen = true;
+            max_remapped_rssid = std::max(max_remapped_rssid, new_rssid);
         }
         std::string serialized;
         if (!value_pb.SerializeToString(&serialized)) {
@@ -1411,6 +1516,15 @@ StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(TabletMana
     }
     RETURN_IF_ERROR(iter->status());
 
+    // Empty-output case: no keys yielded by the iterator (all delete-marked).
+    // Return nullopt so the caller skips adding an empty PB to merged metadata.
+    if (key_count == 0) {
+        // Discard the (empty) output file by closing then orphaning it; vacuum
+        // will collect.
+        (void)wf->close();
+        return std::optional<PersistentIndexSstablePB>(std::nullopt);
+    }
+
     if (auto st = builder.Finish(); !st.ok()) {
         return st;
     }
@@ -1418,26 +1532,55 @@ StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(TabletMana
     auto [key_start, key_end] = builder.KeyRange();
     RETURN_IF_ERROR(wf->close());
 
-    // 4. Build output PB. rssid_offset=0 + no shared_rssid means the read
-    //    path returns stored rssids unchanged — and since we wrote the
-    //    effective rssids directly, those match the merged tablet's rowset
-    //    id space.
+    // 4. Compute output max_rss_rowid per the v5 rule.
+    uint32_t tombstone_ordering_floor = 0;
+    bool tombstone_ordering_floor_valid = false;
+    if (saw_any_tombstone) {
+        uint32_t source_high = static_cast<uint32_t>(input_pb.max_rss_rowid() >> 32);
+        if (source_high == kRebuildNullRssid) {
+            if (!covered_rssids.empty()) {
+                tombstone_ordering_floor = *std::max_element(covered_rssids.begin(), covered_rssids.end());
+                tombstone_ordering_floor_valid = true;
+            }
+        } else {
+            ASSIGN_OR_RETURN(tombstone_ordering_floor,
+                             remap_stored_rssid_for_rebuild(source_high, source_rssid_to_rowset, ctx.rssid_offset(),
+                                                            shared_rssid_lookup, source_tablet_id, covered_rssids));
+            tombstone_ordering_floor_valid = true;
+        }
+    }
+
+    uint32_t output_max_high;
+    if (any_real_value_seen && tombstone_ordering_floor_valid) {
+        output_max_high = std::max(max_remapped_rssid, tombstone_ordering_floor);
+    } else if (any_real_value_seen) {
+        output_max_high = max_remapped_rssid;
+    } else if (tombstone_ordering_floor_valid) {
+        output_max_high = tombstone_ordering_floor;
+    } else {
+        return Status::Corruption(
+                "rebuild_sstable: tombstone-only output and merged metadata has no covered rssids; "
+                "cannot anchor LSM ordering");
+    }
+    uint32_t output_max_low = saw_any_tombstone ? kRebuildNullRowid : (kRebuildNullRowid - 1);
+
+    // 5. Build output PB. rssid_offset=0 + no shared_rssid: read path returns
+    // stored rssids unchanged, and we wrote effective rssids directly, so they
+    // match the merged tablet's rowset id space.
     PersistentIndexSstablePB output_pb;
     output_pb.set_filename(out_filename);
     output_pb.set_filesize(filesize);
     output_pb.mutable_range()->set_start_key(key_start.to_string());
     output_pb.mutable_range()->set_end_key(key_end.to_string());
     output_pb.set_encryption_meta(out_encryption_meta);
-    // Use UINT32_MAX-1 as low (matches ingest_sst convention for sstables
-    // representing all rows of a logical rowset).
-    output_pb.set_max_rss_rowid((static_cast<uint64_t>(max_effective_rssid) << 32) |
-                                (std::numeric_limits<uint32_t>::max() - 1));
+    output_pb.set_max_rss_rowid((static_cast<uint64_t>(output_max_high) << 32) | output_max_low);
     output_pb.set_shared(false);
     output_pb.set_rssid_offset(0);
     LOG(INFO) << "rebuild_sstable: source=" << input_pb.filename() << " (tablet=" << source_tablet_id
               << ") -> dest=" << out_filename << " (tablet=" << merged_tablet_id << "), keys=" << key_count
-              << ", max_effective_rssid=" << max_effective_rssid;
-    return output_pb;
+              << ", max_remapped=" << max_remapped_rssid << ", tombstone_floor=" << tombstone_ordering_floor
+              << ", output_max_high=" << output_max_high << ", saw_tombstone=" << saw_any_tombstone;
+    return std::optional<PersistentIndexSstablePB>(std::move(output_pb));
 }
 
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
@@ -1505,8 +1648,15 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
             out->CopyFrom(sst);
 
             if (sst.has_shared_rssid()) {
-                // shared_rssid path: project rssid, clear offset, project delvec
+                // shared_rssid path: project rssid, validate covered, clear
+                // offset, project delvec.
                 ASSIGN_OR_RETURN(auto mapped_rssid, ctx.map_rssid(sst.shared_rssid()));
+                if (covered_rssids.count(mapped_rssid) == 0) {
+                    return Status::Corruption(fmt::format(
+                            "merge_sstables: shared_rssid sstable maps to uncovered rssid {} (filename={}, "
+                            "source_tablet={}, ctx.offset={})",
+                            mapped_rssid, sst.filename(), ctx.metadata()->id(), ctx.rssid_offset()));
+                }
                 out->set_shared_rssid(mapped_rssid);
                 out->set_rssid_offset(0); // clear to avoid double-transform in read path
 
@@ -1546,17 +1696,25 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                     // to the legacy offset projection — production paths always
                     // have the file present.
                     g_tablet_reshard_merge_sstable_needs_rebuild_total << 1;
-                    auto rebuild_result = rebuild_sstable_with_per_key_remap(tablet_manager, ctx.metadata()->id(),
-                                                                             new_metadata->id(), sst, ctx);
-                    if (rebuild_result.ok()) {
-                        out->Clear();
-                        out->CopyFrom(rebuild_result.value());
+                    auto rebuild_result = rebuild_sstable_with_per_key_remap(
+                            tablet_manager, ctx.metadata()->id(), new_metadata->id(), sst, ctx, covered_rssids);
+                    if (!rebuild_result.ok()) {
+                        g_tablet_reshard_merge_sstable_rebuild_failed_total << 1;
+                        LOG(WARNING) << "merge_sstables: rebuild_sstable failed for " << sst.filename()
+                                     << " (source_tablet=" << ctx.metadata()->id()
+                                     << ", merged_tablet=" << new_metadata->id() << "): " << rebuild_result.status();
+                        return rebuild_result.status();
+                    }
+                    if (!rebuild_result->has_value()) {
+                        // Empty output: source iterator yielded zero keys. Pop
+                        // the entry we speculatively added; nothing for this
+                        // sstable goes into merged metadata.
+                        dest->RemoveLast();
                         continue;
                     }
-                    LOG(WARNING) << "merge_sstables: rebuild_sstable failed for " << sst.filename()
-                                 << " (source_tablet=" << ctx.metadata()->id()
-                                 << ", merged_tablet=" << new_metadata->id() << "): " << rebuild_result.status()
-                                 << ". Falling back to legacy offset projection.";
+                    out->Clear();
+                    out->CopyFrom(rebuild_result->value());
+                    continue;
                 }
                 // Accumulate rssid_offset so a stacked merge composes correctly
                 // (test branch fix: read path adds the stored offset once, so

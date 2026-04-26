@@ -55,6 +55,13 @@ bvar::Adder<int64_t> g_tablet_reshard_merge_input_tablet_count("tablet_reshard_m
 bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_needs_rebuild_total(
         "tablet_reshard_merge_sstable_needs_rebuild_total");
 
+// Counts MERGE sstable rebuild failures. Bumped at the rebuild-failure return
+// site in merge_sstables when rebuild_sstable_with_per_key_remap returns a
+// non-OK Status (orphaned stored rssid, uncovered shared_rssid mapping, etc).
+// In a healthy cluster this should remain zero.
+bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_rebuild_failed_total(
+        "tablet_reshard_merge_sstable_rebuild_failed_total");
+
 // Layer 2: Identical metrics
 bvar::Adder<int64_t> g_tablet_reshard_identical_total("tablet_reshard_identical_total");
 bvar::Adder<int64_t> g_tablet_reshard_identical_failed("tablet_reshard_identical_failed");
