@@ -113,8 +113,7 @@ Status read_lake_persistent_index_snapshot(const std::string& path, LakePersiste
 
 int64_t parse_snapshot_version_from_filename(std::string_view name) {
     constexpr std::string_view kSuffix = ".snapshot";
-    if (name.size() <= kSuffix.size() + 1 || name[0] != 'v' ||
-        name.substr(name.size() - kSuffix.size()) != kSuffix) {
+    if (name.size() <= kSuffix.size() + 1 || name[0] != 'v' || name.substr(name.size() - kSuffix.size()) != kSuffix) {
         return -1;
     }
     int64_t version = 0;

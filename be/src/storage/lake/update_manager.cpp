@@ -222,8 +222,8 @@ void UpdateManager::boot_prewarm_hook() {
     // `worker_threads` worker threads. Boot does not block on completion: the BE is
     // ready to accept requests immediately, and any tablet whose snapshot has not yet
     // been restored will hit the existing lazy-restore-on-publish path on first use.
-    LOG(INFO) << "pk-index snapshot prewarm: dispatching " << targets.size() << " tablet(s) across "
-              << worker_threads << " worker thread(s) from " << snapshot_root;
+    LOG(INFO) << "pk-index snapshot prewarm: dispatching " << targets.size() << " tablet(s) across " << worker_threads
+              << " worker thread(s) from " << snapshot_root;
 
     auto walker = [this, targets = std::move(targets), worker_threads, snapshot_root]() mutable {
         std::atomic<size_t> next{0};
@@ -239,8 +239,7 @@ void UpdateManager::boot_prewarm_hook() {
                 }
                 const auto& t = targets[i];
 
-                auto metadata_or =
-                        _tablet_mgr->get_tablet_metadata(t.tablet_id, t.version, /*fill_cache=*/false);
+                auto metadata_or = _tablet_mgr->get_tablet_metadata(t.tablet_id, t.version, /*fill_cache=*/false);
                 if (!metadata_or.ok()) {
                     // Most common reason here is that the FE has advanced this tablet's metadata
                     // beyond the snapshot's captured_version, so the exact-version object no
@@ -291,8 +290,7 @@ void UpdateManager::boot_prewarm_hook() {
         }
 
         LOG(INFO) << "pk-index snapshot prewarm: complete root=" << snapshot_root << " walked=" << targets.size()
-                  << " ok=" << ok.load(std::memory_order_relaxed)
-                  << " miss=" << miss.load(std::memory_order_relaxed)
+                  << " ok=" << ok.load(std::memory_order_relaxed) << " miss=" << miss.load(std::memory_order_relaxed)
                   << " failed=" << failed.load(std::memory_order_relaxed);
     };
 
