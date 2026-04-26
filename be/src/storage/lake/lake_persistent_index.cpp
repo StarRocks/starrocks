@@ -841,8 +841,19 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                      return fileset_contains_func(fileset);
                                  });
     if (start_it == _sstable_filesets.end()) {
-        return Status::InternalError(
-                fmt::format("no matching sstable fileset found for compaction in tablet {}", _tablet_id));
+        // No fileset matches the compaction's input sstables. This can happen
+        // after a tablet MERGE that triggered rebuild_sstable_with_per_key_remap:
+        // the rebuild produces a new UUID-named sstable encoding all effective
+        // rssids of the merged sources, so the in-memory `_sstable_filesets`
+        // no longer contains the pre-MERGE filenames the compaction was
+        // scheduled against. Since the rebuild has already absorbed the keys
+        // those input sstables held, the pending compaction is now a no-op —
+        // skip both removal and insertion to let publish proceed instead of
+        // hanging the table in COMMITTED.
+        LOG(WARNING) << "apply_opcompaction: no matching sstable fileset for compaction in tablet "
+                     << _tablet_id << ", inputs=" << op_compaction.input_sstables_size()
+                     << " (likely superseded by post-MERGE rebuild). Treating as no-op.";
+        return Status::OK();
     }
 
     // 2. Find the end position of the contiguous range.
