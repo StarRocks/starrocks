@@ -116,14 +116,24 @@ size_t count_adaptive_split_segments(const std::vector<std::shared_ptr<Rowset>>&
 AdaptiveSegmentPrepareDecision get_adaptive_segment_prepare_decision(size_t segment_count,
                                                                      const TabletReaderParams& read_params,
                                                                      const RowsetReadOptions& rs_opts) {
-    if (segment_count < std::max<size_t>(kMinAdaptiveSegmentCount, read_params.scan_dop / 4)) {
+    const int64_t divisor = std::max<int64_t>(1, config::lake_adaptive_segment_prepare_scan_dop_divisor);
+    const size_t dop_based_threshold =
+            std::max<size_t>(kMinAdaptiveSegmentCount, static_cast<size_t>(read_params.scan_dop) / divisor);
+    size_t threshold = dop_based_threshold;
+    if (config::lake_adaptive_segment_prepare_max_threshold > 0) {
+        threshold = std::min<size_t>(threshold, config::lake_adaptive_segment_prepare_max_threshold);
+    }
+    if (segment_count < threshold) {
         return AdaptiveSegmentPrepareDecision::SKIP_SEGMENT_COUNT;
     }
-    if (!rs_opts.ranges.empty()) {
-        return AdaptiveSegmentPrepareDecision::USE;
+    if (!config::enable_lake_adaptive_segment_prepare_ignore_prunable_inputs) {
+        if (!rs_opts.ranges.empty()) {
+            return AdaptiveSegmentPrepareDecision::USE;
+        }
+        return !rs_opts.pred_tree_for_zone_map.empty() ? AdaptiveSegmentPrepareDecision::USE
+                                                       : AdaptiveSegmentPrepareDecision::SKIP_NO_PRUNABLE_INPUT;
     }
-    return !rs_opts.pred_tree_for_zone_map.empty() ? AdaptiveSegmentPrepareDecision::USE
-                                                   : AdaptiveSegmentPrepareDecision::SKIP_NO_PRUNABLE_INPUT;
+    return AdaptiveSegmentPrepareDecision::USE;
 }
 
 LakeSplitPlan make_lake_split_plan(bool could_split_physically, const std::vector<std::shared_ptr<Rowset>>& rowsets,

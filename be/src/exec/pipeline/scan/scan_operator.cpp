@@ -595,17 +595,12 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 if (!hit) {
                     break;
                 }
-                auto [delta_version, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
-                if (!delta_rowsets.empty()) {
+                auto [delta_version, delta_rowsets] = _cache_operator->shared_delta_version_and_rowsets(lane_owner);
+                if (delta_rowsets != nullptr && !delta_rowsets->empty()) {
                     // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
                     // created from rowsets passed in to itself instead of capturing it from TabletManager again.
                     morsel->set_from_version(delta_version);
-
-                    std::vector<BaseRowsetSharedPtr> drs;
-                    for (auto& rs : delta_rowsets) {
-                        drs.emplace_back(rs);
-                    }
-                    morsel->set_delta_rowsets(std::move(drs));
+                    morsel->set_shared_delta_rowsets(std::move(delta_rowsets));
                     break;
                 } else {
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
@@ -616,14 +611,10 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 // When both intra-tablet parallelism and multi-version cache mechanisms take effects, we must
                 // use delta rowsets instead of the ensemble of rowsets to fetch rows from disk for all of the
                 // morsels originated from the identical tablet.
-                auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
-                if (!delta_rowsets.empty()) {
+                auto [delta_verrsion, delta_rowsets] = _cache_operator->shared_delta_version_and_rowsets(lane_owner);
+                if (delta_rowsets != nullptr && !delta_rowsets->empty()) {
                     morsel->set_from_version(delta_verrsion);
-                    std::vector<BaseRowsetSharedPtr> drs;
-                    for (auto& rs : delta_rowsets) {
-                        drs.emplace_back(rs);
-                    }
-                    morsel->set_delta_rowsets(std::move(drs));
+                    morsel->set_shared_delta_rowsets(std::move(delta_rowsets));
                 }
                 break;
             }

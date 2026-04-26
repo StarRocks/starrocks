@@ -343,7 +343,10 @@ bool ConnectorScanOperator::_is_lake_child_reuse_candidate(const Morsel& morsel)
         return false;
     }
     auto* scan_morsel = dynamic_cast<const ScanMorsel*>(&morsel);
-    if (scan_morsel == nullptr || scan_morsel->from_version() != 0) {
+    if (scan_morsel == nullptr) {
+        return false;
+    }
+    if (scan_morsel->from_version() != 0 && !config::enable_lake_scan_child_morsel_delta_rowsets_reuse) {
         return false;
     }
     const auto* split_context = dynamic_cast<const LakeSplitContext*>(scan_morsel->get_split_context());

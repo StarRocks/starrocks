@@ -45,7 +45,7 @@ struct PerLaneBuffer {
     int lane;
     PerLaneBufferState state;
     BaseTabletSharedPtr tablet;
-    std::vector<BaseRowsetSharedPtr> rowsets;
+    CacheOperator::SharedDeltaRowsetsPtr rowsets;
     RowsetsAcqRelPtr rowsets_acq_rel;
     int64_t required_version;
     int64_t cached_version;
@@ -62,7 +62,7 @@ struct PerLaneBuffer {
         if (rowsets_acq_rel != nullptr) {
             rowsets_acq_rel.reset();
         }
-        rowsets.clear();
+        rowsets.reset();
         required_version = 0;
         cached_version = 0;
         chunks.clear();
@@ -315,7 +315,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
     // case 3: otherwise, the cache result is partial result of per-tablet computation, so delta versions must
     //  be scanned and merged with cache result to generate total result.
     buffer->state = PLBS_HIT_PARTIAL;
-    buffer->rowsets = std::move(base_rowsets);
+    buffer->rowsets = std::make_shared<const std::vector<BaseRowsetSharedPtr>>(std::move(base_rowsets));
     buffer->rowsets_acq_rel = std::move(rowsets_acq_rel);
     buffer->num_rows = 0;
     buffer->num_bytes = 0;
@@ -490,8 +490,19 @@ std::tuple<int64_t, vector<BaseRowsetSharedPtr>> CacheOperator::delta_version_an
         return make_tuple(0, vector<BaseRowsetSharedPtr>{});
     } else {
         auto& buffer = _per_lane_buffers[lane_it->second];
-        return make_tuple(buffer->cached_version + 1, buffer->rowsets);
+        return make_tuple(buffer->cached_version + 1, buffer->rowsets != nullptr ? *buffer->rowsets
+                                                                                 : vector<BaseRowsetSharedPtr>{});
     }
+}
+
+std::tuple<int64_t, CacheOperator::SharedDeltaRowsetsPtr> CacheOperator::shared_delta_version_and_rowsets(
+        int64_t tablet_id) {
+    auto lane_it = _owner_to_lanes.find(tablet_id);
+    if (lane_it == _owner_to_lanes.end()) {
+        return make_tuple(0, SharedDeltaRowsetsPtr{});
+    }
+    auto& buffer = _per_lane_buffers[lane_it->second];
+    return make_tuple(buffer->cached_version + 1, buffer->rowsets);
 }
 
 Status CacheOperator::set_finishing(RuntimeState* state) {

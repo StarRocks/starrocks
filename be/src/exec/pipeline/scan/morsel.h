@@ -100,11 +100,14 @@ public:
 
     void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
     void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) {
+        _delta_rowsets = std::make_shared<const std::vector<BaseRowsetSharedPtr>>(std::move(delta_rowsets));
+    }
+    void set_shared_delta_rowsets(std::shared_ptr<const std::vector<BaseRowsetSharedPtr>> delta_rowsets) {
         _delta_rowsets = std::move(delta_rowsets);
     }
     const std::vector<BaseRowsetSharedPtr>& rowsets() const {
-        if (_delta_rowsets.has_value()) {
-            return _delta_rowsets.value();
+        if (_delta_rowsets != nullptr) {
+            return *_delta_rowsets;
         } else {
             return *_rowsets;
         }
@@ -122,7 +125,7 @@ private:
     static const std::vector<BaseRowsetSharedPtr> kEmptyRowsets;
     // _rowsets is owned by MorselQueue, whose lifecycle is longer than that of Morsel.
     const std::vector<BaseRowsetSharedPtr>* _rowsets = &kEmptyRowsets;
-    std::optional<std::vector<BaseRowsetSharedPtr>> _delta_rowsets;
+    std::shared_ptr<const std::vector<BaseRowsetSharedPtr>> _delta_rowsets;
 };
 
 class ScanSplitContext {

@@ -171,6 +171,7 @@ private:
         bool valid = false;
         int64_t tablet_id = 0;
         std::string version;
+        int64_t from_version = 0;
         const void* rowsets_identity = nullptr;
     };
     ReuseSignature _reuse_signature;

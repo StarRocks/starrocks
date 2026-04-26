@@ -298,7 +298,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：控制 Lake shared-data physical split 的兄弟 child morsel，在顶层 prepared split 路径已经选中的前提下，是否在同一个 slot 内继续复用 chunk source 和 reader 壳层。这只是 slot-local 的次级实现细节开关，不参与 prepared path 与 baseline path 的架构选路。对于 query cache 的 delta-rowsets 读取、logical split morsel、GLM、CACHE SELECT/SST warmup 等暂未支持的场景，会自动回退到原有的按 morsel 重建 reader 路径。
+- 描述：控制 Lake shared-data physical split 的兄弟 child morsel，在顶层 prepared split 路径已经选中的前提下，是否在同一个 slot 内继续复用 chunk source 和 reader 壳层。这只是 slot-local 的次级实现细节开关，不参与 prepared path 与 baseline path 的架构选路。对于 logical split morsel、CACHE SELECT/SST warmup 等暂未支持的场景，会自动回退到原有的按 morsel 重建 reader 路径。query cache stale-entry 触发的 delta-rowsets 读取仍需额外开启 `enable_lake_scan_child_morsel_delta_rowsets_reuse`。
+- 引入版本：v4.1
+
+### enable_lake_scan_child_morsel_delta_rowsets_reuse
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：临时 A/B 开关，用于将 Lake physical child morsel reuse 扩展到 query cache stale-entry 场景下的 delta-rowsets 读取。开启后，只要兄弟 morsel 共享同一份捕获到的 delta-rowsets 视图，并且 `from_version` 一致，StarRocks 就允许这些 reused child 继续走复用路径。关闭后，delta-rowsets 读取始终回退到原有的按 morsel 重建 reader 路径。
 - 引入版本：v4.1
 
 ### enable_lake_scan_child_morsel_prepared_state_reuse
@@ -326,6 +335,42 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：控制复用中的 Lake physical split child morsel，在前一个 morsel 结束后如果检测到 Runtime Filter 晚到或版本发生变化时，是否放弃当前复用的 reader 壳层，并重新执行一遍存储 reader 初始化链路。开启后，StarRocks 会为该 reused child 重新构建 `ScanConjunctsManager`、scan range 和 `TabletReader`，以便像 baseline 的按 child `open()` 路径那样，把新的 Runtime Filter predicate 更完整地下推到存储层。该开关只有在开启 `enable_lake_scan_child_morsel_reuse` 时才生效。
+- 引入版本：v4.1
+
+### lake_tablet_internal_parallel_enough_tablet_dop_multiplier
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Lake shared-data scan 策略的临时 A/B 配置，用于控制 provider 侧的粗粒度门槛，即“当前 tablet 已经足够多，因此不再启用 tablet-internal parallel”。只有当 `num_total_scan_ranges >= pipeline_dop * lake_tablet_internal_parallel_enough_tablet_dop_multiplier` 时，StarRocks 才会跳过 tablet-internal parallel。将其设置为 `1` 可恢复到之前的行为。
+- 引入版本：v4.1
+
+### lake_adaptive_segment_prepare_scan_dop_divisor
+
+- 默认值：8
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Lake adaptive prepared-split 策略的临时 A/B 配置。基础 segment 数门槛先按 `max(2, scan_dop / lake_adaptive_segment_prepare_scan_dop_divisor)` 计算，再由 `lake_adaptive_segment_prepare_max_threshold` 进行封顶。该值越小，prepared path 越保守。将其设置为 `4` 可恢复到之前的行为。
+- 引入版本：v4.1
+
+### lake_adaptive_segment_prepare_max_threshold
+
+- 默认值：4
+- 类型：Int
+- 单位：Segments
+- 是否动态：是
+- 描述：Lake adaptive prepared-split segment 门槛的临时 A/B 封顶值。大于 `0` 时，会在基于 `scan_dop` 的门槛计算后再做一次上限裁剪；小于等于 `0` 时表示不封顶。将其设置为 `0` 可恢复到之前的不封顶行为。
+- 引入版本：v4.1
+
+### enable_lake_adaptive_segment_prepare_ignore_prunable_inputs
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Lake adaptive prepared-split 策略的临时 A/B 开关。开启后，只要 segment 数达到门槛，即使当前没有 seek range 或 zone-map pruning predicate，StarRocks 也允许进入 prepared physical split 路径；关闭后，会恢复之前的行为，即必须存在 key range 或 `pred_tree_for_zone_map` 等可裁剪输入才会进入该路径。
 - 引入版本：v4.1
 
 ### max_hdfs_file_handle

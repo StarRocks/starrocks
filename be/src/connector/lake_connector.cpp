@@ -250,7 +250,10 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
 
 void LakeDataSource::refresh_reuse_signature() {
     _reuse_signature = {};
-    if (!enable_local_child_morsel_reuse() || !_reader_schema_inited || _morsel == nullptr || _morsel->from_version() != 0) {
+    if (!enable_local_child_morsel_reuse() || !_reader_schema_inited || _morsel == nullptr) {
+        return;
+    }
+    if (_morsel->from_version() != 0 && !config::enable_lake_scan_child_morsel_delta_rowsets_reuse) {
         return;
     }
 
@@ -269,11 +272,15 @@ void LakeDataSource::refresh_reuse_signature() {
     _reuse_signature.valid = true;
     _reuse_signature.tablet_id = internal_scan_range.tablet_id;
     _reuse_signature.version = internal_scan_range.version;
+    _reuse_signature.from_version = _morsel->from_version();
     _reuse_signature.rowsets_identity = &(_morsel->rowsets());
 }
 
 bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel) const {
-    if (!_reuse_signature.valid || morsel.from_version() != 0) {
+    if (!_reuse_signature.valid) {
+        return false;
+    }
+    if (morsel.from_version() != 0 && !config::enable_lake_scan_child_morsel_delta_rowsets_reuse) {
         return false;
     }
 
@@ -289,6 +296,7 @@ bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel
 
     const auto& internal_scan_range = scan_range->internal_scan_range;
     return internal_scan_range.tablet_id == _reuse_signature.tablet_id &&
+           morsel.from_version() == _reuse_signature.from_version &&
            internal_scan_range.version == _reuse_signature.version &&
            &(morsel.rowsets()) == _reuse_signature.rowsets_identity;
 }
@@ -1644,8 +1652,12 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
         int64_t* splitted_scan_rows) const {
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
+    const int64_t enough_tablet_multiplier =
+            std::max<int64_t>(1, config::lake_tablet_internal_parallel_enough_tablet_dop_multiplier);
+    const size_t enough_tablet_parallelism_threshold =
+            std::max<size_t>(1, static_cast<size_t>(pipeline_dop) * enough_tablet_multiplier);
     // The enough number of tablets shouldn't use tablet internal parallel.
-    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
+    if (!force_split && num_total_scan_ranges >= enough_tablet_parallelism_threshold) {
         return false;
     }
 
