@@ -1271,9 +1271,11 @@ static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB
 // This is the Phase 2 core of Bug B. Called only when
 // sstable_translation_lands_in_metadata returns false; healthy sstables are
 // untouched and continue down the legacy offset projection path.
-StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(
-        TabletManager* tablet_manager, int64_t source_tablet_id, int64_t merged_tablet_id,
-        const PersistentIndexSstablePB& input_pb, const TabletMergeContext& ctx) {
+StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(TabletManager* tablet_manager,
+                                                                      int64_t source_tablet_id,
+                                                                      int64_t merged_tablet_id,
+                                                                      const PersistentIndexSstablePB& input_pb,
+                                                                      const TabletMergeContext& ctx) {
     auto* update_mgr = tablet_manager->update_mgr();
     if (update_mgr == nullptr) {
         return Status::InternalError("rebuild_sstable: update_mgr is null");
@@ -1287,11 +1289,11 @@ StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(
     //    stored rssids, not the offset-projected ones).
     auto source_path = tablet_manager->sst_location(source_tablet_id, input_pb.filename());
     PersistentIndexSstablePB raw_pb = input_pb;
-    raw_pb.set_rssid_offset(0);  // suppress reader-time translation
+    raw_pb.set_rssid_offset(0); // suppress reader-time translation
     raw_pb.clear_shared_rssid();
     raw_pb.clear_shared_version();
-    ASSIGN_OR_RETURN(auto reader, PersistentIndexSstable::new_sstable(raw_pb, source_path, cache,
-                                                                      false /*need_filter*/));
+    ASSIGN_OR_RETURN(auto reader,
+                     PersistentIndexSstable::new_sstable(raw_pb, source_path, cache, false /*need_filter*/));
 
     // 2. Open the output writer. Place under merged tablet's sst path so the
     //    file is owned by the merged tablet from the start; on merge failure
@@ -1340,9 +1342,8 @@ StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(
             } else {
                 int64_t off = static_cast<int64_t>(stored_rssid) + ctx.rssid_offset();
                 if (off < 0 || off > std::numeric_limits<uint32_t>::max()) {
-                    return Status::Corruption(
-                            fmt::format("rebuild_sstable: rssid overflow stored={} offset={}",
-                                        stored_rssid, ctx.rssid_offset()));
+                    return Status::Corruption(fmt::format("rebuild_sstable: rssid overflow stored={} offset={}",
+                                                          stored_rssid, ctx.rssid_offset()));
                 }
                 effective_rssid = static_cast<uint32_t>(off);
             }
