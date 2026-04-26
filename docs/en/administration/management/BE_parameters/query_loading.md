@@ -322,6 +322,15 @@ This topic introduces the following types of FE configurations:
 - Description: Controls whether a reused Lake physical split child morsel bypasses the full `LakeDataSource::open_reader_for_current_morsel()` shell and directly reopens the existing `TabletReader` with only the child-specific rowid range refreshed. This switch only takes effect when `enable_lake_scan_child_morsel_reuse` is also enabled and only for same-slot physical child morsel reuse.
 - Introduced in: v4.1
 
+### enable_lake_scan_child_morsel_reinit_on_late_runtime_filter
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether a reused Lake physical split child morsel drops the reused reader shell and reruns the storage reader initialization path when a runtime filter arrives late or its version changes after the previous morsel finished. When enabled, StarRocks rebuilds `ScanConjunctsManager`, scan ranges, and `TabletReader` for that reused child so the new runtime-filter predicates can be pushed down to storage more like the baseline per-child open path. This switch only takes effect when `enable_lake_scan_child_morsel_reuse` is enabled.
+- Introduced in: v4.1
+
 ### late_materialization_ratio
 
 - Default: 10

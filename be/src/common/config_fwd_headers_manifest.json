@@ -472,6 +472,7 @@
         "enable_lake_index_pruned_physical_split",
         "enable_lake_scan_child_morsel_reuse",
         "enable_lake_scan_child_morsel_fast_reopen",
+        "enable_lake_scan_child_morsel_reinit_on_late_runtime_filter",
         "max_hdfs_file_handle",
         "io_coalesce_lake_read_enable",
         "enable_orc_late_materialization",

@@ -67,6 +67,11 @@ Status LakeDataSource::open(RuntimeState* state) {
     _prepare_only_mode = false;
     if (_reuse_pending) {
         _reuse_pending = false;
+        auto late_rf_reinit = detect_late_runtime_filter_reinit();
+        if (late_rf_reinit.triggered) {
+            record_late_runtime_filter_reinit(late_rf_reinit);
+            return reinit_reader_for_current_morsel_with_runtime_filters();
+        }
         if (can_fast_reopen_current_morsel()) {
             return fast_reopen_reader_for_current_morsel();
         }
@@ -105,41 +110,10 @@ Status LakeDataSource::open(RuntimeState* state) {
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
 
-    // Init _conjuncts_manager.
-    const TQueryOptions& query_options = state->query_options();
-    int32_t max_scan_key_num;
-    if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
-        max_scan_key_num = query_options.max_scan_key_num;
-    } else {
-        max_scan_key_num = config::max_scan_key_num;
-    }
-    bool enable_column_expr_predicate = false;
-    if (thrift_lake_scan_node.__isset.enable_column_expr_predicate) {
-        enable_column_expr_predicate = thrift_lake_scan_node.enable_column_expr_predicate;
-    }
-
-    ScanConjunctsManagerOptions opts;
-    opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
-    opts.tuple_desc = tuple_desc;
-    opts.obj_pool = &_obj_pool;
-    opts.key_column_names = &thrift_lake_scan_node.sort_key_column_names;
-    opts.runtime_filters = _runtime_filters;
-    opts.runtime_state = state;
-    opts.scan_keys_unlimited = true;
-    opts.max_scan_key_num = max_scan_key_num;
-    opts.enable_column_expr_predicate = enable_column_expr_predicate;
-    opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
-    opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
-
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
-    ScanConjunctsManager& cm = *_conjuncts_manager;
-
-    // Parse conjuncts via _conjuncts_manager.
-    RETURN_IF_ERROR(cm.parse_conjuncts());
-
-    RETURN_IF_ERROR(build_scan_range(_runtime_state));
+    RETURN_IF_ERROR(rebuild_scan_conjuncts());
 
     RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
+    refresh_runtime_filter_versions();
     return Status::OK();
 }
 
@@ -294,6 +268,144 @@ bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel
 
 bool LakeDataSource::enable_local_child_morsel_reuse() const {
     return config::enable_lake_scan_child_morsel_reuse && !has_reuse_blocker();
+}
+
+void LakeDataSource::refresh_runtime_filter_versions() {
+    _runtime_filter_versions.clear();
+    if (_runtime_filters == nullptr || _runtime_filters->size() == 0) {
+        return;
+    }
+
+    for (const auto& [filter_id, desc] : _runtime_filters->descriptors()) {
+        const RuntimeFilter* rf = desc->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
+        _runtime_filter_versions.emplace(filter_id, rf != nullptr ? rf->rf_version() : 0);
+    }
+}
+
+LakeDataSource::LateRuntimeFilterReinitDecision LakeDataSource::detect_late_runtime_filter_reinit() const {
+    LateRuntimeFilterReinitDecision decision;
+    if (!config::enable_lake_scan_child_morsel_reinit_on_late_runtime_filter || _runtime_filters == nullptr ||
+        _runtime_filters->size() == 0) {
+        return decision;
+    }
+
+    const auto& descriptors = _runtime_filters->descriptors();
+    if (_runtime_filter_versions.size() != descriptors.size()) {
+        decision.triggered = true;
+        decision.reason = LateRuntimeFilterReinitDecision::Reason::FILTER_SET_CHANGED;
+        return decision;
+    }
+
+    for (const auto& [filter_id, desc] : descriptors) {
+        const RuntimeFilter* rf = desc->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
+        const size_t current_version = rf != nullptr ? rf->rf_version() : 0;
+        auto it = _runtime_filter_versions.find(filter_id);
+        if (it == _runtime_filter_versions.end()) {
+            decision.triggered = true;
+            decision.reason = LateRuntimeFilterReinitDecision::Reason::FILTER_SET_CHANGED;
+            decision.filter_id = filter_id;
+            return decision;
+        }
+        if (it->second == 0 && current_version > 0) {
+            decision.triggered = true;
+            decision.reason = LateRuntimeFilterReinitDecision::Reason::NEWLY_ARRIVED;
+            decision.filter_id = filter_id;
+            return decision;
+        }
+        if (current_version > it->second) {
+            decision.triggered = true;
+            decision.reason = LateRuntimeFilterReinitDecision::Reason::VERSION_CHANGED;
+            decision.filter_id = filter_id;
+            return decision;
+        }
+    }
+    return decision;
+}
+
+void LakeDataSource::record_late_runtime_filter_reinit(const LateRuntimeFilterReinitDecision& decision) {
+    COUNTER_UPDATE(_late_rf_reinit_counter, 1);
+    switch (decision.reason) {
+    case LateRuntimeFilterReinitDecision::Reason::FILTER_SET_CHANGED:
+        COUNTER_UPDATE(_late_rf_reinit_filter_set_changed_counter, 1);
+        break;
+    case LateRuntimeFilterReinitDecision::Reason::NEWLY_ARRIVED:
+        COUNTER_UPDATE(_late_rf_reinit_new_arrival_counter, 1);
+        break;
+    case LateRuntimeFilterReinitDecision::Reason::VERSION_CHANGED:
+        COUNTER_UPDATE(_late_rf_reinit_version_changed_counter, 1);
+        break;
+    case LateRuntimeFilterReinitDecision::Reason::NONE:
+        break;
+    }
+}
+
+Status LakeDataSource::reset_reader_state_for_reinit() {
+    release_reader(_runtime_state);
+    _prepared_read_state.reset();
+    _reuse_signature = {};
+    _runtime_filter_versions.clear();
+    _reader_schema_inited = false;
+    _use_projection_iterator = false;
+    _tablet_schema.reset();
+    _params = TabletReaderParams{};
+    _key_ranges.clear();
+    _scanner_ranges.clear();
+    _query_slots.clear();
+    _unused_output_column_ids.clear();
+    _predicate_free_pool.clear();
+    _not_push_down_conjuncts.clear();
+    _non_pushdown_pred_tree = PredicateTree();
+    _conjuncts_manager.reset();
+    return Status::OK();
+}
+
+Status LakeDataSource::rebuild_scan_conjuncts() {
+    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
+    TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
+    if (tuple_desc == nullptr) {
+        return Status::InternalError("failed to get tuple descriptor for LakeDataSource");
+    }
+    _slots = &tuple_desc->slots();
+
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    int32_t max_scan_key_num;
+    if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
+        max_scan_key_num = query_options.max_scan_key_num;
+    } else {
+        max_scan_key_num = config::max_scan_key_num;
+    }
+    bool enable_column_expr_predicate = false;
+    if (thrift_lake_scan_node.__isset.enable_column_expr_predicate) {
+        enable_column_expr_predicate = thrift_lake_scan_node.enable_column_expr_predicate;
+    }
+
+    ScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = &_obj_pool;
+    opts.key_column_names = &thrift_lake_scan_node.sort_key_column_names;
+    opts.runtime_filters = _runtime_filters;
+    opts.runtime_state = _runtime_state;
+    opts.scan_keys_unlimited = true;
+    opts.max_scan_key_num = max_scan_key_num;
+    opts.enable_column_expr_predicate = enable_column_expr_predicate;
+    opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+    opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
+
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
+    RETURN_IF_ERROR(_conjuncts_manager->parse_conjuncts());
+    RETURN_IF_ERROR(build_scan_range(_runtime_state));
+    return Status::OK();
+}
+
+Status LakeDataSource::reinit_reader_for_current_morsel_with_runtime_filters() {
+    _ignore_split_context_prepared_state_once = true;
+    auto reset_ignore_flag = DeferOp([this]() { _ignore_split_context_prepared_state_once = false; });
+    RETURN_IF_ERROR(reset_reader_state_for_reinit());
+    RETURN_IF_ERROR(rebuild_scan_conjuncts());
+    RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
+    refresh_runtime_filter_versions();
+    return Status::OK();
 }
 
 bool LakeDataSource::should_attach_prepared_read_state() const {
@@ -616,7 +728,7 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     _params.prepared_target_rowset_index = -1;
     _params.prepared_target_segment_index = -1;
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
-    if (split_context != nullptr && split_context->prepared_read_state != nullptr) {
+    if (!_ignore_split_context_prepared_state_once && split_context != nullptr && split_context->prepared_read_state != nullptr) {
         _prepared_read_state = split_context->prepared_read_state;
     }
     if (_split_context != nullptr) {
@@ -625,7 +737,8 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         } else {
             _params.short_key_ranges_option = split_context->short_key_range;
         }
-        if (split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
+        if (!_ignore_split_context_prepared_state_once &&
+            split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
             split_context->prepared_read_state != nullptr && split_context->prepared_segment_state != nullptr) {
             _params.prepared_target_rowset_index = static_cast<int64_t>(split_context->rowset_index);
             _params.prepared_target_segment_index = static_cast<int64_t>(split_context->segment_index);
@@ -681,6 +794,7 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     }
 
     RETURN_IF_ERROR(_reader->open(_params));
+    refresh_runtime_filter_versions();
     return Status::OK();
 }
 
@@ -691,7 +805,7 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
     }
 
     const auto* split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
-    if (split_context->prepared_read_state != nullptr) {
+    if (!_ignore_split_context_prepared_state_once && split_context->prepared_read_state != nullptr) {
         _prepared_read_state = split_context->prepared_read_state;
     }
 
@@ -702,14 +816,17 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
     _params.scan_range = nullptr;
     _params.prepared_target_rowset_index = -1;
     _params.prepared_target_segment_index = -1;
-    if (split_context->prepared_read_state != nullptr && split_context->prepared_segment_state != nullptr) {
+    if (!_ignore_split_context_prepared_state_once && split_context->prepared_read_state != nullptr &&
+        split_context->prepared_segment_state != nullptr) {
         _params.prepared_target_rowset_index = static_cast<int64_t>(split_context->rowset_index);
         _params.prepared_target_segment_index = static_cast<int64_t>(split_context->segment_index);
     }
 
     refresh_reuse_signature();
     _reader->set_prepared_read_state(_prepared_read_state);
-    return _reader->open(_params);
+    RETURN_IF_ERROR(_reader->open(_params));
+    refresh_runtime_filter_versions();
+    return Status::OK();
 }
 
 void LakeDataSource::release_reader(RuntimeState* state) {
@@ -1090,6 +1207,13 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
 void LakeDataSource::init_counter(RuntimeState* state) {
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _late_rf_reinit_counter = ADD_COUNTER(_runtime_profile, "LakeScanLateRuntimeFilterReinit", TUnit::UNIT);
+    _late_rf_reinit_new_arrival_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanLateRuntimeFilterReinitNewArrival", TUnit::UNIT);
+    _late_rf_reinit_version_changed_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanLateRuntimeFilterReinitVersionChanged", TUnit::UNIT);
+    _late_rf_reinit_filter_set_changed_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanLateRuntimeFilterReinitFilterSetChanged", TUnit::UNIT);
 
     _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
 

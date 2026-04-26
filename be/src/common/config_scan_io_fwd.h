@@ -84,6 +84,10 @@ CONF_mBool(enable_lake_scan_child_morsel_reuse, "false");
 // child-specific scan parameters before reopening the existing TabletReader.
 CONF_mBool(enable_lake_scan_child_morsel_fast_reopen, "false");
 
+// Whether late-arrived runtime filters force a reused Lake physical child morsel to drop the reused reader shell and
+// rebuild the storage reader path from ScanConjunctsManager again so the new predicates can be pushed down to storage.
+CONF_mBool(enable_lake_scan_child_morsel_reinit_on_late_runtime_filter, "false");
+
 // The max hdfs file handle.
 CONF_mInt32(max_hdfs_file_handle, "1000");
 

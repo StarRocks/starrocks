@@ -310,6 +310,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制复用中的 Lake physical split child morsel，是否绕过完整的 `LakeDataSource::open_reader_for_current_morsel()` 壳层，只刷新 child 自己的 rowid range 后直接重开已有 `TabletReader`。该开关只有在同时开启 `enable_lake_scan_child_morsel_reuse` 时才生效，并且只作用于同一 slot 内的 physical child morsel 复用场景。
 - 引入版本：v4.1
 
+### enable_lake_scan_child_morsel_reinit_on_late_runtime_filter
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制复用中的 Lake physical split child morsel，在前一个 morsel 结束后如果检测到 Runtime Filter 晚到或版本发生变化时，是否放弃当前复用的 reader 壳层，并重新执行一遍存储 reader 初始化链路。开启后，StarRocks 会为该 reused child 重新构建 `ScanConjunctsManager`、scan range 和 `TabletReader`，以便像 baseline 的按 child `open()` 路径那样，把新的 Runtime Filter predicate 更完整地下推到存储层。该开关只有在开启 `enable_lake_scan_child_morsel_reuse` 时才生效。
+- 引入版本：v4.1
+
 ### max_hdfs_file_handle
 
 - 默认值：1000

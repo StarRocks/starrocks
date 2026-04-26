@@ -84,6 +84,19 @@ public:
     TabletSchemaCSPtr TEST_tablet_schema() const { return _tablet_schema; }
 
 private:
+    struct LateRuntimeFilterReinitDecision {
+        enum class Reason {
+            NONE = 0,
+            FILTER_SET_CHANGED = 1,
+            NEWLY_ARRIVED = 2,
+            VERSION_CHANGED = 3,
+        };
+
+        bool triggered = false;
+        Reason reason = Reason::NONE;
+        int32_t filter_id = -1;
+    };
+
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
@@ -104,8 +117,14 @@ private:
     bool can_fast_reopen_current_morsel() const;
     Status open_reader_for_current_morsel();
     Status fast_reopen_reader_for_current_morsel();
+    Status reinit_reader_for_current_morsel_with_runtime_filters();
     void release_reader(RuntimeState* state);
     void refresh_reuse_signature();
+    void refresh_runtime_filter_versions();
+    LateRuntimeFilterReinitDecision detect_late_runtime_filter_reinit() const;
+    void record_late_runtime_filter_reinit(const LateRuntimeFilterReinitDecision& decision);
+    Status reset_reader_state_for_reinit();
+    Status rebuild_scan_conjuncts();
 
     Status _extend_schema_by_access_paths();
     void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
@@ -144,6 +163,7 @@ private:
     bool _use_projection_iterator = false;
     bool _prepare_only_mode = false;
     bool _reuse_pending = false;
+    bool _ignore_split_context_prepared_state_once = false;
     struct ReuseSignature {
         bool valid = false;
         int64_t tablet_id = 0;
@@ -151,6 +171,7 @@ private:
         const void* rowsets_identity = nullptr;
     };
     ReuseSignature _reuse_signature;
+    std::unordered_map<int32_t, size_t> _runtime_filter_versions;
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
@@ -258,6 +279,10 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
+    RuntimeProfile::Counter* _late_rf_reinit_counter = nullptr;
+    RuntimeProfile::Counter* _late_rf_reinit_new_arrival_counter = nullptr;
+    RuntimeProfile::Counter* _late_rf_reinit_version_changed_counter = nullptr;
+    RuntimeProfile::Counter* _late_rf_reinit_filter_set_changed_counter = nullptr;
 };
 
 // ================================
