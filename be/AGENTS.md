@@ -185,8 +185,8 @@ Schema scanner base contract and shared mechanics without concrete scanner, pipe
 ### ExecSchemaScanners (`execschemascanners`)
 Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.
 - Targets: `ExecSchemaScanners`
-- Allowed internal include prefixes: `exec/schema_scanner.h`, `exec/schema_scanner/schema_column_filler.h`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `util/`
-- Allowed target deps: `ExecSchemaScannerCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Util`
+- Allowed internal include prefixes: `exec/schema_scanner.h`, `exec/schema_scanner/schema_column_filler.h`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecSchemaScannerCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_schema_scanners_test`
 - Remediation: Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries.
 <!-- END GENERATED: BE MODULE HARNESSES -->

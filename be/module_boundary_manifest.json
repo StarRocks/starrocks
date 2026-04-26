@@ -362,7 +362,7 @@
       "additional_owned_globs": [
         "be/src/exec/schema_scanner/schema_column_filler.h"
       ],
-      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner/schema_column_filler.h", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/", "util/"],
+      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner/schema_column_filler.h", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/pipeline/", "storage/", "http/", "service/", "cache/"],
       "forbidden_includes": [
         "exec/schema_scanner/schema_helper.h",
@@ -370,9 +370,9 @@
         "exec/exec_node.h",
         "exec/data_sink.h"
       ],
-      "allowed_target_deps": ["ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen", "Util"],
+      "allowed_target_deps": ["ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_schema_scanners_test"],
-      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen", "Util"],
+      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
     }
   ]

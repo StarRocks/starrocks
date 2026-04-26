@@ -74,7 +74,6 @@ target_link_libraries(ExecSchemaScannerCore PUBLIC
 set(EXEC_SCHEMA_SCANNER_FILES
     schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_configs_scanner.cpp
-    schema_scanner/schema_be_metrics_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
@@ -98,7 +97,6 @@ target_link_libraries(ExecSchemaScanners PUBLIC
     Base
     Gutil
     StarRocksGen
-    Util
 )
 
 set(PIPELINE_PRIMITIVES_SRCS
@@ -396,6 +394,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_be_tablets_scanner.cpp
     schema_scanner/schema_be_txns_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
+    schema_scanner/schema_be_metrics_scanner.cpp
     schema_scanner/schema_fe_metrics_scanner.cpp
     schema_scanner/schema_fe_threads_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
