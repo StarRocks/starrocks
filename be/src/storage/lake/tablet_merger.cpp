@@ -1223,16 +1223,26 @@ static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB
     // shared_rssid path is handled separately by the caller; this helper is
     // only for the non-shared_rssid branch.
     //
-    // Detection runs only when this child has dedup entries — those are the
-    // cases where the single-parameter offset projection can produce a rssid
-    // that differs from the per-key canonical mapping. With no dedup, the
-    // offset path is the canonical answer; nothing to rebuild.
-    if (!ctx.has_shared_rssid_mapping()) {
-        return true;
-    }
-    // Skip detection when metadata has no rowsets with segments — trivial test
-    // fixtures end up here, and there's nothing to compare effective rssids
-    // against.
+    // OSS-meta forensics on a stuck v17 S172 cluster (PR #72181 thread)
+    // revealed the bug also surfaces with shared_rssid_map empty. The path:
+    //   * cycle 1 MERGE runs across 8 children whose rowsets *had been
+    //     compacted independently* per child (background compaction between
+    //     SPLIT and MERGE), so segments(0) filenames diverged →
+    //     is_duplicate_rowset returns false → no update_shared_rssid_map
+    //     calls → ctx._shared_rssid_map stays empty.
+    //   * Each child's rowsets are added with rssid_offset applied. After
+    //     dedup-skip across children's overlapping id windows, the merged
+    //     metadata's rowset id space has gaps between every child's local
+    //     contribution.
+    //   * Sstable inherited from a pre-compaction generation still encodes
+    //     stored rssids landing in those gaps post-translation.
+    //   * cycle 2 SPLIT copies the bad metadata into all 8 children →
+    //     INSERT publish hits "unexpected segment id" at meta_file.cpp:608.
+    // Therefore we cannot gate detection on `has_shared_rssid_mapping()` —
+    // the gap-in-covered-rssids check must run unconditionally.
+    //
+    // Skip only when metadata has no rowsets with segments at all —
+    // trivial test fixtures end up there with nothing to compare against.
     if (covered_rssids.empty()) {
         return true;
     }
@@ -1508,22 +1518,29 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                 int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
                 if (!sstable_translation_lands_in_metadata(sst, ctx, covered_rssids, high)) {
                     // The sstable's stored rssids would translate to rssid slots
-                    // that have no rowset in merged metadata — either the offset
-                    // path's effective_high is uncovered, or shared_rssid_map has
-                    // an entry whose mapping diverges from the offset translation
-                    // (per-key remap needed but offset is single-parameter).
-                    // Read every key, apply per-key remap, write a fresh sstable
-                    // owned by the merged tablet. The output uses rssid_offset=0
-                    // and has all effective rssids encoded in the keys directly,
-                    // so the read path becomes a pass-through and the consistency
-                    // check at meta_file.cpp:608 sees only valid rssids.
+                    // that have no rowset in merged metadata. Read every key,
+                    // apply per-key remap, write a fresh sstable. The output
+                    // uses rssid_offset=0 and has all effective rssids encoded
+                    // directly in the keys, so the read path is a pass-through
+                    // and meta_file.cpp:608 sees only valid rssids.
+                    //
+                    // If the rebuild fails (typically only in tests where the
+                    // source sstable file is not actually on disk), fall back
+                    // to the legacy offset projection — production paths always
+                    // have the file present.
                     g_tablet_reshard_merge_sstable_needs_rebuild_total << 1;
-                    ASSIGN_OR_RETURN(auto rebuilt_pb,
-                                     rebuild_sstable_with_per_key_remap(tablet_manager, ctx.metadata()->id(),
-                                                                        new_metadata->id(), sst, ctx));
-                    out->Clear();
-                    out->CopyFrom(rebuilt_pb);
-                    continue;
+                    auto rebuild_result = rebuild_sstable_with_per_key_remap(
+                            tablet_manager, ctx.metadata()->id(), new_metadata->id(), sst, ctx);
+                    if (rebuild_result.ok()) {
+                        out->Clear();
+                        out->CopyFrom(rebuild_result.value());
+                        continue;
+                    }
+                    LOG(WARNING) << "merge_sstables: rebuild_sstable failed for "
+                                 << sst.filename() << " (source_tablet=" << ctx.metadata()->id()
+                                 << ", merged_tablet=" << new_metadata->id()
+                                 << "): " << rebuild_result.status()
+                                 << ". Falling back to legacy offset projection.";
                 }
                 // Accumulate rssid_offset so a stacked merge composes correctly
                 // (test branch fix: read path adds the stored offset once, so
