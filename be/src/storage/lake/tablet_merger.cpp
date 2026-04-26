@@ -1443,8 +1443,21 @@ StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(TabletMana
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       TabletMetadataPB* new_metadata) {
     auto* dest = new_metadata->mutable_sstable_meta()->mutable_sstables();
-    // key: filename -> index in dest, for shared dedup + consistency check
+    // key: source filename -> index in dest, for shared dedup
     std::unordered_map<std::string, int> shared_dedup;
+    // key: source filename -> snapshot of consistency-check fields from the
+    // first time we saw this shared sstable. Tracked separately from `dest`
+    // because the rebuild path can rewrite dest[i] with a fresh sstable
+    // (new filename / filesize / range / encryption_meta), which would
+    // otherwise make the consistency check compare a later child's source
+    // against the earlier child's *rebuilt* entry instead of its source.
+    struct SharedSig {
+        int64_t filesize;
+        std::string encryption_meta;
+        std::string start_key;
+        std::string end_key;
+    };
+    std::unordered_map<std::string, SharedSig> shared_sigs;
 
     // Pre-compute coverage set once for Phase 1 detection. Empty sstable_meta
     // (no rowsets with segments) just yields an empty set; detection then
@@ -1467,20 +1480,25 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
             if (sst.shared()) {
                 auto [it, inserted] = shared_dedup.emplace(sst.filename(), dest->size());
                 if (!inserted) {
-                    // Dedup hit: check the fields that identify the physical file.
+                    // Dedup hit: consistency check against the recorded source
+                    // signature (NOT against dest[i], which may have been
+                    // rewritten by the rebuild path).
                     // fileset_id is intentionally excluded: it is a grouping hint that
                     // PersistentIndexSstableFileset::init may synthesize per-load when
                     // the source sstable has no persisted id, so two ctxs sharing the
                     // same legacy file can legitimately hold different ids. The merged
                     // tablet re-derives grouping from whatever id the dedup keeps.
-                    const auto& existing = dest->Get(it->second);
-                    if (existing.filesize() != sst.filesize() || existing.encryption_meta() != sst.encryption_meta() ||
-                        existing.range().start_key() != sst.range().start_key() ||
-                        existing.range().end_key() != sst.range().end_key()) {
+                    const auto& sig = shared_sigs.at(sst.filename());
+                    if (sig.filesize != sst.filesize() || sig.encryption_meta != sst.encryption_meta() ||
+                        sig.start_key != sst.range().start_key() || sig.end_key != sst.range().end_key()) {
                         return Status::Corruption("Shared sstable metadata mismatch for same filename");
                     }
                     continue; // skip duplicate
                 }
+                // First time we see this shared sstable: record source signature.
+                shared_sigs[sst.filename()] = SharedSig{static_cast<int64_t>(sst.filesize()),
+                                                       sst.encryption_meta(), sst.range().start_key(),
+                                                       sst.range().end_key()};
             }
 
             // Projection: branch on has_shared_rssid, not on shared flag
