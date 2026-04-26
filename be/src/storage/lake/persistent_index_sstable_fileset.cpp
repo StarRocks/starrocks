@@ -155,10 +155,9 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     //    in at most one SST, so per-key writes to `values[key_index]` are disjoint across
     //    SSTs. Concurrent inserts into the shared `found_key_indexes` set are serialised
     //    under a mutex.
-    auto* pool = ExecEnv::GetInstance() != nullptr ? ExecEnv::GetInstance()->pk_index_execution_thread_pool()
-                                                   : nullptr;
-    const bool parallel = config::enable_pk_index_multi_get_parallel && sstable_key_indexes_map.size() > 1 &&
-                          pool != nullptr;
+    auto* pool = ExecEnv::GetInstance() != nullptr ? ExecEnv::GetInstance()->pk_index_execution_thread_pool() : nullptr;
+    const bool parallel =
+            config::enable_pk_index_multi_get_parallel && sstable_key_indexes_map.size() > 1 && pool != nullptr;
     if (parallel) {
         TRACE_COUNTER_SCOPE_LATENCY_US("fileset_multi_get_parallel_us");
         auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
