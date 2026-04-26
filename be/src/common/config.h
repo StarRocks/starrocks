@@ -486,10 +486,14 @@ CONF_mInt64(pk_index_snapshot_max_age_sec, "604800");
 // the BE-restart benefit by default.
 CONF_mBool(pk_index_snapshot_capture_on_shutdown, "true");
 // Whether to capture a snapshot before evicting an entry from the PK-index cache (TTL-driven
-// or memory-pressure driven). Default false — opt-in until the eviction-time capture path
-// has been validated under sustained load. The snapshot is best-effort: per-entry failures
-// (lock contention, IO error) are logged but do not block eviction.
-CONF_mBool(pk_index_snapshot_capture_on_eviction, "false");
+// or memory-pressure driven). Default true — extends snapshot coverage from "tablets in cache
+// at shutdown" to "tablets ever cached and not yet GC'd from the snapshot dir", which is the
+// dominant gap measured in 1000-table workloads where TTL eviction empties the cache between
+// Test runs. The snapshot walk happens before clear_expired/try_evict (entry refs held), and
+// each per-entry capture takes a non-blocking mutex — entries currently in active use are
+// skipped silently rather than blocked. Per-entry failures (lock contention, IO error) are
+// logged but do not block eviction.
+CONF_mBool(pk_index_snapshot_capture_on_eviction, "true");
 // How often (in seconds) the cache-expire background thread scans the snapshot directory and
 // removes files older than pk_index_snapshot_max_age_sec. 0 disables GC. Default 30 minutes.
 CONF_mInt64(pk_index_snapshot_gc_interval_sec, "1800");
