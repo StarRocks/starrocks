@@ -14,6 +14,7 @@
 
 set(EXEC_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    exec_node_exec_core_test.cpp
     runtime_filter_exec_core_test.cpp
 )
 

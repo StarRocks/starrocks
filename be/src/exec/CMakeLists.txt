@@ -21,6 +21,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_CORE_FILES
+    exec_node.cpp
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
     runtime_filter/runtime_filter_probe_wait.cpp
@@ -223,7 +224,6 @@ set(EXEC_NON_PIPELINE_FILES
     data_sink.cpp
     empty_set_node.cpp
     exec_factory.cpp
-    exec_node.cpp
     pipeline_node.cpp
     exchange_node.cpp
     scan_node.cpp
