@@ -760,13 +760,13 @@ Status LakePrimaryIndex::try_lake_load_from_snapshot(TabletManager* tablet_mgr, 
         Status realize_st = persistent->realize_filesets_eagerly();
         const int64_t prewarm_us = GetCurrentTimeMicros() - prewarm_start_us;
         if (!realize_st.ok()) {
-            LOG(WARNING) << "pk-index snapshot block prewarm: realize_filesets_eagerly failed tablet="
-                         << metadata->id() << " version=" << base_version << " elapsed_us=" << prewarm_us
-                         << " : " << realize_st.to_string()
+            LOG(WARNING) << "pk-index snapshot block prewarm: realize_filesets_eagerly failed tablet=" << metadata->id()
+                         << " version=" << base_version << " elapsed_us=" << prewarm_us << " : "
+                         << realize_st.to_string()
                          << " — first publish will fall back to per-multi_get ensure_opened()";
         } else {
-            VLOG(1) << "pk-index snapshot block prewarm: tablet=" << metadata->id()
-                    << " version=" << base_version << " elapsed_us=" << prewarm_us;
+            VLOG(1) << "pk-index snapshot block prewarm: tablet=" << metadata->id() << " version=" << base_version
+                    << " elapsed_us=" << prewarm_us;
         }
     }
 
