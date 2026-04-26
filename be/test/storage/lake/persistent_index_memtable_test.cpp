@@ -146,6 +146,27 @@ TEST(PersistentIndexMemtableTest, test_replace) {
     }
 }
 
+TEST(PersistentIndexMemtableTest, test_bulk_insert_from_snapshot_skips_tombstone_for_max_rss_rowid) {
+    // Regression for the iter-045 finding: bulk_insert_from_snapshot used
+    // value.get_value() in the running std::max for _max_rss_rowid. Since
+    // NullIndexValue == UINT64_MAX, restoring a snapshot that contained a
+    // delete tombstone clobbered _max_rss_rowid. The next flush emitted an
+    // sstable with max_rss_rowid == UINT64_MAX, which LakePersistentIndex::
+    // commit() then read as int64_t -1 and rejected as "sstables are not
+    // ordered" for every subsequent publish on the tablet.
+    constexpr uint64_t kInitMax = 0x0000000200000020ULL;
+    auto memtable = std::make_unique<PersistentIndexMemtable>(nullptr, 1, kInitMax);
+    std::vector<std::tuple<std::string, int64_t, IndexValue>> entries;
+    // A real upsert with rss_rowid above the init floor — should advance the max.
+    constexpr uint64_t kUpsertRssRowid = 0x0000000300000005ULL;
+    entries.emplace_back("alpha-pk", 40, IndexValue(kUpsertRssRowid));
+    // A tombstone restored from snapshot — must NOT clobber _max_rss_rowid.
+    entries.emplace_back("beta-pk", 41, IndexValue(NullIndexValue));
+    ASSERT_OK(memtable->bulk_insert_from_snapshot(entries));
+    EXPECT_EQ(kUpsertRssRowid, memtable->max_rss_rowid())
+            << "tombstone leaked NullIndexValue (UINT64_MAX) into _max_rss_rowid";
+}
+
 TEST(PersistentIndexMemtableTest, test_memory_usage) {
     auto memtable = std::make_unique<PersistentIndexMemtable>();
     {

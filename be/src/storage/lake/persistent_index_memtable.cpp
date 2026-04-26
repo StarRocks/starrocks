@@ -41,7 +41,17 @@ Status PersistentIndexMemtable::bulk_insert_from_snapshot(
             return Status::InternalError("duplicate key in pk-index snapshot bulk_insert");
         }
         _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
-        _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
+        // Tombstones (NullIndexValue == UINT64_MAX) must NOT participate in the running
+        // max — using their sentinel value would clobber _max_rss_rowid to UINT64_MAX,
+        // which a later flush propagates into PersistentIndexSstablePB.max_rss_rowid.
+        // LakePersistentIndex::commit() reads that field as int64_t (becomes -1 after
+        // the implicit cast), failing the "sstables are not ordered" ordering check
+        // for every subsequent publish on the tablet. The init()-side floor derived
+        // from sstable_meta already covers the rowset of any deletes that pre-existed
+        // in earlier flushed sstables, so skipping tombstones here is safe.
+        if (value.get_value() != NullIndexValue) {
+            _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
+        }
     }
     return Status::OK();
 }
