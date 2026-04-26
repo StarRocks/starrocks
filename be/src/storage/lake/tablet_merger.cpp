@@ -1223,20 +1223,37 @@ static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB
     // shared_rssid path is handled separately by the caller; this helper is
     // only for the non-shared_rssid branch.
     //
-    // Detection only meaningfully discriminates when this child has dedup
-    // entries — those are the cases where the offset-based projection can
-    // diverge from the dedup mapping. With no dedup, the offset path is the
-    // canonical answer regardless of what the sstable's high word looks like.
-    // This narrowing keeps trivial test fixtures (which sometimes set sstable
-    // max_rss_rowid out-of-band of any rowset id) from flagging spuriously.
+    // Detection runs only when this child has dedup entries — those are the
+    // cases where the single-parameter offset projection can produce a rssid
+    // that differs from the per-key canonical mapping. With no dedup, the
+    // offset path is the canonical answer; nothing to rebuild.
     if (!ctx.has_shared_rssid_mapping()) {
         return true;
     }
-    // Skip detection when there are no covered rssids — metadata has no
-    // rowsets with segments, so any "uncovered" verdict would be vacuous.
+    // Skip detection when metadata has no rowsets with segments — trivial test
+    // fixtures end up here, and there's nothing to compare effective rssids
+    // against.
     if (covered_rssids.empty()) {
         return true;
     }
+    // We cannot prove the sstable is safe without scanning its keys: the
+    // sstable carries no per-key rssid manifest, so any of its stored rssids
+    // could (a) hit a shared_rssid_map entry whose canonical id differs from
+    // the offset translation, or (b) produce an effective rssid that falls in
+    // a gap in covered_rssids. Conservatively flag for rebuild whenever dedup
+    // is in play AND the merged tablet has rowset coverage to compare against.
+    // The rebuild reads the keys once and writes a fresh sstable with the
+    // translation already baked in, so subsequent reads are pass-through.
+    //
+    // Cheap escape hatches first — keep the offset path when:
+    //   * the sstable's effective high is already covered AND
+    //   * every shared_rssid_map entry whose source could appear in this
+    //     sstable maps to the same value the offset would produce AND
+    //     that mapped value is covered in metadata.
+    // These together imply the sstable would produce only safe rssids
+    // *if* its stored rssids are at most source_high. They do not prove
+    // safety for stored rssids strictly less than source_high, so we only
+    // skip rebuild when the source_high case is itself trivially safe.
     int64_t effective_high = source_high + ctx.rssid_offset();
     if (effective_high < 0 || effective_high > std::numeric_limits<uint32_t>::max()) {
         return false;
@@ -1247,6 +1264,8 @@ static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB
     bool ok = true;
     ctx.for_each_shared_rssid_mapping([&](uint32_t src_rssid, uint32_t mapped) {
         if (!ok) return;
+        // Any shared_rssid_map entry whose key could appear in this sstable's
+        // keys forces us to check that dedup matches offset for it.
         if (static_cast<int64_t>(src_rssid) > source_high) return;
         int64_t offset_alternative = static_cast<int64_t>(src_rssid) + ctx.rssid_offset();
         if (offset_alternative != static_cast<int64_t>(mapped)) {
@@ -1257,7 +1276,29 @@ static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB
             ok = false;
         }
     });
-    return ok;
+    if (!ok) return false;
+    // Even if all the above checks pass, a stored rssid strictly below
+    // source_high can still produce an uncovered effective rssid if there
+    // are gaps in covered_rssids in the [ctx.rssid_offset, effective_high]
+    // range. Walk that range and verify every position is covered.
+    // The range size is bounded by source_high (a uint32 in practice tied
+    // to the sstable's source rowset's id+segment_count) — typically a
+    // handful to a few hundred values per sstable. Conservative but cheap.
+    for (int64_t s = 0; s <= source_high; ++s) {
+        int64_t e = s + ctx.rssid_offset();
+        if (e < 0 || e > std::numeric_limits<uint32_t>::max()) {
+            return false;
+        }
+        if (covered_rssids.find(static_cast<uint32_t>(e)) == covered_rssids.end()) {
+            // This position is uncovered. If the offset path would produce
+            // it for some stored rssid s, the sstable might have such a key.
+            // Flag for rebuild — the rebuild's per-key remap will resolve it
+            // (either via shared_rssid_map for dedup'd source rowsets or by
+            // skipping if no key actually has that rssid).
+            return false;
+        }
+    }
+    return true;
 }
 
 // Rebuild a non-shared_rssid sstable for the merged tablet by reading every
