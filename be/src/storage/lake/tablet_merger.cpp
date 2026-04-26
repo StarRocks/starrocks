@@ -1496,9 +1496,8 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                     continue; // skip duplicate
                 }
                 // First time we see this shared sstable: record source signature.
-                shared_sigs[sst.filename()] = SharedSig{static_cast<int64_t>(sst.filesize()),
-                                                       sst.encryption_meta(), sst.range().start_key(),
-                                                       sst.range().end_key()};
+                shared_sigs[sst.filename()] = SharedSig{static_cast<int64_t>(sst.filesize()), sst.encryption_meta(),
+                                                        sst.range().start_key(), sst.range().end_key()};
             }
 
             // Projection: branch on has_shared_rssid, not on shared flag
