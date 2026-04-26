@@ -1502,14 +1502,29 @@ StatusOr<std::optional<PersistentIndexSstablePB>> rebuild_sstable_with_per_key_r
                 *out_pb.add_values() = v;
                 continue;
             }
-            // Real entry: remap via source-lineage helper. NotFound → drop
-            // (compaction-output sstable in merged metadata covers the key).
+            // Real entry: remap via source-lineage helper. NotFound → write
+            // with sentinel rssid (smallest covered) so the persistent index
+            // keeps the K → rssid mapping. Dropping the entry caused
+            // observed row-count drift in cycle 3+ on TSP build 1307: ~80%
+            // of an inherited sstable's keys are orphaned after multiple
+            // cycles of compaction, dropping all of them removes K from the
+            // index entirely → subsequent UPSERT misses → INSERTs duplicate
+            // → row count diverges.
             auto remap_result = remap_stored_rssid_for_rebuild(v.rssid(), source_rssid_to_rowset, ctx.rssid_offset(),
                                                                shared_rssid_lookup, source_tablet_id, covered_rssids);
             if (!remap_result.ok()) {
                 if (remap_result.status().is_not_found()) {
+                    if (covered_rssids.empty()) {
+                        return Status::Corruption(
+                                "rebuild_sstable: orphaned stored rssid and merged metadata has no covered "
+                                "rssids; cannot place sentinel");
+                    }
+                    uint32_t sentinel_rssid =
+                            *std::min_element(covered_rssids.begin(), covered_rssids.end());
                     ++dropped_entry_count;
-                    g_tablet_reshard_merge_sstable_rebuild_dropped_entries_total << 1;
+                    v.set_rssid(sentinel_rssid);
+                    *out_pb.add_values() = v;
+                    any_real_value_seen = true;
                     continue;
                 }
                 return remap_result.status();
@@ -1534,7 +1549,8 @@ StatusOr<std::optional<PersistentIndexSstablePB>> rebuild_sstable_with_per_key_r
     }
     RETURN_IF_ERROR(iter->status());
     if (dropped_entry_count > 0) {
-        LOG(WARNING) << "rebuild_sstable: dropped " << dropped_entry_count
+        g_tablet_reshard_merge_sstable_rebuild_dropped_entries_total << dropped_entry_count;
+        LOG(WARNING) << "rebuild_sstable: routed " << dropped_entry_count
                      << " entries with compacted-away source rssid (sstable=" << input_pb.filename()
                      << ", source_tablet=" << source_tablet_id << ", merged_tablet=" << merged_tablet_id << ")";
     }
