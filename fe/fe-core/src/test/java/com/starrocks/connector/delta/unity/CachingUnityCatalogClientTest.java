@@ -37,7 +37,6 @@ public class CachingUnityCatalogClientTest {
                 "unity.catalog.cache.credentials.safety-margin-sec", Long.toString(credentialsSafetyMarginSec)));
     }
 
-    /** Manually-advanceable ticker; avoids pulling in guava-testlib. */
     private static final class AdvanceableTicker extends Ticker {
         private final AtomicLong nanos = new AtomicLong();
 

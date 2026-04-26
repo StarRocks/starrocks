@@ -131,10 +131,7 @@ public class DeltaLakeConnectorTest {
     }
 
     @Test
-    public void testUnitySnapshotCacheNotBypassedWhenUnityClientCacheEnabled() throws Exception {
-        // Default config has vended-credentials-enabled=true and unity.catalog.cache.enabled=true,
-        // so the snapshot cache should stay in play (clamped TTL); UnityBackedDeltaMetastore
-        // must NOT bypass the snapshot cache in this mode.
+    public void testUnitySnapshotCacheNotBypassedWhenUnityClientCacheEnabled() {
         Map<String, String> properties = ImmutableMap.<String, String>builder()
                 .put("type", "deltalake")
                 .put("hive.metastore.type", "unity")
@@ -150,7 +147,7 @@ public class DeltaLakeConnectorTest {
     }
 
     @Test
-    public void testUnitySnapshotCacheBypassedWhenUnityClientCacheDisabled() throws Exception {
+    public void testUnitySnapshotCacheBypassedWhenUnityClientCacheDisabled() {
         Map<String, String> properties = ImmutableMap.<String, String>builder()
                 .put("type", "deltalake")
                 .put("hive.metastore.type", "unity")
@@ -166,7 +163,7 @@ public class DeltaLakeConnectorTest {
     }
 
     @Test
-    public void testUnitySnapshotCacheBypassedWhenUnityClientCacheTtlIsZero() throws Exception {
+    public void testUnitySnapshotCacheBypassedWhenUnityClientCacheTtlIsZero() {
         Map<String, String> properties = ImmutableMap.<String, String>builder()
                 .put("type", "deltalake")
                 .put("hive.metastore.type", "unity")
@@ -181,9 +178,7 @@ public class DeltaLakeConnectorTest {
     }
 
     @Test
-    public void testUnitySnapshotCacheNotBypassedWhenVendedCredentialsDisabled() throws Exception {
-        // Without vended credentials there is nothing baked into the snapshot that can expire,
-        // so the snapshot cache is always safe regardless of the unity client cache toggle.
+    public void testUnitySnapshotCacheNotBypassedWhenVendedCredentialsDisabled() {
         Map<String, String> properties = ImmutableMap.<String, String>builder()
                 .put("type", "deltalake")
                 .put("hive.metastore.type", "unity")

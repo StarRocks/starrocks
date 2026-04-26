@@ -49,6 +49,8 @@ public class DeltaLakeScanNodeTest {
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
         new Expectations() {
             {
+                table.getCloudConfiguration();
+                result = null;
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
                 result = connector;
                 connector.getMetadata().getCloudConfiguration();
@@ -71,6 +73,10 @@ public class DeltaLakeScanNodeTest {
                 buildCloudConfigurationForStorage(new HashMap<>());
         new Expectations() {
             {
+                table.getCloudConfiguration();
+                result = null;
+                minTimes = 0;
+
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
                 result = connector;
                 minTimes = 0;
@@ -104,6 +110,10 @@ public class DeltaLakeScanNodeTest {
                 buildCloudConfigurationForStorage(new HashMap<>());
 
         new Expectations() {{
+                table.getCloudConfiguration();
+                result = null;
+                minTimes = 0;
+
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
                 result = connector;
                 minTimes = 0;
@@ -140,6 +150,39 @@ public class DeltaLakeScanNodeTest {
     }
 
     @Test
+    public void testPrefersPerTableCloudConfiguration(@Mocked GlobalStateMgr globalStateMgr,
+                                                      @Mocked CatalogConnector connector,
+                                                      @Mocked DeltaLakeTable table) {
+        String catalogName = "delta0";
+        CloudConfiguration perTableCloudConfiguration = CloudConfigurationFactory
+                .buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {
+            {
+                table.getCatalogName();
+                result = catalogName;
+                minTimes = 0;
+
+                table.getCloudConfiguration();
+                result = perTableCloudConfiguration;
+                minTimes = 0;
+
+                // The per-table cloud config short-circuits the catalog path entirely; both
+                // getMetadata() and getCloudConfiguration() should stay unreached. Recording
+                // only getMetadata() (with times = 0) lets us assert that without falling into
+                // JMockit's chained-expectation trap where times=0 only binds to the trailing
+                // call and the intermediate getMetadata() inherits the default 1+ expectation.
+                connector.getMetadata();
+                times = 0;
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode =
+                new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
+        Assertions.assertNotNull(scanNode);
+    }
+
+    @Test
     public void testPrepareRetry(@Mocked GlobalStateMgr globalStateMgr,
                                  @Mocked CatalogConnector connector,
                                  @Mocked DeltaLakeTable table,
@@ -147,6 +190,8 @@ public class DeltaLakeScanNodeTest {
         String catalog = "delta_cat";
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
         new Expectations() {{
+            table.getCloudConfiguration();
+            result = null;
             GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
             result = connector;
             connector.getMetadata().getCloudConfiguration();
@@ -186,6 +231,8 @@ public class DeltaLakeScanNodeTest {
                 .buildCloudConfigurationForStorage(new HashMap<>());
         new Expectations() {
             {
+                table.getCloudConfiguration();
+                result = null;
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
                 result = connector;
                 connector.getMetadata().getCloudConfiguration();

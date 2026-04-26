@@ -502,9 +502,6 @@ public class CachingDeltaLakeMetastoreTest {
 
     @Test
     public void testGetTableBypassesSnapshotCacheWhenDelegateOptsOut() {
-        // Subclass HMSBackedDeltaMetastore so isSnapshotCacheBypassed() returns true and
-        // getTable() returns a sentinel value. CachingDeltaLakeMetastore should hand the
-        // request straight through and never populate its tableSnapshotCache.
         IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
         DeltaLakeTable sentinel = new DeltaLakeTable(42, "delta0", "db1", "table1",
                 Lists.newArrayList(), Lists.newArrayList("ts"), null, null,

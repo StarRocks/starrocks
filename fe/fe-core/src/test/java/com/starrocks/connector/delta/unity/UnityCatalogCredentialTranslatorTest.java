@@ -62,8 +62,6 @@ public class UnityCatalogCredentialTranslatorTest {
         CloudConfiguration cc = UnityCatalogCredentialTranslator.toCloudConfiguration(creds,
                 "s3://bucket/path/table", null);
         Assertions.assertEquals(CloudType.AWS, cc.getCloudType());
-        // No explicit region should have been plumbed through; AwsCloudConfigurationProvider may
-        // stamp a default, but that value must not be the caller-supplied "eu-central-1".
         Assertions.assertNotEquals("eu-central-1",
                 ((AwsCloudConfiguration) cc).getAwsCloudCredential().getRegion());
     }

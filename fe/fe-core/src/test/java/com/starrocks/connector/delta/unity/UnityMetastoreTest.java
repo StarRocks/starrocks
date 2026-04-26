@@ -184,8 +184,7 @@ public class UnityMetastoreTest {
         Assertions.assertInstanceOf(AwsCloudConfiguration.class, cc);
         Assertions.assertEquals("eu-central-1",
                 ((AwsCloudConfiguration) cc).getAwsCloudCredential().getRegion());
-        // Second call must reuse the memoized region; the times = 1 expectation above proves
-        // getMetastoreSummary() is not invoked again.
+        // Second call must reuse the memoized region
         CloudConfiguration cc2 = metastore.resolveCloudConfiguration(info);
         Assertions.assertNotNull(cc2);
         Assertions.assertInstanceOf(AwsCloudConfiguration.class, cc2);
@@ -225,11 +224,8 @@ public class UnityMetastoreTest {
         };
 
         UnityMetastore metastore = new UnityMetastore(client, propsWithVendedCredentials(true));
-        // First lookup fails -> StarRocksConnectorException is caught by the outer fallback in
-        // resolveCloudConfiguration; the call returns null and the memo stays unset.
         CloudConfiguration first = metastore.resolveCloudConfiguration(info);
         Assertions.assertNull(first, "transient region lookup failure must surface as null");
-        // Second lookup succeeds -> region resolved and propagated to the AWS cloud config.
         CloudConfiguration second = metastore.resolveCloudConfiguration(info);
         Assertions.assertInstanceOf(AwsCloudConfiguration.class, second);
         Assertions.assertEquals("eu-central-1",
@@ -308,8 +304,6 @@ public class UnityMetastoreTest {
             {
                 client.getTemporaryTableCredentials("abc-123", "READ");
                 result = creds;
-                // The override must short-circuit metastore_summary entirely -- the whole point
-                // of exposing the property is to let operators avoid that REST call.
                 client.getMetastoreSummary();
                 times = 0;
             }
@@ -337,8 +331,6 @@ public class UnityMetastoreTest {
             {
                 client.getTemporaryTableCredentials("abc-azure", "READ");
                 result = creds;
-                // Azure tables must not trigger metastore_summary -- the AWS region is irrelevant
-                // for the SAS-based ADLS path.
                 client.getMetastoreSummary();
                 times = 0;
             }
@@ -367,6 +359,7 @@ public class UnityMetastoreTest {
         UnityMetastore metastore = new UnityMetastore(client, propsWithVendedCredentials(false));
         Assertions.assertNull(metastore.resolveCloudConfiguration(info));
     }
+
     @Test
     public void testGetMetastoreTableRejectsNonDelta(@Mocked UnityCatalogClient client) {
         UnityCatalogTypes.TableInfo info = new UnityCatalogTypes.TableInfo();
@@ -426,6 +419,7 @@ public class UnityMetastoreTest {
         UnityMetastore metastore = new UnityMetastore(client, propsWithVendedCredentials(true));
         Assertions.assertNull(metastore.resolveCloudConfiguration(info));
     }
+
     @Test
     public void testTableExists(@Mocked UnityCatalogClient client) {
         new Expectations() {
@@ -442,11 +436,6 @@ public class UnityMetastoreTest {
         Assertions.assertFalse(metastore.tableExists("sales", "missing"));
     }
 
-    /**
-     * {@link UnityMetastore#invalidateTable} is the bridge that the {@code REFRESH EXTERNAL TABLE}
-     * pipe walks down to drop the {@link CachingUnityCatalogClient} entries; verify it forwards
-     * to {@code client.invalidate(fullName)} with the correctly composed three-part name.
-     */
     @Test
     public void testInvalidateTableForwardsToClient(@Mocked UnityCatalogClient client) {
         UnityMetastore metastore = new UnityMetastore(client, propsWithVendedCredentials(true));

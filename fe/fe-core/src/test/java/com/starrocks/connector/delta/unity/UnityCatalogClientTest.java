@@ -49,7 +49,6 @@ public class UnityCatalogClientTest {
         Assertions.assertEquals("sales", schemas.get(0).name);
         Assertions.assertEquals("marketing", schemas.get(1).name);
         Assertions.assertEquals(1, stub.getRequestCount());
-        // Verify auth header.
         Assertions.assertEquals("Bearer " + TOKEN,
                 stub.getRequests().get(0).header("Authorization"));
     }
@@ -71,7 +70,6 @@ public class UnityCatalogClientTest {
 
     @Test
     public void testListTablesFiltersUnknownFormatsAreStillReturned() {
-        // The client itself does not filter by data_source_format (UnityMetastore does).
         StubInterceptor stub = new StubInterceptor()
                 .addResponse(200,
                         "{\"tables\": [" +
@@ -174,10 +172,6 @@ public class UnityCatalogClientTest {
                 "401 is not retryable; only one request should be made");
     }
 
-    /**
-     * An OkHttp interceptor that returns canned responses in order, without ever touching the
-     * network. Tracks the actual requests so tests can assert on URL / headers.
-     */
     private static final class StubInterceptor implements Interceptor {
         private final List<String> bodies = new ArrayList<>();
         private final List<Integer> statuses = new ArrayList<>();

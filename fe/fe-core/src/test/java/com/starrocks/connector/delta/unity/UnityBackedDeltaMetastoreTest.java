@@ -68,12 +68,6 @@ public class UnityBackedDeltaMetastoreTest {
                 props);
     }
 
-    /**
-     * After {@code REFRESH EXTERNAL TABLE} drops the Unity client's cached entries, the next
-     * read must cause a fresh vend. We assert this by verifying the underlying
-     * {@code getTable} + {@code getTemporaryTableCredentials} pair is invoked twice -- once for
-     * the initial vend, once after the refresh.
-     */
     @Test
     public void testRefreshTableTriggersFreshCredentialVend(@Mocked UnityCatalogClient client) {
         UnityCatalogTypes.TableInfo info = tableInfo();
@@ -94,7 +88,6 @@ public class UnityBackedDeltaMetastoreTest {
         UnityMetastore unityMetastore = new UnityMetastore(client, propsWithVendedCredentials());
         UnityBackedDeltaMetastore backed = newUnityBacked(unityMetastore, propsWithVendedCredentials());
 
-        // Initial vend produces an AWS cloud config from the UC client.
         CloudConfiguration first = backed.resolveTableCloudConfiguration("sales", "orders");
         Assertions.assertNotNull(first);
         Assertions.assertEquals(CloudType.AWS, first.getCloudType());
@@ -102,15 +95,12 @@ public class UnityBackedDeltaMetastoreTest {
 
         backed.refreshTable("sales", "orders");
 
-        // The Unity client's cache entries were dropped; the next call must hit UC again.
         CloudConfiguration second = backed.resolveTableCloudConfiguration("sales", "orders");
         Assertions.assertNotNull(second);
         Assertions.assertEquals(CloudType.AWS, second.getCloudType());
 
         new Verifications() {
             {
-                // The Unity client side of the refresh path must have been invoked once with the
-                // composed three-part name so the CachingUnityCatalogClient drops its entries.
                 client.invalidate("main.sales.orders");
                 times = 1;
             }
@@ -133,8 +123,6 @@ public class UnityBackedDeltaMetastoreTest {
                 new DeltaLakeCatalogProperties(Maps.newHashMap()),
                 propsNoVend);
 
-        // Even with vending off, refreshTable must still propagate to the Unity client so a
-        // manual REFRESH still flushes any cached TableInfo entry the operator might want gone.
         backed.refreshTable("sales", "orders");
 
         new Verifications() {
