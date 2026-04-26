@@ -167,12 +167,12 @@ Core expression infrastructure that depends only on RuntimeCore and lower layers
 - Remediation: Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs.
 
 ### ExecCore (`execcore`)
-Execution-layer runtime-filter infrastructure on top of ExprCore without broader Exec/Runtime service coupling.
+Execution-node base and runtime-filter infrastructure on top of ExprCore without broader Exec/Runtime service coupling.
 - Targets: `ExecCore`
-- Allowed internal include prefixes: `exec/runtime_filter/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_core_test`
-- Remediation: Keep ExecCore limited to execution-layer runtime-filter orchestration; move broader pipeline/operator/service integration into Exec or Runtime.
+- Remediation: Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 
 ## BE-Specific Sync Rules

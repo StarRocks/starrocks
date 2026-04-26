@@ -326,16 +326,16 @@
     {
       "id": "execcore",
       "doc_label": "ExecCore",
-      "summary": "Execution-layer runtime-filter infrastructure on top of ExprCore without broader Exec/Runtime service coupling.",
+      "summary": "Execution-node base and runtime-filter infrastructure on top of ExprCore without broader Exec/Runtime service coupling.",
       "owned_targets": ["ExecCore"],
       "additional_owned_globs": [
         "be/src/exec/runtime_filter/**"
       ],
-      "allowed_include_prefixes": ["exec/runtime_filter/", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_include_prefixes": ["exec/runtime_filter/", "exec/pipeline/pipeline_fwd.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_core_test"],
       "allowed_test_link_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExecCore limited to execution-layer runtime-filter orchestration; move broader pipeline/operator/service integration into Exec or Runtime."
+      "remediation": "Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code."
     }
   ]
 }
