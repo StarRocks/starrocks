@@ -117,6 +117,33 @@ Status LakeDataSource::open(RuntimeState* state) {
     return Status::OK();
 }
 
+bool LakeDataSource::enable_global_late_materialization() const {
+    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
+    return thrift_lake_scan_node.__isset.enable_global_late_materialization &&
+           thrift_lake_scan_node.enable_global_late_materialization;
+}
+
+void LakeDataSource::refresh_glm_context() const {
+    if (!enable_global_late_materialization()) {
+        return;
+    }
+
+    DCHECK(_runtime_state != nullptr);
+    DCHECK(_morsel != nullptr);
+
+    int32_t scan_node_id = _provider->_scan_node->id();
+    auto* glm_mgr = _runtime_state->query_ctx()->global_late_materialization_ctx_mgr();
+    auto* obj_pool = _runtime_state->query_ctx()->object_pool();
+    auto creator = [&]() {
+        auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
+        return ctx;
+    };
+    auto* glm_ctx = down_cast<LakeScanLazyMaterializationContext*>(glm_mgr->get_or_create_ctx(scan_node_id, creator));
+    glm_ctx->set_scan_node(_provider->_t_lake_scan_node);
+    int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+    glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
+}
+
 void LakeDataSource::close(RuntimeState* state) {
     _reuse_pending = false;
     _prepare_only_mode = false;
@@ -268,6 +295,10 @@ bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel
 
 bool LakeDataSource::enable_local_child_morsel_reuse() const {
     return config::enable_lake_scan_child_morsel_reuse && !has_reuse_blocker();
+}
+
+bool LakeDataSource::enable_local_child_prepared_state_reuse() const {
+    return enable_local_child_morsel_reuse() && config::enable_lake_scan_child_morsel_prepared_state_reuse;
 }
 
 void LakeDataSource::refresh_runtime_filter_versions() {
@@ -627,21 +658,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
 
-    bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
-                      thrift_lake_scan_node.enable_global_late_materialization;
-    if (enable_glm) {
-        int32_t scan_node_id = _provider->_scan_node->id();
-        auto* glm_mgr = runtime_state->query_ctx()->global_late_materialization_ctx_mgr();
-        auto* obj_pool = runtime_state->query_ctx()->object_pool();
-        auto creator = [&]() {
-            auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
-            return ctx;
-        };
-        auto* glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(scan_node_id, creator);
-        glm_ctx->set_scan_node(thrift_lake_scan_node);
-        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
-        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
-    }
+    refresh_glm_context();
 
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
@@ -692,14 +709,11 @@ bool LakeDataSource::can_reuse_current_morsel(const pipeline::ScanMorsel& morsel
 }
 
 bool LakeDataSource::has_reuse_blocker() const {
-    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
-    const bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
-                            thrift_lake_scan_node.enable_global_late_materialization;
     const bool enable_cache_select = _runtime_state != nullptr &&
                                      _runtime_state->query_options().__isset.enable_cache_select &&
                                      _runtime_state->query_options().enable_cache_select &&
                                      config::lake_cache_select_in_physical_way;
-    return enable_glm || enable_cache_select;
+    return enable_cache_select;
 }
 
 bool LakeDataSource::can_fast_reopen_current_morsel() const {
@@ -722,14 +736,22 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         return Status::InternalError("lake reader schema is not initialized");
     }
     _prepare_only_mode = false;
+    // Reused child morsels do not re-enter init_tablet_reader(), so refresh the
+    // GLM rowset snapshot here to keep row-locator lookup aligned with the
+    // current morsel's rowset view.
+    refresh_glm_context();
 
     _params.rowid_range_option.reset();
     _params.short_key_ranges_option.reset();
     _params.prepared_target_rowset_index = -1;
     _params.prepared_target_segment_index = -1;
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
-    if (!_ignore_split_context_prepared_state_once && split_context != nullptr && split_context->prepared_read_state != nullptr) {
+    const bool can_reuse_prepared_state = !_ignore_split_context_prepared_state_once && split_context != nullptr &&
+                                          enable_local_child_prepared_state_reuse();
+    if (can_reuse_prepared_state && split_context->prepared_read_state != nullptr) {
         _prepared_read_state = split_context->prepared_read_state;
+    } else if (split_context != nullptr) {
+        _prepared_read_state.reset();
     }
     if (_split_context != nullptr) {
         if (_provider->could_split_physically()) {
@@ -737,8 +759,7 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         } else {
             _params.short_key_ranges_option = split_context->short_key_range;
         }
-        if (!_ignore_split_context_prepared_state_once &&
-            split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
+        if (can_reuse_prepared_state && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
             split_context->prepared_read_state != nullptr && split_context->prepared_segment_state != nullptr) {
             _params.prepared_target_rowset_index = static_cast<int64_t>(split_context->rowset_index);
             _params.prepared_target_segment_index = static_cast<int64_t>(split_context->segment_index);
@@ -803,10 +824,15 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
     if (!_reader_schema_inited) {
         return Status::InternalError("lake reader schema is not initialized");
     }
+    refresh_glm_context();
 
     const auto* split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
-    if (!_ignore_split_context_prepared_state_once && split_context->prepared_read_state != nullptr) {
+    const bool can_reuse_prepared_state =
+            !_ignore_split_context_prepared_state_once && enable_local_child_prepared_state_reuse();
+    if (can_reuse_prepared_state && split_context->prepared_read_state != nullptr) {
         _prepared_read_state = split_context->prepared_read_state;
+    } else {
+        _prepared_read_state.reset();
     }
 
     _prepare_only_mode = false;
@@ -816,7 +842,7 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
     _params.scan_range = nullptr;
     _params.prepared_target_rowset_index = -1;
     _params.prepared_target_segment_index = -1;
-    if (!_ignore_split_context_prepared_state_once && split_context->prepared_read_state != nullptr &&
+    if (can_reuse_prepared_state && split_context->prepared_read_state != nullptr &&
         split_context->prepared_segment_state != nullptr) {
         _params.prepared_target_rowset_index = static_cast<int64_t>(split_context->rowset_index);
         _params.prepared_target_segment_index = static_cast<int64_t>(split_context->segment_index);

@@ -313,6 +313,15 @@ This topic introduces the following types of FE configurations:
 - Description: Controls whether Lake shared-data physical split sibling morsels reuse the same chunk source and reader shell within one slot after the top-level prepared split path has already been chosen. This is a secondary implementation-detail switch for slot-local reuse only; it does not participate in the prepared-vs-baseline path selection. Unsupported cases such as query cache delta-rowset reads, logical split morsels, GLM, or CACHE SELECT warmup paths automatically fall back to the original per-morsel reader construction path.
 - Introduced in: v4.1
 
+### enable_lake_scan_child_morsel_prepared_state_reuse
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether a reused Lake physical split child morsel attaches the prepared tablet or segment read state carried by its split context. When enabled, sibling morsels can reuse prepared execution-pruned segment state and raw segment iterators. When disabled, StarRocks can still reuse the chunk source and reader shell if `enable_lake_scan_child_morsel_reuse` is enabled, but each child rebuilds its segment-level prepared state instead of reusing the shared one.
+- Introduced in: v4.1
+
 ### enable_lake_scan_child_morsel_fast_reopen
 
 - Default: false

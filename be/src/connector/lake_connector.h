@@ -109,7 +109,10 @@ private:
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
     void update_counter(RuntimeState* state, const OlapReaderStatistics& stats);
+    bool enable_global_late_materialization() const;
+    void refresh_glm_context() const;
     bool enable_local_child_morsel_reuse() const;
+    bool enable_local_child_prepared_state_reuse() const;
     bool should_attach_prepared_read_state() const;
     bool can_reuse_current_morsel(const pipeline::ScanMorsel& morsel) const;
     bool can_reuse_with_signature(const pipeline::ScanMorsel& morsel) const;

@@ -80,6 +80,11 @@ CONF_mBool(enable_lake_index_pruned_physical_split, "true");
 // not participate in the planner's prepared-vs-baseline path selection.
 CONF_mBool(enable_lake_scan_child_morsel_reuse, "false");
 
+// Whether reused Lake physical child morsels attach prepared tablet/segment read state from split contexts so they
+// can reuse prepared execution-pruned segment state and raw segment iterators across sibling morsels. Disable this to
+// keep chunk-source / reader-shell reuse while forcing each child morsel to rebuild segment-level prepared state.
+CONF_mBool(enable_lake_scan_child_morsel_prepared_state_reuse, "true");
+
 // Whether reused Lake physical child morsels on the same slot bypass the full reader reopen shell and only refresh
 // child-specific scan parameters before reopening the existing TabletReader.
 CONF_mBool(enable_lake_scan_child_morsel_fast_reopen, "false");

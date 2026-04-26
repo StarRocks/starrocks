@@ -471,6 +471,7 @@
         "tablet_internal_parallel_min_scan_dop",
         "enable_lake_index_pruned_physical_split",
         "enable_lake_scan_child_morsel_reuse",
+        "enable_lake_scan_child_morsel_prepared_state_reuse",
         "enable_lake_scan_child_morsel_fast_reopen",
         "enable_lake_scan_child_morsel_reinit_on_late_runtime_filter",
         "max_hdfs_file_handle",

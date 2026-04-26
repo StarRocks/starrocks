@@ -301,6 +301,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制 Lake shared-data physical split 的兄弟 child morsel，在顶层 prepared split 路径已经选中的前提下，是否在同一个 slot 内继续复用 chunk source 和 reader 壳层。这只是 slot-local 的次级实现细节开关，不参与 prepared path 与 baseline path 的架构选路。对于 query cache 的 delta-rowsets 读取、logical split morsel、GLM、CACHE SELECT/SST warmup 等暂未支持的场景，会自动回退到原有的按 morsel 重建 reader 路径。
 - 引入版本：v4.1
 
+### enable_lake_scan_child_morsel_prepared_state_reuse
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制复用中的 Lake physical split child morsel，是否继续挂接 split context 携带的 prepared tablet/segment read state。开启后，兄弟 morsel 可以复用 prepared execution-pruned segment state 和 raw segment iterator。关闭后，只要 `enable_lake_scan_child_morsel_reuse` 仍开启，StarRocks 仍可复用 chunk source 和 reader 壳层，但每个 child 都会重建自己的 segment 级 prepared state，而不再复用共享的那份。
+- 引入版本：v4.1
+
 ### enable_lake_scan_child_morsel_fast_reopen
 
 - 默认值：false
