@@ -371,6 +371,14 @@ set_target_properties(lz4 PROPERTIES
 # Add macro to use direct includes instead of subdirectory includes
 add_compile_definitions(STARROCKS_MACOS_USE_FLAT_INCLUDES=1)
 
+# Homebrew's jemalloc has an empty symbol prefix, so its header defines
+# je_* as macros (je_free -> free, ...) and #undefs them at the end
+# unless this flag is set. Keep the macros alive so je_* calls compile
+# unchanged on macOS. Note: jemalloc_allocator.cpp must write ::je_free —
+# bare je_free expands to free, which would then bind to the enclosing
+# JemallocAllocator::free() member (infinite recursion).
+add_compile_definitions(JEMALLOC_NO_DEMANGLE=1)
+
 # Homebrew libraries - zstd
 find_library(ZSTD_LIB NAMES zstd PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 add_library(zstd STATIC IMPORTED GLOBAL)
@@ -572,18 +580,56 @@ set_target_properties(re2 PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
 
 # abseil libraries from Homebrew - required by re2 (dynamic libraries)
+# re2 is a pre-built Homebrew bottle linked against a specific abseil ABI.
+# If the installed abseil has diverged, linking fails with undefined
+# _AbslInternalSpinLockWake_lts_<date>. Extract the exact ABI from
+# libre2.dylib and locate that abseil: prefer opt/ (clean install), fall
+# back to a matching keg in Cellar, fatal-error if neither has it.
+execute_process(
+    COMMAND bash -c "otool -L ${HOMEBREW_PREFIX}/lib/libre2.dylib | grep -oE 'libabsl_base\\.[0-9.]+\\.dylib' | head -1 | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+'"
+    OUTPUT_VARIABLE ABSEIL_ABI_VERSION
+    RESULT_VARIABLE ABSEIL_ABI_DETECT_RC
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT ABSEIL_ABI_DETECT_RC EQUAL 0 OR NOT ABSEIL_ABI_VERSION)
+    message(FATAL_ERROR
+        "Failed to detect the abseil ABI version that ${HOMEBREW_PREFIX}/lib/libre2.dylib depends on. "
+        "Make sure re2 is installed via Homebrew (`brew install re2`) and that `otool` is available.")
+endif()
+
+set(ABSEIL_LIB_DIR "")
+if(EXISTS "${HOMEBREW_PREFIX}/opt/abseil/lib/libabsl_base.${ABSEIL_ABI_VERSION}.dylib")
+    set(ABSEIL_LIB_DIR "${HOMEBREW_PREFIX}/opt/abseil/lib")
+else()
+    file(GLOB _matched "${HOMEBREW_PREFIX}/Cellar/abseil/*/lib/libabsl_base.${ABSEIL_ABI_VERSION}.dylib")
+    if(_matched)
+        list(GET _matched 0 _matched_path)
+        get_filename_component(ABSEIL_LIB_DIR "${_matched_path}" DIRECTORY)
+    endif()
+endif()
+if(NOT ABSEIL_LIB_DIR)
+    message(FATAL_ERROR
+        "Homebrew's re2 requires libabsl_base.${ABSEIL_ABI_VERSION}.dylib, but it was not found under "
+        "${HOMEBREW_PREFIX}/opt/abseil/lib or ${HOMEBREW_PREFIX}/Cellar/abseil/*/lib. "
+        "This usually means abseil was upgraded after re2 was bottled. Fix by either:\n"
+        "  1) `brew reinstall re2` to pick up a bottle for the current abseil, or\n"
+        "  2) keep the matching abseil keg in Cellar (e.g. `brew install abseil` of the pinned version).")
+endif()
+message(STATUS "abseil ABI version re2 needs: ${ABSEIL_ABI_VERSION}")
+message(STATUS "abseil lib dir: ${ABSEIL_LIB_DIR}")
+
 # Temporarily allow finding .dylib files for abseil
 set(CMAKE_FIND_LIBRARY_SUFFIXES_SAVED ${CMAKE_FIND_LIBRARY_SUFFIXES})
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".dylib" ".a")
 
-find_library(ABSL_BASE_LIB NAMES absl_base PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
-find_library(ABSL_SPINLOCK_WAIT_LIB NAMES absl_spinlock_wait PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
-find_library(ABSL_HASH_LIB NAMES absl_hash PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
-find_library(ABSL_LOG_INTERNAL_MESSAGE_LIB NAMES absl_log_internal_message PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
-find_library(ABSL_SYNCHRONIZATION_LIB NAMES absl_synchronization PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
-find_library(ABSL_STRINGS_LIB NAMES absl_strings PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
-find_library(ABSL_STR_FORMAT_INTERNAL_LIB NAMES absl_str_format_internal PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
-find_library(ABSL_RAW_HASH_SET_LIB NAMES absl_raw_hash_set PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_BASE_LIB NAMES absl_base PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
+find_library(ABSL_SPINLOCK_WAIT_LIB NAMES absl_spinlock_wait PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
+find_library(ABSL_HASH_LIB NAMES absl_hash PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
+find_library(ABSL_LOG_INTERNAL_MESSAGE_LIB NAMES absl_log_internal_message PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
+find_library(ABSL_SYNCHRONIZATION_LIB NAMES absl_synchronization PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
+find_library(ABSL_STRINGS_LIB NAMES absl_strings PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
+find_library(ABSL_STR_FORMAT_INTERNAL_LIB NAMES absl_str_format_internal PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
+find_library(ABSL_RAW_HASH_SET_LIB NAMES absl_raw_hash_set PATHS ${ABSEIL_LIB_DIR} NO_DEFAULT_PATH)
 
 # Restore the original suffixes
 set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES_SAVED})
@@ -730,7 +776,7 @@ else()
 endif()
 
 # simdjson for fast JSON parsing
-find_library(SIMDJSON_LIB NAMES simdjson PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+find_library(SIMDJSON_LIB NAMES simdjson simdjson_static PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 if(SIMDJSON_LIB)
     add_library(simdjson SHARED IMPORTED GLOBAL)
     set_target_properties(simdjson PROPERTIES
@@ -801,6 +847,11 @@ include_directories(${HOMEBREW_PREFIX}/opt/libevent/include)
 include_directories(${HOMEBREW_PREFIX}/opt/apache-arrow/include)
 include_directories(${HOMEBREW_PREFIX}/opt/openssl@3/include)
 include_directories(${HOMEBREW_PREFIX}/opt/gperftools/include)
+# Use jemalloc's keg-specific include dir instead of /opt/homebrew/include,
+# which would shadow thirdparty's protobuf. Global (not target-scoped) so
+# any compilation unit that transitively includes shims/include/malloc.h
+# can resolve <jemalloc/jemalloc.h>.
+include_directories(${HOMEBREW_PREFIX}/opt/jemalloc/include)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 # Add source subdirectories - following the same pattern as main CMakeLists.txt
@@ -823,6 +874,11 @@ set(STARROCKS_SOURCE_DIRS
 # Create a library for all StarRocks sources
 file(GLOB_RECURSE STARROCKS_SOURCES
     ${SRC_DIR}/agent/*.cpp
+    # util->base refactor moved common helpers under base/.
+    ${SRC_DIR}/base/*.cpp
+    ${SRC_DIR}/base/*.cc
+    ${SRC_DIR}/base/**/*.cpp
+    ${SRC_DIR}/base/**/*.cc
     ${SRC_DIR}/common/*.cpp
     ${SRC_DIR}/column/*.cpp
     ${SRC_DIR}/exec/*.cpp
@@ -851,6 +907,8 @@ file(GLOB_RECURSE STARROCKS_SOURCES
     ${SRC_DIR}/storage/*.cpp
     ${SRC_DIR}/storage/**/*.cpp
     ${SRC_DIR}/types/*.cpp
+    # udf/ top-level is non-Java. Python/Java subdirs filtered out by regex below.
+    ${SRC_DIR}/udf/*.cpp
     # util contains important .cc sources on macOS (e.g., easy_json.cc)
     ${SRC_DIR}/util/*.cpp
     ${SRC_DIR}/util/*.cc
@@ -1090,7 +1148,6 @@ set(MACOS_SHIM_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/sinks_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/connector_shims.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/disabled_components_shim.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/shims/src/thrift_uuid_stub.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/tracer_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/lake_manager_stub.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/inverted_index_stub.cpp"

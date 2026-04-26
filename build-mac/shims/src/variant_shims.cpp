@@ -20,8 +20,8 @@
 #include <sstream>
 
 // Bring in concrete types used by shim return values
-#include "util/slice.h"
-#include "runtime/decimalv2_value.h"
+#include "base/string/slice.h"
+#include "types/decimalv2_value.h"
 #include "types/date_value.h"
 
 namespace starrocks {

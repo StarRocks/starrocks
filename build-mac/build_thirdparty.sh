@@ -8,6 +8,15 @@
 
 set -euo pipefail
 
+# build_be.sh sources env_macos.sh before calling us, which exports a
+# batch of CMake behavior-control vars intended for the BE build only.
+# They leak into thirdparty subprocesses and break bundled cmake logic
+# (e.g. velocypack's TargetArch.cmake rejects CMAKE_OSX_ARCHITECTURES=arm64).
+# Unset at entry so running via build_be.sh matches running standalone.
+unset CMAKE_OSX_ARCHITECTURES CMAKE_BUILD_TARGET_ARCH \
+      CMAKE_GENERATOR CMAKE_FIND_LIBRARY_SUFFIXES \
+      BUILD_SHARED_LIBS CMAKE_BUILD_TYPE MAKEFLAGS
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 THIRDPARTY_DIR="${ROOT_DIR}/thirdparty"
