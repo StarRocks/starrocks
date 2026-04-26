@@ -51,6 +51,56 @@ ADD_BE_LIB(SpillCore
 
 target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IOCore Common Base Gutil StarRocksGen)
 
+set(EXEC_SCHEMA_SCANNER_CORE_FILES
+    schema_scanner.cpp
+)
+
+ADD_BE_LIB(ExecSchemaScannerCore
+    ${EXEC_SCHEMA_SCANNER_CORE_FILES}
+)
+
+target_link_libraries(ExecSchemaScannerCore PUBLIC
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
+set(EXEC_SCHEMA_SCANNER_FILES
+    schema_scanner/schema_be_bvars_scanner.cpp
+    schema_scanner/schema_be_configs_scanner.cpp
+    schema_scanner/schema_be_metrics_scanner.cpp
+    schema_scanner/schema_be_threads_scanner.cpp
+    schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collations_scanner.cpp
+    schema_scanner/schema_dummy_scanner.cpp
+    schema_scanner/schema_events_scanner.cpp
+    schema_scanner/schema_statistics_scanner.cpp
+    schema_scanner/schema_triggers_scanner.cpp
+)
+
+ADD_BE_LIB(ExecSchemaScanners
+    ${EXEC_SCHEMA_SCANNER_FILES}
+)
+
+target_link_libraries(ExecSchemaScanners PUBLIC
+    ExecSchemaScannerCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    Util
+)
+
 set(PIPELINE_PRIMITIVES_SRCS
     pipeline/operator.cpp
 )
@@ -304,7 +354,7 @@ set(EXEC_NON_PIPELINE_FILES
     dict_decode_node.cpp
     repeat_node.cpp
     table_function_node.cpp
-    schema_scanner.cpp
+    schema_scanner_factory.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
@@ -328,16 +378,10 @@ set(EXEC_NON_PIPELINE_FILES
     file_scanner/parquet_scanner.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
-    schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
     schema_scanner/schema_variables_scanner.cpp
     schema_scanner/schema_columns_scanner.cpp
     schema_scanner/schema_column_stats_usage_scanner.cpp
-    schema_scanner/schema_charsets_scanner.cpp
-    schema_scanner/schema_collations_scanner.cpp
-    schema_scanner/schema_statistics_scanner.cpp
-    schema_scanner/schema_triggers_scanner.cpp
-    schema_scanner/schema_events_scanner.cpp
     schema_scanner/schema_views_scanner.cpp
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
@@ -349,17 +393,13 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp
     schema_scanner/schema_tables_config_scanner.cpp
-    schema_scanner/schema_be_metrics_scanner.cpp
     schema_scanner/schema_be_tablets_scanner.cpp
     schema_scanner/schema_be_txns_scanner.cpp
-    schema_scanner/schema_be_configs_scanner.cpp
-    schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
     schema_scanner/schema_fe_metrics_scanner.cpp
     schema_scanner/schema_fe_threads_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
-    schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
     schema_scanner/schema_be_tablet_write_log_scanner.cpp
     schema_scanner/schema_pipe_files.cpp
@@ -453,4 +493,4 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecCore SpillCore)
+target_link_libraries(Exec PUBLIC ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners)

@@ -336,6 +336,44 @@
       "allowed_test_targets": ["exec_core_test"],
       "allowed_test_link_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code."
+    },
+    {
+      "id": "execschemascannercore",
+      "doc_label": "ExecSchemaScannerCore",
+      "summary": "Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.",
+      "owned_targets": ["ExecSchemaScannerCore"],
+      "allowed_include_prefixes": ["exec/schema_scanner.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/schema_scanner/", "exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "forbidden_includes": [
+        "runtime/exec_env.h",
+        "exec/exec_node.h",
+        "exec/data_sink.h"
+      ],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["schema_scanner_core_test"],
+      "allowed_test_link_deps": ["ExecSchemaScannerCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules."
+    },
+    {
+      "id": "execschemascanners",
+      "doc_label": "ExecSchemaScanners",
+      "summary": "Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.",
+      "owned_targets": ["ExecSchemaScanners"],
+      "additional_owned_globs": [
+        "be/src/exec/schema_scanner/schema_column_filler.h"
+      ],
+      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner/schema_column_filler.h", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/", "util/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "forbidden_includes": [
+        "exec/schema_scanner/schema_helper.h",
+        "runtime/exec_env.h",
+        "exec/exec_node.h",
+        "exec/data_sink.h"
+      ],
+      "allowed_target_deps": ["ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen", "Util"],
+      "allowed_test_targets": ["exec_schema_scanners_test"],
+      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen", "Util"],
+      "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
     }
   ]
 }
