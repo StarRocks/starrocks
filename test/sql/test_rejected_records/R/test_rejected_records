@@ -809,4 +809,71 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 -- !result
 drop database db_${uuid0};
 -- result:
+-- !result-- name: test_rejected_records_routine_load_csv @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int not null, val int not null)
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: printf '1,10\n2,bad\n3,30\n' | ${kafka_tool_path}/kafka-console-producer.sh --broker-list ${broker_list} --topic rej_rl_${uuid0} >/dev/null 2>&1; echo $?
+-- result:
+0
+0
+-- !result
+CREATE ROUTINE LOAD rl_${uuid0} ON t
+COLUMNS TERMINATED BY ',',
+COLUMNS (id, val)
+PROPERTIES (
+    "format" = "csv",
+    "strict_mode" = "true",
+    "max_filter_ratio" = "1.0",
+    "log_rejected_record_num" = "-1"
+)
+FROM KAFKA (
+    "kafka_broker_list" = "${broker_list}",
+    "kafka_topic" = "rej_rl_${uuid0}",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+-- result:
+-- !result
+function: check_routine_load_progress(3, "rl_${uuid0}", "db_${uuid0}", "t")
+-- result:
+None
+-- !result
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- result:
+0
+0
+-- !result
+select load_type,
+       error_code is not null as has_error_code,
+       raw_record is not null as has_raw_record,
+       source_info is not null as has_source_info
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t'
+order by created_at limit 5;
+-- result:
+ROUTINE_LOAD	1	1	1
+-- !result
+STOP ROUTINE LOAD FOR rl_${uuid0};
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
 -- !result
