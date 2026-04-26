@@ -850,8 +850,8 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         // those input sstables held, the pending compaction is now a no-op —
         // skip both removal and insertion to let publish proceed instead of
         // hanging the table in COMMITTED.
-        LOG(WARNING) << "apply_opcompaction: no matching sstable fileset for compaction in tablet "
-                     << _tablet_id << ", inputs=" << op_compaction.input_sstables_size()
+        LOG(WARNING) << "apply_opcompaction: no matching sstable fileset for compaction in tablet " << _tablet_id
+                     << ", inputs=" << op_compaction.input_sstables_size()
                      << " (likely superseded by post-MERGE rebuild). Treating as no-op.";
         return Status::OK();
     }
