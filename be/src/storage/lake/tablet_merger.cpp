@@ -1384,22 +1384,22 @@ static StatusOr<uint32_t> remap_stored_rssid_for_rebuild(
     } else {
         int64_t off = static_cast<int64_t>(src->id()) + rssid_offset;
         if (off < 0 || off > std::numeric_limits<uint32_t>::max()) {
-            return Status::Corruption(fmt::format(
-                    "rebuild_sstable: rowset offset overflow src_rowset_id={} offset={}", src->id(), rssid_offset));
+            return Status::Corruption(fmt::format("rebuild_sstable: rowset offset overflow src_rowset_id={} offset={}",
+                                                  src->id(), rssid_offset));
         }
         merged_rowset_id = static_cast<uint32_t>(off);
     }
     int64_t effective = static_cast<int64_t>(merged_rowset_id) + seg_offset;
     if (effective < 0 || effective > std::numeric_limits<uint32_t>::max()) {
-        return Status::Corruption(fmt::format(
-                "rebuild_sstable: effective rssid overflow merged_rowset_id={} seg_offset={}", merged_rowset_id,
-                seg_offset));
+        return Status::Corruption(
+                fmt::format("rebuild_sstable: effective rssid overflow merged_rowset_id={} seg_offset={}",
+                            merged_rowset_id, seg_offset));
     }
     if (covered_rssids.count(static_cast<uint32_t>(effective)) == 0) {
-        return Status::Corruption(fmt::format(
-                "rebuild_sstable: src rowset {} (seg_offset {}) -> merged rowset {} (effective {}) not in "
-                "covered_rssids; dedup/add_rowset invariant broken",
-                src->id(), seg_offset, merged_rowset_id, effective));
+        return Status::Corruption(
+                fmt::format("rebuild_sstable: src rowset {} (seg_offset {}) -> merged rowset {} (effective {}) not in "
+                            "covered_rssids; dedup/add_rowset invariant broken",
+                            src->id(), seg_offset, merged_rowset_id, effective));
     }
     return static_cast<uint32_t>(effective);
 }
@@ -1652,10 +1652,10 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                 // offset, project delvec.
                 ASSIGN_OR_RETURN(auto mapped_rssid, ctx.map_rssid(sst.shared_rssid()));
                 if (covered_rssids.count(mapped_rssid) == 0) {
-                    return Status::Corruption(fmt::format(
-                            "merge_sstables: shared_rssid sstable maps to uncovered rssid {} (filename={}, "
-                            "source_tablet={}, ctx.offset={})",
-                            mapped_rssid, sst.filename(), ctx.metadata()->id(), ctx.rssid_offset()));
+                    return Status::Corruption(
+                            fmt::format("merge_sstables: shared_rssid sstable maps to uncovered rssid {} (filename={}, "
+                                        "source_tablet={}, ctx.offset={})",
+                                        mapped_rssid, sst.filename(), ctx.metadata()->id(), ctx.rssid_offset()));
                 }
                 out->set_shared_rssid(mapped_rssid);
                 out->set_rssid_offset(0); // clear to avoid double-transform in read path
