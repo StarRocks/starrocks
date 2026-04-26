@@ -14,10 +14,15 @@
 
 #include "storage/lake/persistent_index_sstable_fileset.h"
 
+#include <mutex>
+
 #include "base/debug/trace.h"
+#include "common/config_primary_key_fwd.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/comparator.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
@@ -146,7 +151,50 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
             }
         }
     }
-    // 2. multi get from each sstable
+    // 2. multi get from each sstable. The routing in step 1 guarantees each query key lands
+    //    in at most one SST, so per-key writes to `values[key_index]` are disjoint across
+    //    SSTs. Concurrent inserts into the shared `found_key_indexes` set are serialised
+    //    under a mutex.
+    auto* pool = ExecEnv::GetInstance() != nullptr ? ExecEnv::GetInstance()->pk_index_execution_thread_pool()
+                                                   : nullptr;
+    const bool parallel = config::enable_pk_index_multi_get_parallel && sstable_key_indexes_map.size() > 1 &&
+                          pool != nullptr;
+    if (parallel) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("fileset_multi_get_parallel_us");
+        auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        std::mutex mu;
+        Status task_status = Status::OK();
+        Trace* parent_trace = Trace::CurrentTrace();
+        for (const auto& entry : sstable_key_indexes_map) {
+            PersistentIndexSstable* sstable = entry.first;
+            const KeyIndexSet* sstable_key_indexes = &entry.second;
+            auto submit_st = token->submit_func([&, sstable, sstable_key_indexes, parent_trace]() {
+                ADOPT_TRACE(parent_trace);
+                Status st = sstable->ensure_opened();
+                if (st.ok()) {
+                    KeyIndexSet local_found;
+                    st = sstable->multi_get(keys, *sstable_key_indexes, version, values, &local_found);
+                    if (st.ok() && !local_found.empty()) {
+                        std::lock_guard<std::mutex> lg(mu);
+                        for (auto idx : local_found) {
+                            found_key_indexes->insert(idx);
+                        }
+                    }
+                }
+                if (!st.ok()) {
+                    std::lock_guard<std::mutex> lg(mu);
+                    task_status.update(st);
+                }
+            });
+            if (!submit_st.ok()) {
+                std::lock_guard<std::mutex> lg(mu);
+                task_status.update(submit_st);
+            }
+        }
+        token->wait();
+        RETURN_IF_ERROR(task_status);
+        return Status::OK();
+    }
     for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
         RETURN_IF_ERROR(sstable->ensure_opened());
         RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));

@@ -148,6 +148,11 @@ CONF_Bool(enable_pk_index_snapshot_block_prewarm, "true");
 // natural admission control across concurrent tablet rebuilds.
 CONF_mBool(enable_pk_index_rebuild_segment_parallel, "true");
 
+// Within-fileset SSTable-level parallelism for `PersistentIndexSstableFileset::multi_get` —
+// see config.h for the full rationale. Default true; turn off to fall back to the serial
+// per-SST loop. Re-readable at runtime via `set config`.
+CONF_mBool(enable_pk_index_multi_get_parallel, "true");
+
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 

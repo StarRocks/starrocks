@@ -540,6 +540,18 @@ CONF_Bool(enable_pk_index_snapshot_block_prewarm, "true");
 // `pk_index_parallel_execution_threadpool_max_threads` (defaults to num_cores/2), which provides
 // natural admission control across concurrent tablet rebuilds.
 CONF_mBool(enable_pk_index_rebuild_segment_parallel, "true");
+// Within-fileset SSTable-level parallelism for `PersistentIndexSstableFileset::multi_get`.
+// When true, and the per-call key routing splits into >=2 distinct SSTs, each SST's
+// `ensure_opened()` + `multi_get()` is dispatched onto `pk_index_execution_thread_pool` so
+// independent OSS reads (footer/index/data blocks for a cold rebuild's `load_dels` path; data
+// block reads for steady-state upsert lookups) run concurrently. The map's routing already
+// guarantees each query key lands in at most one SST, so per-key writes to `values[key_index]`
+// don't collide; concurrent inserts into the shared `found_key_indexes` set are serialised
+// under a single mutex (small critical section). Bounded by
+// `pk_index_parallel_execution_threadpool_max_threads` (defaults to num_cores/2).
+// iter-060 trace: top slow event 5617 ms = 2707 ms `multi_get_us` + 2630 ms `rebuild_index_del_cost_us`
+// (which itself calls multi_get under `get()`); both paths benefit from this knob.
+CONF_mBool(enable_pk_index_multi_get_parallel, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.

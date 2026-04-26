@@ -728,6 +728,7 @@
         "enable_pk_index_snapshot_lazy_sst_open",
         "enable_pk_index_snapshot_block_prewarm",
         "enable_pk_index_rebuild_segment_parallel",
+        "enable_pk_index_multi_get_parallel",
         "ignore_merge_condition_inside_same_transaction",
         "update_memory_limit_percent",
         "enable_retry_apply",
