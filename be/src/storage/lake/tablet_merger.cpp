@@ -1959,13 +1959,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                       new_tablet_metadata.get()));
     }
 
-    // F.1: leave merged sstable_meta empty; rely on
-    // LakePersistentIndex::load_from_lake_tablet to rebuild persistent
-    // index from rowsets. Inheriting source SSTs (even with rssid remap)
-    // misses the post-compaction K -> R_new mappings that live only in
-    // the source's load-time rebuild output. Skipping merge_sstables is
-    // the only correctness-safe option; v17 S172 cluster evidence shows
-    // both drop-on-NotFound and sentinel-rssid produce row-count drift.
+    RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));
 
     // Phase 4: Finalize
     update_next_rowset_id(new_tablet_metadata.get());
