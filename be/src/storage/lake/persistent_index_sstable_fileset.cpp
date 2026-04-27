@@ -202,9 +202,8 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     int64_t inline_start = 0;
     int64_t inline_us = 0;
     for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
-        Status submit_st = fanout_pool->submit_func([&run_one, sstable, &sstable_key_indexes]() {
-            run_one(sstable, sstable_key_indexes);
-        });
+        Status submit_st = fanout_pool->submit_func(
+                [&run_one, sstable, &sstable_key_indexes]() { run_one(sstable, sstable_key_indexes); });
         if (!submit_st.ok()) {
             // Pool full / shutdown / OOM: run inline. `remaining` is still decremented
             // inside run_one so the wait loop terminates correctly.
