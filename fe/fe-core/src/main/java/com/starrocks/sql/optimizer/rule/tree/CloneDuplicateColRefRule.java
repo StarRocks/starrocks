@@ -18,16 +18,14 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 // ProjectOperator or Projection of Operator may have several ColumnRefs remapped to the same ColumnRef, for an example:
 // 1.ColumnRef(1)->ColumnRef(1);
@@ -53,11 +51,6 @@ public class CloneDuplicateColRefRule implements TreeRewriteRule {
                 return;
             }
 
-            List<Map.Entry<ColumnRefOperator, ScalarOperator>> entries =
-                    colRefMap.entrySet().stream()
-                            .sorted(Comparator.comparing(entry -> entry.getKey().getId()))
-                            .collect(Collectors.toList());
-
             Map<ScalarOperator, Integer> duplicateColRefs = Maps.newHashMap();
             colRefMap.forEach((k, v) -> {
                 if (!v.isColumnRef()) {
@@ -81,10 +74,19 @@ public class CloneDuplicateColRefRule implements TreeRewriteRule {
                 PhysicalProjectOperator projectOp = optExpression.getOp().cast();
                 substColumnRefOperatorWithCloneOperator(projectOp.getColumnRefMap());
                 substColumnRefOperatorWithCloneOperator(projectOp.getCommonSubOperatorMap());
-            } else if (optExpression.getOp().getProjection() != null) {
-                Projection projection = optExpression.getOp().getProjection();
-                substColumnRefOperatorWithCloneOperator(projection.getColumnRefMap());
-                substColumnRefOperatorWithCloneOperator(projection.getCommonSubOperatorMap());
+            } else {
+                // PhysicalCTEConsumeOperator's cteOutputColumnRefMap is materialized into a
+                // ProjectNode in PlanFragmentBuilder, so it has the same shared-column hazard
+                // as a regular projection and must also be processed here.
+                if (optExpression.getOp() instanceof PhysicalCTEConsumeOperator) {
+                    PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
+                    substColumnRefOperatorWithCloneOperator(consume.getCteOutputColumnRefMap());
+                }
+                if (optExpression.getOp().getProjection() != null) {
+                    Projection projection = optExpression.getOp().getProjection();
+                    substColumnRefOperatorWithCloneOperator(projection.getColumnRefMap());
+                    substColumnRefOperatorWithCloneOperator(projection.getCommonSubOperatorMap());
+                }
             }
             optExpression.getInputs().forEach(input -> this.visit(input, context));
             return null;

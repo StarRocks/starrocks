@@ -16,12 +16,15 @@
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -36,8 +39,12 @@ public class CTEConsumerReuseImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         // delete children of cte consume
         LogicalCTEConsumeOperator logical = (LogicalCTEConsumeOperator) input.getOp();
+        // Widen the value type to ScalarOperator so CloneDuplicateColRefRule can later
+        // substitute duplicated producer refs with CloneOperator in place.
+        Map<ColumnRefOperator, ScalarOperator> cteOutputColumnRefMap =
+                Maps.newHashMap(logical.getCteOutputColumnRefMap());
         PhysicalCTEConsumeOperator consume =
-                new PhysicalCTEConsumeOperator(logical.getCteId(), logical.getCteOutputColumnRefMap(),
+                new PhysicalCTEConsumeOperator(logical.getCteId(), cteOutputColumnRefMap,
                         logical.getLimit(), logical.getPredicate(), logical.getProjection(), Map.of());
         return Lists.newArrayList(OptExpression.create(consume));
     }

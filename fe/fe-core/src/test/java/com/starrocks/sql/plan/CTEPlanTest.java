@@ -25,8 +25,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+
 
 public class CTEPlanTest extends PlanTestBase {
     private static class TestStorage extends EmptyStatisticStorage {
@@ -1332,5 +1334,35 @@ public class CTEPlanTest extends PlanTestBase {
         Assertions.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
         // x1 with NOT MATERIALIZED: inlined even though it has random(), t1 scanned twice
         Assertions.assertEquals(2, StringUtils.countMatches(plan, "TABLE: t1"));
+    }
+
+    @Test
+    public void testCTEConsumeDuplicateColRefNeedsCloneBasic() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+
+        String sql = "WITH base AS (" +
+                "  SELECT v1, v2, CAST(v1 AS BIGINT) AS v1_dup FROM t0" +
+                ") [materialized] " +
+                "SELECT v1, v2, v1_dup FROM base WHERE v1 > 0 " +
+                "UNION ALL " +
+                "SELECT v1, v2, v1_dup FROM base WHERE v1 < 0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks");
+        assertContains(plan, "clone(");
+    }
+
+    @Test
+    public void testCTEConsumeDuplicateColRefNeedsCloneMultiplePredicates() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+
+        String sql = "WITH base AS (" +
+                "  SELECT v1, v2, CAST(v1 AS BIGINT) AS v1_dup FROM t0" +
+                ") [materialized] " +
+                "SELECT v1, v2, v1_dup FROM base WHERE v1 > 10 or v1_dup < -10  " +
+                "UNION ALL " +
+                "SELECT v1, v2, v1_dup FROM base WHERE v1 < 5 and v1_dup > -5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks");
+        assertContains(plan, "clone(");
     }
 }

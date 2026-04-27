@@ -620,10 +620,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
         DecodeInfo info = context.operatorDecodeInfo.get(consume);
-        Map<ColumnRefOperator, ColumnRefOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
+        Map<ColumnRefOperator, ScalarOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
                         (e) -> new Pair<>(
                                 context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
-                                context.stringRefToDictRefMap.getOrDefault(e.getValue(), e.getValue())))
+                                e.getValue().isColumnRef()
+                                        && context.stringRefToDictRefMap.containsKey((ColumnRefOperator) e.getValue())
+                                ? context.stringRefToDictRefMap.get((ColumnRefOperator) e.getValue()) : e.getValue()))
                 .collect(Collectors.toMap(p -> p.first, p -> p.second));
         PhysicalCTEConsumeOperator newOp = new PhysicalCTEConsumeOperator(
                 consume.getCteId(),

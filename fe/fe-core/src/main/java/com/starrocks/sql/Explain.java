@@ -647,7 +647,7 @@ public class Explain {
             PhysicalCTEConsumeOperator consume = (PhysicalCTEConsumeOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- CTEConsume[" + consume.getCteId() + "]\n");
 
-            for (Map.Entry<ColumnRefOperator, ColumnRefOperator> kv : consume.getCteOutputColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : consume.getCteOutputColumnRefMap().entrySet()) {
                 String expression = EXPR_PRINTER.print(kv.getKey()) + " := " + EXPR_PRINTER.print(kv.getValue());
                 buildOperatorProperty(sb, expression, context.step);
             }
