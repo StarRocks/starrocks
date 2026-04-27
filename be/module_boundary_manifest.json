@@ -338,6 +338,23 @@
       "remediation": "Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code."
     },
     {
+      "id": "execsinkcore",
+      "doc_label": "ExecSinkCore",
+      "summary": "DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.",
+      "owned_targets": ["ExecSinkCore"],
+      "allowed_include_prefixes": ["exec/data_sink.h", "exec/pipeline/pipeline_fwd.h", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "connector/", "storage/", "http/", "service/", "cache/", "runtime/"],
+      "forbidden_includes": [
+        "exec/exec_node.h",
+        "exec/multi_olap_table_sink.h",
+        "exec/tablet_sink.h"
+      ],
+      "allowed_target_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_core_test"],
+      "allowed_test_link_deps": ["ExecSinkCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecSinkCore limited to the DataSink base contract; move construction, concrete sinks, pipeline decomposition, and future sink IO behavior into higher modules."
+    },
+    {
       "id": "execschemascannercore",
       "doc_label": "ExecSchemaScannerCore",
       "summary": "Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.",

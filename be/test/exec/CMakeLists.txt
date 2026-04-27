@@ -44,6 +44,32 @@ set_target_properties(starrocks_exec_core_test_objs PROPERTIES COMPILE_FLAGS "-f
 add_executable(exec_core_test $<TARGET_OBJECTS:starrocks_exec_core_test_objs>)
 target_link_libraries(exec_core_test ${EXEC_CORE_TEST_LINK_LIBS} gtest_main)
 
+set(DATA_SINK_CORE_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    data_sink/data_sink_core_test.cpp
+)
+
+set(DATA_SINK_CORE_TEST_LINK_LIBS
+    ExecSinkCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_library(starrocks_data_sink_core_test_objs OBJECT ${DATA_SINK_CORE_TEST_FILES})
+target_link_libraries(starrocks_data_sink_core_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_data_sink_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(data_sink_core_test $<TARGET_OBJECTS:starrocks_data_sink_core_test_objs>)
+target_link_libraries(data_sink_core_test ${DATA_SINK_CORE_TEST_LINK_LIBS} gtest_main)
+
 set(SCHEMA_SCANNER_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     schema_scanner/schema_scanner_core_test.cpp

@@ -21,6 +21,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
+#include "exec/workgroup/work_group.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"

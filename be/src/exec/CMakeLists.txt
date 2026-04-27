@@ -35,6 +35,16 @@ ADD_BE_LIB(ExecCore
 
 target_link_libraries(ExecCore PUBLIC ExprCore RuntimeCore)
 
+set(EXEC_SINK_CORE_FILES
+    data_sink.cpp
+)
+
+ADD_BE_LIB(ExecSinkCore
+    ${EXEC_SINK_CORE_FILES}
+)
+
+target_link_libraries(ExecSinkCore PUBLIC Common Base Gutil StarRocksGen)
+
 set(SPILL_CORE_FILES
     spill/dir_manager.cpp
     spill/block_reader.cpp
@@ -269,7 +279,8 @@ set(EXEC_NON_PIPELINE_FILES
     fetch_node.cpp
     lookup_node.cpp
     capture_version_node.cpp
-    data_sink.cpp
+    data_sink_factory.cpp
+    data_sink_pipeline.cpp
     empty_set_node.cpp
     exec_factory.cpp
     pipeline_node.cpp
@@ -492,4 +503,4 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners)
+target_link_libraries(Exec PUBLIC ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners)
