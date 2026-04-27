@@ -800,10 +800,12 @@ else()
     message(FATAL_ERROR "streamvbyte not found. Please install: brew install streamvbyte")
 endif()
 
-# simdjson for fast JSON parsing
-find_library(SIMDJSON_LIB NAMES simdjson simdjson_static PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH REQUIRED)
+# simdjson for fast JSON parsing — Homebrew ships libsimdjson_static.a;
+# build-mac/env_macos.sh pins CMAKE_FIND_LIBRARY_SUFFIXES=".a" so we always
+# resolve to the static archive. Declare STATIC IMPORTED to match.
+find_library(SIMDJSON_LIB NAMES simdjson_static PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH REQUIRED)
 if(SIMDJSON_LIB)
-    add_library(simdjson SHARED IMPORTED GLOBAL)
+    add_library(simdjson STATIC IMPORTED GLOBAL)
     set_target_properties(simdjson PROPERTIES
         IMPORTED_LOCATION ${SIMDJSON_LIB}
         INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
