@@ -2033,4 +2033,194 @@ TEST_F(MetaFileTest, test_apply_drop_index_skips_malformed_entries) {
     EXPECT_EQ(1, schema->dropped_table_indices_size());
 }
 
+// --- Per-column flag flip on apply_add_index (the R3 fix) -----------------
+
+namespace {
+ColumnPB* push_column(TabletSchemaPB* schema, int col_uid, const std::string& name) {
+    auto* c = schema->add_column();
+    c->set_unique_id(col_uid);
+    c->set_name(name);
+    c->set_type("INT");
+    c->set_has_bitmap_index(false);
+    c->set_is_bf_column(false);
+    return c;
+}
+} // namespace
+
+TEST_F(MetaFileTest, test_apply_add_index_flips_has_bitmap_index_flag) {
+    // BITMAP add must flip column.has_bitmap_index=true so a future
+    // compaction inlines the bitmap into the new segment footer.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20100);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20100);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/42, "c1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7777);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(42);
+    builder.apply_add_index(op);
+
+    ASSERT_EQ(1, schema->table_indices_size());
+    EXPECT_TRUE(schema->column(0).has_bitmap_index());
+    EXPECT_FALSE(schema->column(0).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_ngrambf) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20101);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20101);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/55, "v1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(8888);
+    new_ix->set_index_type(NGRAMBF);
+    new_ix->add_col_unique_id(55);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+    EXPECT_TRUE(schema->column(0).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_bloom_filter) {
+    // Plain BLOOM_FILTER (the bf_columns property fast path) also needs
+    // the per-column flag flipped.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20102);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20102);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/77, "v2");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(77);
+    builder.apply_add_index(op);
+
+    EXPECT_TRUE(schema->column(0).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_unknown_col_unique_id_is_noop_on_columns) {
+    // If the index references a unique_id that isn't on any column (e.g. the
+    // column was dropped between alter request and publish), bump_flag must
+    // silently skip rather than touch the wrong column.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20103);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20103);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/42, "c1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(9001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(/*ghost=*/999);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+    EXPECT_FALSE(schema->column(0).is_bf_column());
+    // table_indices still gets the entry (it's keyed by index_id and is
+    // logically the source of truth even if the column was dropped).
+    EXPECT_EQ(1, schema->table_indices_size());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_self_heals_existing_index_id) {
+    // Replay path: same index_id already in table_indices. The add must NOT
+    // duplicate the entry, but should still flip per-column flags so older
+    // metadata written before the R3 fix gets repaired on the next publish.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20104);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20104);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/12, "c");
+    auto* ix = schema->add_table_indices();
+    ix->set_index_id(123);
+    ix->set_index_type(BITMAP);
+    ix->add_col_unique_id(12);
+    // Simulate older BE that didn't bump the flag.
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(123);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(12);
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(1, schema->table_indices_size());        // not duplicated
+    EXPECT_TRUE(schema->column(0).has_bitmap_index()); // self-healed
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_no_segment_entries_only_index_pb) {
+    // op carries new_indexes but no segment_entries (e.g. an alter that
+    // touches schema only). idg_meta stays empty; schema gets the index.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20105);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20105);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/1, "c1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(42);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(1);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(metadata->has_idg_meta());
+    EXPECT_EQ(1, schema->table_indices_size());
+    EXPECT_TRUE(schema->column(0).has_bitmap_index());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_index_without_type_skips_flag_bump) {
+    // index_type unset → bump_flag never called.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20106);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20106);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/3, "c");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(99);
+    // intentionally omit set_index_type
+    new_ix->add_col_unique_id(3);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+    EXPECT_FALSE(schema->column(0).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_unknown_id_noop) {
+    // Drop op references an index_id not present in schema → table_indices
+    // unchanged, dropped_table_indices stays empty, no crash.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20107);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20107);
+    auto* schema = metadata->mutable_schema();
+    auto* ix = schema->add_table_indices();
+    ix->set_index_id(11);
+    ix->set_index_type(BITMAP);
+    ix->add_col_unique_id(0);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/9999, /*col_uid=*/0, BITMAP);
+    builder.apply_drop_index(op);
+
+    EXPECT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ(0, schema->dropped_table_indices_size());
+}
+
 } // namespace starrocks::lake
