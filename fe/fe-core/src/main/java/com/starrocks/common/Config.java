@@ -3942,6 +3942,9 @@ public class Config extends ConfigBase {
             "materialized views(>10) or query is complex(multi table joins).")
     public static long mv_query_context_cache_max_size = 1000;
 
+    @ConfField(mutable = false)
+    public static long mv_aggregate_join_push_down_query_column_cache_max_size = 1000;
+
     @ConfField(mutable = true)
     public static boolean enable_materialized_view_concurrent_prepare = true;
 

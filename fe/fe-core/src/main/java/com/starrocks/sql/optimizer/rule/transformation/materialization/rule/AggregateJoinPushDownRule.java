@@ -17,8 +17,11 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Predicate;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
@@ -79,6 +82,24 @@ import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PUSH_DOWN
  */
 public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     private static AggregateJoinPushDownRule INSTANCE = new AggregateJoinPushDownRule();
+
+    private static final class QueryColumnCache {
+        final Map<Table, Set<String>> groupByColumnsByTable;
+        final Map<Table, Set<String>> predicateColumnsByTable;
+
+        QueryColumnCache(Map<Table, Set<String>> groupByColumnsByTable,
+                         Map<Table, Set<String>> predicateColumnsByTable) {
+            this.groupByColumnsByTable = groupByColumnsByTable;
+            this.predicateColumnsByTable = predicateColumnsByTable;
+        }
+    }
+
+    // Identity-keyed cache: one entry per distinct queryExpression object.
+    // Max size is read once at startup from Config.mv_aggregate_join_push_down_query_cache_max_size.
+    private final Cache<OptExpression, QueryColumnCache> queryColumnCache = CacheBuilder.newBuilder()
+            .maximumSize(Config.mv_aggregate_join_push_down_query_column_cache_max_size)
+            .weakKeys()
+            .build();
 
     public AggregateJoinPushDownRule() {
         super(RuleType.TF_MV_AGGREGATE_JOIN_PUSH_DOWN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
@@ -146,10 +167,19 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
                                                 OptimizerContext context,
                                                 List<MaterializationContext> mvCandidateContexts) {
         List<LogicalScanOperator> scanOperators = getScanOperator(queryExpression);
-        Map<Table, Set<String>> queryGroupByColumnsByTable = new HashMap<>();
-        collectGroupByColumnsByTable(queryExpression, queryGroupByColumnsByTable);
-        Map<Table, Set<String>> queryPredicateColumnsByTable = new HashMap<>();
-        collectPredicateColumnsByTable(queryExpression, queryPredicateColumnsByTable);
+        QueryColumnCache cached = queryColumnCache.getIfPresent(queryExpression);
+        Map<Table, Set<String>> queryGroupByColumnsByTable;
+        Map<Table, Set<String>> queryPredicateColumnsByTable;
+        if (cached != null) {
+            queryGroupByColumnsByTable = cached.groupByColumnsByTable;
+            queryPredicateColumnsByTable = cached.predicateColumnsByTable;
+        } else {
+            queryGroupByColumnsByTable = new HashMap<>();
+            collectGroupByColumnsByTable(queryExpression, queryGroupByColumnsByTable);
+            queryPredicateColumnsByTable = new HashMap<>();
+            collectPredicateColumnsByTable(queryExpression, queryPredicateColumnsByTable);
+            queryColumnCache.put(queryExpression, new QueryColumnCache(queryGroupByColumnsByTable, queryPredicateColumnsByTable));
+        }
         Map<Table, Set<String>> queryGroupByAndPredicateColumnsByTable = new HashMap<>(queryGroupByColumnsByTable);
         queryPredicateColumnsByTable.forEach(
                 (tableId, columns) -> queryGroupByAndPredicateColumnsByTable.computeIfAbsent(tableId,
