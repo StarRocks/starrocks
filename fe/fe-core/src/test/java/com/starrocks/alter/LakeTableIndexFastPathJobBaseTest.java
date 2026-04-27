@@ -172,7 +172,12 @@ public class LakeTableIndexFastPathJobBaseTest {
         MetadataMgr mm = mock(MetadataMgr.class);
         when(mm.getDb(anyLong())).thenReturn(db);
         when(gsm.getMetadataMgr()).thenReturn(mm);
-        when(gsm.getEditLog()).thenReturn(mockEditLog());
+        // Build the EditLog mock OUTSIDE the chained when(..) to avoid
+        // Mockito's UnfinishedStubbing detection (mockEditLog itself does
+        // doAnswer().when(edit) which Mockito interprets as nested
+        // stubbing if invoked inside another when().thenReturn(...) chain).
+        EditLog editLog = mockEditLog();
+        when(gsm.getEditLog()).thenReturn(editLog);
         return gsm;
     }
 
