@@ -367,13 +367,20 @@ class DecodeContext {
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void ignore) {
             // string dict expression use origin string column
-            ScalarOperator res = stringRefToDefineExprMap.get(variable.getId());
-            if (res.isColumnRef() && variable.getId() == ((ColumnRefOperator) res).getId()) {
+            ScalarOperator define = stringRefToDefineExprMap.get(variable.getId());
+            if (define.isColumnRef() && variable.getId() == ((ColumnRefOperator) define).getId()) {
                 // mock to string column
                 return new ColumnRefOperator(variable.getId(), variable.getType(), variable.getName(),
                         variable.isNullable());
             }
-            return res.accept(this, null);
+            ScalarOperator result = define.accept(this, null);
+            if (result.isColumnRef() && result.getType().isArrayType() && variable.getType().isStringType()) {
+                // This is result of an unnest operator on an ARRAY<VARCHAR>, we replace the type with INT so that
+                // backend doesn't get confused when creating dictionaries.
+                ColumnRefOperator ref = result.cast();
+                return new ColumnRefOperator(ref.getId(), Type.INT, ref.getName(), ref.isNullable());
+            }
+            return result;
         }
 
         @Override
