@@ -42,15 +42,17 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <hadoop.version>3.4.3</hadoop.version>
         <guava.version>32.0.1-jre</guava.version>
-        <zookeeper.version>3.9.3</zookeeper.version>
+        <zookeeper.version>3.9.5</zookeeper.version>
         <protobuf.version>3.25.5</protobuf.version>
         <thrift.version>0.14.1</thrift.version>
-        <tomcat.version>9.0.106</tomcat.version>
+        <tomcat.version>9.0.117</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
         <jackson.version>2.21.1</jackson.version>
+        <jackson-annotations.version>2.21</jackson-annotations.version>
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.58.v20250814</jetty.version>
-        <io.netty.version>4.1.128.Final</io.netty.version>
+        <io.netty.version>4.1.132.Final</io.netty.version>
+        <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
     </properties>
 
     <profiles>
@@ -264,8 +266,8 @@ under the License.
                 <version>${hadoop.version}</version>
                 <exclusions>
                     <exclusion>
-                        <artifactId>com.fasterxml.jackson.core</artifactId>
-                        <groupId>jackson-databind</groupId>
+                        <groupId>com.fasterxml.jackson.core</groupId>
+                        <artifactId>*</artifactId>
                     </exclusion>
                     <exclusion>
                         <groupId>io.netty</groupId>
@@ -286,6 +288,18 @@ under the License.
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson-annotations.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.avro/avro/ -->
@@ -388,6 +402,12 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>bundle</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
@@ -400,7 +420,17 @@ under the License.
                         <groupId>org.ini4j</groupId>
                         <artifactId>ini4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.jdom</groupId>
+                        <artifactId>jdom2</artifactId>
+                    </exclusion>
                 </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>org.jdom</groupId>
+                <artifactId>jdom2</artifactId>
+                <version>2.0.6.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.ksyun.kmr/hadoop-ks3 -->
@@ -408,6 +438,14 @@ under the License.
                 <groupId>com.ksyun.kmr</groupId>
                 <artifactId>hadoop-ks3</artifactId>
                 <version>3.1.1-1.1.2</version>
+            </dependency>
+
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-v2-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
