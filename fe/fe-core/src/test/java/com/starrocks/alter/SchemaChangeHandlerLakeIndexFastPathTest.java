@@ -141,7 +141,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             rmStatic.when(RunMode::getCurrentRunMode).thenReturn(RunMode.SHARED_DATA);
             Object result = invoke(m, handler, stubDb(), table,
                     Collections.<AlterClause>singletonList(clause));
@@ -166,7 +167,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
         Method m = privateMethod("tryBuildLakeAddIndexJob", Database.class, OlapTable.class, List.class);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             Object result = invoke(m, handler, stubDb(), table,
                     Collections.<AlterClause>singletonList(clause));
             assertNull(result);
@@ -193,7 +195,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         Method m = privateMethod("tryBuildLakeDropIndexJob", Database.class, OlapTable.class, List.class);
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             Object result = invoke(m, handler, stubDb(), table,
                     Collections.<AlterClause>singletonList(clause));
             assertNotNull(result);
@@ -232,7 +235,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         DropIndexClause clause = new DropIndexClause("ix_a");
         Method m = privateMethod("tryBuildLakeDropIndexJob", Database.class, OlapTable.class, List.class);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             Object result = invoke(m, handler, stubDb(), table,
                     Collections.<AlterClause>singletonList(clause));
             LakeTableDropIndexJob job = (LakeTableDropIndexJob) result;
@@ -258,7 +262,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         Method m = privateMethod("tryBuildLakeAddBloomFilterJob", Database.class, OlapTable.class, Set.class);
         Set<String> added = new HashSet<>(Arrays.asList("c1", "c2"));
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             Object result = invoke(m, handler, stubDb(), table, added);
             assertNotNull(result);
             LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
@@ -281,7 +286,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
         Method m = privateMethod("tryBuildLakeAddBloomFilterJob", Database.class, OlapTable.class, Set.class);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             Object result = invoke(m, handler, stubDb(), table, Collections.singleton("c1"));
             LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
             String fpp = job.getIndexesToAdd().get(0).getIndex_properties().get("bloom_filter_fpp");
@@ -328,7 +334,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         OlapTable table = stubLakeTable("c1");
         Method m = privateMethod("tryBuildLakeDropBloomFilterJob", Database.class, OlapTable.class, Set.class);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             Object result = invoke(m, handler, stubDb(), table, Collections.singleton("c1"));
             assertNotNull(result);
             LakeTableDropIndexJob job = (LakeTableDropIndexJob) result;
