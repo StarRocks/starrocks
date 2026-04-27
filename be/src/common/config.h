@@ -475,6 +475,18 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
+// Whether enable within-fileset parallel multi_get for primary key index in shared-data mode.
+// When a single PersistentIndexSstableFileset has multiple sstables, the per-sstable
+// multi_get calls are independent OSS reads; fanning them out shrinks the cold-rebuild
+// `multi_get_us` (serial OSS RTT) tail. The fanout uses a SEPARATE thread pool from
+// the parent pk_index_execution pool, so it cannot trigger pool-self-submit FATALs.
+CONF_mBool(enable_pk_index_sstable_fanout, "true");
+// The threadpool max thread num for within-fileset parallel multi_get in shared-data mode.
+// 0 means CpuInfo::num_cores() / 2.
+CONF_mInt32(pk_index_sstable_fanout_threadpool_max_threads, "0");
+// Minimum number of distinct sstables in a fileset before fanout is used.
+// Must be >= 2 (no benefit at 1). Default 2 for maximum fanout coverage.
+CONF_mInt32(pk_index_sstable_fanout_min_ssts, "2");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.

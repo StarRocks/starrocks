@@ -74,6 +74,17 @@ CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 
+// Whether enable within-fileset parallel multi_get for primary key index in shared-data mode.
+// When a single PersistentIndexSstableFileset has multiple sstables, the per-sstable
+// multi_get calls are independent OSS reads; fanning them out shrinks the cold-rebuild
+// `multi_get_us` (serial OSS RTT) tail. The fanout uses a SEPARATE thread pool from
+// the parent pk_index_execution pool, so it cannot trigger pool-self-submit FATALs.
+CONF_mBool(enable_pk_index_sstable_fanout, "true");
+
+// Minimum number of distinct sstables in a fileset before fanout is used.
+// Must be >= 2 (no benefit at 1). Default 2 for maximum fanout coverage.
+CONF_mInt32(pk_index_sstable_fanout_min_ssts, "2");
+
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 

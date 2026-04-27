@@ -34,6 +34,7 @@ src/storage/lake/lake_persistent_index.cpp
 src/storage/lake/lake_replication_txn_manager.cpp
 src/storage/lake/local_pk_index_manager.cpp
 src/storage/lake/metacache.cpp
+src/storage/lake/persistent_index_sstable_fileset.cpp
 src/storage/lake/rowset.cpp
 src/storage/lake/tablet_reader.cpp
 src/storage/lake/tablet_reshard.cpp

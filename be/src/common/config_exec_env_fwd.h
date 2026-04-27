@@ -45,6 +45,10 @@ CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
 
+// The threadpool max thread num for within-fileset parallel multi_get in shared-data mode.
+// 0 means CpuInfo::num_cores() / 2.
+CONF_mInt32(pk_index_sstable_fanout_threadpool_max_threads, "0");
+
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 

@@ -377,6 +377,11 @@ public:
 
     ThreadPool* lake_partial_update_thread_pool() { return _lake_partial_update_thread_pool.get(); }
 
+    // Separate pool for within-fileset parallel multi_get fanout. Distinct from
+    // _pk_index_execution_thread_pool so a worker calling into multi_get cannot
+    // re-enter its own pool (avoids the iter-061 reentrance FATAL).
+    ThreadPool* pk_index_sstable_fanout_thread_pool() { return _pk_index_sstable_fanout_thread_pool.get(); }
+
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
@@ -454,6 +459,7 @@ private:
     std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _lake_partial_update_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _pk_index_sstable_fanout_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr = nullptr;

@@ -14,7 +14,16 @@
 
 #include "storage/lake/persistent_index_sstable_fileset.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+
 #include "base/debug/trace.h"
+#include "common/config_exec_env_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/thread/threadpool.h"
+#include "gutil/walltime.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/comparator.h"
@@ -139,11 +148,80 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
             }
         }
     }
-    // 2. multi get from each sstable
-    for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
-        RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));
+    // 2. multi get from each sstable.
+    // The N per-sstable lookups are independent OSS reads. On a cold rebuild they dominate
+    // upsert tail latency (`multi_get_us` ~2-3 s, serial OSS RTT). Fan them out to a
+    // dedicated thread pool so a single fileset's lookups overlap.
+    const size_t n_ssts = sstable_key_indexes_map.size();
+    ThreadPool* fanout_pool = nullptr;
+    auto* exec_env = ExecEnv::GetInstance();
+    if (exec_env != nullptr) {
+        fanout_pool = exec_env->pk_index_sstable_fanout_thread_pool();
     }
-    return Status::OK();
+    const bool can_fanout = fanout_pool != nullptr && config::enable_pk_index_sstable_fanout &&
+                            n_ssts >= static_cast<size_t>(std::max(2, config::pk_index_sstable_fanout_min_ssts));
+
+    if (!can_fanout) {
+        for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
+            RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));
+        }
+        return Status::OK();
+    }
+
+    TRACE_COUNTER_SCOPE_LATENCY_US("fileset_get_fanout_us");
+    TRACE_COUNTER_INCREMENT("fileset_get_fanout_tasks", n_ssts);
+
+    // Per-sstable key sets are disjoint by construction in step 1, so each task writes
+    // to a disjoint slice of `values[key_index]` — no synchronization needed for `values`.
+    // `found_key_indexes` is shared (std::set), so each task accumulates into a local
+    // KeyIndexSet then merges under a mutex.
+    std::mutex out_mu;
+    Status worker_status; // OK by default; first error wins
+    std::atomic<size_t> remaining{n_ssts};
+    std::mutex done_mu;
+    std::condition_variable done_cv;
+
+    auto run_one = [&](PersistentIndexSstable* sst, const KeyIndexSet& sst_keys) {
+        KeyIndexSet local_found;
+        Status st = sst->multi_get(keys, sst_keys, version, values, &local_found);
+        {
+            std::lock_guard<std::mutex> lg(out_mu);
+            if (!st.ok() && worker_status.ok()) {
+                worker_status = st;
+            }
+            if (!local_found.empty()) {
+                found_key_indexes->insert(local_found.begin(), local_found.end());
+            }
+        }
+        if (remaining.fetch_sub(1) == 1) {
+            std::lock_guard<std::mutex> lg(done_mu);
+            done_cv.notify_one();
+        }
+    };
+
+    int64_t inline_start = 0;
+    int64_t inline_us = 0;
+    for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
+        Status submit_st = fanout_pool->submit_func([&run_one, sstable, &sstable_key_indexes]() {
+            run_one(sstable, sstable_key_indexes);
+        });
+        if (!submit_st.ok()) {
+            // Pool full / shutdown / OOM: run inline. `remaining` is still decremented
+            // inside run_one so the wait loop terminates correctly.
+            inline_start = GetCurrentTimeMicros();
+            run_one(sstable, sstable_key_indexes);
+            inline_us += (GetCurrentTimeMicros() - inline_start);
+        }
+    }
+
+    {
+        std::unique_lock<std::mutex> lg(done_mu);
+        done_cv.wait(lg, [&]() { return remaining.load() == 0; });
+    }
+    if (inline_us > 0) {
+        TRACE_COUNTER_INCREMENT("fileset_get_fanout_inline_us", inline_us);
+    }
+    return worker_status;
 }
 
 const std::string& PersistentIndexSstableFileset::standalone_sstable_filename() const {
