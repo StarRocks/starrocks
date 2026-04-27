@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -61,6 +62,10 @@ public class UDFHelper {
     public static final int TYPE_BOOLEAN = 24;
     public static final int TYPE_TIME = 44;
     public static final int TYPE_VARBINARY = 46;
+    public static final int TYPE_DECIMAL32 = 47;
+    public static final int TYPE_DECIMAL64 = 48;
+    public static final int TYPE_DECIMAL128 = 49;
+    public static final int TYPE_DECIMAL256 = 26;
     public static final int TYPE_DATE = 50;
     public static final int TYPE_DATETIME = 51;
 
@@ -76,6 +81,10 @@ public class UDFHelper {
             put(TYPE_VARCHAR, String.class);
             put(TYPE_ARRAY, List.class);
             put(TYPE_MAP, Map.class);
+            put(TYPE_DECIMAL32, BigDecimal.class);
+            put(TYPE_DECIMAL64, BigDecimal.class);
+            put(TYPE_DECIMAL128, BigDecimal.class);
+            put(TYPE_DECIMAL256, BigDecimal.class);
         }
     };
 
@@ -317,6 +326,147 @@ public class UDFHelper {
         getStringBoxedResult(numRows, results, columnAddr);
     }
 
+    public static void getDecimalResultFromBoxedArray(int type, int precision, int scale, int numRows,
+                                                      Object boxedResult, long columnAddr, boolean errorIfOverflow) {
+        if (numRows == 0) {
+            return;
+        }
+        BigDecimal[] column = (BigDecimal[]) boxedResult;
+        byte[] nulls = new byte[numRows];
+        final long[] addrs = getAddrs(columnAddr);
+        // A valid DECIMAL(p, s) value satisfies |unscaled| < 10^p.
+        BigInteger precisionLimit = BigInteger.TEN.pow(precision);
+        switch (type) {
+            case TYPE_DECIMAL32: {
+                int[] dataArr = new int[numRows];
+                for (int i = 0; i < numRows; i++) {
+                    if (column[i] == null) {
+                        nulls[i] = 1;
+                        continue;
+                    }
+                    try {
+                        BigInteger unscaled = rescaleAndCheck(column[i], precision, scale, precisionLimit);
+                        dataArr[i] = unscaled.intValueExact();
+                    } catch (ArithmeticException e) {
+                        if (errorIfOverflow) throw e;
+                        nulls[i] = 1;
+                    }
+                }
+                Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+                Platform.copyMemory(dataArr, Platform.INT_ARRAY_OFFSET, null, addrs[1], numRows * 4L);
+                break;
+            }
+            case TYPE_DECIMAL64: {
+                long[] dataArr = new long[numRows];
+                for (int i = 0; i < numRows; i++) {
+                    if (column[i] == null) {
+                        nulls[i] = 1;
+                        continue;
+                    }
+                    try {
+                        BigInteger unscaled = rescaleAndCheck(column[i], precision, scale, precisionLimit);
+                        dataArr[i] = unscaled.longValueExact();
+                    } catch (ArithmeticException e) {
+                        if (errorIfOverflow) throw e;
+                        nulls[i] = 1;
+                    }
+                }
+                Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+                Platform.copyMemory(dataArr, Platform.LONG_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
+                break;
+            }
+            case TYPE_DECIMAL128:
+                writeWideDecimalResult(numRows, precision, scale, precisionLimit, column, nulls, addrs, 16,
+                        errorIfOverflow);
+                break;
+            case TYPE_DECIMAL256:
+                writeWideDecimalResult(numRows, precision, scale, precisionLimit, column, nulls, addrs, 32,
+                        errorIfOverflow);
+                break;
+            default:
+                throw new UnsupportedOperationException("unsupported decimal type:" + type);
+        }
+    }
+
+    // Round `v` to `scale` fractional digits (HALF_UP) and verify the rescaled unscaled
+    // value fits into DECIMAL(precision, scale). Throws ArithmeticException on overflow so
+    // the caller can choose to rethrow (REPORT_ERROR) or mark the row null (OUTPUT_NULL).
+    // Package-private for direct unit testing.
+    static BigInteger rescaleAndCheck(BigDecimal v, int precision, int scale, BigInteger precisionLimit) {
+        BigInteger unscaled = v.setScale(scale, RoundingMode.HALF_UP).unscaledValue();
+        if (unscaled.abs().compareTo(precisionLimit) >= 0) {
+            throw new ArithmeticException("Value " + v + " out of DECIMAL(" + precision + "," + scale + ") range");
+        }
+        return unscaled;
+    }
+
+    // Single-value helper used by the BE's per-row path (assign_jvalue / cast_to_jvalue).
+    // Rescales `v` to DECIMAL(precision, scale) and returns the unscaled integer as a long
+    // for DECIMAL32/64. Throws ArithmeticException on precision overflow or if the unscaled
+    // value does not fit in a Java long (DECIMAL128/256 should use unscaledLEBytes instead).
+    public static long unscaledLong(BigDecimal v, int precision, int scale) {
+        BigInteger unscaled = rescaleAndCheck(v, precision, scale, BigInteger.TEN.pow(precision));
+        return unscaled.longValueExact();
+    }
+
+    // Single-value helper used by the BE for DECIMAL128/256 per-row paths. Returns `byteWidth`
+    // little-endian sign-extended bytes corresponding to the unscaled integer of
+    // setScale(scale, HALF_UP). Throws ArithmeticException on precision overflow or width
+    // overflow.
+    public static byte[] unscaledLEBytes(BigDecimal v, int precision, int scale, int byteWidth) {
+        BigInteger unscaled = rescaleAndCheck(v, precision, scale, BigInteger.TEN.pow(precision));
+        byte[] be = unscaled.toByteArray();
+        if (be.length > byteWidth) {
+            throw new ArithmeticException("DECIMAL" + (byteWidth * 8) + " overflow: " + v);
+        }
+        byte[] le = new byte[byteWidth];
+        byte signByte = (be[0] < 0) ? (byte) 0xFF : 0;
+        // sign-extend high (little-endian: high bytes at end)
+        for (int j = be.length; j < byteWidth; ++j) {
+            le[j] = signByte;
+        }
+        // copy big-endian magnitude into little-endian positions
+        for (int j = 0; j < be.length; ++j) {
+            le[j] = be[be.length - 1 - j];
+        }
+        return le;
+    }
+
+    // Pack `numRows` BigDecimal values into `byteWidth` little-endian signed-integer bytes.
+    private static void writeWideDecimalResult(int numRows, int precision, int scale, BigInteger precisionLimit,
+                                               BigDecimal[] column, byte[] nulls, long[] addrs, int byteWidth,
+                                               boolean errorIfOverflow) {
+        byte[] dataArr = new byte[numRows * byteWidth];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] == null) {
+                nulls[i] = 1;
+                continue;
+            }
+            try {
+                BigInteger unscaled = rescaleAndCheck(column[i], precision, scale, precisionLimit);
+                byte[] be = unscaled.toByteArray();
+                if (be.length > byteWidth) {
+                    throw new ArithmeticException("DECIMAL" + (byteWidth * 8) + " overflow: " + column[i]);
+                }
+                int base = i * byteWidth;
+                byte signByte = (be[0] < 0) ? (byte) 0xFF : 0;
+                // sign-extend high (little-endian: high bytes at end)
+                for (int j = be.length; j < byteWidth; ++j) {
+                    dataArr[base + j] = signByte;
+                }
+                // copy big-endian magnitude into little-endian positions
+                for (int j = 0; j < be.length; ++j) {
+                    dataArr[base + j] = be[be.length - 1 - j];
+                }
+            } catch (ArithmeticException e) {
+                if (errorIfOverflow) throw e;
+                nulls[i] = 1;
+            }
+        }
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+        Platform.copyMemory(dataArr, Platform.BYTE_ARRAY_OFFSET, null, addrs[1], numRows * (long) byteWidth);
+    }
+
     private static void copyDataToBinaryColumn(int numRows, byte[][] byteRes, int[] offsets, byte[] nulls,
                                                long columnAddr) {
         byte[] bytes = new byte[offsets[numRows - 1]];
@@ -452,7 +602,7 @@ public class UDFHelper {
         Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
 
         resize(elementAddr, offsets[numRows - 1]);
-        getResultFromBoxedArray(elementType, offsets[numRows - 1], elements, elementAddr);
+        writeElementsByType(elementType, offsets[numRows - 1], elements, elementAddr);
     }
 
     public static void getResultFromMapArray(int numRows, Map<?, ?>[] maps, long columnAddr) {
@@ -497,8 +647,28 @@ public class UDFHelper {
         // memcpy to offset array
         Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
 
-        getResultFromBoxedArray(keyType, offsets[numRows - 1], keys, keyAddr);
-        getResultFromBoxedArray(valueType, offsets[numRows - 1], values, valueAddr);
+        writeElementsByType(keyType, offsets[numRows - 1], keys, keyAddr);
+        writeElementsByType(valueType, offsets[numRows - 1], values, valueAddr);
+    }
+
+    // Element-write dispatcher used by ARRAY / MAP outputs. For DECIMAL element columns
+    // we look up precision/scale from the column's getAddrs() tail slots (filled by the
+    // BE-side GetColumnAddrVistor for DecimalV3Column) and route through the scale-aware
+    // helper. Everything else falls back to the regular getResultFromBoxedArray.
+    private static void writeElementsByType(int elementType, int numRows, Object elements, long elementAddr) {
+        if (elementType == TYPE_DECIMAL32 || elementType == TYPE_DECIMAL64 || elementType == TYPE_DECIMAL128
+                || elementType == TYPE_DECIMAL256) {
+            long[] elemAddrs = getAddrs(elementAddr);
+            int precision = (int) elemAddrs[2];
+            int scale = (int) elemAddrs[3];
+            // Nested-element overflow always reports an error: collection writers cannot
+            // null individual elements without breaking the parent offsets, and the FE has
+            // already validated declared precision/scale.
+            getDecimalResultFromBoxedArray(elementType, precision, scale, numRows, elements, elementAddr,
+                    /*errorIfOverflow=*/true);
+            return;
+        }
+        getResultFromBoxedArray(elementType, numRows, elements, elementAddr);
     }
 
     public static void getResultFromBoxedArray(int type, int numRows, Object boxedResult, long columnAddr) {
@@ -799,6 +969,66 @@ public class UDFHelper {
         byte[] nullBytes = new byte[rows];
         nullBuff.get(nullBytes);
         return nullBytes;
+    }
+
+    // Single JNI entry point for all DECIMAL input conversions. The BE passes the logical
+    // type; DECIMAL32/64 use BigDecimal.valueOf(long, scale) via the narrow helper, while
+    // DECIMAL128/256 reverse their little-endian byte layout into a BigInteger via the wide
+    // helper.
+    public static Object[] createBoxedDecimalArray(int type, int numRows, int scale, ByteBuffer nullBuffer,
+                                                   ByteBuffer dataBuffer) {
+        byte[] nullArr = (nullBuffer != null) ? getNullData(nullBuffer, numRows) : null;
+        switch (type) {
+            case TYPE_DECIMAL32: {
+                int[] dataArr = new int[numRows];
+                dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(dataArr);
+                BigDecimal[] res = new BigDecimal[numRows];
+                for (int i = 0; i < numRows; ++i) {
+                    if (nullArr == null || nullArr[i] == 0) {
+                        res[i] = BigDecimal.valueOf(dataArr[i], scale);
+                    }
+                }
+                return res;
+            }
+            case TYPE_DECIMAL64: {
+                long[] dataArr = new long[numRows];
+                dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asLongBuffer().get(dataArr);
+                BigDecimal[] res = new BigDecimal[numRows];
+                for (int i = 0; i < numRows; ++i) {
+                    if (nullArr == null || nullArr[i] == 0) {
+                        res[i] = BigDecimal.valueOf(dataArr[i], scale);
+                    }
+                }
+                return res;
+            }
+            case TYPE_DECIMAL128:
+                return readWideDecimalArray(numRows, scale, nullArr, dataBuffer, 16);
+            case TYPE_DECIMAL256:
+                return readWideDecimalArray(numRows, scale, nullArr, dataBuffer, 32);
+            default:
+                throw new UnsupportedOperationException("unsupported decimal type: " + type);
+        }
+    }
+
+    // Turn `numRows` little-endian signed-integer values of width `byteWidth` into BigDecimals.
+    private static BigDecimal[] readWideDecimalArray(int numRows, int scale, byte[] nullArr, ByteBuffer dataBuffer,
+                                                     int byteWidth) {
+        byte[] raw = new byte[numRows * byteWidth];
+        dataBuffer.get(raw);
+        BigDecimal[] res = new BigDecimal[numRows];
+        byte[] be = new byte[byteWidth];
+        for (int i = 0; i < numRows; ++i) {
+            if (nullArr != null && nullArr[i] != 0) {
+                continue;
+            }
+            int base = i * byteWidth;
+            // little-endian -> big-endian for BigInteger (sign is preserved from the MSB).
+            for (int j = 0; j < byteWidth; ++j) {
+                be[j] = raw[base + byteWidth - 1 - j];
+            }
+            res[i] = new BigDecimal(new BigInteger(be), scale);
+        }
+        return res;
     }
 
     public static Object[] createBoxedStringArray(int numRows, ByteBuffer nullBuffer, ByteBuffer offsetBuffer,

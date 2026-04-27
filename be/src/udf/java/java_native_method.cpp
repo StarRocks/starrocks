@@ -21,6 +21,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/decimalv3_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -61,6 +62,22 @@ public:
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.immutable_data().data());
+        return Status::OK();
+    }
+
+    // DecimalV3Column<T> is a sibling of FixedLengthColumn<T> (both inherit from
+    // FixedLengthColumnBase), so the FixedLengthColumn overload above does not match.
+    // Explicit specialization keeps DECIMAL columns reachable from native helpers like
+    // getAddrs that the Java side calls for DECIMAL UDF return paths.
+    //
+    // Layout: addrs[0]=null, addrs[1]=data, addrs[2]=precision, addrs[3]=scale.
+    // The trailing precision/scale slots are unused by other column shapes, so the Java
+    // side can pull them out for DECIMAL element write-back without a separate JNI call.
+    template <typename T>
+    Status do_visit(const DecimalV3Column<T>& column) {
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.immutable_data().data());
+        _jarr[_idx++] = static_cast<int64_t>(column.precision());
+        _jarr[_idx++] = static_cast<int64_t>(column.scale());
         return Status::OK();
     }
 
@@ -118,6 +135,22 @@ public:
             return Status::OK();
         }
         return Status::NotSupported("unsupported UDF type");
+    }
+
+    template <typename T>
+    Status do_visit(const DecimalV3Column<T>& column) {
+        if constexpr (std::is_same_v<T, int32_t>) {
+            *_result = TYPE_DECIMAL32;
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            *_result = TYPE_DECIMAL64;
+        } else if constexpr (std::is_same_v<T, int128_t>) {
+            *_result = TYPE_DECIMAL128;
+        } else if constexpr (std::is_same_v<T, int256_t>) {
+            *_result = TYPE_DECIMAL256;
+        } else {
+            return Status::NotSupported("unsupported decimal width");
+        }
+        return Status::OK();
     }
 
     template <typename T>

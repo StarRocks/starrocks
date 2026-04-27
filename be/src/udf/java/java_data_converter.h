@@ -50,6 +50,11 @@ public:
 StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, const Column* col, int row_num);
 
 void release_jvalue(bool is_boxed, jvalue val);
-Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val);
+
+// Append a Java-side jvalue to `col`, converting DECIMAL via the column's declared
+// precision/scale. When the value overflows, `error_if_overflow == true` (default)
+// returns an error Status (REPORT_ERROR), `false` appends NULL (OUTPUT_NULL).
+Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val,
+                     bool error_if_overflow = true);
 Status check_type_matched(const TypeDescriptor& type_desc, jobject val);
 } // namespace starrocks

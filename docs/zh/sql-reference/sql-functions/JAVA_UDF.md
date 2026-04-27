@@ -547,18 +547,28 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 >
 > 当前 Scalar UDF 只支持非嵌套的 ARRAY 和 MAP 的参数/返回类型。
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
-| ARRAY          | java.util.List    |
-| Map            | java.util.Map     |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| ARRAY                                          | java.util.List        |
+| Map                                            | java.util.Map         |
+
+> **说明**
+>
+> 对于 `DECIMAL` 参数，UDF 返回的 BigDecimal 在写回列前会按照列声明的
+> `(precision, scale)` 使用 `RoundingMode.HALF_UP` 重新缩放。如果重新缩放后的
+> 值无法装入声明的 `(precision, scale)`，行为由会话变量 `overflow_mode` 决定：
+>
+> - `OUTPUT_NULL`（默认）：该行写入 `NULL`。
+> - `REPORT_ERROR`：查询以 `ArithmeticException` 错误终止。
 
 ## 参数配置
 
