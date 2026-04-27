@@ -2349,14 +2349,12 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         // Either way, the distance column is appended to `chunk`, which always has
         // the planner-allocated distance slot.
         auto vec_col_id = _vector_index_ctx->vector_data_column_id;
-        ColumnPtr vector_column = chunk->is_cid_exist(vec_col_id)
-                                          ? chunk->get_column_by_id(vec_col_id)
-                                          : _context->_dict_chunk->get_column_by_id(vec_col_id);
+        ColumnPtr vector_column = chunk->is_cid_exist(vec_col_id) ? chunk->get_column_by_id(vec_col_id)
+                                                                  : _context->_dict_chunk->get_column_by_id(vec_col_id);
         DCHECK_EQ(vector_column->size(), chunk->num_rows())
                 << "brute-force vector column row count must match chunk; row alignment was lost";
         if (UNLIKELY(vector_column->size() != chunk->num_rows())) {
-            return Status::InternalError(
-                    "brute-force vector column row count does not match chunk row count");
+            return Status::InternalError("brute-force vector column row count does not match chunk row count");
         }
         _compute_brute_force_distances(vector_column.get(), chunk);
 
