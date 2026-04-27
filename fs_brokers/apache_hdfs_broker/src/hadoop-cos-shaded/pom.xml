@@ -49,29 +49,14 @@ under the License.
                     <groupId>org.json</groupId>
                     <artifactId>json</artifactId>
                 </exclusion>
-                <exclusion>
-                    <groupId>com.qcloud</groupId>
-                    <artifactId>cos_api-bundle</artifactId>
-                </exclusion>
             </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/cos_api-bundle -->
         <dependency>
             <groupId>com.qcloud</groupId>
-            <artifactId>cos_api</artifactId>
+            <artifactId>cos_api-bundle</artifactId>
             <version>5.6.137.2</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-core</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/cosn-ranger-interface -->
@@ -122,6 +107,12 @@ under the License.
                             <artifact>com.qcloud:hadoop-ranger-client-for-hadoop</artifact>
                             <excludes>
                                 <exclude>META-INF/maven/io.netty/netty/**</exclude>
+                            </excludes>
+                        </filter>
+                        <filter>
+                            <artifact>com.qcloud:cos_api-bundle</artifact>
+                            <excludes>
+                                <exclude>META-INF/maven/com.fasterxml.jackson.core/jackson-core/**</exclude>
                             </excludes>
                         </filter>
                     </filters>
