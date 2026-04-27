@@ -2270,14 +2270,16 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         // column from output_schema, the vector data column lives in
         // _dict_chunk (un-swapped by _build_final_chunk). It must stay
         // row-aligned with `chunk` for the later distance compute, so apply
-        // the same selection here.
+        // the same selection here. (filter_range is non-const, columns are
+        // held as Cow ImmutPtr — same as Chunk::filter_range, use
+        // as_mutable_raw_ptr to mutate in place.)
         Column* brute_force_vec_col = nullptr;
         if (_vector_index_ctx != nullptr && _vector_index_ctx->use_brute_force) {
             auto vec_cid = _vector_index_ctx->vector_data_column_id;
             if (!chunk->is_cid_exist(vec_cid)) {
-                auto col = _context->_dict_chunk->get_column_by_id(vec_cid);
+                const auto& col = _context->_dict_chunk->get_column_by_id(vec_cid);
                 if (col != nullptr && col->size() == old_sz) {
-                    brute_force_vec_col = col.get();
+                    brute_force_vec_col = col->as_mutable_raw_ptr();
                 }
             }
         }
