@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
@@ -72,7 +73,7 @@ Status CompactionResultManager::scan_on_startup() {
 
     for (const auto& root : _root_dirs) {
         std::string dir = join_path(root, kSubDir);
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dir));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dir));
         if (!fs->path_exists(dir).ok()) {
             // Lazy-create on first use; nothing to scan.
             continue;
@@ -175,7 +176,7 @@ Status CompactionResultManager::append_result(const CompactionResultPB& result) 
         RETURN_IF_ERROR(wf->append(serialized));
         RETURN_IF_ERROR(wf->close());
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dir));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dir));
     RETURN_IF_ERROR(fs->rename_file(tmp_path, final_path));
 
     {
@@ -274,7 +275,7 @@ Status CompactionResultManager::delete_results(int64_t tablet_id, const std::vec
     for (const auto& p : paths_to_delete) {
         int64_t sz = 0;
         // Best-effort size accounting: read size before delete.
-        auto fs_or = FileSystem::CreateSharedFromString(p);
+        auto fs_or = FileSystemFactory::CreateSharedFromString(p);
         if (fs_or.ok()) {
             auto sz_or = (*fs_or)->get_file_size(p);
             if (sz_or.ok()) sz = sz_or.value();
