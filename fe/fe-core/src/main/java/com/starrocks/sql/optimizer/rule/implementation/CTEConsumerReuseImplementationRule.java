@@ -45,7 +45,7 @@ public class CTEConsumerReuseImplementationRule extends ImplementationRule {
                 Maps.newHashMap(logical.getCteOutputColumnRefMap());
         PhysicalCTEConsumeOperator consume =
                 new PhysicalCTEConsumeOperator(logical.getCteId(), cteOutputColumnRefMap,
-                        logical.getLimit(), logical.getPredicate(), logical.getProjection());
+                        logical.getLimit(), logical.getPredicate(), logical.getProjection(), Map.of());
         return Lists.newArrayList(OptExpression.create(consume));
     }
 }

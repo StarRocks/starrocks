@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -613,6 +614,28 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
         builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
         return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(consume);
+        Map<ColumnRefOperator, ScalarOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
+                        (e) -> new Pair<>(
+                                context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
+                                e.getValue().isColumnRef()
+                                        && context.stringRefToDictRefMap.containsKey((ColumnRefOperator) e.getValue())
+                                ? context.stringRefToDictRefMap.get((ColumnRefOperator) e.getValue()) : e.getValue()))
+                .collect(Collectors.toMap(p -> p.first, p -> p.second));
+        PhysicalCTEConsumeOperator newOp = new PhysicalCTEConsumeOperator(
+                consume.getCteId(),
+                newMap,
+                consume.getLimit(),
+                rewritePredicate(consume.getPredicate(), info.outputStringColumns),
+                rewriteProjection(consume.getProjection(), info.outputStringColumns),
+                computeDictExpr(fragmentUseDictExprs)
+        );
+        return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
     }
 
     @NotNull
