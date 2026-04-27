@@ -1308,9 +1308,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // tail. `pk_index_cold_rebuild_max_concurrent <= 0` disables the gate.
     const int cold_rebuild_cap = config::pk_index_cold_rebuild_max_concurrent;
     const int64_t admission_wait_us = ColdRebuildAdmission::instance().acquire(cold_rebuild_cap);
-    DeferOp release_admission([cold_rebuild_cap]() {
-        ColdRebuildAdmission::instance().release(cold_rebuild_cap);
-    });
+    DeferOp release_admission([cold_rebuild_cap]() { ColdRebuildAdmission::instance().release(cold_rebuild_cap); });
     TRACE_COUNTER_INCREMENT("cold_rebuild_admission_wait_us", admission_wait_us);
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
