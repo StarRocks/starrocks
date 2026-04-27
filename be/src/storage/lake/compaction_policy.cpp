@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include "storage/lake/rowset.h"
+
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
@@ -569,6 +571,31 @@ double size_tiered_compaction_score(const std::shared_ptr<const TabletMetadataPB
 }
 
 CompactionPolicy::~CompactionPolicy() = default;
+
+StatusOr<std::vector<RowsetPtr>> CompactionPolicy::pick_rowsets_with_limit(
+        const std::unordered_set<uint32_t>& excluded_rowset_ids, int64_t max_input_bytes) {
+    // Default implementation: pick_rowsets() then post-filter. Subclasses can
+    // override for an integrated, score-aware selection that benefits from the
+    // exclusion set during scoring.
+    ASSIGN_OR_RETURN(auto picked, pick_rowsets());
+    std::vector<RowsetPtr> result;
+    result.reserve(picked.size());
+    int64_t total_bytes = 0;
+    for (const auto& r : picked) {
+        if (excluded_rowset_ids.count(r->id()) > 0) {
+            continue;
+        }
+        int64_t rsz = r->data_size();
+        if (max_input_bytes > 0 && total_bytes > 0 && total_bytes + rsz > max_input_bytes) {
+            // Stop accumulating; but if a single rowset exceeds the cap and is
+            // the first, include it anyway so progress is possible.
+            break;
+        }
+        result.push_back(r);
+        total_bytes += rsz;
+    }
+    return result;
+}
 
 StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) {
     // If there are no rowsets, it could be cloud native index compaction, default to CLOUD_NATIVE_INDEX_COMPACTION

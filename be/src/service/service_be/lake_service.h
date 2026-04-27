@@ -56,6 +56,14 @@ public:
     void compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
                  ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) override;
 
+    // Autonomous compaction COLLECT_AND_PUBLISH path: collect locally-cached
+    // CompactionResultPB files for each tablet (filtered by visible_version),
+    // assemble OpParallelCompaction TxnLog when present, then publish_version
+    // with force_publish=true to keep all tablets at the same version.
+    void compact_collect_and_publish(::google::protobuf::RpcController* controller,
+                                     const ::starrocks::CompactRequest* request,
+                                     ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done);
+
     void aggregate_compact(::google::protobuf::RpcController* controller,
                            const ::starrocks::AggregateCompactRequest* request, ::starrocks::CompactResponse* response,
                            ::google::protobuf::Closure* done) override;

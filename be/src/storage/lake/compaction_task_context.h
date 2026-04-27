@@ -31,6 +31,7 @@ struct OlapWriterStatistics;
 
 namespace starrocks::lake {
 
+class CompactionResultManager;
 class CompactionTaskCallback;
 class Progress {
 public:
@@ -138,6 +139,22 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     bool has_upper_bound = false;
     bool is_first_range = false;
     bool is_last_range = false;
+
+    // Autonomous compaction: when true, compaction_task does NOT write the txn log
+    // to remote storage. Instead, after the task completes, it persists the result
+    // locally via CompactionResultManager so that a later COLLECT_AND_PUBLISH
+    // request can merge and publish it. Mutually compatible with skip_write_txnlog
+    // (which only suppresses the remote write); this extra flag triggers the
+    // local persistence step.
+    bool write_to_local_result = false;
+    // The base_version (== op_compaction.compact_version) recorded when the
+    // compaction task started. Stored separately in CompactionResultPB so that
+    // the manager can index/filter without parsing OpCompaction.
+    int64_t local_result_base_version = 0;
+    // Non-owning pointer to the BE-global CompactionResultManager. Plumbed in by
+    // the task creator (compaction_scheduler / LakeCompactionManager) so the
+    // task implementations stay free of global-singleton dependencies.
+    CompactionResultManager* result_manager = nullptr;
 };
 
 } // namespace starrocks::lake

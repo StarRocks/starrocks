@@ -25,6 +25,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
@@ -111,6 +112,10 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     if (_context->skip_write_txnlog) {
         // return txn_log to caller later
         _context->txn_log = txn_log;
+    } else if (_context->write_to_local_result) {
+        _context->txn_log = txn_log;
+        RETURN_IF_ERROR(persist_compaction_result_from_txn_log(_context->result_manager, _tablet.id(),
+                                                                _context->local_result_base_version, *txn_log));
     } else {
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }

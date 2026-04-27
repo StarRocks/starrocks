@@ -115,7 +115,165 @@ public class CompactionScheduler extends Daemon {
         if (stateMgr.isLeader() && stateMgr.isReady()) {
             abortStaleCompaction(deletedPartitionIdentifiers);
             scheduleNewCompaction();
+            if (Config.enable_lake_autonomous_compaction) {
+                if (Config.enable_file_bundling) {
+                    // Aggregate publish path uses a different RPC (aggregate_compact /
+                    // aggregate_publish_version) that the autonomous COLLECT_AND_PUBLISH
+                    // flow does not understand. Mixing both would cause two publish
+                    // sources to race for the same partition. Log and skip.
+                    LOG.warn("enable_lake_autonomous_compaction is ON but enable_file_bundling is also ON; "
+                            + "skipping autonomous publish to avoid conflicts. Disable file bundling to use autonomous compaction.");
+                } else {
+                    schedulePartitionPublish();
+                }
+            }
             history.changeMaxSize(Config.lake_compaction_history_size);
+        }
+    }
+
+    /**
+     * For each partition not currently busy with a COMPACT_AND_PUBLISH job, evaluate the
+     * three autonomous-compaction trigger strategies. If any matches, build and dispatch
+     * a PUBLISH_ONLY job that asks every owning BE to drain its local CompactionResultPB
+     * cache for this partition and publish_version with force_publish=true so all tablets
+     * reach the same new_version even when some have no local results.
+     */
+    private void schedulePartitionPublish() {
+        for (PartitionIdentifier partition : compactionManager.getAllPartitions()) {
+            if (runningCompactions.containsKey(partition)) {
+                continue; // partition is busy with COMPACT_AND_PUBLISH or an earlier PUBLISH_ONLY
+            }
+            if (disabledIds.contains(partition.getTableId())) {
+                continue;
+            }
+            PartitionStatistics stats = compactionManager.getStatistics(partition);
+            if (stats == null) {
+                continue;
+            }
+            PartitionStatisticsSnapshot snapshot = stats.getSnapshot();
+            long currentVersion = stats.getCurrentVersion() == null ? 0L : stats.getCurrentVersion().getVersion();
+            long lastPublishVersion = stats.getLastPublishVisibleVersion();
+            long versionDelta = currentVersion - lastPublishVersion;
+            if (versionDelta <= 0) {
+                continue;
+            }
+            double lastScore = stats.getLastPublishScore();
+            long now = System.currentTimeMillis();
+            long timeSinceLastPublish = now - stats.getLastPublishTimeMs();
+
+            boolean trigger = false;
+            String reason = null;
+            if (versionDelta >= Config.lake_compaction_version_delta_threshold) {
+                trigger = true;
+                reason = "version_delta>=" + Config.lake_compaction_version_delta_threshold;
+            } else if (lastScore > Config.lake_compaction_high_score_threshold &&
+                    versionDelta >= Config.lake_compaction_min_version_delta_for_high_score) {
+                trigger = true;
+                reason = "high_score(" + lastScore + ")&&version_delta>="
+                        + Config.lake_compaction_min_version_delta_for_high_score;
+            } else if (timeSinceLastPublish > Config.lake_compaction_max_interval_ms) {
+                trigger = true;
+                reason = "max_interval_ms exceeded";
+            }
+            if (!trigger) {
+                continue;
+            }
+
+            CompactionJob job = startPublishOnly(snapshot, currentVersion, reason);
+            if (job != null) {
+                stats.setLastPublishVisibleVersion(currentVersion);
+                stats.setLastPublishTimeMs(now);
+                if (snapshot.getCompactionScore() != null) {
+                    stats.setLastPublishScore(snapshot.getCompactionScore().getMax());
+                }
+                runningCompactions.put(partition, job);
+            }
+        }
+    }
+
+    /**
+     * Bring up a PUBLISH_ONLY {@link CompactionJob}: open a transaction, build per-BE
+     * CompactRequest in COLLECT_AND_PUBLISH mode, dispatch them. Returns null on failure;
+     * caller must NOT register a null result.
+     */
+    private CompactionJob startPublishOnly(PartitionStatisticsSnapshot snapshot, long visibleVersion, String reason) {
+        PartitionIdentifier partitionIdentifier = snapshot.getPartition();
+        Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
+        if (db == null) {
+            compactionManager.removePartition(partitionIdentifier);
+            return null;
+        }
+        long txnId;
+        long newVersion;
+        OlapTable table;
+        PhysicalPartition partition;
+        Map<Long, List<Long>> beToTablets;
+        ComputeResource computeResource;
+        Warehouse warehouse;
+        try {
+            computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getCompactionComputeResource(partitionIdentifier.getTableId());
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(computeResource.getWarehouseId());
+        } catch (ErrorReportException e) {
+            LOG.debug("Resolve warehouse for autonomous publish failed partition={} err={}",
+                    partitionIdentifier, e.getMessage());
+            return null;
+        }
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            table = (OlapTable) stateMgr.getLocalMetastore()
+                    .getTable(db.getId(), partitionIdentifier.getTableId());
+            if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                // Don't autonomous-publish during schema change; cross-version apply with
+                // alter_metadata is unsupported and FE-side schema change uses its own version sequence.
+                return null;
+            }
+            partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
+            if (partition == null) {
+                compactionManager.removePartition(partitionIdentifier);
+                return null;
+            }
+            beToTablets = collectPartitionTablets(partition, computeResource);
+            if (beToTablets.isEmpty()) {
+                return null;
+            }
+            txnId = beginTransaction(partitionIdentifier, partition, computeResource);
+            // Existing flow: visible_version moves forward by exactly one per transaction.
+            // The FE transaction manager assigns the actual commit version internally;
+            // BE only needs to know base_version (visible) and new_version for publish_version.
+            newVersion = visibleVersion + 1;
+            partition.setMinRetainVersion(visibleVersion);
+        } catch (RunningTxnExceedException | AnalysisException | LabelAlreadyUsedException
+                | DuplicatedRequestException e) {
+            LOG.warn("Fail to begin txn for autonomous publish partition={} reason={} err={}",
+                    partitionIdentifier, reason, e.getMessage());
+            return null;
+        } catch (Throwable e) {
+            LOG.warn("Unexpected error in autonomous publish setup partition={} err={}", partitionIdentifier,
+                    e.getMessage());
+            return null;
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, /*allowPartialSuccess=*/true,
+                computeResource, warehouse.getName());
+        job.setJobType(CompactionJob.JobType.PUBLISH_ONLY);
+        try {
+            List<CompactionTask> tasks = createPublishOnlyTasks(visibleVersion, newVersion, beToTablets, txnId);
+            for (CompactionTask t : tasks) {
+                t.sendRequest();
+            }
+            job.setTasks(tasks);
+            LOG.debug("Started PUBLISH_ONLY job partition={} reason={} visible={} new={} txn={}",
+                    partitionIdentifier, reason, visibleVersion, newVersion, txnId);
+            return job;
+        } catch (Exception e) {
+            LOG.warn("Fail to dispatch PUBLISH_ONLY tasks partition={} err={}", partitionIdentifier, e.getMessage());
+            abortTransactionIgnoreError(job, e.getMessage());
+            return null;
         }
     }
 
@@ -143,8 +301,13 @@ public class CompactionScheduler extends Daemon {
                         taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS)) {
                     job.getPartition().setMinRetainVersion(0);
                     try {
-                        commitCompaction(partition, job,
-                                taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS /* forceCommit */);
+                        // PUBLISH_ONLY jobs always need force_publish=true:
+                        // tablets without local results have no TxnLog and rely on the
+                        // ignore_txn_log + observe_empty_compaction path on the BE to
+                        // bump version uniformly with the rest of the partition.
+                        boolean forceCommit = (taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS) ||
+                                (job.getJobType() == CompactionJob.JobType.PUBLISH_ONLY);
+                        commitCompaction(partition, job, forceCommit);
                         if (!job.transactionHasCommitted()) { // should not happen
                             errorMsg = String.format("Fail to commit transaction %s", job.getDebugString());
                             LOG.error(errorMsg);
@@ -428,6 +591,49 @@ public class CompactionScheduler extends Daemon {
                 parallelConfig.maxBytesPerSubtask = 0L;
                 request.parallelConfig = parallelConfig;
             }
+
+            // Autonomous compaction: redirect EXECUTE-side compaction output to BE-local result
+            // files; an upcoming PUBLISH_ONLY job will merge & publish them.
+            if (Config.enable_lake_autonomous_compaction) {
+                request.writeToLocalResult = true;
+            }
+
+            CompactionTask task = new CompactionTask(node.getId(), service, request);
+            tasks.add(task);
+        }
+        return tasks;
+    }
+
+    /**
+     * Build PUBLISH_ONLY tasks: one CompactRequest per BE that owns tablets in this partition,
+     * with mode=COLLECT_AND_PUBLISH. BE will gather locally-cached CompactionResultPB files
+     * (filtered by visible_version) into OpParallelCompaction and publish_version with
+     * force_publish=true so all tablets reach new_version uniformly.
+     */
+    @NotNull
+    private List<CompactionTask> createPublishOnlyTasks(long visibleVersion, long newVersion,
+            Map<Long, List<Long>> beToTablets, long txnId) throws StarRocksException, RpcException {
+        List<CompactionTask> tasks = new ArrayList<>();
+        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
+            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+            if (node == null) {
+                throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
+            }
+            LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+
+            CompactRequest request = new CompactRequest();
+            request.tabletIds = entry.getValue();
+            request.txnId = txnId;
+            // mode requires both visible_version and new_version
+            request.mode = com.starrocks.proto.CompactionMode.COLLECT_AND_PUBLISH;
+            request.visibleVersion = visibleVersion;
+            request.newVersion = newVersion;
+            // version field is unused by BE in COLLECT_AND_PUBLISH path but the proto needs it set
+            // to keep older validation happy; we use visibleVersion.
+            request.version = visibleVersion;
+            request.timeoutMs = Config.lake_compaction_publish_timeout_seconds * 1000L;
+            request.allowPartialSuccess = true;
+            request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);

@@ -33,6 +33,21 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class CompactionJob {
+    /**
+     * COMPACT_AND_PUBLISH: legacy path. FE picks tablets, BE runs compaction
+     *   AND writes TxnLog to remote storage, FE publishes.
+     * PUBLISH_ONLY: autonomous path. BE has already executed compaction(s)
+     *   independently and persisted CompactionResultPB locally. The job sends
+     *   a single CompactRequest with mode=COLLECT_AND_PUBLISH per BE; the BE
+     *   assembles OpParallelCompaction TxnLogs from local results and invokes
+     *   publish_version with force_publish=true so all tablets in the
+     *   partition reach the same new_version uniformly.
+     */
+    public enum JobType {
+        COMPACT_AND_PUBLISH,
+        PUBLISH_ONLY
+    }
+
     private static final Logger LOG = LogManager.getLogger(CompactionJob.class);
     private final Database db;
     private final Table table;
@@ -46,6 +61,7 @@ public class CompactionJob {
     private boolean allowPartialSuccess = false;
     private final ComputeResource computeResource;
     private String warehouse;
+    private JobType jobType = JobType.COMPACT_AND_PUBLISH;
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
             boolean allowPartialSuccess, ComputeResource computeResource, String warehouse) {
@@ -59,6 +75,14 @@ public class CompactionJob {
         this.allowPartialSuccess = allowPartialSuccess;
         this.computeResource = computeResource;
         this.warehouse = warehouse;
+    }
+
+    public JobType getJobType() {
+        return jobType;
+    }
+
+    public void setJobType(JobType jobType) {
+        this.jobType = Objects.requireNonNull(jobType, "jobType is null");
     }
 
     Database getDb() {

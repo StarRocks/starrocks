@@ -193,7 +193,9 @@ set(STORAGE_FILES
     lake/async_delta_writer.cpp
     lake/async_file_deleter.cpp
     lake/compaction_policy.cpp
+    lake/compaction_result_manager.cpp
     lake/compaction_scheduler.cpp
+    lake/lake_compaction_manager.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
     lake/tablet_parallel_compaction_manager.cpp

@@ -1336,6 +1336,17 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
+// ===== Autonomous compaction (lake mode) =====
+// Master switch for BE-driven autonomous compaction. When false, BE behavior is unchanged.
+CONF_mBool(enable_lake_autonomous_compaction, "false");
+// Global cap for concurrent autonomous compaction tasks across the BE.
+CONF_mInt32(lake_autonomous_compaction_max_concurrent_tasks, "32");
+// Per-tablet cap for concurrent autonomous compaction tasks.
+CONF_mInt32(lake_autonomous_compaction_max_tasks_per_tablet, "3");
+// Score threshold for enqueueing a tablet into the autonomous scheduler.
+CONF_mDouble(lake_autonomous_compaction_score_threshold, "10.0");
+// Hard cap on local result directory bytes per BE; new results refused beyond this.
+CONF_mInt64(lake_autonomous_compaction_local_result_dir_max_bytes, "1073741824");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");

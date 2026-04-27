@@ -397,7 +397,20 @@ message TxnLogPB {
 }
 
 message CombinedTxnLogPB {
-    repeated TxnLogPB txn_logs = 1;    
+    repeated TxnLogPB txn_logs = 1;
+}
+
+// Locally-cached compaction result produced by autonomous compaction on the BE.
+// One file per finished compaction task; consumed by COLLECT_AND_PUBLISH later.
+message CompactionResultPB {
+    optional int64 tablet_id = 1;
+    // Equal to the value of op_compaction.compact_version; duplicated for fast scan.
+    optional int64 base_version = 2;
+    // Embedded OpCompaction so we can reuse existing apply paths verbatim.
+    optional TxnLogPB.OpCompaction op_compaction = 3;
+    optional int64 finish_time_ms = 4;
+    // Locally unique within tablet, used in the file name.
+    optional int64 result_id = 5;
 }
 
 message TabletMetadataLockPB {}

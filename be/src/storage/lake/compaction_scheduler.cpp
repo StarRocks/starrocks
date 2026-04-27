@@ -40,6 +40,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/thrift_rpc_helper.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/lake_compaction_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -129,6 +130,20 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     if (context->skip_write_txnlog && context->txn_log != nullptr) {
         // context->txn_log could be nullptr if the task is failed before writing txn log.
         _response->add_txn_logs()->CopyFrom(*context->txn_log);
+    }
+    // Autonomous compaction: release running_inputs reservation and trigger the
+    // next round for this tablet. Done outside the lock-protected fields so the
+    // notification doesn't deadlock with the dispatcher.
+    if (context->write_to_local_result) {
+        std::vector<uint32_t> consumed;
+        if (context->txn_log != nullptr && context->txn_log->has_op_compaction()) {
+            for (uint32_t rid : context->txn_log->op_compaction().input_rowsets()) {
+                consumed.push_back(rid);
+            }
+        }
+        LakeCompactionManager::instance()->notify_task_finished(context->tablet_id, consumed);
+        // Self-continuation: there might still be excluded-set-eligible rowsets.
+        LakeCompactionManager::instance()->update_tablet_async(context->tablet_id);
     }
     DCHECK(_request != nullptr);
     _status.update(context->status);
@@ -284,6 +299,14 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                request->force_base_compaction(),
                                                                request->skip_write_txnlog(), cb);
+        // Autonomous compaction EXECUTE-side: divert output to local result file.
+        // base_version for the result equals request->version() (== the visible
+        // version at the moment FE issued the compaction).
+        if (request->write_to_local_result()) {
+            context->write_to_local_result = true;
+            context->local_result_base_version = request->version();
+            context->result_manager = LakeCompactionManager::instance()->result_manager();
+        }
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }
@@ -366,6 +389,11 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
             auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                    request->force_base_compaction(),
                                                                    request->skip_write_txnlog(), callback);
+            if (request->write_to_local_result()) {
+                context->write_to_local_result = true;
+                context->local_result_base_version = request->version();
+                context->result_manager = LakeCompactionManager::instance()->result_manager();
+            }
             context->enqueue_time_sec = ::time(nullptr);
 
             {
