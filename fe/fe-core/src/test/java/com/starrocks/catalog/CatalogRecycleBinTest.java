@@ -1182,8 +1182,6 @@ public class CatalogRecycleBinTest {
         Assertions.assertEquals(0, adjustedTime2);
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testGetAdjustedRecycleTimestampUsesDbIdForTableLookup() {
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
@@ -1201,51 +1199,6 @@ public class CatalogRecycleBinTest {
         Assertions.assertEquals(recycleBin.idToRecycleTime.get(table.getId()), adjustedTimeWithOtherDb);
     }
 
-    @Test
-    public void testNonRetryableTableErasure() {
-        // This test verifies that non-retryable tables (shared-nothing mode) are erased synchronously
-        // and do not leak in any tracking data structures (lakeTableToPartitions, etc.)
-        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        long dbId = 1;
-
-        // Create non-retryable tables (regular tables in shared-nothing mode)
-        Table nonRetryableTable1 = new Table(111, "non_retryable_1", Table.TableType.OLAP, Lists.newArrayList());
-        Table nonRetryableTable2 = new Table(222, "non_retryable_2", Table.TableType.OLAP, Lists.newArrayList());
-
-        // Recycle non-retryable tables
-        recycleBin.recycleTable(dbId, nonRetryableTable1, false);
-        recycleBin.recycleTable(dbId, nonRetryableTable2, false);
-
-        // Verify tables are in recycle bin
-        Assertions.assertEquals(2, recycleBin.getTables(dbId).size());
-        Assertions.assertNotNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
-        Assertions.assertNotNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
-
-        // Set expire time to trigger erasure
-        Config.catalog_trash_expire_second = 3600;
-        long now = System.currentTimeMillis();
-        long expireFromNow = now - 3600 * 1000L;
-        recycleBin.idToRecycleTime.put(nonRetryableTable1.getId(), expireFromNow - 1000);
-        recycleBin.idToRecycleTime.put(nonRetryableTable2.getId(), expireFromNow - 1000);
-
-        // Trigger table erasure
-        recycleBin.eraseTable(now);
-        waitTableClearFinished(recycleBin, nonRetryableTable1.getId(), now);
-        waitTableClearFinished(recycleBin, nonRetryableTable2.getId(), now);
-
-        // Verify tables are removed from recycle bin
-        Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
-        Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
-
-        // CRITICAL: Verify non-retryable tables are NOT tracked in lakeTableToPartitions
-        // Non-retryable tables should be deleted synchronously without any async tracking
-        java.util.Map<?, ?> lakeTableToPartitions =
-                Deencapsulation.getField(recycleBin, "lakeTableToPartitions");
-        Assertions.assertTrue(lakeTableToPartitions.isEmpty(),
-                "lakeTableToPartitions should be empty for non-retryable tables");
-    }
-
->>>>>>> bfeeccb6c1 ([Enhancement] Optimize CatalogRecycleBin adjusted recycle timestamp lookup (#72128))
     /**
      * Regression test for the bug where disableRecoverPartitionWithSameName() would unconditionally
      * reset idToRecycleTime for already-non-recoverable partitions with retention periods, causing
