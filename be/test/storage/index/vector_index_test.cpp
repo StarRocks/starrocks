@@ -108,8 +108,7 @@ protected:
 
     // Threshold not met: finish() short-circuits without writing a file. Readers
     // surface the missing file as NotFound and fall back to brute-force scan.
-    void write_vector_index_below_threshold(const std::string& path,
-                                            const std::shared_ptr<TabletIndex>& tablet_index) {
+    void write_vector_index_below_threshold(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
         std::unique_ptr<VectorIndexWriter> vector_index_writer;
         VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
         CHECK_OK(vector_index_writer->init());
