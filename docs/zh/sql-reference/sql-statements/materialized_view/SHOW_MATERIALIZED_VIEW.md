@@ -48,6 +48,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | name                       | 物化视图名称。                                               |
 | refresh_type               | 物化视图的更新方式，包括 ROLLUP、MANUAL、ASYNC、INCREMENTAL。   |
 | is_active                  | 物化视图状态是否为 active。有效值：`true` 和 `false`。          |
+| inactive_reason            | 物化视图失效的原因。                                          |
 | partition_type             | 物化视图的分区类型，包括 RANGE 和 UNPARTITIONED。|
 | task_id                    | 物化视图的刷新任务 ID。                                       |
 | task_name                  | 物化视图的刷新任务名称。                                       |
@@ -64,7 +65,13 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | last_refresh_error_message | 物化视图上一次刷新失败的 ErrorMessage（如果物化视图状态不为 active）。 |
 | rows                       | 物化视图中数据行数。                                           |
 | text                       | 创建物化视图的查询语句。                                        |
+| extra_message              | 最近一次刷新任务的额外信息。                                    |
+| query_rewrite_status       | 物化视图的查询改写状态。                                        |
+| creator                    | 最近一次刷新任务的创建者。                                      |
+| last_refresh_process_time  | 最近一次刷新任务的处理开始时间。                                |
+| last_refresh_job_id        | 最近一次刷新任务的作业 ID。                                     |
 | last_freshness_confirmed_at | 最近一次成功刷新的开始时间，在整次刷新（其全部 task run）完成后才记录；确认基表无变化、无需刷新的刷新同样会确认新鲜度。物化视图反映该时刻的基表数据。区别于 `last_refresh_time`（基表数据版本时间），这是墙钟时间。首次成功刷新前、以及同步物化视图，为空。按分区范围的 REFRESH（部分刷新）不推进该值。 |
+| last_refresh_time          | 物化视图已反映基表更新的最新时间。                              |
 
 ## 示例
 

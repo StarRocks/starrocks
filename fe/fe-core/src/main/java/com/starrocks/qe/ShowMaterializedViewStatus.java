@@ -75,6 +75,7 @@ public class ShowMaterializedViewStatus {
     private long taskId;
     private String taskName;
     private long lastFreshnessConfirmedAt;
+    private long lastRefreshTime;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -355,6 +356,9 @@ public class ShowMaterializedViewStatus {
             status.setTaskId(task.getId());
             status.setTaskName(task.getName());
         }
+        if (refreshScheme != null) {
+            status.setLastRefreshTime(refreshScheme.getLastRefreshTime());
+        }
         status.setLastJobTaskRunStatus(taskTaskStatusJob);
         return status;
     }
@@ -491,6 +495,14 @@ public class ShowMaterializedViewStatus {
 
     public void setLastFreshnessConfirmedAt(long lastFreshnessConfirmedAt) {
         this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
+    }
+
+    public long getLastRefreshTime() {
+        return lastRefreshTime;
+    }
+
+    public void setLastRefreshTime(long lastRefreshTime) {
+        this.lastRefreshTime = lastRefreshTime;
     }
 
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
@@ -671,6 +683,10 @@ public class ShowMaterializedViewStatus {
         if (lastFreshnessConfirmedAt > 0) {
             status.setLast_freshness_confirmed_at(TimeUtils.longToTimeString(lastFreshnessConfirmedAt));
         }
+        // last refresh time (data version timestamp used for staleness check)
+        if (lastRefreshTime > 0) {
+            status.setLast_refresh_time(TimeUtils.longToTimeString(lastRefreshTime));
+        }
 
         return status;
     }
@@ -745,6 +761,8 @@ public class ShowMaterializedViewStatus {
         // last refresh job id
         addField(resultRow, refreshJobStatus.getJobId());
         addField(resultRow, lastFreshnessConfirmedAt > 0 ? TimeUtils.longToTimeString(lastFreshnessConfirmedAt) : "");
+        // last refresh time (data version timestamp used for staleness check)
+        addField(resultRow, lastRefreshTime > 0 ? TimeUtils.longToTimeString(lastRefreshTime) : "");
 
         return resultRow;
     }

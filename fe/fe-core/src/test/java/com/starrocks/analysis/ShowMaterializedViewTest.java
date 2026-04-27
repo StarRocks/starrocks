@@ -122,7 +122,8 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.creator AS creator, " +
                         "information_schema.materialized_views.last_refresh_process_time AS last_refresh_process_time, " +
                         "information_schema.materialized_views.last_refresh_job_id AS last_refresh_job_id, " +
-                        "information_schema.materialized_views.last_freshness_confirmed_at AS last_freshness_confirmed_at" +
+                        "information_schema.materialized_views.last_freshness_confirmed_at AS last_freshness_confirmed_at, " +
+                        "information_schema.materialized_views.last_refresh_time AS last_refresh_time" +
                         " FROM " +
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +

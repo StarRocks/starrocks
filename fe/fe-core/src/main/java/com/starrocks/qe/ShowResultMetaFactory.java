@@ -831,6 +831,7 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
                 .column("last_refresh_process_time", ScalarType.createType(PrimitiveType.DATETIME))
                 .column("last_refresh_job_id", ScalarType.createVarchar(64))
                 .column("last_freshness_confirmed_at", ScalarType.createType(PrimitiveType.DATETIME))
+                .column("last_refresh_time", ScalarType.createType(PrimitiveType.DATETIME))
                 .build();
     }
 
