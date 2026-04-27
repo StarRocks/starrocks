@@ -686,42 +686,73 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     // combined_txn_log collection dispatch. See `_enable_per_partition_coordinator`
     // field comment for the two modes and their invariants.
+    //
+    // Note on snapshot timing: the elected coordinator must be decided AFTER
+    // `_txn_log_collector.wait()` returns, NOT before it. `notify()` only fires
+    // when close_channel becomes true, i.e. every sender's eos has been
+    // processed. Each NodeChannel guarantees in-order processing of its own
+    // RPCs (incremental_open precedes add_chunk precedes eos), so by the time
+    // every sender's eos is processed, every sender's incremental_open claims
+    // are recorded in `_partition_coordinator`. Cross-sender RPC processing
+    // is *not* ordered (different brpc workers, different connections), so a
+    // pre-wait snapshot can miss late-arriving incremental_open claims from
+    // other senders and incorrectly classify their partitions as orphan.
     if (_finish_mode == lake::kDontWriteTxnLog && request.eos() &&
         response->status().status_code() == TStatusCode::OK) {
         const int32_t sender_id = request.sender_id();
 
-        bool per_partition_mode;
-        std::unordered_set<int64_t> my_partitions;
-        std::unordered_set<int64_t> all_claimed_partitions;
-        int32_t min_coord_sender_id = std::numeric_limits<int32_t>::max();
+        // Pre-wait coarse gate: enter the wait/collect path if there is any
+        // chance this sender will need to collect logs.
+        //   - per_partition mode: every sender enters; the actual coordinator
+        //     is decided post-wait. Non-coordinator wakes wake quickly via
+        //     the sticky latch and just return.
+        //   - legacy mode: only sender 0 enters (matches pre-fix behavior).
+        bool per_partition_mode_pre;
         {
             std::lock_guard l(_partition_coordinator_mtx);
-            per_partition_mode = _enable_per_partition_coordinator;
-            if (per_partition_mode) {
-                for (auto& [pid, sid] : _partition_coordinator) {
-                    all_claimed_partitions.insert(pid);
-                    if (sid == sender_id) my_partitions.insert(pid);
-                    min_coord_sender_id = std::min(min_coord_sender_id, sid);
-                }
-            }
+            per_partition_mode_pre = _enable_per_partition_coordinator;
         }
+        const bool should_enter_wait = per_partition_mode_pre || (sender_id == 0);
 
-        // Should this sender collect anything on this eos?
-        //   - New mode: only if elected coordinator of at least one partition.
-        //   - Legacy mode: only sender 0.
-        const bool should_collect = per_partition_mode ? !my_partitions.empty() : (sender_id == 0);
-
-        if (should_collect) {
-            if (per_partition_mode) {
-                StarRocksMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
-            } else {
-                StarRocksMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
-            }
+        if (should_enter_wait) {
             rolk.unlock();
             auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
             auto ok = _txn_log_collector.wait(t);
             auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
-            if (st.ok()) {
+
+            // Post-wait snapshot: coordinator map is now final (every sender's
+            // eos has been processed by the channel, which means every
+            // sender's prior incremental_open claims have been recorded).
+            bool per_partition_mode;
+            std::unordered_set<int64_t> my_partitions;
+            std::unordered_set<int64_t> all_claimed_partitions;
+            int32_t min_coord_sender_id = std::numeric_limits<int32_t>::max();
+            {
+                std::lock_guard l(_partition_coordinator_mtx);
+                per_partition_mode = _enable_per_partition_coordinator;
+                if (per_partition_mode) {
+                    for (auto& [pid, sid] : _partition_coordinator) {
+                        all_claimed_partitions.insert(pid);
+                        if (sid == sender_id) my_partitions.insert(pid);
+                        min_coord_sender_id = std::min(min_coord_sender_id, sid);
+                    }
+                }
+            }
+            const bool i_collect = per_partition_mode ? !my_partitions.empty() : (sender_id == 0);
+
+            if (!st.ok()) {
+                // Only the elected coordinator (or sender 0 in legacy) reports
+                // the timeout, so FE sees a single error and non-coordinators
+                // don't pollute the response.
+                if (i_collect) {
+                    context->update_status(st);
+                }
+            } else if (i_collect) {
+                if (per_partition_mode) {
+                    StarRocksMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
+                } else {
+                    StarRocksMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
+                }
                 auto all_logs = _txn_log_collector.logs();
                 if (per_partition_mode) {
                     // Filter: collect only the partitions this sender coordinates.
@@ -757,9 +788,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     // Legacy path: sender 0 takes every log.
                     context->add_txn_logs(all_logs);
                 }
-            } else {
-                context->update_status(st);
             }
+            // else: woke up but post-snap shows I'm not the coordinator;
+            // silently return — another sender will collect.
         }
     }
 }
