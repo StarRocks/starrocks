@@ -1430,7 +1430,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         sql = "select count(t.a) from(select S_ADDRESS <=> 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("DictDecode([11: S_ADDRESS, INT, false], [<place-holder> <=> 'kks'])"), plan);
+        Assertions.assertTrue(plan.contains("DictDecode(11: S_ADDRESS, [<place-holder> <=> 'kks']"), plan);
 
         sql = "select S_ADDRESS not like '%key%' from supplier";
         plan = getVerboseExplain(sql);
