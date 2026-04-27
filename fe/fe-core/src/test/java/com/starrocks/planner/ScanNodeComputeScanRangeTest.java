@@ -158,7 +158,7 @@ public class ScanNodeComputeScanRangeTest {
         ComputeResource computeResource =
                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
         Assertions.assertDoesNotThrow(() ->
-                OlapTableSink.createLocation(olapTable, partitionParam, false, computeResource, null));
+                OlapTableSink.createLocation(olapTable, partitionParam, false, computeResource));
         // 10 tablets share a single batched StarClient.getShardInfo call.
         Assertions.assertEquals(1, invokeCounter.get());
     }

@@ -849,10 +849,7 @@ public class OlapTableSink extends DataSink {
             List<Long> allTabletIds = new ArrayList<>();
             for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
-                List<MaterializedIndex> indexes = (txnState != null)
-                        ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                        : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
-                for (MaterializedIndex index : indexes) {
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
                         allTabletIds.add(tablet.getId());
                     }
