@@ -44,6 +44,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -1318,6 +1319,134 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNotNull(isNotNullStat.getHistogram());
         Assertions.assertEquals(700_000L, isNotNullStat.getHistogram().getMCV().get("1"));
         Assertions.assertEquals(300_000L, isNotNullStat.getHistogram().getMCV().get("0"));
+    }
+
+    @Test
+    public void testIfWithIsNullPredicateHasCorrectNdv() {
+        // GIVEN
+        // CASE WHEN `NONNULL` IS NULL THEN 1 ELSE 0 END
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "NONNULL", true);
+
+        final var colStat = ColumnStatistic.builder() //
+                .setDistinctValuesCount(1_000_237) //
+                .setNullsFraction(0) //
+                .setAverageRowSize(8) //
+                .build();
+
+        final var statistics = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+
+        final var isNull = new IsNullPredicateOperator(false, col);
+        final var then = ConstantOperator.createInt(1);
+        final var elseClause = ConstantOperator.createInt(0);
+
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.TINYINT, Lists.newArrayList(isNull, then, elseClause));
+
+        // WHEN
+        final var ifStat = ExpressionStatisticCalculator.calculate(ifOp, statistics);
+
+        // THEN
+        Assertions.assertFalse(ifStat.isUnknown());
+        Assertions.assertEquals(1, ifStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, ifStat.getMinValue(), 0.001);
+        Assertions.assertEquals(0, ifStat.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testIfIsNullMcvPropagation() {
+        // GIVEN
+        Function<Double, Statistics> makeStats = nullFrac -> {
+            final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+            final var colStat = ColumnStatistic.builder() //
+                    .setDistinctValuesCount(1_000_000) //
+                    .setNullsFraction(nullFrac) //
+                    .setAverageRowSize(8) //
+                    .build();
+            return Statistics.builder() //
+                    .setOutputRowCount(1_000_000) //
+                    .addColumnStatistic(col, colStat) //
+                    .build();
+        };
+
+        Function<Statistics, ColumnStatistic> calcIfStat = stats -> {
+            final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+            final var isNull = new IsNullPredicateOperator(false, col);
+            final var then = ConstantOperator.createTinyInt((byte) 1);
+            final var elseConst = ConstantOperator.createTinyInt((byte) 0);
+            final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.TINYINT, Lists.newArrayList(isNull, then, elseConst));
+            return ExpressionStatisticCalculator.calculate(ifOp, stats);
+        };
+
+        // WHEN
+        // nullsFraction = 0.0
+        var stat = calcIfStat.apply(makeStats.apply(0.0));
+
+        // THEN
+        Assertions.assertNotNull(stat.getHistogram());
+        var mcv = stat.getHistogram().getMCV();
+        Assertions.assertFalse(mcv.containsKey("1"));
+        Assertions.assertEquals(1_000_000L, mcv.get("0"));
+
+        // WHEN
+        // nullsFraction = 0.3
+        stat = calcIfStat.apply(makeStats.apply(0.3));
+        // THEN
+        Assertions.assertNotNull(stat.getHistogram());
+        mcv = stat.getHistogram().getMCV();
+        Assertions.assertEquals(300_000L, mcv.get("1"));
+        Assertions.assertEquals(700_000L, mcv.get("0"));
+
+        // WHEN
+        // nullsFraction = 1.0
+        stat = calcIfStat.apply(makeStats.apply(1.0));
+        // THEN
+        Assertions.assertNotNull(stat.getHistogram());
+        mcv = stat.getHistogram().getMCV();
+        Assertions.assertEquals(1_000_000L, mcv.get("1"));
+        Assertions.assertFalse(mcv.containsKey("0"));
+    }
+
+    @Test
+    public void testIfNullFractionWeightedByConditionDistribution() {
+        // GIVEN
+        // IF(col IS NULL, nullable_expr, non_nullable_expr)
+        // col has 0% nulls, so IS NULL is always false => only ELSE branch is taken.
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+
+        final var colStat = ColumnStatistic.builder() //
+                .setDistinctValuesCount(500) //
+                .setNullsFraction(0.0) //
+                .setAverageRowSize(8) //
+                .build();
+
+        final var statistics = Statistics.builder() //
+                .setOutputRowCount(10_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+
+        final var isNull = new IsNullPredicateOperator(false, col);
+        final var thenClause = ConstantOperator.createNull(IntegerType.INT);
+        final var elseClause = ConstantOperator.createInt(42);
+
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.INT,
+                Lists.newArrayList(isNull, thenClause, elseClause));
+
+        // WHEN
+        final var ifStat = ExpressionStatisticCalculator.calculate(ifOp, statistics);
+
+        // THEN
+        // Condition is always false (0% nulls), so only ELSE branch is reachable.
+        // NDV, min/max, and nullsFraction should collapse to the ELSE branch only.
+        Assertions.assertFalse(ifStat.isUnknown());
+        Assertions.assertEquals(0.0, ifStat.getNullsFraction(), 0.001);
+        Assertions.assertEquals(1, ifStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(42, ifStat.getMinValue(), 0.001);
+        Assertions.assertEquals(42, ifStat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(ifStat.getHistogram());
+        Assertions.assertNotNull(ifStat.getHistogram().getMCV());
+        Assertions.assertTrue(ifStat.getHistogram().getMCV().containsKey("42"));
     }
 }
 

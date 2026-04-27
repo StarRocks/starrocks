@@ -507,7 +507,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  hasNullableGenerateChild: true\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE"), replayPair.second);
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] MCV: [[1:1]] ESTIMATE"), replayPair.second);
     }
 
     @Test
