@@ -174,6 +174,14 @@ Execution-node base and runtime-filter infrastructure on top of ExprCore without
 - Core tests: `exec_core_test`
 - Remediation: Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code.
 
+### ExecSinkCore (`execsinkcore`)
+DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.
+- Targets: `ExecSinkCore`
+- Allowed internal include prefixes: `exec/data_sink.h`, `exec/pipeline/pipeline_fwd.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `data_sink_core_test`
+- Remediation: Keep ExecSinkCore limited to the DataSink base contract; move construction, concrete sinks, pipeline decomposition, and future sink IO behavior into higher modules.
+
 ### ExecSchemaScannerCore (`execschemascannercore`)
 Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.
 - Targets: `ExecSchemaScannerCore`

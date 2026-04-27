@@ -25,6 +25,7 @@
 #include "common/system/master_info.h"
 #include "exec/tablet_info.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"

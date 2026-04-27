@@ -54,6 +54,7 @@
 #include "common/system/backend_options.h"
 #include "common/util/thrift_client.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/BackendService.h"

@@ -17,14 +17,19 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/util/thrift_util.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

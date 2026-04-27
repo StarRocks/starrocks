@@ -29,6 +29,7 @@
 #include "exec/tablet_info.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"

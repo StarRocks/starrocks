@@ -35,6 +35,7 @@
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_sink.h"
+#include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

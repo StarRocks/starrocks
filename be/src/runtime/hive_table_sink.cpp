@@ -16,6 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
