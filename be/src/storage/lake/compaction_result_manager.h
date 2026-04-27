@@ -89,8 +89,7 @@ public:
 
 private:
     static std::string make_file_name(int64_t tablet_id, int64_t base_version, int64_t result_id);
-    static bool parse_file_name(const std::string& name, int64_t* tablet_id, int64_t* base_version,
-                                int64_t* result_id);
+    static bool parse_file_name(const std::string& name, int64_t* tablet_id, int64_t* base_version, int64_t* result_id);
 
     Status load_one_file(const std::string& path);
     std::string pick_root_dir() const;

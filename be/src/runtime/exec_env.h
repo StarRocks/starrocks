@@ -361,7 +361,9 @@ public:
 
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
 
-    lake::CompactionResultManager* lake_compaction_result_manager() const { return _lake_compaction_result_manager.get(); }
+    lake::CompactionResultManager* lake_compaction_result_manager() const {
+        return _lake_compaction_result_manager.get();
+    }
 
     AgentServer* agent_server() const { return _agent_server; }
 

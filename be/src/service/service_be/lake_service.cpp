@@ -1359,7 +1359,6 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
     latch.wait();
 }
 
-
 void LakeServiceImpl::compact_collect_and_publish(::google::protobuf::RpcController* controller,
                                                   const ::starrocks::CompactRequest* request,
                                                   ::starrocks::CompactResponse* response,

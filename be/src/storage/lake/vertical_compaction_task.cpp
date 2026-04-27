@@ -115,7 +115,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     } else if (_context->write_to_local_result) {
         _context->txn_log = txn_log;
         RETURN_IF_ERROR(persist_compaction_result_from_txn_log(_context->result_manager, _tablet.id(),
-                                                                _context->local_result_base_version, *txn_log));
+                                                               _context->local_result_base_version, *txn_log));
     } else {
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }

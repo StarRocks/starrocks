@@ -17,8 +17,6 @@
 #include <algorithm>
 #include <unordered_map>
 
-#include "storage/lake/rowset.h"
-
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
@@ -26,6 +24,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_compaction_policy.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_schema.h"

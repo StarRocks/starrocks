@@ -701,8 +701,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         for (const auto& sp : store_paths) {
             result_root_dirs.emplace_back(sp.path);
         }
-        _lake_compaction_result_manager =
-                std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
+        _lake_compaction_result_manager = std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
         auto scan_st = _lake_compaction_result_manager->scan_on_startup();
         if (!scan_st.ok()) {
             LOG(WARNING) << "CompactionResultManager scan_on_startup failed: " << scan_st;
@@ -710,8 +709,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         // Start the autonomous-compaction event-driven scheduler. It only does
         // anything when config::enable_lake_autonomous_compaction is true; the
         // start() call is a no-op cost when the feature is disabled at runtime.
-        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager,
-                                                        _lake_compaction_result_manager.get());
+        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager, _lake_compaction_result_manager.get());
     }
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
