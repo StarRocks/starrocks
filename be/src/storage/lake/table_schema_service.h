@@ -107,8 +107,7 @@ public:
      * Uses (table_id, index_id) as SingleFlight key so that concurrent requests for
      * different tablets under the same index share one RPC.
      */
-    StatusOr<TGetTabletInitialMetadataResponse> get_tablet_initial_metadata(int64_t tablet_id,
-                                                                            int64_t table_id = -1,
+    StatusOr<TGetTabletInitialMetadataResponse> get_tablet_initial_metadata(int64_t tablet_id, int64_t table_id = -1,
                                                                             int64_t partition_id = -1,
                                                                             int64_t index_id = -1);
 
@@ -230,7 +229,7 @@ private:
     using InitialMetadataSFGroup = bthreads::singleflight::Group<std::string, InitialMetadataSFResultPtr>;
 
     InitialMetadataSFResultPtr _fetch_initial_metadata_via_rpc(int64_t tablet_id, int64_t table_id,
-                                                                  int64_t partition_id, int64_t index_id);
+                                                               int64_t partition_id, int64_t index_id);
 
     InitialMetadataSFGroup& _select_initial_metadata_sf_group(const std::string& key) {
         const size_t h = std::hash<std::string>{}(key);

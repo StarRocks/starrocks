@@ -280,8 +280,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
 // Parse (table_id, partition_id, index_id) from StarOS shard properties.
 // Extracted as a helper so it can be unit tested without a real g_worker.
 Status TabletManager::parse_shard_properties(int64_t tablet_id,
-                                               const std::unordered_map<std::string, std::string>& properties,
-                                               int64_t* table_id, int64_t* partition_id, int64_t* index_id) {
+                                             const std::unordered_map<std::string, std::string>& properties,
+                                             int64_t* table_id, int64_t* partition_id, int64_t* index_id) {
     *table_id = -1;
     *partition_id = -1;
     *index_id = -1;
@@ -324,12 +324,11 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
     }
     auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
     if (!shard_info_or.ok()) {
-        return Status::InternalError(
-                fmt::format("fail to get shard info, tablet_id: {}, error: {}",
-                            tablet_id, shard_info_or.status().message()));
+        return Status::InternalError(fmt::format("fail to get shard info, tablet_id: {}, error: {}", tablet_id,
+                                                 shard_info_or.status().message()));
     }
-    RETURN_IF_ERROR(parse_shard_properties(tablet_id, shard_info_or.value().properties,
-                                             &table_id, &partition_id, &index_id));
+    RETURN_IF_ERROR(
+            parse_shard_properties(tablet_id, shard_info_or.value().properties, &table_id, &partition_id, &index_id));
 #else
     return Status::InternalError("cn-free tablet creation requires USE_STAROS");
 #endif
@@ -341,8 +340,8 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
 
 // NOTE: if you add a new field to create_tablet(), also update this method and
 // TGetTabletInitialMetadataResponse in FrontendService.thrift to keep them in sync.
-StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(
-        int64_t tablet_id, const TGetTabletInitialMetadataResponse& resp) {
+StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(int64_t tablet_id,
+                                                                  const TGetTabletInitialMetadataResponse& resp) {
     auto metadata = std::make_shared<TabletMetadataPB>();
     metadata->set_id(tablet_id);
     metadata->set_version(kInitialVersion);
@@ -400,8 +399,7 @@ StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(
             metadata->set_compaction_strategy(CompactionStrategyPB::REAL_TIME);
             break;
         default:
-            return Status::InternalError(
-                    strings::Substitute("Unknown compaction strategy, tabletId:$0", tablet_id));
+            return Status::InternalError(strings::Substitute("Unknown compaction strategy, tabletId:$0", tablet_id));
         }
     } else {
         metadata->set_compaction_strategy(CompactionStrategyPB::DEFAULT);

@@ -417,8 +417,10 @@ bvar::Adder<int64_t> g_initial_metadata_fetch_error("table_schema_service", "ini
 // Number of retry attempts for initial metadata fetches (excludes the initial attempt).
 bvar::Adder<int64_t> g_initial_metadata_fetch_retries("table_schema_service", "initial_metadata_fetch_retries");
 
-StatusOr<TGetTabletInitialMetadataResponse> TableSchemaService::get_tablet_initial_metadata(
-        int64_t tablet_id, int64_t table_id, int64_t partition_id, int64_t index_id) {
+StatusOr<TGetTabletInitialMetadataResponse> TableSchemaService::get_tablet_initial_metadata(int64_t tablet_id,
+                                                                                            int64_t table_id,
+                                                                                            int64_t partition_id,
+                                                                                            int64_t index_id) {
     g_initial_metadata_fetch_count << 1;
     auto start = butil::gettimeofday_us();
     DeferOp defer([&]() { g_initial_metadata_fetch_latency_us << (butil::gettimeofday_us() - start); });
@@ -436,11 +438,9 @@ StatusOr<TGetTabletInitialMetadataResponse> TableSchemaService::get_tablet_initi
 
         auto& result = sf_result->result;
 
-        VLOG(2) << "get_tablet_initial_metadata, tablet_id: " << tablet_id
-                << ", table_id: " << table_id << ", partition_id: " << partition_id
-                << ", index_id: " << index_id
-                << ", attempt: " << attempt + 1 << "/" << max_retries
-                << ", status: " << result.status();
+        VLOG(2) << "get_tablet_initial_metadata, tablet_id: " << tablet_id << ", table_id: " << table_id
+                << ", partition_id: " << partition_id << ", index_id: " << index_id << ", attempt: " << attempt + 1
+                << "/" << max_retries << ", status: " << result.status();
 
         if (result.ok()) {
             return result;
@@ -468,8 +468,10 @@ StatusOr<TGetTabletInitialMetadataResponse> TableSchemaService::get_tablet_initi
     return Status::InternalError("get_tablet_initial_metadata result is null");
 }
 
-TableSchemaService::InitialMetadataSFResultPtr TableSchemaService::_fetch_initial_metadata_via_rpc(
-        int64_t tablet_id, int64_t table_id, int64_t partition_id, int64_t index_id) {
+TableSchemaService::InitialMetadataSFResultPtr TableSchemaService::_fetch_initial_metadata_via_rpc(int64_t tablet_id,
+                                                                                                   int64_t table_id,
+                                                                                                   int64_t partition_id,
+                                                                                                   int64_t index_id) {
     TBatchGetTabletInitialMetadataRequest batch_req;
     TGetTabletInitialMetadataRequest req;
     req.__set_tablet_id(tablet_id);
@@ -504,11 +506,9 @@ TableSchemaService::InitialMetadataSFResultPtr TableSchemaService::_fetch_initia
     auto result = std::make_shared<InitialMetadataSFResult>();
 
     if (!rpc_status.ok()) {
-        LOG(WARNING) << "get_tablet_initial_metadata rpc failed, tablet_id: " << tablet_id
-                     << ", table_id: " << table_id
-                     << ", partition_id: " << partition_id << ", index_id: " << index_id
-                     << ", fe: " << fe.hostname << ":" << fe.port
-                     << ", latency: " << rpc_latency_us << "us, error: " << rpc_status;
+        LOG(WARNING) << "get_tablet_initial_metadata rpc failed, tablet_id: " << tablet_id << ", table_id: " << table_id
+                     << ", partition_id: " << partition_id << ", index_id: " << index_id << ", fe: " << fe.hostname
+                     << ":" << fe.port << ", latency: " << rpc_latency_us << "us, error: " << rpc_status;
         result->result = rpc_status;
         return result;
     }
@@ -516,8 +516,7 @@ TableSchemaService::InitialMetadataSFResultPtr TableSchemaService::_fetch_initia
     Status batch_status(batch_resp.status);
     if (!batch_status.ok()) {
         LOG(WARNING) << "get_tablet_initial_metadata batch failed, tablet_id: " << tablet_id
-                     << ", table_id: " << table_id
-                     << ", partition_id: " << partition_id << ", index_id: " << index_id
+                     << ", table_id: " << table_id << ", partition_id: " << partition_id << ", index_id: " << index_id
                      << ", error: " << batch_status;
         result->result = batch_status;
         return result;
@@ -525,8 +524,7 @@ TableSchemaService::InitialMetadataSFResultPtr TableSchemaService::_fetch_initia
 
     if (!batch_resp.__isset.responses || batch_resp.responses.empty()) {
         LOG(WARNING) << "get_tablet_initial_metadata empty response, tablet_id: " << tablet_id
-                     << ", table_id: " << table_id
-                     << ", partition_id: " << partition_id << ", index_id: " << index_id;
+                     << ", table_id: " << table_id << ", partition_id: " << partition_id << ", index_id: " << index_id;
         result->result = Status::InternalError("empty response");
         return result;
     }
@@ -534,18 +532,15 @@ TableSchemaService::InitialMetadataSFResultPtr TableSchemaService::_fetch_initia
     auto& resp = batch_resp.responses[0];
     Status resp_status(resp.status);
     if (!resp_status.ok()) {
-        LOG(INFO) << "get_tablet_initial_metadata failed, tablet_id: " << tablet_id
-                  << ", table_id: " << table_id
-                  << ", partition_id: " << partition_id << ", index_id: " << index_id
-                  << ", error: " << resp_status;
+        LOG(INFO) << "get_tablet_initial_metadata failed, tablet_id: " << tablet_id << ", table_id: " << table_id
+                  << ", partition_id: " << partition_id << ", index_id: " << index_id << ", error: " << resp_status;
         result->result = resp_status;
         return result;
     }
 
-    VLOG(2) << "get_tablet_initial_metadata success, tablet_id: " << tablet_id
-            << ", table_id: " << table_id
-            << ", partition_id: " << partition_id << ", index_id: " << index_id
-            << ", latency: " << rpc_latency_us << "us";
+    VLOG(2) << "get_tablet_initial_metadata success, tablet_id: " << tablet_id << ", table_id: " << table_id
+            << ", partition_id: " << partition_id << ", index_id: " << index_id << ", latency: " << rpc_latency_us
+            << "us";
     result->result = std::move(resp);
     return result;
 }

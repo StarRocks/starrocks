@@ -855,12 +855,12 @@ TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_not_found) {
 TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_rpc_error) {
     ScopedSyncPoint sync_point;
 
-    SyncPoint::GetInstance()->SetCallBack(
-            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
-                auto ctx = unpack_initial_metadata_hook_args(arg);
-                *ctx.mock_thrift_rpc = true;
-                *ctx.status = Status::ThriftRpcError("connection refused");
-            });
+    SyncPoint::GetInstance()->SetCallBack("TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook",
+                                          [&](void* arg) {
+                                              auto ctx = unpack_initial_metadata_hook_args(arg);
+                                              *ctx.mock_thrift_rpc = true;
+                                              *ctx.status = Status::ThriftRpcError("connection refused");
+                                          });
 
     auto result = _schema_service->get_tablet_initial_metadata(next_id(), next_id(), next_id(), next_id());
     ASSERT_FALSE(result.ok());
