@@ -28,7 +28,7 @@ authentication_ldap_simple_ssl_conn_trust_store_path =
 authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 
-StarRocks が LDAP システム内でユーザーを直接取得する方法でユーザーを認証したい場合は、**以下の追加設定項目を追加する必要があります**。
+StarRocks が LDAP システム内でユーザーを直接取得する方法でユーザーを認証したい場合（検索バインドモード）は、**以下の追加設定項目を追加する必要があります**。
 
 ```Properties
 # ユーザーのベース DN を追加し、ユーザーの取得範囲を指定します。
@@ -40,6 +40,29 @@ authentication_ldap_simple_bind_root_dn =
 # ユーザーを取得するための管理者パスワードを追加します。
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+**ダイレクトバインドモード**（検索ステップをスキップし、構築した DN で直接バインドする）を使用する場合は、DN パターンを設定できます。ユーザー DN の構造が予測可能な場合に便利です。
+
+```Properties
+# ダイレクトバインド認証の DN パターン。
+# ユーザー名のプレースホルダーとして ${USER} を使用します。
+# 複数のパターンはセミコロン ';' で区切ります。
+authentication_ldap_simple_bind_dn_pattern =
+```
+
+例: `uid=${USER},ou=People,dc=example,dc=com`
+
+ユーザーが複数の OU に分散している場合は、セミコロンで区切って複数のパターンを指定できます:
+
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
+
+システムは各パターンを順番に試行し、最初にバインドに成功した結果を返します。
+
+:::note
+
+パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@corp.example.com` のような UPN 形式のパターンはサポートされていません。結果が DN ではないため、ダウンストリームのグループ検索が失敗します。DN の属性値に `@` が含まれる場合（例: `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`）は有効です。
+
+:::
 
 ## DN マッチングメカニズム
 
@@ -61,30 +84,38 @@ v3.5.0 以降、StarRocks は LDAP 認証時にユーザーの識別名 (DN) 情
 - **Microsoft AD 環境**: グループメンバーにユーザー名属性が存在しない場合があります。`ldap_user_search_attr` は設定できません。システムは直接 DN を使用して照合を行います。
 - **混合環境**: 両方の照合方法を柔軟に切り替えることがサポートされています。
 
+## 認証の優先順位
+
+ユーザーが LDAP 認証でログインする際、StarRocks は以下の優先順位でユーザーの DN を決定します：
+
+1. **ユーザー指定の DN**: ユーザー作成時に明示的な DN が指定されている場合（`CREATE USER ... AS 'dn'`）、その DN が直接使用されます。
+2. **DN パターンによるダイレクトバインド**: `authentication_ldap_simple_bind_dn_pattern` が設定されている場合、システムはパターンから DN を構築し、直接バインドを試みます。複数のパターンは順番に試行されます。
+3. **検索バインド**: 上記のいずれも該当しない場合、システムは管理者アカウントを使用して LDAP 内のユーザーを検索し、見つかった DN でバインドします。
+
 ## LDAP でユーザーを作成する
 
 ユーザーを作成する際、認証方法を LDAP 認証として `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'` と指定します。xxx は LDAP 内のユーザーの DN (Distinguished Name) です。
 
-例 1:
+例 1: 明示的な DN を指定してユーザーを作成する。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ```
 
-LDAP 内でユーザーの DN を指定せずにユーザーを作成することも可能です。ユーザーがログインすると、StarRocks は LDAP システムにアクセスしてユーザー情報を取得します。1 つだけ一致する場合、認証は成功します。
-
-例 2:
+例 2: DN を指定せずにユーザーを作成する。設定に応じて、ログイン時に DN パターン（ダイレクトバインド）または検索バインドによって DN が解決されます。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple
 ```
 
-この場合、FE に追加の設定を追加する必要があります。
+**検索バインド**モードを使用する場合、FE に以下の追加設定が必要です：
 
 - `authentication_ldap_simple_bind_base_dn`: ユーザーのベース DN で、ユーザーの取得範囲を指定します。
 - `authentication_ldap_simple_user_search_attr`: LDAP オブジェクト内でユーザーを識別する属性の名前で、デフォルトは uid です。
 - `authentication_ldap_simple_bind_root_dn`: ユーザー情報を取得する際に使用する管理者アカウントの DN です。
 - `authentication_ldap_simple_bind_root_pwd`: ユーザー情報を取得する際に使用する管理者アカウントのパスワードです。
+
+**ダイレクトバインド**モードを使用する場合は、`authentication_ldap_simple_bind_dn_pattern` を設定するだけで、管理者アカウントは不要です。
 
 ## ユーザーを認証する
 

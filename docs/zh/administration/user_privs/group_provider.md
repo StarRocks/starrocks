@@ -159,6 +159,17 @@ LDAP 服务器可以识别的自定义组过滤器。它将被直接发送到您
 
 :::
 
+:::tip
+
+**与 `authentication_ldap_simple_bind_dn_pattern` 的配合**
+
+当使用 DN pattern 认证（如 `uid=${USER}@abc.com,ou=People,dc=example,dc=com`），且 `${USER}` 替换后的属性值中包含非用户名部分时：
+
+- **建议**：不配置 `ldap_user_search_attr`。系统将使用完整 DN 进行组匹配，避免提取错误。
+- **如确需配置**：需使用正则表达式精确提取用户名部分。例如 DN pattern 为 `uid=${USER}@abc.com,ou=People,dc=example,dc=com` 时，应将 `ldap_user_search_attr` 设为 `uid=([^,@]+)@abc.com`，仅提取 `${USER}` 对应的部分。若简单配置为 `uid` 或 `uid=([^,]+)`，会错误地提取出 `alice@abc.com` 而非 `alice`。
+
+:::
+
 #### `ldap_cache_arg` 参数组
 
 用于定义 LDAP 组信息缓存行为的参数。

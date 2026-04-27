@@ -767,4 +767,50 @@ public class SecurityIntegrationTest {
         authenticationMgr.replayDropSecurityIntegration("full_jwt");
     }
 
+    /**
+     * Test case: LDAP Security Integration with bind DN pattern
+     * Test point: Validate bind_dn_pattern property is passed through and shown in SHOW CREATE
+     */
+    @Test
+    public void testLDAPSecurityIntegrationWithBindDNPattern() throws DdlException, AuthenticationException, IOException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_ldap_simple");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_DN_PATTERN,
+                "uid=${USER},ou=People,dc=example,dc=com");
+
+        // Create integration with pattern
+        authenticationMgr.replayCreateSecurityIntegration("ldap_pattern", properties);
+        SecurityIntegration integration = authenticationMgr.getSecurityIntegration("ldap_pattern");
+        Assertions.assertNotNull(integration);
+        Assertions.assertTrue(integration instanceof SimpleLDAPSecurityIntegration);
+
+        // Verify provider can be created
+        AuthenticationProvider provider = ((SimpleLDAPSecurityIntegration) integration).getAuthenticationProvider();
+        Assertions.assertNotNull(provider);
+        Assertions.assertTrue(provider instanceof LDAPAuthProvider);
+
+        // Verify SHOW CREATE includes bind_dn_pattern
+        ShowResultSet resultSet =
+                ShowExecutor.execute(new ShowCreateSecurityIntegrationStatement("ldap_pattern", NodePosition.ZERO), null);
+        String createStatement = resultSet.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createStatement.contains("authentication_ldap_simple_bind_dn_pattern"));
+        Assertions.assertTrue(createStatement.contains("uid=${USER},ou=People,dc=example,dc=com"));
+
+        // Alter to change pattern
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_DN_PATTERN,
+                "cn=${USER},ou=Staff,dc=example,dc=com");
+        authenticationMgr.replayAlterSecurityIntegration("ldap_pattern", alterProps);
+
+        // Verify altered pattern in SHOW CREATE
+        resultSet = ShowExecutor.execute(
+                new ShowCreateSecurityIntegrationStatement("ldap_pattern", NodePosition.ZERO), null);
+        createStatement = resultSet.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createStatement.contains("cn=${USER},ou=Staff,dc=example,dc=com"));
+
+        // Clean up
+        authenticationMgr.replayDropSecurityIntegration("ldap_pattern");
+    }
 }
