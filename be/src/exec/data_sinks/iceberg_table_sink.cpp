@@ -418,11 +418,15 @@ Status IcebergTableSink::create_row_delta_sink_context(
     delete_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     delete_sink_ctx->fragment_context = fragment_ctx;
 
-    // Delete output_exprs: columns from 0 to data_column_start-1 (_file, _pos, partition cols)
-    std::vector<TExpr> delete_output_exprs(output_exprs.begin(), output_exprs.begin() + data_column_start);
-    delete_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(delete_output_exprs, runtime_state);
+    // Pass the full output_exprs list (one per tuple slot) so
+    // IcebergDeleteSinkProvider::create_chunk_sink()'s strict
+    // `tuple_desc->slots().size() == ctx->output_exprs.size()` DCHECK holds in
+    // debug builds. The delete sub-sink only consumes evaluators [0]=_file and
+    // [1]=_pos at runtime; trailing data-column / op_code evaluators are held
+    // but not used.
+    delete_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
     delete_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
-    delete_sink_ctx->output_exprs = delete_output_exprs;
+    delete_sink_ctx->output_exprs = output_exprs;
 
     // Configure partition columns for delete context
     delete_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
