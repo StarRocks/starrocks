@@ -422,18 +422,49 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         this.commitVersionMap = other.commitVersionMap;
         this.errMsg = other.errMsg;
         this.finishedTimeMs = other.finishedTimeMs;
-        if (jobState == JobState.FINISHED) {
+
+        // Edit-log entries persist AlterJobV2 state but NOT the OlapTable's
+        // state. After a cold start, the table's state must be re-derived
+        // from the job's state or it can fall out of sync with the image.
+        // Mirror LakeTableSchemaChangeJob.replay():
+        //   - in-progress states  -> SCHEMA_CHANGE (block concurrent DDL)
+        //   - FINISHED / CANCELLED -> NORMAL       (release the table)
+        // Without this, a checkpoint taken while the table was in
+        // SCHEMA_CHANGE could leave the table permanently stuck on FINISHED
+        // replay, and drop_partition (which only checks the live state)
+        // could run against a partition mid-alter on PENDING/RUNNING replay.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        OlapTable table = null;
+        if (db != null) {
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), tableId);
+        }
+        if (table == null) {
+            return;
+        }
+        if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN
+                || jobState == JobState.RUNNING || jobState == JobState.FINISHED_REWRITING) {
+            table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        } else if (jobState == JobState.FINISHED) {
             // Reapply catalog mutation at replay so a cold-started FE sees
             // the post-alter table state. The mutation is idempotent by
             // design (add checks presence, drop is no-op on missing).
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db != null) {
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), tableId);
-                if (table != null) {
-                    applyCatalogMutation(table);
+            //
+            // Also re-bump each partition's visibleVersion: the live FE
+            // captured this in memory only, and the next image may have been
+            // taken before the bump landed. Skip a partition whose live
+            // visibleVersion already covers the commitVersion (idempotent on
+            // replay-after-checkpoint).
+            for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
+                PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
+                if (pp != null && pp.getVisibleVersion() < e.getValue()) {
+                    pp.setVisibleVersion(e.getValue(), finishedTimeMs);
                 }
             }
+            applyCatalogMutation(table);
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        } else if (jobState == JobState.CANCELLED) {
+            table.setState(OlapTable.OlapTableState.NORMAL);
         }
     }
 
