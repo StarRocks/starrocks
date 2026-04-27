@@ -662,7 +662,7 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
 
     std::vector<TExpr> t_conjuncts;
     // id > 2, this triggers page index filtering
-    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
+    ParquetUTBase::append_bigint_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
 
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
