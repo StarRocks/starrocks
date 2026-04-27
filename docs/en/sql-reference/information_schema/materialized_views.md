@@ -37,3 +37,4 @@ The following fields are provided in `materialized_views`:
 | CREATOR                              | Creator of the materialized view.                            |
 | LAST_REFRESH_PROCESS_TIME            | Process time of the most recent refresh task.                |
 | LAST_REFRESH_JOB_ID                  | Job ID of the most recent refresh task.                      |
+| LAST_REFRESH_TIME                    | Time up to which base table updates are reflected in the materialized view. |

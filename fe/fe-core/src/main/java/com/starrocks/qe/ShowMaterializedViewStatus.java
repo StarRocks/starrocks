@@ -74,6 +74,7 @@ public class ShowMaterializedViewStatus {
     private String queryRewriteStatus;
     private long taskId;
     private String taskName;
+    private long lastRefreshTime;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -353,6 +354,9 @@ public class ShowMaterializedViewStatus {
             status.setTaskId(task.getId());
             status.setTaskName(task.getName());
         }
+        if (refreshScheme != null) {
+            status.setLastRefreshTime(refreshScheme.getLastRefreshTime());
+        }
         status.setLastJobTaskRunStatus(taskTaskStatusJob);
         return status;
     }
@@ -481,6 +485,14 @@ public class ShowMaterializedViewStatus {
 
     public void setTaskName(String taskName) {
         this.taskName = taskName;
+    }
+
+    public long getLastRefreshTime() {
+        return lastRefreshTime;
+    }
+
+    public void setLastRefreshTime(long lastRefreshTime) {
+        this.lastRefreshTime = lastRefreshTime;
     }
 
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
@@ -658,6 +670,10 @@ public class ShowMaterializedViewStatus {
         status.setQuery_rewrite_status(queryRewriteStatus);
         // creator
         status.setCreator(refreshJobStatus.getTaskOwner());
+        // last refresh time (data version timestamp used for staleness check)
+        if (lastRefreshTime > 0) {
+            status.setLast_refresh_time(TimeUtils.longToTimeString(lastRefreshTime));
+        }
 
         return status;
     }
@@ -731,6 +747,8 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
         // last refresh job id
         addField(resultRow, refreshJobStatus.getJobId());
+        // last refresh time (data version timestamp used for staleness check)
+        addField(resultRow, lastRefreshTime > 0 ? TimeUtils.longToTimeString(lastRefreshTime) : "");
 
         return resultRow;
     }
