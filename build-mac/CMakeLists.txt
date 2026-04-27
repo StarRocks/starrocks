@@ -1181,6 +1181,7 @@ set(MACOS_SHIM_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/java_window_function_stub.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/missing_symbols_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/lookup_stub.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/orc_lzo_stub.cpp"
 )
 foreach(_shim_file IN LISTS MACOS_SHIM_SOURCES)
     if(EXISTS "${_shim_file}")
