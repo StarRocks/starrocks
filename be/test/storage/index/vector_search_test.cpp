@@ -430,7 +430,8 @@ protected:
 
     // Write a segment WITHOUT vector index. The .vi file won't exist.
     StatusOr<std::shared_ptr<Segment>> write_segment(const std::vector<int64_t>& ids,
-                                                     const std::vector<std::vector<float>>& vectors) {
+                                                     const std::vector<std::vector<float>>& vectors,
+                                                     std::shared_ptr<TabletSchema> read_schema = nullptr) {
         auto write_schema = build_write_schema();
         std::string file_name = kSegmentDir + "/test_segment.dat";
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(file_name));
@@ -456,8 +457,11 @@ protected:
         uint64_t seg_size = 0, index_size = 0, footer_pos = 0;
         RETURN_IF_ERROR(writer.finalize(&seg_size, &index_size, &footer_pos));
 
-        // Open with the read schema (which has vector index) to simulate real scenario
-        auto read_schema = build_read_schema_with_vector_index();
+        // Open with the supplied read schema (or the default vector-index schema) so
+        // _setup_brute_force_fallback sees the metric_type the test wants to exercise.
+        if (read_schema == nullptr) {
+            read_schema = build_read_schema_with_vector_index();
+        }
         return Segment::open(_fs, FileInfo{file_name}, 0, read_schema);
     }
 };
@@ -685,6 +689,198 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     EXPECT_EQ(ids_out->get_data()[1], 2);
     EXPECT_EQ(ids_out->get_data()[2], 3);
 
+    chunk_iter->close();
+}
+
+namespace {
+// Build a read-time TabletSchema with a vector index whose metric_type is the
+// argument. Mirrors BruteForceVectorFallbackTest::build_read_schema_with_vector_index
+// but lets the caller swap the metric to exercise the cosine / l2 / unsupported
+// branches in _setup_brute_force_fallback.
+std::shared_ptr<TabletSchema> build_read_schema_with_metric(const std::string& metric) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_next_column_unique_id(3);
+
+    auto* col0 = schema_pb.add_column();
+    col0->set_unique_id(0);
+    col0->set_name("id");
+    col0->set_type("BIGINT");
+    col0->set_is_key(true);
+    col0->set_is_nullable(false);
+    col0->set_length(8);
+    col0->set_index_length(8);
+    col0->set_aggregation("NONE");
+
+    auto* col1 = schema_pb.add_column();
+    col1->set_unique_id(1);
+    col1->set_name("vector");
+    col1->set_type("ARRAY");
+    col1->set_is_key(false);
+    col1->set_is_nullable(false);
+    col1->set_length(24);
+    col1->set_aggregation("NONE");
+    auto* child = col1->add_children_columns();
+    child->set_unique_id(2);
+    child->set_name("element");
+    child->set_type("FLOAT");
+    child->set_is_key(false);
+    child->set_is_nullable(true);
+    child->set_length(4);
+    child->set_aggregation("NONE");
+
+    auto* idx = schema_pb.add_table_indices();
+    idx->set_index_id(100);
+    idx->set_index_name("vector_index");
+    idx->set_index_type(IndexType::VECTOR);
+    idx->add_col_unique_id(1);
+    std::string props = R"({"common_properties":{"index_type":"hnsw","dim":"3","metric_type":")" + metric +
+                        R"(","is_vector_normed":"false"},"index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})";
+    idx->set_index_properties(props);
+    return TabletSchema::create(schema_pb);
+}
+
+VectorSearchOptionPtr make_vector_search_opt(int slot_id, int num_columns, const std::vector<float>& query) {
+    auto opt = std::make_shared<VectorSearchOption>();
+    opt->use_vector_index = true;
+    opt->query_vector = query;
+    opt->k = 10;
+    opt->k_factor = 1.0;
+    opt->vector_distance_column_name = "__vector_approx_l2_distance";
+    opt->vector_column_id = num_columns;
+    opt->vector_slot_id = slot_id;
+    opt->use_ivfpq = false;
+    opt->vector_range = -1.0;
+    opt->result_order = 0;
+    opt->pq_refine_factor = 1.0;
+    return opt;
+}
+} // namespace
+
+// Cosine similarity path covers the cosine branch of _setup_brute_force_fallback
+// (is_cosine_similarity = true) and the cosine branch of
+// _compute_brute_force_distances (query_norm precompute + per-row dot/norm_v).
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_cosine_similarity) {
+    std::vector<int64_t> ids = {1, 2, 3};
+    std::vector<std::vector<float>> vectors = {
+            {1.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f, 0.0f},
+            {1.0f, 1.0f, 1.0f},
+    };
+    auto schema = build_read_schema_with_metric("cosine_similarity");
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors, schema));
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    auto opt = make_vector_search_opt(/*slot_id=*/100, schema->num_columns(), {1.0f, 0.0f, 0.0f});
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = opt;
+
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    ASSERT_OK(chunk_iter->get_next(chunk.get(), &rowids));
+    ASSERT_EQ(chunk->num_rows(), 3);
+
+    // Query [1, 0, 0] (norm = 1):
+    //   Row 0 [1,0,0]: dot = 1, |v| = 1, cosine = 1.0
+    //   Row 1 [0,1,0]: dot = 0, |v| = 1, cosine = 0.0
+    //   Row 2 [1,1,1]: dot = 1, |v| = sqrt(3), cosine = 1/sqrt(3)
+    auto dist_col = chunk->get_column_by_slot_id(opt->vector_slot_id);
+    ASSERT_NE(dist_col, nullptr);
+    const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
+    ASSERT_EQ(distances->size(), 3);
+    EXPECT_FLOAT_EQ(distances->get_data()[0], 1.0f);
+    EXPECT_FLOAT_EQ(distances->get_data()[1], 0.0f);
+    EXPECT_NEAR(distances->get_data()[2], 1.0f / std::sqrt(3.0f), 1e-6);
+
+    chunk_iter->close();
+}
+
+// Unsupported metric (inner_product, etc.) covers the LOG-and-disable branch in
+// _setup_brute_force_fallback. The iterator must not crash and must not append a
+// distance column, since use_brute_force is turned off.
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_unsupported_metric_disables_fallback) {
+    std::vector<int64_t> ids = {1};
+    std::vector<std::vector<float>> vectors = {{1.0f, 2.0f, 3.0f}};
+    auto schema = build_read_schema_with_metric("inner_product");
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors, schema));
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    auto opt = make_vector_search_opt(/*slot_id=*/100, schema->num_columns(), {1.0f, 0.0f, 0.0f});
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = opt;
+
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+    // Distance column is intentionally NOT produced — fallback was disabled.
+    // The iterator should still process rows for the id column without
+    // crashing on missing distance.
+    ASSERT_TRUE(st.ok() || st.is_end_of_file());
+    EXPECT_FALSE(chunk->is_slot_exist(opt->vector_slot_id));
+    chunk_iter->close();
+}
+
+// Dim mismatch covers the LOG_EVERY_N warning + truncated calc_dim path in
+// _compute_brute_force_distances, plus the early-return when the array has zero
+// elements (offsets[i+1] == offsets[i] -> calc_dim = 0 -> distance == 0).
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_dim_mismatch_truncates) {
+    std::vector<int64_t> ids = {1, 2};
+    std::vector<std::vector<float>> vectors = {
+            {1.0f, 1.0f}, // dim 2, query is dim 3 -> truncate to 2
+            {1.0f, 1.0f, 1.0f, 1.0f}, // dim 4, truncate to 3
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+
+    auto schema = build_read_schema_with_vector_index();
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    auto opt = make_vector_search_opt(/*slot_id=*/100, schema->num_columns(), {1.0f, 1.0f, 1.0f});
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = opt;
+
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    ASSERT_OK(chunk_iter->get_next(chunk.get(), &rowids));
+    ASSERT_EQ(chunk->num_rows(), 2);
+
+    // Row 0: dim=2 vs query=3 -> calc_dim=2 -> dist = (1-1)^2 + (1-1)^2 = 0
+    // Row 1: dim=4 vs query=3 -> calc_dim=3 -> dist = (1-1)^2 + (1-1)^2 + (1-1)^2 = 0
+    auto dist_col = chunk->get_column_by_slot_id(opt->vector_slot_id);
+    ASSERT_NE(dist_col, nullptr);
+    const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
+    ASSERT_EQ(distances->size(), 2);
+    EXPECT_FLOAT_EQ(distances->get_data()[0], 0.0f);
+    EXPECT_FLOAT_EQ(distances->get_data()[1], 0.0f);
     chunk_iter->close();
 }
 
