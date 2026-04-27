@@ -2288,9 +2288,23 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
                                     _vector_index_ctx->vector_slot_id);
     } else if (_vector_index_ctx && _vector_index_ctx->use_brute_force) {
-        // Brute-force fallback: compute distances from raw vector data in chunk
+        // Brute-force fallback: compute distances from raw vector data.
+        //
+        // The vector data column may live in `chunk` (== _final_chunk) or in
+        // _dict_chunk depending on output_schema:
+        //   * If output_schema includes the vector column (FE did not prune it),
+        //     _build_final_chunk has already SWAPPED the column out of _dict_chunk
+        //     into chunk. _dict_chunk's slot is now empty; read from chunk.
+        //   * If output_schema does NOT include the vector column (FE pruned it,
+        //     and _setup_brute_force_fallback re-added it to _schema after the
+        //     caller's init_output_schema froze output_schema), the swap skipped
+        //     it. The column is still in _dict_chunk; read from there.
+        // Either way, the distance column is appended to `chunk`, which always has
+        // the planner-allocated distance slot.
         auto vec_col_id = _vector_index_ctx->vector_data_column_id;
-        const auto& vector_column = chunk->get_column_by_id(vec_col_id);
+        ColumnPtr vector_column =
+                chunk->is_cid_exist(vec_col_id) ? chunk->get_column_by_id(vec_col_id)
+                                                : _context->_dict_chunk->get_column_by_id(vec_col_id);
         _compute_brute_force_distances(vector_column.get(), chunk);
 
         // Apply vector_range filter before removing columns, so slot_id mapping is intact

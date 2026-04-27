@@ -510,6 +510,13 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_TRUE(chunk_iter != nullptr);
 
+    // Simulate the production caller (TabletReader / OlapChunkSource): freeze the
+    // output schema BEFORE the iterator's lazy _init runs. Brute-force fallback's
+    // late _schema mutation must not be expected to flow into output_schema —
+    // _do_get_next sources the vector column from _dict_chunk instead of the
+    // (possibly pruned) final chunk.
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+
     // The output schema includes the distance virtual column appended by brute-force path
     auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
