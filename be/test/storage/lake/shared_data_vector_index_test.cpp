@@ -555,4 +555,114 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_not_found) {
 
 #endif // WITH_TENANN
 
+// SegmentWriterOptions::skip_vector_index gates the VECTOR branch of
+// SegmentWriter::init that wires up standalone_index_file_paths for the
+// vector column. With skip_vector_index=true, no .vi path is configured,
+// no .vi file is produced, and _has_vector_index_written stays false.
+//
+// HorizontalGeneralTabletWriter sets this flag for bundle-file segments
+// (segments that share a single underlying data file across the rowset)
+// because the segment filename in metadata is the bundle filename, not
+// the per-segment name used to derive .vi paths. Producing .vi files for
+// bundle segments would generate paths that don't match what readers
+// look up, so the writer suppresses them.
+//
+// This test pins down the SegmentWriter-level contract directly, without
+// the BundleWritableFileContext scaffolding, so a regression that drops
+// the `&& !_opts.skip_vector_index` guard would fail here.
+TEST_F(SharedDataTabletWriterVITest, test_segment_writer_skip_vector_index_no_vi_artifact) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
+
+    auto schema_pb = create_vi_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    std::string rowset_dir = _test_dir + "/rowset_skip_vi";
+    ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
+    std::string seg_path = rowset_dir + "/segment_0.dat";
+
+    SegmentWriterOptions opts;
+    opts.segment_file_mark.rowset_path_prefix = rowset_dir;
+    opts.segment_file_mark.rowset_id = "1";
+    opts.skip_vector_index = true; // simulate the bundle-file path
+
+    ASSIGN_OR_ABORT(auto wfile, fs::new_writable_file(seg_path));
+    auto writer = std::make_unique<SegmentWriter>(std::move(wfile), /*segment_id=*/0, tablet_schema, opts);
+    ASSERT_OK(writer->init());
+
+    constexpr int kRows = 4;
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkHelper::new_chunk(schema, kRows);
+    for (int i = 0; i < kRows; ++i) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+        DatumArray arr;
+        arr.emplace_back(static_cast<float>(i) + 0.1f);
+        arr.emplace_back(static_cast<float>(i) + 0.2f);
+        arr.emplace_back(static_cast<float>(i) + 0.3f);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(arr));
+    }
+    ASSERT_OK(writer->append_chunk(*chunk));
+
+    uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
+    ASSERT_OK(writer->finalize(&seg_size, &idx_size, &footer_pos));
+
+    // Per-column write_vector_index() must report 0 standalone size, leaving
+    // _has_vector_index_written = false so the tablet writer does NOT advertise
+    // vector_index_ids on this segment's SegmentFileInfo.
+    EXPECT_FALSE(writer->has_vector_index_written());
+
+    // No .vi artifact must land on disk for this segment under any of the
+    // path-resolution branches.
+    std::string expected_vi_index_descriptor =
+            fmt::format("{}/{}_{}_{}.vi", rowset_dir, opts.segment_file_mark.rowset_id, 0, kIndexId);
+    EXPECT_FALSE(fs::path_exist(expected_vi_index_descriptor));
+}
+
+// SegmentWriter::has_vector_index_written should also be false when the
+// tablet schema has no VECTOR index at all — the per-column write_vector_index()
+// loop never sets standalone_index_size > 0. This pins down the false-by-default
+// branch that the existing tests cover only implicitly.
+TEST_F(SharedDataTabletWriterVITest, test_segment_writer_no_vi_column_has_vector_index_written_false) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(1);
+    c0->set_name("pk");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(2);
+    c1->set_name("v");
+    c1->set_type("INT");
+    c1->set_is_key(false);
+    c1->set_is_nullable(false);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    std::string rowset_dir = _test_dir + "/rowset_no_vi";
+    ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
+    std::string seg_path = rowset_dir + "/segment_0.dat";
+
+    SegmentWriterOptions opts;
+    opts.segment_file_mark.rowset_path_prefix = rowset_dir;
+    opts.segment_file_mark.rowset_id = "1";
+
+    ASSIGN_OR_ABORT(auto wfile, fs::new_writable_file(seg_path));
+    auto writer = std::make_unique<SegmentWriter>(std::move(wfile), /*segment_id=*/0, tablet_schema, opts);
+    ASSERT_OK(writer->init());
+
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkHelper::new_chunk(schema, 3);
+    for (int i = 0; i < 3; ++i) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(i * 10)));
+    }
+    ASSERT_OK(writer->append_chunk(*chunk));
+
+    uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
+    ASSERT_OK(writer->finalize(&seg_size, &idx_size, &footer_pos));
+
+    EXPECT_FALSE(writer->has_vector_index_written());
+}
+
 } // namespace starrocks::lake

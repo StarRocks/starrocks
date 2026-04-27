@@ -3223,6 +3223,99 @@ TEST_P(LakeVacuumTest, test_find_orphan_vi_files) {
     EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_999.vi"), 1);
 }
 
+// Test: vacuum honours the `i < segment_metas_size()` defensive guard in
+// delete_rowset_vi_files when a rowset has only partial segment_metas
+// (a mix of segments — some with VI tracking, some without). Pre-existing
+// rowsets that landed before precise-vacuum tracking can have segment_metas
+// shorter than segments. The vacuum must:
+//   * delete .vi files for segments that DO have segment_metas entries, and
+//   * not crash and not fabricate filenames for segments without entries.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
+    // Two segments in the compaction inputs. seg_a has segment_metas with a
+    // .vi entry; seg_b does not. Vacuum should delete seg_a's .vi only.
+    create_data_file("00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat");
+    create_data_file("00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat");
+    create_data_file("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi");
+    // The fresh-version segment (alive after compaction).
+    create_data_file("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5400,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat",
+                    "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"
+                ],
+                "data_size": 4096,
+                "segment_metas": [
+                    { "vector_index_ids": [700] }
+                ]
+            }
+        ],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5400,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat"
+                ],
+                "data_size": 200
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat",
+                    "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"
+                ],
+                "data_size": 4096,
+                "segment_metas": [
+                    { "vector_index_ids": [700] }
+                ]
+            }
+        ],
+        "prev_garbage_version": 2,
+        "commit_time": 1
+        }
+        )DEL")));
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(5400);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_min_active_txn_id(1000);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_OK(Status(response.status()));
+    }
+
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDir));
+    auto data_dir = join_path(kTestDir, kSegmentDirectoryName);
+    auto exists = [&](const std::string& name) {
+        return fs->path_exists(join_path(data_dir, name)).ok();
+    };
+
+    // Both compaction-input segments removed.
+    EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat"));
+    EXPECT_FALSE(exists("00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"));
+    // The .vi tracked by segment_metas[0] is deleted.
+    EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi"));
+    // The alive segment must still exist; vacuum did not crash on the partial-metas rowset.
+    EXPECT_TRUE(exists("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat"));
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 
