@@ -695,26 +695,18 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
-    {
-        std::vector<std::string> result_root_dirs;
-        result_root_dirs.reserve(store_paths.size());
-        for (const auto& sp : store_paths) {
-            result_root_dirs.emplace_back(sp.path);
-        }
-        _lake_compaction_result_manager = std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
-        auto scan_st = _lake_compaction_result_manager->scan_on_startup();
-        if (!scan_st.ok()) {
-            LOG(WARNING) << "CompactionResultManager scan_on_startup failed: " << scan_st;
-        }
-        // NOTE: LakeCompactionManager dispatch thread is intentionally NOT started
-        // at init time — auto-starting here was observed to deadlock BE init in
-        // some test/runtime configurations (the dispatch thread's _cv wait apparently
-        // interfered with earlier worker thread initialization, and CN nodes never
-        // reached the FE-registration step). Phase 4 follow-up will wire start/stop
-        // into a config-change watcher tied to enable_lake_autonomous_compaction.
-        // scan_on_startup() above already rebuilds pending_inputs so any future
-        // start() picks up correctly.
-    }
+    // NOTE: Intentionally NOT initializing _lake_compaction_result_manager nor
+    // starting LakeCompactionManager dispatch thread here. The autonomous
+    // compaction feature is gated by config::enable_lake_autonomous_compaction
+    // (default false); a future Phase 4 commit will wire the lazy
+    // construction + start/stop into a config-change watcher.
+    //
+    // We previously observed CN nodes never registering with the FE when this
+    // init block ran during BE startup; rather than chase the exact cause now
+    // (logging is not easily accessible on TSP clusters), keep init identical
+    // to the pre-feature baseline. All COLLECT_AND_PUBLISH paths look up the
+    // manager via the singleton accessor so they will fall back gracefully
+    // when nullptr is returned.
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
         std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
