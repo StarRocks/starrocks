@@ -274,9 +274,36 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     for (const auto& ix : schema->table_indices()) {
         if (ix.has_index_id()) have_ids.insert(ix.index_id());
     }
+    // 3. Mirror the per-column flags that metadata_util::convert_t_schema_to_pb_schema
+    //    sets at initial create. SegmentWriter gates bitmap / bloom-filter
+    //    construction on column.has_bitmap_index() / column.is_bf_column();
+    //    if we only update table_indices, the next compaction emits a segment
+    //    without the inlined index payload — and because compaction also
+    //    deletes the IDG entries for its input rowsets, the index data is
+    //    lost permanently.
+    auto bump_flag = [&](int col_uid, IndexType type) {
+        for (auto& col : *schema->mutable_column()) {
+            if (col.unique_id() != col_uid) continue;
+            if (type == IndexType::BITMAP) {
+                col.set_has_bitmap_index(true);
+            } else if (type == IndexType::NGRAMBF || type == IndexType::BLOOM_FILTER) {
+                col.set_is_bf_column(true);
+            }
+            break;
+        }
+    };
     for (const auto& new_ix : op.new_indexes()) {
-        if (!new_ix.has_index_id() || have_ids.count(new_ix.index_id()) == 0) {
+        bool added = !new_ix.has_index_id() || have_ids.count(new_ix.index_id()) == 0;
+        if (added) {
             schema->add_table_indices()->CopyFrom(new_ix);
+        }
+        // Apply the per-column flags whether or not the table_indices entry
+        // was newly added: a previous publish may have skipped the column
+        // flag update (older BE) and we want this path to be self-healing.
+        if (new_ix.has_index_type()) {
+            for (int col_uid : new_ix.col_unique_id()) {
+                bump_flag(col_uid, new_ix.index_type());
+            }
         }
     }
 }
