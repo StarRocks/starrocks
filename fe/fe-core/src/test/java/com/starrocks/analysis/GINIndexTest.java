@@ -28,24 +28,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.IndexDef.IndexType;
-<<<<<<< HEAD
-import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.thrift.TIndexType;
-import com.starrocks.thrift.TOlapTableIndex;
-=======
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.MatchExpr;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.StringType;
->>>>>>> c68e6523f3 ([BugFix] Fix MV index properties lost during materialized view creation (#69187))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -193,50 +180,6 @@ public class GINIndexTest extends PlanTestBase {
         MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testGINWithAutoIncrement() throws Exception {
-        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = true (Should succeed)
-        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(
-                "CREATE TABLE `t_builtin` (" +
-                        "  `k` BIGINT AUTO_INCREMENT," +
-                        "  `msg_all` varchar(100)," +
-                        "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
-                        ") ENGINE=OLAP " +
-                        "DUPLICATE KEY(`k`) " +
-                        "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
-                        "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
-        starRocksAssert.dropTable("t_builtin");
-
-        // Test clucene GIN with AUTO_INCREMENT and replicated_storage = true (Should fail)
-        // because OlapTableFactory will force replicated_storage to false for clucene GIN
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Table with AUTO_INCREMENT column must use Replicated Storage",
-                () -> starRocksAssert.withTable(
-                        "CREATE TABLE `t_clucene` (" +
-                                "  `k` BIGINT AUTO_INCREMENT," +
-                                "  `msg_all` varchar(100)," +
-                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"standard\")" +
-                                ") ENGINE=OLAP " +
-                                "DUPLICATE KEY(`k`) " +
-                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
-                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
-
-        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = false (Should fail)
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Table with AUTO_INCREMENT column must use Replicated Storage",
-                () -> starRocksAssert.withTable(
-                        "CREATE TABLE `t_builtin_no_rs` (" +
-                                "  `k` BIGINT AUTO_INCREMENT," +
-                                "  `msg_all` varchar(100)," +
-                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
-                                ") ENGINE=OLAP " +
-                                "DUPLICATE KEY(`k`) " +
-                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
-                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"false\" );"));
-    }
 
     @Test
     public void testMaterializedViewGINIndexProperties() throws Exception {
@@ -299,5 +242,4 @@ public class GINIndexTest extends PlanTestBase {
                 olapIndex.getIndex_properties().get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY),
                 "Thrift index_properties should contain parser with default value");
     }
->>>>>>> c68e6523f3 ([BugFix] Fix MV index properties lost during materialized view creation (#69187))
 }
