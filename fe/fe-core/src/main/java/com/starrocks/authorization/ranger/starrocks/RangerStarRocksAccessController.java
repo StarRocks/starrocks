@@ -14,6 +14,7 @@
 
 package com.starrocks.authorization.ranger.starrocks;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
@@ -29,9 +30,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
 
@@ -488,5 +491,18 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnWarehouse(ConnectContext context, String name) throws AccessDeniedException {
         throw new AccessDeniedException();
+    }
+
+    @Override
+    @VisibleForTesting
+    public void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, Set<String> groups,
+                                 PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        // Restrict Ranger root bypass to StarRocks-internal controller.
+        // External resources (Hive/Iceberg/Hudi/...) must still be evaluated by their own Ranger policies.
+        if (UserIdentity.ROOT.equals(user)) {
+            return;
+        }
+        super.hasPermission(resource, user, groups, privilegeType);
     }
 }
