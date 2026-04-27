@@ -77,6 +77,20 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 
+// Per-CN admission cap on concurrent cold rebuilds in `LakePersistentIndex::load_from_lake_tablet`.
+// During cold-burst scenarios (BE restart, scale-out, first publish after a long idle window) the
+// publish-version pool can dispatch tens of cold rebuilds in the same ~100 ms window. Each rebuild
+// is OSS-RTT- and CPU-bound (multi_get + del_cost dominate the per-task wall time); when they all
+// run together they contend on local CPU and OSS bandwidth, which inflates the per-task time and
+// produces a tail of 7-11 s upsert Max events. Capping concurrency to a small N keeps each admitted
+// task with enough dedicated CPU/IO bandwidth to finish quickly, smoothing the burst from a
+// high-peak/short-duration shape into a lower-peak/longer-duration one. Set <= 0 to disable
+// admission control entirely (legacy behavior). Backed by a process-wide `std::mutex` +
+// `condition_variable` (NOT a threadpool token), so callers from `cloud_native_pk_index_execution`
+// or other internal pools cannot deadlock. Wait time is reported via TRACE counter
+// `cold_rebuild_admission_wait_us`.
+CONF_mInt32(pk_index_cold_rebuild_max_concurrent, "8");
+
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 
