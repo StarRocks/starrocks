@@ -47,8 +47,12 @@ public class AutonomousPublishTriggerTest {
      * (kept in lock-step manually so tests can exercise just the predicate).
      */
     private static boolean shouldTrigger(long versionDelta, double lastScore, long timeSinceLastPublishMs) {
-        if (versionDelta <= 0) return false;
-        if (versionDelta >= Config.lake_compaction_version_delta_threshold) return true;
+        if (versionDelta <= 0) {
+            return false;
+        }
+        if (versionDelta >= Config.lake_compaction_version_delta_threshold) {
+            return true;
+        }
         if (lastScore > Config.lake_compaction_high_score_threshold &&
                 versionDelta >= Config.lake_compaction_min_version_delta_for_high_score) {
             return true;

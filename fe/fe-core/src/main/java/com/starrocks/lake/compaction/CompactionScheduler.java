@@ -122,7 +122,8 @@ public class CompactionScheduler extends Daemon {
                     // flow does not understand. Mixing both would cause two publish
                     // sources to race for the same partition. Log and skip.
                     LOG.warn("enable_lake_autonomous_compaction is ON but enable_file_bundling is also ON; "
-                            + "skipping autonomous publish to avoid conflicts. Disable file bundling to use autonomous compaction.");
+                            + "skipping autonomous publish to avoid conflicts. "
+                            + "Disable file bundling to use autonomous compaction.");
                 } else {
                     schedulePartitionPublish();
                 }
