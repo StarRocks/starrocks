@@ -480,7 +480,7 @@ CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 // Max threads for lake partial update segment-level parallelism.
-// <= 0 means use CPU core count. Runtime on/off is controlled by enable_pk_index_parallel_execution.
+// <= 0 means use half of CPU core count. Runtime on/off is controlled by enable_pk_index_parallel_execution.
 CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 // Queue size for the lake partial update threadpool.
 CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");

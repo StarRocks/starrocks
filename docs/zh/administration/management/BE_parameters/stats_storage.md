@@ -905,7 +905,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数。运行时开关由 `enable_pk_index_parallel_execution` 控制。
+- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。运行时开关由 `enable_pk_index_parallel_execution` 控制。
 - 引入版本：v4.1
 
 ### lake_partial_update_thread_pool_queue_size

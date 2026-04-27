@@ -724,11 +724,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
     max_thread_count = config::lake_partial_update_thread_pool_max_threads;
     if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores();
+        max_thread_count = CpuInfo::num_cores() / 2;
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("lake_partial_update")
                             .set_min_threads(0)
-                            .set_max_threads(max_thread_count)
+                            .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::lake_partial_update_thread_pool_queue_size)
                             .build(&_lake_partial_update_thread_pool));
     REGISTER_THREAD_POOL_METRICS(lake_partial_update, _lake_partial_update_thread_pool);

@@ -780,7 +780,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データモードでの部分更新セグメントレベル並列実行用のスレッドプールの最大スレッド数。このスレッドプールは行モード（並列 load_segment + rewrite_segment）と列モード（並列 DCG 生成）の両方の部分更新で使用されます。0 は CPU コア数に自動設定されることを意味します。実行時のオン/オフは `enable_pk_index_parallel_execution` で制御されます。
+- 説明: 共有データモードでの部分更新セグメントレベル並列実行用のスレッドプールの最大スレッド数。このスレッドプールは行モード（並列 load_segment + rewrite_segment）と列モード（並列 DCG 生成）の両方の部分更新で使用されます。0 は CPU コア数の半分に自動設定されることを意味します。実行時のオン/オフは `enable_pk_index_parallel_execution` で制御されます。
 - 導入バージョン: v4.1
 
 ### lake_partial_update_thread_pool_queue_size
