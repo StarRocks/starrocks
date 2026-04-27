@@ -1363,27 +1363,6 @@ build_formula_sasl() {
     sync_lib64_links
 }
 
-build_formula_absl() {
-    ensure_formula abseil
-    local prefix
-    prefix="$(formula_prefix abseil)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libabsl"*.a "${prefix}/lib/libabsl"*.dylib
-    link_formula_metadata "${prefix}"
-    sync_lib64_links
-}
-
-build_formula_grpc() {
-    ensure_formula grpc
-    local prefix
-    prefix="$(formula_prefix grpc)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libgrpc"*.a "${prefix}/lib/libgrpc"*.dylib "${prefix}/lib/libgpr"*.a "${prefix}/lib/libgpr"*.dylib "${prefix}/lib/libaddress_sorting"*.a "${prefix}/lib/libaddress_sorting"*.dylib "${prefix}/lib/libupb"*.a "${prefix}/lib/libupb"*.dylib "${prefix}/lib/libutf8_range"*.a "${prefix}/lib/libutf8_range"*.dylib
-    link_matching_if_missing "${TP_INSTALL_DIR}/bin" "${prefix}/bin/grpc"* "${prefix}/bin/protoc-gen-grpc"* "${prefix}/bin/grpc_cpp_plugin"
-    link_formula_metadata "${prefix}"
-    sync_lib64_links
-}
-
 # Build abseil from TP source (pinned 20220623). Homebrew's abseil ABI drifts
 # across releases and newer ones are too new for gRPC 1.43; source build
 # keeps the whole TP chain consistent.
@@ -1403,13 +1382,12 @@ build_absl() {
 
     cd "${TP_SOURCE_DIR}/${ABSL_SOURCE}"
 
-    # abseil 20220623's APPLE branch assumes Apple Clang's -Xarch_* driver,
-    # which Homebrew LLVM clang doesn't implement — it then passes -msse4.1
-    # to arm64 and fails. Narrow the branch to AppleClang only.
+    # Narrow the APPLE+Clang branch to AppleClang only — Homebrew LLVM clang
+    # does not implement Apple Clang's -Xarch_* driver and fails on arm64.
+    local patch_file="${TP_PATCH_DIR}/abseil-cpp-20220623.0-apple-clang-only.patch"
     local copts_file="absl/copts/AbseilConfigureCopts.cmake"
-    if grep -q "if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES \\[\\[Clang\\]\\])" "${copts_file}"; then
-        sed -i.bak 's/if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES \[\[Clang\]\])/if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")/' "${copts_file}"
-        rm -f "${copts_file}.bak"
+    if [[ -f "${patch_file}" ]] && grep -q "MATCHES \\[\\[Clang\\]\\]" "${copts_file}" 2>/dev/null; then
+        patch -p1 --forward --batch < "${patch_file}" >/dev/null || true
     fi
 
     mkdir -p "${BUILD_DIR}"
