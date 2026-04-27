@@ -33,9 +33,13 @@ import java.util.Objects;
 public class PhysicalCTEConsumeOperator extends PhysicalOperator {
     private final int cteId;
 
-    private final Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
+    // Value type is ScalarOperator (not ColumnRefOperator) so that CloneDuplicateColRefRule
+    // can wrap duplicated producer column refs in a CloneOperator in place. At construction
+    // time the values are always ColumnRefOperator; CloneOperator values are only introduced
+    // by CloneDuplicateColRefRule near the end of optimization.
+    private final Map<ColumnRefOperator, ScalarOperator> cteOutputColumnRefMap;
 
-    public PhysicalCTEConsumeOperator(int cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap,
+    public PhysicalCTEConsumeOperator(int cteId, Map<ColumnRefOperator, ScalarOperator> cteOutputColumnRefMap,
                                       long limit, ScalarOperator predicate, Projection projection) {
         super(OperatorType.PHYSICAL_CTE_CONSUME);
         this.cteId = cteId;
@@ -49,14 +53,14 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
         return cteId;
     }
 
-    public Map<ColumnRefOperator, ColumnRefOperator> getCteOutputColumnRefMap() {
+    public Map<ColumnRefOperator, ScalarOperator> getCteOutputColumnRefMap() {
         return cteOutputColumnRefMap;
     }
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
-        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : cteOutputColumnRefMap.entrySet()) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : cteOutputColumnRefMap.entrySet()) {
             entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
         }
         return new RowOutputInfo(entryList);
@@ -98,6 +102,7 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
                 "cteId='" + cteId + '\'' +
                 ", limit=" + limit +
                 ", predicate=" + predicate +
+                ", outputColumns='" + getCteOutputColumnRefMap() + '\'' +
                 '}';
     }
 }

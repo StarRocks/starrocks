@@ -196,6 +196,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
@@ -3563,8 +3564,12 @@ public class PlanFragmentBuilder {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
             this.currentExecGroup.add(exchangeNode, true);
+            // Values may be wrapped in CloneOperator by CloneDuplicateColRefRule when
+            // multiple consumer columns alias the same producer column; unwrap to recover
+            // the underlying producer ColumnRef so the exchange receives each column once.
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
+                    .map(v -> v instanceof CloneOperator ? v.getChild(0) : v)
+                    .map(v -> ((ColumnRefOperator) v).getId()).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
             exchangeNode.forceCollectExecStats();
 

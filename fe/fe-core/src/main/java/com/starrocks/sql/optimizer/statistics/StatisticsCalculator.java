@@ -1940,7 +1940,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
-                                   Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
+                                   Map<ColumnRefOperator, ? extends ScalarOperator> columnRefMap) {
 
         if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first
@@ -1965,7 +1965,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {
-            ColumnRefOperator produceRef = columnRefMap.get(ref);
+            // Statistics are computed before CloneDuplicateColRefRule runs, so values are
+            // always ColumnRefOperator here even for the physical CTE consume operator.
+            ColumnRefOperator produceRef = (ColumnRefOperator) columnRefMap.get(ref);
             ColumnStatistic statistic = produceStatistics.getColumnStatistic(produceRef);
             builder.addColumnStatistic(ref, statistic);
         }
