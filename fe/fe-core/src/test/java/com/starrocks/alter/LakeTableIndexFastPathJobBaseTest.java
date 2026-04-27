@@ -117,7 +117,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(gsm.getWarehouseMgr()).thenReturn(wm);
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
-             MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
+                MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             rmStatic.when(RunMode::getCurrentRunMode).thenReturn(RunMode.SHARED_DATA);
             List<List<Comparable>> infos = new ArrayList<>();
@@ -149,7 +149,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(wm.getWarehouseAllowNull(anyLong())).thenReturn(null);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
-             MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
+                MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             rmStatic.when(RunMode::getCurrentRunMode).thenReturn(RunMode.SHARED_DATA);
             List<List<Comparable>> infos = new ArrayList<>();
@@ -215,7 +215,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(db, table);
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
-             MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class)) {
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             assertTrue(job.cancelImpl("oops"));
             queueStatic.verify(() -> AgentTaskQueue.removeTask(11L, TTaskType.ALTER, 22L), times(1));

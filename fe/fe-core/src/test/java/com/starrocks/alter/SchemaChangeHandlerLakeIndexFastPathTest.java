@@ -140,7 +140,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         Method m = privateMethod("tryBuildLakeAddIndexJob", Database.class, OlapTable.class, List.class);
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
-             MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
+                MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(stubGsm());
             rmStatic.when(RunMode::getCurrentRunMode).thenReturn(RunMode.SHARED_DATA);
             Object result = invoke(m, handler, stubDb(), table,
