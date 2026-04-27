@@ -296,8 +296,7 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        // Helper method to check if rowid should always be built
-        bool always_build_rowid() const { return (use_vector_index || use_brute_force) && !use_ivfpq; }
+        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
     };
 
     // Inverted index related context, only created when needed

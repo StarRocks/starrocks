@@ -462,10 +462,16 @@ protected:
     }
 };
 
-// Test: segment with skip_vector_index=true, SegmentIterator with use_vector_index=true.
-// _prepare_vector_index should detect skip flag, set up brute-force, add vector column to schema.
-// _compute_brute_force_distances should compute correct L2 distances.
-// The iterator should NOT crash and should return a chunk with the distance column.
+// Test: segment written without a .vi file, SegmentIterator with use_vector_index=true.
+//
+// This exercises the runtime-NotFound branch of the fallback: the segment footer's
+// vector_index_storage_type is unset (the writer in OSS only sets STANDALONE when
+// a .vi was produced and never explicitly emits NONE), so Segment::skip_vector_index()
+// is false and _prepare_vector_index is a no-op. Instead, _init_ann_reader tries to
+// open the .vi file via VectorIndexReaderFactory::create_from_file, gets NotFound
+// at runtime, and routes through _setup_brute_force_fallback. The footer-hint
+// short-circuit in _prepare_vector_index is intentionally untested here — covering
+// it would require a writer that emits VECTOR_INDEX_STORAGE_NONE in the footer.
 TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     std::vector<int64_t> ids = {1, 2, 3};
     std::vector<std::vector<float>> vectors = {
@@ -474,6 +480,10 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
             {0.0f, 0.0f, 0.0f},
     };
     ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+    // Confirm we are exercising the runtime-NotFound path, not the footer-hint
+    // path — without this, a future writer change that emits NONE in the footer
+    // would silently switch which fallback branch this test covers.
+    ASSERT_FALSE(segment->skip_vector_index());
 
     auto schema = build_read_schema_with_vector_index();
 
