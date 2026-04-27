@@ -31,6 +31,15 @@ namespace starrocks {
 class ArrayColumn;
 class VectorIndexFileWriter;
 
+// Validate an array column against the vector index parameters. Every caller
+// that feeds data into a vector index builder must call this first so the
+// same dim and cosine-normalization rules apply regardless of whether the
+// build is inline (VectorIndexWriter::append, sync OLAP path) or asynchronous
+// (lake::VectorIndexBuildTask, shared-data path), and so that buffered data
+// below the build threshold is still checked. Mirrors the original
+// valid_input_vector logic in tenann_index_builder.cpp.
+Status validate_vector_index_input(const ArrayColumn& array_col, size_t dim, bool is_input_normalized);
+
 class VectorIndexWriter {
 public:
     static void create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& vector_index_file_path,

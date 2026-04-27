@@ -188,4 +188,61 @@ TEST_F(VectorIndexWriterTest, testwrite_with_empty_mark) {
     write_vector_index_below_threshold(index_path, tablet_index);
 }
 
+// Helper: build an ArrayColumn with the given per-row float vectors.
+static MutableColumnPtr make_array_column(const std::vector<std::vector<float>>& rows) {
+    auto element = FixedLengthColumn<float>::create();
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    uint32_t cursor = 0;
+    for (const auto& row : rows) {
+        for (float v : row) element->append(v);
+        cursor += static_cast<uint32_t>(row.size());
+        offsets->append(cursor);
+    }
+    auto null_column = NullColumn::create(element->size(), 0);
+    auto nullable = NullableColumn::create(std::move(element), std::move(null_column));
+    return ArrayColumn::create(std::move(nullable), std::move(offsets));
+}
+
+// Regression for StarRocksTest issue 11268 case 1: a non-normalized vector
+// must be rejected at INSERT time when cosine_similarity + is_vector_normed.
+// validate_vector_index_input is the single check called from
+// ArrayColumnWriter::append covering both sync and async write paths.
+TEST_F(VectorIndexWriterTest, validate_rejects_non_normalized_cosine) {
+    auto col = make_array_column({{1.0f, 2.0f, 3.0f, 4.0f, 5.0f}}); // sum² = 55
+    auto st = validate_vector_index_input(*down_cast<ArrayColumn*>(col.get()), /*dim=*/5,
+                                          /*is_input_normalized=*/true);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_invalid_argument()) << "expected InvalidArgument, got " << st.to_string();
+    ASSERT_NE(st.message().find("not normalized"), std::string_view::npos)
+            << "expected normalization message, got: " << st.message();
+}
+
+TEST_F(VectorIndexWriterTest, validate_accepts_normalized_cosine) {
+    // Vector with sum² ~= 1.
+    auto col = make_array_column({{0.1f, -0.3f, 0.4f, 0.5f, -0.7f}});
+    CHECK_OK(validate_vector_index_input(*down_cast<ArrayColumn*>(col.get()), 5, true));
+}
+
+TEST_F(VectorIndexWriterTest, validate_rejects_dim_mismatch) {
+    auto col = make_array_column({{1.0f, 2.0f, 3.0f}}); // 3 elems, expected 5
+    auto st = validate_vector_index_input(*down_cast<ArrayColumn*>(col.get()), 5, false);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_invalid_argument()) << "expected InvalidArgument, got " << st.to_string();
+    ASSERT_NE(st.message().find("dimensions of the vector"), std::string_view::npos)
+            << "expected dim mismatch message, got: " << st.message();
+}
+
+// Without the cosine + normalized combination, sum² is not checked.
+TEST_F(VectorIndexWriterTest, validate_skips_normalization_when_flag_off) {
+    auto col = make_array_column({{1.0f, 2.0f, 3.0f, 4.0f, 5.0f}});
+    CHECK_OK(validate_vector_index_input(*down_cast<ArrayColumn*>(col.get()), 5, false));
+}
+
+// Empty input is a no-op (mirrors original valid_input_vector behavior).
+TEST_F(VectorIndexWriterTest, validate_empty_is_noop) {
+    auto col = make_array_column({});
+    CHECK_OK(validate_vector_index_input(*down_cast<ArrayColumn*>(col.get()), 5, true));
+}
+
 } // namespace starrocks

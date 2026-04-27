@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <boost/algorithm/string.hpp>
+
 #include "column/array_column.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/casts.h"
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/column_writer.h"
+#include "storage/tablet_index.h"
 
 namespace starrocks {
 
@@ -60,6 +63,17 @@ private:
     std::unique_ptr<ScalarColumnWriter> _array_size_writer;
     std::unique_ptr<ColumnWriter> _element_writer;
     std::unique_ptr<VectorIndexWriter> _vector_index_writer;
+
+    // Vector-index input validation parameters. Populated from
+    // _opts.tablet_index[VECTOR] in init() whenever the schema declares a
+    // vector index for this array column — independently of need_vector_index,
+    // so the same validation runs in both the sync (inline build) and async
+    // (defer_vector_index_build) write paths. Validation runs once per batch
+    // in append() before any column data is written, so writes that succeed
+    // are guaranteed to contain only well-formed vectors.
+    bool _validate_vector_input = false;
+    size_t _vi_dim = 0;
+    bool _vi_is_input_normalized = false;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnWriterOptions& opts,
@@ -148,6 +162,28 @@ Status ArrayColumnWriter::init() {
         RETURN_IF_ERROR(_vector_index_writer->init());
     }
 
+    // Parse vector-index validation parameters whenever the schema declares
+    // a vector index for this column, regardless of whether the index is
+    // built inline (sync) or asynchronously. Without this the async path
+    // would persist malformed vectors that later break index reads or fail
+    // the deferred build, instead of failing the INSERT at write time.
+    if (_opts.tablet_index.count(IndexType::VECTOR) > 0) {
+        const auto& tablet_index = _opts.tablet_index.at(IndexType::VECTOR);
+        const auto& props = tablet_index.common_properties();
+        auto dim_it = props.find("dim");
+        if (dim_it == props.end()) {
+            return Status::InvalidArgument("dim is needed because it's a critical common param");
+        }
+        _vi_dim = static_cast<size_t>(std::atoi(dim_it->second.c_str()));
+        auto normed_it = props.find("is_vector_normed");
+        auto metric_it = props.find("metric_type");
+        // Lowercase-insensitive parsing mirrors get_vector_meta so the writer
+        // and the index builder agree on whether normalization applies.
+        _vi_is_input_normalized = normed_it != props.end() && boost::iequals(normed_it->second, "true") &&
+                                  metric_it != props.end() && boost::iequals(metric_it->second, "cosine_similarity");
+        _validate_vector_input = true;
+    }
+
     return Status::OK();
 }
 
@@ -160,6 +196,15 @@ Status ArrayColumnWriter::append(const Column& column) {
         null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         array_column = down_cast<const ArrayColumn*>(&column);
+    }
+
+    // Validate vector input first so writes that succeed are always
+    // well-formed. This single check covers both the sync inline-build path
+    // and the async defer_vector_index_build path; downstream consumers
+    // (VectorIndexWriter, TenAnnIndexBuilderProxy, lake::VectorIndexBuildTask)
+    // trust the data here and skip re-validation.
+    if (_validate_vector_input) {
+        RETURN_IF_ERROR(validate_vector_index_input(*array_column, _vi_dim, _vi_is_input_normalized));
     }
 
     // 1. Write null column when necessary
