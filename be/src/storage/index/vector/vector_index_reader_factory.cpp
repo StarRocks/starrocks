@@ -22,28 +22,25 @@
 
 namespace starrocks {
 
-static Status index_path_check_exists(const std::string& index_path, FileSystem* fs) {
-    if (fs != nullptr) {
-        auto st = fs->path_exists(index_path);
-        if (st.is_not_found()) {
-            return Status::NotFound(fmt::format("index path {} not found", index_path));
-        }
-        return st;
-    }
-    if (!fs::path_exist(index_path)) {
-        return Status::NotFound(fmt::format("index path {} not found", index_path));
-    }
-    return Status::OK();
-}
-
 static Status create_from_file_impl(const std::string& index_path,
                                     const std::shared_ptr<tenann::IndexMeta>& /*index_meta*/,
                                     std::shared_ptr<VectorIndexReader>* vector_index_reader, FileSystem* fs) {
-    RETURN_IF_ERROR(index_path_check_exists(index_path, fs));
     std::unique_ptr<RandomAccessFile> index_file;
     if (fs != nullptr) {
-        ASSIGN_OR_RETURN(index_file, fs->new_random_access_file(index_path));
+        // Remote FS: let new_random_access_file() be the single source of truth for
+        // NotFound. Doing a separate path_exists() here would cost an extra round-trip.
+        auto file_or = fs->new_random_access_file(index_path);
+        if (!file_or.ok()) {
+            if (file_or.status().is_not_found()) {
+                return Status::NotFound(fmt::format("index path {} not found", index_path));
+            }
+            return file_or.status();
+        }
+        index_file = std::move(file_or).value();
     } else {
+        if (!fs::path_exist(index_path)) {
+            return Status::NotFound(fmt::format("index path {} not found", index_path));
+        }
         ASSIGN_OR_RETURN(index_file, fs::new_random_access_file(index_path));
     }
     ASSIGN_OR_RETURN(auto file_size, index_file->get_size());

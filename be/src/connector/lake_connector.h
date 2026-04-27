@@ -139,7 +139,7 @@ private:
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id = 0;
 
-    // The following are profile meatures
+    // The following are profile measures
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
     int64_t _bytes_read = 0;

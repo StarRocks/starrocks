@@ -381,7 +381,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
 // Exercise the vector-search branches of LakeDataSource::open() that were added by
 // the shared-data vector index read PR:
 //   * open() propagation of TVectorSearchOptions from thrift into _use_vector_index etc.
-//   * init_scanner_columns: the slot-id == _vector_slot_id branch and its else branch.
+//   * init_scanner_columns: the slot-id != _vector_slot_id (regular column lookup) branch.
 //   * init_reader_params: the `if (_use_vector_index)` block that copies query_vector,
 //     vector_range, ann_params, etc. onto the reader params.
 //
@@ -398,9 +398,9 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
 
     create_rowsets_for_testing(_tablet_metadata.get(), 2);
 
-    // 1) Build TLakeScanNode with vector_search_options set. vector_slot_id intentionally
-    //    matches the first tuple slot's id (assigned 0 below) so the slot-id == _vector_slot_id
-    //    branch fires for at least one slot.
+    // 1) Build TLakeScanNode with vector_search_options set. vector_slot_id is set to
+    //    a value that does not match any tuple slot (see below), so init_scanner_columns
+    //    exercises the regular-column-lookup branch for every slot.
     int64_t schema_id = next_id();
     if (schema_id == _tablet_metadata->schema().id()) {
         schema_id = next_id();
