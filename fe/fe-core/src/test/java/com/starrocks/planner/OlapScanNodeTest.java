@@ -73,4 +73,36 @@ public class OlapScanNodeTest {
         Assertions.assertEquals(Arrays.asList("1.0", "2.0", "3.0"),
                 msg.lake_scan_node.getVector_search_options().getQuery_vector());
     }
+
+    @Test
+    public void testLakeScanNodeWithVectorSearchOptionsDisabled() {
+        // toThrift must not emit vector_search_options on the lake_scan_node when ANN is disabled.
+        // Covers the `vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()` guard:
+        // the negative side of the `&&`, which the positive-case test cannot exercise.
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.CLOUD_NATIVE);
+
+        VectorSearchOptions opts = new VectorSearchOptions();
+        opts.setEnableUseANN(false);
+        scanNode.setVectorSearchOptions(opts);
+
+        TPlanNode msg = new TPlanNode();
+        scanNode.toThrift(msg);
+
+        Assertions.assertNotNull(msg.lake_scan_node);
+        Assertions.assertFalse(msg.lake_scan_node.isSetVector_search_options());
+    }
+
+    @Test
+    public void testLakeScanNodeWithNullVectorSearchOptions() {
+        // toThrift must not emit vector_search_options when the field has been set to null.
+        // Covers the `vectorSearchOptions != null` short-circuit branch in toThrift.
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.CLOUD_NATIVE);
+        scanNode.setVectorSearchOptions(null);
+
+        TPlanNode msg = new TPlanNode();
+        scanNode.toThrift(msg);
+
+        Assertions.assertNotNull(msg.lake_scan_node);
+        Assertions.assertFalse(msg.lake_scan_node.isSetVector_search_options());
+    }
 }
