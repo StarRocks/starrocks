@@ -38,7 +38,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Function;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -1016,7 +1015,7 @@ public class ExpressionStatisticsCalculatorTest {
     public void testIfWithIsNullPredicateHasCorrectNdv() {
         // GIVEN
         // CASE WHEN `NONNULL` IS NULL THEN 1 ELSE 0 END
-        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "NONNULL", true);
+        final var col = new ColumnRefOperator(0, Type.BIGINT, "NONNULL", true);
 
         final var colStat = ColumnStatistic.builder() //
                 .setDistinctValuesCount(1_000_237) //
@@ -1033,7 +1032,7 @@ public class ExpressionStatisticsCalculatorTest {
         final var then = ConstantOperator.createInt(1);
         final var elseClause = ConstantOperator.createInt(0);
 
-        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.TINYINT, Lists.newArrayList(isNull, then, elseClause));
+        final var ifOp = new CallOperator(FunctionSet.IF, Type.TINYINT, Lists.newArrayList(isNull, then, elseClause));
 
         // WHEN
         final var ifStat = ExpressionStatisticCalculator.calculate(ifOp, statistics);
@@ -1049,7 +1048,7 @@ public class ExpressionStatisticsCalculatorTest {
     public void testIfIsNullMcvPropagation() {
         // GIVEN
         Function<Double, Statistics> makeStats = nullFrac -> {
-            final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+            final var col = new ColumnRefOperator(0, Type.BIGINT, "COL", true);
             final var colStat = ColumnStatistic.builder() //
                     .setDistinctValuesCount(1_000_000) //
                     .setNullsFraction(nullFrac) //
@@ -1062,11 +1061,11 @@ public class ExpressionStatisticsCalculatorTest {
         };
 
         Function<Statistics, ColumnStatistic> calcIfStat = stats -> {
-            final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+            final var col = new ColumnRefOperator(0, Type.BIGINT, "COL", true);
             final var isNull = new IsNullPredicateOperator(false, col);
             final var then = ConstantOperator.createTinyInt((byte) 1);
             final var elseConst = ConstantOperator.createTinyInt((byte) 0);
-            final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.TINYINT, Lists.newArrayList(isNull, then, elseConst));
+            final var ifOp = new CallOperator(FunctionSet.IF, Type.TINYINT, Lists.newArrayList(isNull, then, elseConst));
             return ExpressionStatisticCalculator.calculate(ifOp, stats);
         };
 
@@ -1104,7 +1103,7 @@ public class ExpressionStatisticsCalculatorTest {
         // GIVEN
         // IF(col IS NULL, nullable_expr, non_nullable_expr)
         // col has 0% nulls, so IS NULL is always false => only ELSE branch is taken.
-        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+        final var col = new ColumnRefOperator(0, Type.BIGINT, "COL", true);
 
         final var colStat = ColumnStatistic.builder() //
                 .setDistinctValuesCount(500) //
@@ -1118,10 +1117,10 @@ public class ExpressionStatisticsCalculatorTest {
                 .build();
 
         final var isNull = new IsNullPredicateOperator(false, col);
-        final var thenClause = ConstantOperator.createNull(IntegerType.INT);
+        final var thenClause = ConstantOperator.createNull(Type.INT);
         final var elseClause = ConstantOperator.createInt(42);
 
-        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.INT,
+        final var ifOp = new CallOperator(FunctionSet.IF, Type.INT,
                 Lists.newArrayList(isNull, thenClause, elseClause));
 
         // WHEN

@@ -19,7 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
@@ -120,7 +120,7 @@ public class ExpressionStatisticCalculator {
                     .setAverageRowSize(operator.getType().getTypeSize()) //
                     .setDistinctValuesCount(1);
 
-            operator.castTo(VarcharType.VARCHAR)
+            operator.castTo(Type.VARCHAR)
                     .map(ConstantOperator::toString)
                     .ifPresent(key -> {
                         final var mcv = Collections.singletonMap(key, Math.round(rowCount));
@@ -836,7 +836,7 @@ public class ExpressionStatisticCalculator {
         }
 
         private static String booleanToMcvValue(boolean bool) {
-            final var op = ConstantOperator.createBoolean(bool).castTo(VarcharType.VARCHAR);
+            final var op = ConstantOperator.createBoolean(bool).castTo(Type.VARCHAR);
 
             if (op.isEmpty()) {
                 throw new StarRocksPlannerException("Could not convert bool to string MCV key", ErrorType.INTERNAL_ERROR);
