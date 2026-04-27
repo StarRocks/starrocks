@@ -352,7 +352,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         // Create thread pool token for segment-level parallelism
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            token = ExecEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
 

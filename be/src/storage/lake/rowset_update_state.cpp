@@ -208,18 +208,8 @@ static bool should_enable_lazy_load(const RowsetUpdateStateParams& params) {
 Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                                        bool need_resolve_conflict, bool need_lock) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segment_us");
-    if (_rowset_ptr == nullptr) {
-        _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
-        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
-                                               -1 /*unused*/, params.tablet_schema);
-    }
-    TRY_CATCH_BAD_ALLOC({
-        _upserts.resize(_rowset_ptr->num_segments());
-        _base_versions.resize(_rowset_ptr->num_segments());
-        _partial_update_states.resize(_rowset_ptr->num_segments());
-        _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
-        _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
-    });
+    // prepare() must have been called before load_segment.
+    DCHECK(_rowset_ptr != nullptr);
 
     if (_upserts.size() == 0) {
         // Empty rowset
@@ -330,23 +320,13 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
 Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params) {
     CHECK_MEM_LIMIT("RowsetUpdateState::_do_load_upserts");
     TRACE_COUNTER_SCOPE_LATENCY_US("do_load_upserts_us");
-    vector<uint32_t> pk_columns;
-    pk_columns.reserve(params.tablet_schema->num_key_columns());
-    for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
-        pk_columns.push_back((uint32_t)i);
-    }
-    Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
-
-    if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
-    }
+    // prepare() must have initialized _segment_iters and _pkey_schema already.
+    DCHECK(!_segment_iters.empty());
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
     auto& iter = _segment_iters[segment_id];
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
-    // Initialize PK iterator with lazy loading if conditions allow (see should_enable_lazy_load for details).
-    // Lazy loading can significantly reduce memory usage for large segments at the cost of deferred I/O.
-    RETURN_IF_ERROR(result->init(iter, pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
+    RETURN_IF_ERROR(result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
     _upserts[segment_id] = std::move(result);
     _memory_usage += _upserts[segment_id]->memory_usage();
 
@@ -496,10 +476,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_states");
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
 
-    const auto& txn_meta = params.op_write.txn_meta();
-    for (auto& entry : txn_meta.column_to_expr_value()) {
-        _column_to_expr_value.insert({entry.first, entry.second});
-    }
+    // _column_to_expr_value is already populated by prepare().
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
     // column list that need to read from source segment
     MutableColumns read_columns;
@@ -850,6 +827,49 @@ void RowsetUpdateState::release_segment(uint32_t segment_id) {
     _memory_usage -=
             _auto_increment_delete_pks[segment_id] ? _auto_increment_delete_pks[segment_id]->memory_usage() : 0;
     _auto_increment_delete_pks[segment_id].reset();
+}
+
+void RowsetUpdateState::release_segment_partial_state(uint32_t segment_id) {
+    // Release write_columns and auto-increment partial state used only by rewrite_segment.
+    // Keep _upserts and _auto_increment_delete_pks for Phase 2 (_do_update + index.erase).
+    _memory_usage -= _partial_update_states[segment_id].memory_usage();
+    _partial_update_states[segment_id].reset();
+    _memory_usage -= _auto_increment_partial_update_states[segment_id].memory_usage();
+    _auto_increment_partial_update_states[segment_id].reset();
+}
+
+Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
+    // Initialize shared state: rowset, per-segment vectors, segment iterators, column expr values.
+    // Must be called once on the main thread before any load_segment call.
+    if (_rowset_ptr == nullptr) {
+        _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
+        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
+                                               -1 /*unused*/, params.tablet_schema);
+    }
+    if (_upserts.size() != _rowset_ptr->num_segments()) {
+        TRY_CATCH_BAD_ALLOC({
+            _upserts.resize(_rowset_ptr->num_segments());
+            _base_versions.resize(_rowset_ptr->num_segments());
+            _partial_update_states.resize(_rowset_ptr->num_segments());
+            _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
+            _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
+        });
+    }
+    if (_segment_iters.empty()) {
+        vector<uint32_t> pk_columns;
+        pk_columns.reserve(params.tablet_schema->num_key_columns());
+        for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
+            pk_columns.push_back((uint32_t)i);
+        }
+        _pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
+    }
+    if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
+        for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {
+            _column_to_expr_value.insert({entry.first, entry.second});
+        }
+    }
+    return Status::OK();
 }
 
 Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStateParams& params) {

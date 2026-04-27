@@ -243,6 +243,8 @@
         "pipeline_scan_thread_pool_thread_num",
         "pipeline_sink_io_thread_pool_queue_size",
         "pipeline_sink_io_thread_pool_thread_num",
+        "lake_partial_update_thread_pool_max_threads",
+        "lake_partial_update_thread_pool_queue_size",
         "pk_index_memtable_flush_threadpool_max_threads",
         "pk_index_memtable_flush_threadpool_size",
         "pk_index_parallel_execution_threadpool_max_threads",

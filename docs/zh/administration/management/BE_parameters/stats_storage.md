@@ -899,6 +899,24 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
+### lake_partial_update_thread_pool_max_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。运行时开关由 `enable_pk_index_parallel_execution` 控制。
+- 引入版本：v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- 默认值：2048
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：部分列更新线程池的任务队列大小。
+- 引入版本：v4.1
+
 ### pk_index_size_tiered_level_multiplier
 
 - 默认值：10
