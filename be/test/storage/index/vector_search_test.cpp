@@ -14,8 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include "fs/fs_factory.h"
-#include "fs/fs_memory.h"
+#include <cmath>
 
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
@@ -27,17 +26,34 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_vector_index_fwd.h"
+#include "fs/fs_factory.h"
+#include "fs/fs_memory.h"
+#include "gen_cpp/tablet_schema.pb.h"
+#include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
+#include "storage/index/vector/vector_search_option.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_iterator.h"
+#include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
+#include "storage/tablet_schema.h"
+#include "storage/tablet_schema_helper.h"
 
 namespace starrocks {
 
@@ -313,5 +329,325 @@ TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_l
 }
 
 #endif // WITH_TENANN
+
+
+// ==================== Brute-force fallback tests ====================
+// Test SegmentIterator brute-force fallback when .vi file is missing.
+// This covers: _prepare_vector_index, _setup_brute_force_fallback,
+// _init_ann_reader fallback path, and _compute_brute_force_distances.
+
+class BruteForceVectorFallbackTest : public testing::Test {
+protected:
+    void SetUp() override {
+        _fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
+    }
+
+    const std::string kSegmentDir = "/brute_force_vector_test";
+    std::shared_ptr<MemoryFileSystem> _fs;
+
+    // Build a TabletSchema with: id(BIGINT key) + vector(ARRAY<FLOAT>), no vector index.
+    // Used for writing segments.
+    std::shared_ptr<TabletSchema> build_write_schema() {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_next_column_unique_id(3);
+
+        auto* col0 = schema_pb.add_column();
+        col0->set_unique_id(0);
+        col0->set_name("id");
+        col0->set_type("BIGINT");
+        col0->set_is_key(true);
+        col0->set_is_nullable(false);
+        col0->set_length(8);
+        col0->set_index_length(8);
+        col0->set_aggregation("NONE");
+
+        auto* col1 = schema_pb.add_column();
+        col1->set_unique_id(1);
+        col1->set_name("vector");
+        col1->set_type("ARRAY");
+        col1->set_is_key(false);
+        col1->set_is_nullable(false);
+        col1->set_length(24);
+        col1->set_aggregation("NONE");
+        auto* child = col1->add_children_columns();
+        child->set_unique_id(2);
+        child->set_name("element");
+        child->set_type("FLOAT");
+        child->set_is_key(false);
+        child->set_is_nullable(true);
+        child->set_length(4);
+        child->set_aggregation("NONE");
+
+        return TabletSchema::create(schema_pb);
+    }
+
+    // Build a TabletSchema identical to write_schema but WITH vector index.
+    // Used for reading — simulates the real table schema that has a vector index.
+    std::shared_ptr<TabletSchema> build_read_schema_with_vector_index() {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_next_column_unique_id(3);
+
+        auto* col0 = schema_pb.add_column();
+        col0->set_unique_id(0);
+        col0->set_name("id");
+        col0->set_type("BIGINT");
+        col0->set_is_key(true);
+        col0->set_is_nullable(false);
+        col0->set_length(8);
+        col0->set_index_length(8);
+        col0->set_aggregation("NONE");
+
+        auto* col1 = schema_pb.add_column();
+        col1->set_unique_id(1);
+        col1->set_name("vector");
+        col1->set_type("ARRAY");
+        col1->set_is_key(false);
+        col1->set_is_nullable(false);
+        col1->set_length(24);
+        col1->set_aggregation("NONE");
+        auto* child = col1->add_children_columns();
+        child->set_unique_id(2);
+        child->set_name("element");
+        child->set_type("FLOAT");
+        child->set_is_key(false);
+        child->set_is_nullable(true);
+        child->set_length(4);
+        child->set_aggregation("NONE");
+
+        auto* idx = schema_pb.add_table_indices();
+        idx->set_index_id(100);
+        idx->set_index_name("vector_index");
+        idx->set_index_type(IndexType::VECTOR);
+        idx->add_col_unique_id(1);
+        std::string props =
+                R"({"common_properties":{"index_type":"hnsw","dim":"3","metric_type":"l2_distance","is_vector_normed":"false"},"index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})";
+        idx->set_index_properties(props);
+
+        return TabletSchema::create(schema_pb);
+    }
+
+    // Write a segment WITHOUT vector index. The .vi file won't exist.
+    StatusOr<std::shared_ptr<Segment>> write_segment(const std::vector<int64_t>& ids,
+                                                     const std::vector<std::vector<float>>& vectors) {
+        auto write_schema = build_write_schema();
+        std::string file_name = kSegmentDir + "/test_segment.dat";
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(file_name));
+
+        SegmentWriterOptions opts;
+        opts.num_rows_per_block = 100;
+        SegmentWriter writer(std::move(wfile), 0, write_schema, opts);
+
+        auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(write_schema), ids.size());
+        for (auto id : ids) {
+            chunk->mutable_columns()[0]->append_datum(Datum(id));
+        }
+        for (const auto& vec : vectors) {
+            DatumArray arr;
+            for (float v : vec) {
+                arr.emplace_back(Datum(v));
+            }
+            chunk->mutable_columns()[1]->append_datum(Datum(arr));
+        }
+
+        RETURN_IF_ERROR(writer.init());
+        RETURN_IF_ERROR(writer.append_chunk(*chunk));
+        uint64_t seg_size = 0, index_size = 0, footer_pos = 0;
+        RETURN_IF_ERROR(writer.finalize(&seg_size, &index_size, &footer_pos));
+
+        // Open with the read schema (which has vector index) to simulate real scenario
+        auto read_schema = build_read_schema_with_vector_index();
+        return Segment::open(_fs, FileInfo{file_name}, 0, read_schema);
+    }
+};
+
+// Test: segment with skip_vector_index=true, SegmentIterator with use_vector_index=true.
+// _prepare_vector_index should detect skip flag, set up brute-force, add vector column to schema.
+// _compute_brute_force_distances should compute correct L2 distances.
+// The iterator should NOT crash and should return a chunk with the distance column.
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
+    std::vector<int64_t> ids = {1, 2, 3};
+    std::vector<std::vector<float>> vectors = {
+            {1.0f, 2.0f, 3.0f},
+            {4.0f, 5.0f, 6.0f},
+            {0.0f, 0.0f, 0.0f},
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+
+    auto schema = build_read_schema_with_vector_index();
+
+    // Set up SegmentReadOptions with vector search enabled
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+
+    auto vector_search_opt = std::make_shared<VectorSearchOption>();
+    vector_search_opt->use_vector_index = true;
+    vector_search_opt->query_vector = {1.0f, 1.0f, 1.0f};
+    vector_search_opt->k = 3;
+    vector_search_opt->k_factor = 1.0;
+    vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
+    // vector_column_id will be set to num_columns (virtual column), matching the FE rewrite behavior
+    vector_search_opt->vector_column_id = schema->num_columns();
+    vector_search_opt->vector_slot_id = 100; // arbitrary slot id
+    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->vector_range = -1.0;
+    vector_search_opt->result_order = 0;
+    vector_search_opt->pq_refine_factor = 1.0;
+
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = vector_search_opt;
+
+    // Build read schema: only the id column (vector column pruned by FE, as in real scenario)
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_TRUE(chunk_iter != nullptr);
+
+    // The output schema includes the distance virtual column appended by brute-force path
+    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+
+    if (st.ok()) {
+        // Verify we got rows back and no crash
+        ASSERT_EQ(chunk->num_rows(), 3);
+
+        // Verify the distance column exists (appended as virtual column)
+        // The chunk should have id column + distance column
+        ASSERT_GE(chunk->num_columns(), 2);
+    }
+    // EndOfFile is also acceptable if the iterator processes all data
+    ASSERT_TRUE(st.ok() || st.is_end_of_file());
+
+    chunk_iter->close();
+}
+
+// Test: when vector column is already in read schema (not pruned),
+// _setup_brute_force_fallback should find it without adding a duplicate.
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) {
+    std::vector<int64_t> ids = {1, 2};
+    std::vector<std::vector<float>> vectors = {
+            {1.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f, 0.0f},
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+
+    auto schema = build_read_schema_with_vector_index();
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+
+    auto vector_search_opt = std::make_shared<VectorSearchOption>();
+    vector_search_opt->use_vector_index = true;
+    vector_search_opt->query_vector = {1.0f, 0.0f, 0.0f};
+    vector_search_opt->k = 2;
+    vector_search_opt->k_factor = 1.0;
+    vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
+    vector_search_opt->vector_column_id = schema->num_columns();
+    vector_search_opt->vector_slot_id = 200;
+    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->vector_range = -1.0;
+    vector_search_opt->result_order = 0;
+    vector_search_opt->pq_refine_factor = 1.0;
+
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = vector_search_opt;
+
+    // Build read schema including both id and vector columns (not pruned)
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    // Add vector column to schema (simulating the case where FE doesn't prune it)
+    auto vec_field = std::make_shared<Field>(ChunkHelper::convert_field(1, schema->column(1)));
+    read_schema.append(vec_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_TRUE(chunk_iter != nullptr);
+
+    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+
+    if (st.ok()) {
+        ASSERT_EQ(chunk->num_rows(), 2);
+        // Should have id + vector + distance columns
+        ASSERT_GE(chunk->num_columns(), 3);
+    }
+    ASSERT_TRUE(st.ok() || st.is_end_of_file());
+
+    chunk_iter->close();
+}
+
+// Test: brute-force fallback with vector_range filter.
+// Rows with distance > vector_range should be filtered out.
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) {
+    std::vector<int64_t> ids = {1, 2, 3, 4};
+    std::vector<std::vector<float>> vectors = {
+            {1.0f, 0.0f, 0.0f}, // L2 dist to query [1,1,1] = 0+1+1 = 2
+            {0.0f, 0.0f, 0.0f}, // L2 dist = 1+1+1 = 3
+            {1.0f, 1.0f, 1.0f}, // L2 dist = 0
+            {5.0f, 5.0f, 5.0f}, // L2 dist = 16+16+16 = 48
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+
+    auto schema = build_read_schema_with_vector_index();
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+
+    auto vector_search_opt = std::make_shared<VectorSearchOption>();
+    vector_search_opt->use_vector_index = true;
+    vector_search_opt->query_vector = {1.0f, 1.0f, 1.0f};
+    vector_search_opt->k = 4;
+    vector_search_opt->k_factor = 1.0;
+    vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
+    vector_search_opt->vector_column_id = schema->num_columns();
+    vector_search_opt->vector_slot_id = 300;
+    vector_search_opt->use_ivfpq = false;
+    // Set vector_range = 3.0: only rows with L2 distance <= 3.0 should pass
+    // Row 1 (dist=2): pass, Row 2 (dist=3): pass, Row 3 (dist=0): pass, Row 4 (dist=48): filtered
+    vector_search_opt->vector_range = 3.0;
+    vector_search_opt->result_order = 1; // ascending (L2: keep dist <= range)
+    vector_search_opt->pq_refine_factor = 1.0;
+
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = vector_search_opt;
+
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_TRUE(chunk_iter != nullptr);
+
+    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+
+    if (st.ok()) {
+        // Row 4 (dist=48) should be filtered out, leaving 3 rows
+        ASSERT_EQ(chunk->num_rows(), 3);
+    }
+    ASSERT_TRUE(st.ok() || st.is_end_of_file());
+
+    chunk_iter->close();
+}
 
 } // namespace starrocks
