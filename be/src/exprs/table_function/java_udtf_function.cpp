@@ -27,6 +27,7 @@
 #include "exprs/table_function/table_function.h"
 #include "gutil/casts.h"
 #include "jni.h"
+#include "runtime/runtime_state.h"
 #include "runtime/user_function_cache.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
@@ -223,7 +224,8 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
                 state->set_status(st);
                 return {};
             }
-            auto res = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi});
+            auto res = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi},
+                                     runtime_state != nullptr && runtime_state->error_if_overflow());
             if (UNLIKELY(!res.ok())) {
                 state->set_status(Status::InternalError(res.to_string()));
                 return {};

@@ -23,11 +23,14 @@
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/decimalv3_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "types/datum.h"
+#include "types/decimalv3.h"
 #include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 
@@ -230,4 +233,86 @@ TEST_F(DataConverterTest, append_jvalue) {
         ASSERT_EQ(c1->debug_item(0), "{1:34}");
     }
 }
+
+namespace {
+// Build a single-row nullable DECIMAL column and populate row 0 from a literal.
+template <LogicalType TYPE, typename T>
+ColumnPtr build_decimal_col(int precision, int scale, const std::string& literal) {
+    using ColumnT = RunTimeColumnType<TYPE>;
+    auto col = ColumnT::create(precision, scale, 1);
+    auto& data = down_cast<ColumnT*>(col.get())->get_data();
+    DecimalV3Cast::from_string<T>(&data[0], precision, scale, literal.c_str(), literal.size());
+    auto nulls = NullColumn::create(1, 0);
+    return NullableColumn::create(std::move(col), std::move(nulls));
+}
+} // namespace
+
+// Round-trip a DECIMAL value through cast_to_jvalue -> append_jvalue to make sure
+// DECIMAL32/64/128/256 ↔ java.math.BigDecimal plumbing is correct end-to-end.
+TEST_F(DataConverterTest, decimal_roundtrip) {
+    struct Case {
+        LogicalType type;
+        int precision;
+        int scale;
+        std::string literal;
+    };
+
+    auto check = [](LogicalType type, int precision, int scale, const std::string& literal, const ColumnPtr& src) {
+        TypeDescriptor tdesc = TypeDescriptor::create_decimalv3_type(type, precision, scale);
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(tdesc, true, src.get(), 0));
+        jobject obj = val.l;
+        LOCAL_REF_GUARD(obj);
+        ASSERT_NE(obj, nullptr) << "cast_to_jvalue returned null for " << literal;
+
+        auto dst = ColumnHelper::create_column(tdesc, true);
+        ASSERT_OK(append_jvalue(tdesc, true, dst.get(), val));
+        EXPECT_EQ(src->debug_item(0), dst->debug_item(0))
+                << "round-trip mismatch for " << tdesc.debug_string() << " literal=" << literal;
+    };
+
+    check(TYPE_DECIMAL32, 9, 2, "12345.67", build_decimal_col<TYPE_DECIMAL32, int32_t>(9, 2, "12345.67"));
+    check(TYPE_DECIMAL32, 9, 0, "-987654321", build_decimal_col<TYPE_DECIMAL32, int32_t>(9, 0, "-987654321"));
+    check(TYPE_DECIMAL64, 18, 4, "1234567890.1234",
+          build_decimal_col<TYPE_DECIMAL64, int64_t>(18, 4, "1234567890.1234"));
+    check(TYPE_DECIMAL64, 18, 0, "9223372036854775807",
+          build_decimal_col<TYPE_DECIMAL64, int64_t>(18, 0, "9223372036854775807"));
+    check(TYPE_DECIMAL128, 38, 10, "12345678901234567890.1234567890",
+          build_decimal_col<TYPE_DECIMAL128, int128_t>(38, 10, "12345678901234567890.1234567890"));
+    check(TYPE_DECIMAL128, 38, 0, "-170141183460469231731687303715884105727",
+          build_decimal_col<TYPE_DECIMAL128, int128_t>(38, 0, "-170141183460469231731687303715884105727"));
+    check(TYPE_DECIMAL256, 76, 10, "1234567890123456789012345678901234567890.1234567890",
+          build_decimal_col<TYPE_DECIMAL256, int256_t>(76, 10, "1234567890123456789012345678901234567890.1234567890"));
+    check(TYPE_DECIMAL256, 76, 0, "-1234567890123456789012345678901234567890",
+          build_decimal_col<TYPE_DECIMAL256, int256_t>(76, 0, "-1234567890123456789012345678901234567890"));
+}
+
+// BigDecimal values that exceed the target DECIMAL(p,s) range are either rejected (REPORT_ERROR
+// = default) or silently nulled out (OUTPUT_NULL), matching built-in decimal cast semantics.
+TEST_F(DataConverterTest, append_jvalue_decimal_overflow) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    TypeDescriptor tdesc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 5, 2); // max 999.99
+
+    // Build a BigDecimal with a value that fits in BigDecimal but not in DECIMAL64(5,2).
+    auto source_tdesc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0);
+    auto src = build_decimal_col<TYPE_DECIMAL128, int128_t>(38, 0, "1234567890");
+    ASSIGN_OR_ASSERT_FAIL(jvalue overflow_val, cast_to_jvalue(source_tdesc, true, src.get(), 0));
+    jobject obj = overflow_val.l;
+    LOCAL_REF_GUARD(obj);
+
+    // REPORT_ERROR: append_jvalue returns a non-OK Status.
+    {
+        auto dst = ColumnHelper::create_column(tdesc, true);
+        auto st = append_jvalue(tdesc, true, dst.get(), overflow_val, /*error_if_overflow=*/true);
+        EXPECT_FALSE(st.ok());
+    }
+    // OUTPUT_NULL: append_jvalue succeeds and appends a null row.
+    {
+        auto dst = ColumnHelper::create_column(tdesc, true);
+        auto st = append_jvalue(tdesc, true, dst.get(), overflow_val, /*error_if_overflow=*/false);
+        ASSERT_OK(st);
+        ASSERT_EQ(dst->size(), 1);
+        EXPECT_TRUE(dst->is_null(0));
+    }
+}
+
 } // namespace starrocks

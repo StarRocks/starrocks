@@ -28,7 +28,8 @@
 #include "udf/java/java_udf.h"
 
 namespace starrocks {
-void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
+Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, int row_num, jvalue val,
+                     bool error_if_overflow);
 
 class JavaWindowFunction final : public JavaUDAFAggregateFunction {
 public:
@@ -83,10 +84,13 @@ public:
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         // insert values to column
         JNIEnv* env = helper.getEnv();
-        MethodTypeDescriptor desc = {(LogicalType)ctx->get_return_type().type, true};
+        const auto& return_type = ctx->get_return_type();
+        const bool error_if_overflow = ctx->error_if_overflow();
         int sz = end - start;
         for (int i = 0; i < sz; ++i) {
-            assign_jvalue(desc, dst, start + i, val);
+            auto st = assign_jvalue(return_type, true, dst, start + i, val, error_if_overflow);
+            SET_FUNCTION_CONTEXT_ERR(st, ctx);
+            if (!st.ok()) break;
         }
         env->DeleteLocalRef(val.l);
     }

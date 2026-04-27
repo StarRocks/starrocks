@@ -75,6 +75,10 @@ public class CreateFunctionStmt extends DdlStmt {
                     .put(PrimitiveType.BIGINT, Long.class)
                     .put(PrimitiveType.CHAR, String.class)
                     .put(PrimitiveType.VARCHAR, String.class)
+                    .put(PrimitiveType.DECIMAL32, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL64, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL128, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL256, java.math.BigDecimal.class)
                     .build();
 
     public CreateFunctionStmt(String functionType,
