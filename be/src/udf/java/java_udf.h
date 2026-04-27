@@ -93,6 +93,12 @@ public:
     jobject create_array(int sz);
     // convert column data to Java Object Array
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
+    // Convert a DECIMAL column to a BigDecimal[] Java array. `type` is the LogicalType
+    // (TYPE_DECIMAL32/64/128) and `scale` is the DECIMAL scale. `null_buff` may be null
+    // for a non-nullable column; `data_buff` is the raw unscaled integer buffer
+    // (int32/int64/int128 little-endian).
+    StatusOr<jobject> create_boxed_decimal_array(int type, int scale, int num_rows, jobject null_buff,
+                                                 jobject data_buff);
     const std::unordered_map<int, jmethodID>& method_map() const { return _method_map; }
 
     template <class... Args>
@@ -137,6 +143,24 @@ public:
 
     Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
 
+    // DECIMAL-aware result conversion. Used when the UDF return type is DECIMAL32/64/128/256
+    // so that the BigDecimal[] produced on the Java side can be materialized into a native
+    // DECIMAL column (int32/int64/int128/int256 unscaled) using `scale` for rounding.
+    // `precision` is the declared DECIMAL precision used for overflow detection; when a
+    // value does not fit, `error_if_overflow` decides between raising an ArithmeticException
+    // (REPORT_ERROR) or nulling the row (OUTPUT_NULL).
+    Status get_decimal_result_from_boxed_array(int type, int precision, int scale, Column* col, jobject jcolumn,
+                                               int rows, bool error_if_overflow);
+
+    // Per-row helpers used by the BE for single-row DECIMAL writes. Both delegate the
+    // setScale + range check + unscaled extraction to UDFHelper (Java side) and surface
+    // overflow as a JNI exception which the caller is expected to clear.
+    //   unscaled_long       - DECIMAL32/64: returns BigDecimal -> long unscaled value.
+    //   unscaled_le_bytes   - DECIMAL128/256: returns `byte_width` LE sign-extended bytes;
+    //                          caller must DeleteLocalRef on the returned jbyteArray.
+    jlong unscaled_long(jobject big_decimal, int precision, int scale);
+    jbyteArray unscaled_le_bytes(jobject big_decimal, int precision, int scale, int byte_width);
+
     // convert int handle to jobject
     // return a local ref
     jobject convert_handle_to_jobject(FunctionContext* ctx, int state);
@@ -160,8 +184,18 @@ public:
 
     jobject newString(const char* data, size_t size);
 
+    // Construct a new java.math.BigDecimal from its string representation.
+    // Returns a local ref (nullptr on failure, error pushed via JNI exception).
+    jobject newBigDecimal(const std::string& s);
+
+    // Fast path: build a BigDecimal via BigDecimal.valueOf(unscaledVal, scale).
+    // Avoids the string-parsing cost used by the (String) constructor and is suitable
+    // for DECIMAL32 / DECIMAL64 whose unscaled value fits in int64_t.
+    jobject newBigDecimal(int64_t unscaled, int scale);
+
     Slice sliceVal(jstring jstr, std::string* buffer);
     jclass string_clazz() { return _string_class; }
+    jclass big_decimal_class() { return _big_decimal_class; }
     // replace '.' as '/'
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);
@@ -197,8 +231,11 @@ private:
     jclass _string_class;
     jclass _jarrays_class;
     jclass _exception_util_class;
+    jclass _big_decimal_class;
 
     jmethodID _string_construct_with_bytes;
+    jmethodID _big_decimal_ctor_string;
+    jmethodID _big_decimal_value_of_ll;
 
     ListMeta _list_meta;
     MapMeta _map_meta;
@@ -209,6 +246,10 @@ private:
 
     jclass _udf_helper_class;
     jmethodID _create_boxed_array;
+    jmethodID _create_boxed_decimal_array;
+    jmethodID _get_decimal_boxed_result;
+    jmethodID _bd_unscaled_long;
+    jmethodID _bd_unscaled_le_bytes;
     std::unordered_map<int, jmethodID> _method_map;
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
