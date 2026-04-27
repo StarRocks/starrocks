@@ -53,6 +53,8 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"
 #include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"
@@ -759,6 +761,209 @@ TEST_F(ColumnReaderWriterTest, test_string_writer_finish_without_append) {
 
     // No writer->append(...) call here.
     ASSERT_OK(writer->finish());
+}
+
+// ---------------------------------------------------------------------------
+// IDG read-side probe tests (covers scalar_column_iterator.cpp lines 80-99,
+// the `_opts.idg_loader != nullptr` block in init() that flips
+// `_has_idg_{original,ngram}_bf` so the upstream pruning gates surface the
+// fast-path sidecar without a footer rewrite).
+// ---------------------------------------------------------------------------
+
+namespace {
+// Stub loader: returns a caller-provided IndexDeltaGroupList (or empty),
+// optionally fails. Trips a counter so we can assert single-shot probing.
+class StubIdgLoader : public lake::IndexDeltaGroupLoader {
+public:
+    StubIdgLoader(lake::IndexDeltaGroupList list, Status load_st = Status::OK())
+            : _list(std::move(list)), _load_st(std::move(load_st)) {}
+    Status load(const TabletSegmentId& tsid, int64_t query_version, lake::IndexDeltaGroupList* out) override {
+        ++calls;
+        if (!_load_st.ok()) return _load_st;
+        *out = _list;
+        return Status::OK();
+    }
+    int calls = 0;
+
+private:
+    lake::IndexDeltaGroupList _list;
+    Status _load_st;
+};
+
+// Make a ColumnIteratorOptions wired to use `idg_loader`. Only the fields
+// the probe consults are populated; everything else inherits the legacy
+// path's defaults.
+ColumnIteratorOptions make_idg_iter_opts(RandomAccessFile* read_file, OlapReaderStatistics* stats,
+                                         std::shared_ptr<lake::IndexDeltaGroupLoader> loader, int32_t col_uid) {
+    ColumnIteratorOptions o;
+    o.stats = stats;
+    o.read_file = read_file;
+    o.use_page_cache = true;
+    o.idg_loader = std::move(loader);
+    o.tablet_id = 1;
+    o.segment_id = 0;
+    o.query_version = 100;
+    o.col_unique_id = col_uid;
+    return o;
+}
+} // namespace
+
+// Probe records NGRAMBF: has_ngram_bloom_filter_index() flips true even when
+// the segment footer carries no BF metadata.
+TEST_F(ColumnReaderWriterTest, idg_probe_sets_ngram_bf_flag) {
+    auto col = numeric_data<TYPE_INT>(0);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/0, IndexType::NGRAMBF});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_TRUE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
+    EXPECT_EQ(1, loader->calls); // probe is one-shot at init()
+}
+
+// Probe records original BF: has_original_bloom_filter_index() flips true.
+TEST_F(ColumnReaderWriterTest, idg_probe_sets_original_bf_flag) {
+    auto col = numeric_data<TYPE_INT>(0);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/0, IndexType::BLOOM_FILTER});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_TRUE(iter_base->has_original_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+}
+
+// Probe ignores entries whose col_unique_id does not match. Both flags stay
+// false.
+TEST_F(ColumnReaderWriterTest, idg_probe_skips_wrong_column) {
+    auto col = numeric_data<TYPE_INT>(0);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/77, IndexType::NGRAMBF});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    // Iterator's column_unique_id is 0, loader entry is 77 -> no match.
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
+}
+
+// Loader returns an error: probe swallows it (init() must still succeed),
+// neither flag is set.
+TEST_F(ColumnReaderWriterTest, idg_probe_tolerates_loader_error) {
+    auto col = numeric_data<TYPE_INT>(0);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{}, Status::IOError("simulated"));
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
+}
+
+// Negative col_unique_id (non-lake / pre-IDG path) skips the probe entirely.
+// Loader is never called.
+TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
+    auto col = numeric_data<TYPE_INT>(0);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/0, IndexType::NGRAMBF});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/-1);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
 }
 
 } // namespace starrocks

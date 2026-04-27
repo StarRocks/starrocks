@@ -469,6 +469,7 @@ SET(DW_TEST_FILES
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
+    ./storage/lake/segment_task_runner_test.cpp
     ./storage/lake/add_index_schema_change_test.cpp
     ./storage/lake/schema_change_test.cpp
     ./storage/lake/lake_replication_txn_manager_test.cpp
