@@ -734,8 +734,9 @@ std::shared_ptr<TabletSchema> build_read_schema_with_metric(const std::string& m
     idx->set_index_name("vector_index");
     idx->set_index_type(IndexType::VECTOR);
     idx->add_col_unique_id(1);
-    std::string props = R"({"common_properties":{"index_type":"hnsw","dim":"3","metric_type":")" + metric +
-                        R"(","is_vector_normed":"false"},"index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})";
+    std::string props =
+            R"({"common_properties":{"index_type":"hnsw","dim":"3","metric_type":")" + metric +
+            R"(","is_vector_normed":"false"},"index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})";
     idx->set_index_properties(props);
     return TabletSchema::create(schema_pb);
 }
@@ -846,7 +847,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_unsupported_metric_disable
 TEST_F(BruteForceVectorFallbackTest, test_brute_force_dim_mismatch_truncates) {
     std::vector<int64_t> ids = {1, 2};
     std::vector<std::vector<float>> vectors = {
-            {1.0f, 1.0f}, // dim 2, query is dim 3 -> truncate to 2
+            {1.0f, 1.0f},             // dim 2, query is dim 3 -> truncate to 2
             {1.0f, 1.0f, 1.0f, 1.0f}, // dim 4, truncate to 3
     };
     ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
