@@ -706,10 +706,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         if (!scan_st.ok()) {
             LOG(WARNING) << "CompactionResultManager scan_on_startup failed: " << scan_st;
         }
-        // Start the autonomous-compaction event-driven scheduler. It only does
-        // anything when config::enable_lake_autonomous_compaction is true; the
-        // start() call is a no-op cost when the feature is disabled at runtime.
-        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager, _lake_compaction_result_manager.get());
+        // NOTE: LakeCompactionManager dispatch thread is intentionally NOT started
+        // at init time — auto-starting here was observed to deadlock BE init in
+        // some test/runtime configurations (the dispatch thread's _cv wait apparently
+        // interfered with earlier worker thread initialization, and CN nodes never
+        // reached the FE-registration step). Phase 4 follow-up will wire start/stop
+        // into a config-change watcher tied to enable_lake_autonomous_compaction.
+        // scan_on_startup() above already rebuilds pending_inputs so any future
+        // start() picks up correctly.
     }
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
