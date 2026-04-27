@@ -143,6 +143,46 @@ TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryNonEmptySourceBuildsJs
 }
 
 // ===========================================================================
+// build_rejected_record_source_info() tests -- pure-functional helper that
+// decides what JSON ends up in _statistics_.rejected_records.source_info.
+// ===========================================================================
+
+TEST(RuntimeStateHelperSourceInfoTest, EmptySourceWithoutKafkaAnchorReturnsEmpty) {
+    TQueryOptions opts;
+    EXPECT_EQ("", RuntimeStateHelper::build_rejected_record_source_info(opts, ""));
+}
+
+TEST(RuntimeStateHelperSourceInfoTest, NonEmptySourceWrapsInJsonObject) {
+    TQueryOptions opts;
+    EXPECT_EQ("{\"source\":\"data.csv\"}", RuntimeStateHelper::build_rejected_record_source_info(opts, "data.csv"));
+}
+
+TEST(RuntimeStateHelperSourceInfoTest, NonEmptySourceWithSpecialCharsIsJsonEscaped) {
+    // rapidjson escapes embedded backslashes and double quotes so a
+    // pathological filename can't break out of the JSON object.
+    TQueryOptions opts;
+    EXPECT_EQ("{\"source\":\"a\\\"b\\\\c\"}", RuntimeStateHelper::build_rejected_record_source_info(opts, "a\"b\\c"));
+}
+
+TEST(RuntimeStateHelperSourceInfoTest, RoutineLoadAnchorOverridesEvenWhenSourceProvided) {
+    // When RoutineLoadTaskExecutor has stuffed a kafka anchor into the
+    // query options, we forward it verbatim and ignore the file scanner's
+    // hardcoded "stream-load-pipe" placeholder string.
+    TQueryOptions opts;
+    opts.__set_routine_load_source_info("{\"format\":\"kafka\",\"topic\":\"t\",\"partitions\":[0,1]}");
+    EXPECT_EQ("{\"format\":\"kafka\",\"topic\":\"t\",\"partitions\":[0,1]}",
+              RuntimeStateHelper::build_rejected_record_source_info(opts, "stream-load-pipe"));
+}
+
+TEST(RuntimeStateHelperSourceInfoTest, EmptyRoutineLoadAnchorFallsBackToSourceWrapping) {
+    // Defensive: an explicitly-empty anchor falls through to the legacy
+    // wrap so we don't lose the file-load source string.
+    TQueryOptions opts;
+    opts.__set_routine_load_source_info("");
+    EXPECT_EQ("{\"source\":\"data.csv\"}", RuntimeStateHelper::build_rejected_record_source_info(opts, "data.csv"));
+}
+
+// ===========================================================================
 // runtime_state.h:302 - note_rejected_record() inline method
 // ===========================================================================
 

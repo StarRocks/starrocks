@@ -810,3 +810,120 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+-- name: test_rejected_records_csv_gzip @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int not null, val int not null, name varchar(64))
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: printf '1,100,alice\n2,bad_val,bob\n3,200,carol' | gzip -c > /tmp/rej_gzip_${uuid0}.csv.gz; curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_gzip_${uuid0}" -H "format:CSV" -H "compression:gzip" -H "strict_mode:true" -H "column_separator:," --data-binary @/tmp/rej_gzip_${uuid0}.csv.gz ${url}/api/db_${uuid0}/t/_stream_load >/dev/null; echo done
+-- result:
+0
+done
+-- !result
+select * from t order by id;
+-- result:
+1	100	alice
+3	200	carol
+-- !result
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- result:
+0
+0
+-- !result
+select load_type,
+       error_code is not null as has_error_code,
+       raw_record is not null as has_raw_record
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t'
+order by created_at limit 5;
+-- result:
+STREAM_LOAD	1	1
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: rm -f /tmp/rej_gzip_${uuid0}.csv.gz; echo 0
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_rejected_records_files_csv_source_info @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int not null, val int not null)
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: printf '1,10\n2,bad\n3,30' > /tmp/rej_files_${uuid0}.csv; ossutil64 mkdir oss://${oss_bucket}/test_rejected_records/${uuid0} >/dev/null 2>&1 || true; ossutil64 cp --force /tmp/rej_files_${uuid0}.csv oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.csv >/dev/null 2>&1; echo 0
+-- result:
+0
+0
+-- !result
+set log_rejected_record_num = -1;
+-- result:
+-- !result
+set insert_max_filter_ratio = 1.0;
+-- result:
+-- !result
+insert into t select cast(id as int), cast(val as int) from files("path" = "oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.csv", "fs.oss.endpoint" = "${oss_endpoint}", "fs.oss.accessKeyId" = "${oss_ak}", "fs.oss.accessKeySecret" = "${oss_sk}", "format" = "csv", "csv.column_separator" = ",");
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	10
+3	30
+-- !result
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- result:
+0
+0
+-- !result
+select load_type,
+       source_info like '%oss://%' as has_oss_path,
+       source_info not like '%stream-load-pipe%' as not_placeholder
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t'
+order by created_at limit 1;
+-- result:
+INSERT	1	1
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: rm -f /tmp/rej_files_${uuid0}.csv; ossutil64 rm -rf oss://${oss_bucket}/test_rejected_records/${uuid0}/ >/dev/null 2>&1 || true; echo 0
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

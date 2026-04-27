@@ -145,23 +145,35 @@ void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, con
     // `log_rejected_record_num` cap fire at half the configured limit
     // for legacy call sites while leaving ORC unbounded.
 
-    // `source` is the legacy free-form string (file name for file loads,
-    // empty for INSERT / Routine Load). Wrap it in JSON so the system
-    // table's source_info column has a consistent shape; rapidjson
-    // escapes embedded quotes / backslashes correctly.
-    std::string source_info_json;
-    if (!source.empty()) {
-        rapidjson::Document d;
-        d.SetObject();
-        auto& alloc = d.GetAllocator();
-        d.AddMember("source", rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
-                    alloc);
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-        d.Accept(w);
-        source_info_json.assign(buf.GetString(), buf.GetSize());
-    }
+    std::string source_info_json = build_rejected_record_source_info(state->_query_options, source);
     writer->append_raw(record, /*error_code=*/"REJECTED", error_msg, /*error_column=*/"", source_info_json);
+}
+
+std::string RuntimeStateHelper::build_rejected_record_source_info(const TQueryOptions& query_options,
+                                                                  const std::string& source) {
+    // Routine load tasks pre-populate the kafka anchor at submit_task
+    // time -- prefer it because `source` here would otherwise be the
+    // SequentialFile placeholder name ("stream-load-pipe") which is
+    // useless to operators. The thrift field carries pre-serialized JSON
+    // built by RoutineLoadTaskExecutor; we forward it verbatim.
+    if (query_options.__isset.routine_load_source_info && !query_options.routine_load_source_info.empty()) {
+        return query_options.routine_load_source_info;
+    }
+    if (source.empty()) {
+        return std::string();
+    }
+    // Wrap the free-form `source` string (typically a file path) in JSON
+    // so the system table column always carries valid JSON; rapidjson
+    // escapes embedded quotes / backslashes correctly.
+    rapidjson::Document d;
+    d.SetObject();
+    auto& alloc = d.GetAllocator();
+    d.AddMember("source", rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
+                alloc);
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+    d.Accept(w);
+    return std::string(buf.GetString(), buf.GetSize());
 }
 
 RejectedRecordWriter* RuntimeStateHelper::rejected_record_writer(RuntimeState* state) {
