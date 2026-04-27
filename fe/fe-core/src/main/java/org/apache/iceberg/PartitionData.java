@@ -46,7 +46,7 @@ public class PartitionData
     // instances. Bounded so an unfamiliar set of struct shapes cannot pin schemas forever; an
     // evicted entry just rebuilds on next use.
     private static final Cache<Types.StructType, CachedSchema> SCHEMA_CACHE =
-            Caffeine.newBuilder().maximumSize(4096).build();
+            Caffeine.newBuilder().maximumSize(1024).build();
 
     private static CachedSchema cachedSchemaFor(Types.StructType partitionType) {
         return SCHEMA_CACHE.get(partitionType, CachedSchema::new);
