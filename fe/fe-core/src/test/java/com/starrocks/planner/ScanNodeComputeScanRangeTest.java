@@ -29,6 +29,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -122,6 +124,40 @@ public class ScanNodeComputeScanRangeTest {
         ComputeResource computeResource =
                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
         Assertions.assertDoesNotThrow(() -> metaScanNode.computeRangeLocations(computeResource));
+        Assertions.assertEquals(1, invokeCounter.get());
+    }
+
+    @Test
+    public void testOlapTableSinkCreateLocationBatchesStarClientCalls() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t1");
+        Assertions.assertNotNull(table);
+        Assertions.assertInstanceOf(OlapTable.class, table);
+        OlapTable olapTable = (OlapTable) table;
+        Assertions.assertEquals(1L, olapTable.getAllPartitionIds().size());
+        long partitionId = olapTable.getAllPartitionIds().get(0);
+        Partition partition = olapTable.getPartition(partitionId);
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartition.getId());
+        partitionParam.addToPartitions(tPartition);
+
+        AtomicInteger invokeCounter = new AtomicInteger(0);
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(Invocation invocation, String serviceId, List<Long> shardIds,
+                                                long workerGroupId) throws StarClientException {
+                invokeCounter.incrementAndGet();
+                return invocation.proceed(serviceId, shardIds, workerGroupId);
+            }
+        };
+
+        ComputeResource computeResource =
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
+        Assertions.assertDoesNotThrow(() ->
+                OlapTableSink.createLocation(olapTable, partitionParam, false, computeResource, null));
+        // 10 tablets share a single batched StarClient.getShardInfo call.
         Assertions.assertEquals(1, invokeCounter.get());
     }
 }
