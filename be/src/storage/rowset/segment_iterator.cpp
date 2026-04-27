@@ -2302,9 +2302,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         // Either way, the distance column is appended to `chunk`, which always has
         // the planner-allocated distance slot.
         auto vec_col_id = _vector_index_ctx->vector_data_column_id;
-        ColumnPtr vector_column =
-                chunk->is_cid_exist(vec_col_id) ? chunk->get_column_by_id(vec_col_id)
-                                                : _context->_dict_chunk->get_column_by_id(vec_col_id);
+        ColumnPtr vector_column = chunk->is_cid_exist(vec_col_id) ? chunk->get_column_by_id(vec_col_id)
+                                                                  : _context->_dict_chunk->get_column_by_id(vec_col_id);
         _compute_brute_force_distances(vector_column.get(), chunk);
 
         // Apply vector_range filter before removing columns, so slot_id mapping is intact
