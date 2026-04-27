@@ -232,6 +232,28 @@ void collect_dcg_orphan_files(const DeltaColumnGroupMetadataPB& old_dcg_meta,
     }
 }
 
+// Mirror of collect_dcg_orphan_files for IDG (.idx) files. Used at full
+// replication snapshot to retire pre-replication .idx files whose owning
+// rowset/segment is being replaced. Without this, the old idg_meta entries
+// would either (a) leak forever, or (b) collide with a new segment that
+// happens to land on the same rssid (source's next_rowset_id is adopted by
+// the target, so rssid spaces can overlap) and silently apply a stale
+// bitmap/bloom payload to fresh data.
+void collect_idg_orphan_files(const IndexDeltaGroupMetadataPB& old_idg_meta,
+                              const std::unordered_set<std::string>& new_referenced_files, TabletMetadataPB* metadata) {
+    for (const auto& [_, idg_ver] : old_idg_meta.idgs()) {
+        for (const auto& entry : idg_ver.entries()) {
+            if (!entry.has_index_file()) continue;
+            if (new_referenced_files.count(entry.index_file()) > 0) continue;
+            FileMetaPB file_meta;
+            file_meta.set_name(entry.index_file());
+            if (entry.has_file_size()) file_meta.set_size(entry.file_size());
+            file_meta.set_shared(entry.shared_file());
+            metadata->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+    }
+}
+
 } // namespace
 
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -697,10 +719,17 @@ private:
             auto old_delvec_meta = std::move(*_metadata->mutable_delvec_meta());
             auto old_sstable_meta = std::move(*_metadata->mutable_sstable_meta());
             auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
+            // Take ownership of the old idg_meta the same way we do for dcg
+            // above. Without this swap, the old IDG entries would persist
+            // through the replication and could collide with new segments that
+            // land on the same rssid (since the target adopts the source's
+            // next_rowset_id, rssid spaces can overlap).
+            auto old_idg_meta = std::move(*_metadata->mutable_idg_meta());
             _metadata->mutable_rowsets()->Clear();
             _metadata->mutable_delvec_meta()->Clear();
             _metadata->mutable_sstable_meta()->Clear();
             _metadata->mutable_dcg_meta()->Clear();
+            _metadata->mutable_idg_meta()->Clear();
 
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
@@ -712,6 +741,9 @@ private:
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
                 _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
+                if (copied_tablet_meta.has_idg_meta()) {
+                    _metadata->mutable_idg_meta()->CopyFrom(copied_tablet_meta.idg_meta());
+                }
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 // In lake replication scenario, we need to carefully handle compaction_inputs.
@@ -773,6 +805,11 @@ private:
                         new_referenced_files.insert(cf);
                     }
                 }
+                for (const auto& [_, idg_ver] : _metadata->idg_meta().idgs()) {
+                    for (const auto& entry : idg_ver.entries()) {
+                        if (entry.has_index_file()) new_referenced_files.insert(entry.index_file());
+                    }
+                }
             }
 
             // Clear delvec_meta and add to orphan files.
@@ -794,6 +831,7 @@ private:
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
+            collect_idg_orphan_files(old_idg_meta, new_referenced_files, _metadata.get());
 
             _tablet.update_mgr()->unload_primary_index(_tablet.id());
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
@@ -1306,13 +1344,21 @@ private:
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
+            // Same reasoning as the PK applier: take ownership of old idg_meta
+            // so stale IDG entries cannot collide with new rssids the source
+            // is about to introduce.
+            auto old_idg_meta = std::move(*_metadata->mutable_idg_meta());
             _metadata->mutable_rowsets()->Clear();
             _metadata->mutable_dcg_meta()->Clear();
+            _metadata->mutable_idg_meta()->Clear();
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
+                if (copied_tablet_meta.has_idg_meta()) {
+                    _metadata->mutable_idg_meta()->CopyFrom(copied_tablet_meta.idg_meta());
+                }
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 // In lake replication scenario, we need to carefully handle compaction_inputs.
@@ -1343,8 +1389,14 @@ private:
                     new_referenced_files.insert(cf);
                 }
             }
-            // Clear dcg_meta and add to orphan files.
+            for (const auto& [_, idg_ver] : _metadata->idg_meta().idgs()) {
+                for (const auto& entry : idg_ver.entries()) {
+                    if (entry.has_index_file()) new_referenced_files.insert(entry.index_file());
+                }
+            }
+            // Clear dcg_meta / idg_meta and add to orphan files.
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
+            collect_idg_orphan_files(old_idg_meta, new_referenced_files, _metadata.get());
             _metadata->set_cumulative_point(0);
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version
