@@ -84,10 +84,6 @@ void LockFreeWorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) 
     auto* wg_queue = _get_or_create_wg_queue(driver->workgroup());
     wg_queue->update_statistics(level, time_spent);
 
-    // Update workgroup vruntime.
-    // NOTE: incr_runtime_ns writes to non-atomic _vruntime_ns.
-    // This is a data race if called concurrently from multiple threads.
-    // Task 8 (integration) must make _vruntime_ns atomic before enabling this code.
     auto* entity = driver->workgroup()->driver_sched_entity();
     entity->incr_runtime_ns(time_spent);
 }

@@ -100,18 +100,29 @@ bool LockFreeDriverQueue::_try_take_from_levels(uint8_t bitmap, int best_level, 
     }
 
     // Best level was empty (lost race). Try remaining levels with bitmap bit set.
-    // Track which levels failed so we can batch-clear their bits.
+    // Track which levels failed so we can batch-clear their bits at the end.
+    //
+    // NOTE: We do NOT clear bits when dequeue succeeds at a non-best level.
+    // Reason: an enqueue concurrent with this loop may have observed the bitmap
+    // bit as still set (because we haven't cleared it yet) and skipped fetch_or
+    // in _mark_non_empty. If we then clear that bit, the enqueued item becomes
+    // hidden from future try_take calls (the wrapper returns true and skips its
+    // fallback). It is acceptable for stale "set" bits to remain — try_take will
+    // just attempt an empty level and fall through harmlessly. Stale "clear"
+    // bits, on the other hand, can hide items.
     uint8_t to_clear = static_cast<uint8_t>(1u << best_level);
     for (int j = 0; j < QUEUE_SIZE; ++j) {
         int i = (start + j) % QUEUE_SIZE;
         if (i == best_level || !(bitmap & (1u << i))) continue;
         if (dequeue(i, driver)) {
-            _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
             return true;
         }
         to_clear |= static_cast<uint8_t>(1u << i);
     }
 
+    // All bitmap-indicated levels were empty in this attempt. Clear their bits
+    // so future calls can short-circuit on bitmap == 0. The wrapper's fallback
+    // path will rescue any items hidden by a racing enqueue.
     _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
     return false;
 }
