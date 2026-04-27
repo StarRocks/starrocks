@@ -117,7 +117,7 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
     tablet_index->add_index_properties("efconstruction", "40");
-    tablet_index->add_index_properties("M", "16");
+    tablet_index->add_index_properties("m", "16");
     tablet_index->add_search_properties("efsearch", "40");
 
     auto index_path = test_vector_index_dir + "/" + vector_index_name;
@@ -138,9 +138,12 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
 
         ASSERT_TRUE(!init_status.is_not_supported());
 
+        constexpr int kTopK = 1;
         Status st;
-        std::vector<int64_t> result_ids;
-        std::vector<float> result_distances;
+        // tenann::AnnSearcher::AnnSearch writes into caller-owned output buffers; the
+        // vectors must be sized to at least k before the call so .data() is non-null.
+        std::vector<int64_t> result_ids(kTopK);
+        std::vector<float> result_distances(kTopK);
         SparseRange<> scan_range;
         DelIdFilter del_id_filter(scan_range);
         std::vector<float> query_vector = {1.0f, 2.0f, 3.0f};
@@ -149,10 +152,10 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
                                          .size = static_cast<uint32_t>(3),
                                          .elem_type = tenann::PrimitiveType::kFloatType};
 
-        st = ann_reader->search(query_view, 1, (result_ids.data()), reinterpret_cast<uint8_t*>(result_distances.data()),
-                                &del_id_filter);
+        st = ann_reader->search(query_view, kTopK, result_ids.data(),
+                                reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
         CHECK_OK(st);
-        ASSERT_EQ(result_ids.size(), 0);
+        ASSERT_EQ(result_ids.size(), kTopK);
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
     }
@@ -167,6 +170,14 @@ TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
     tablet_index->add_common_properties("dim", "3");
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
+    // ivfpq requires these in index_properties for tenann meta validation
+    // (CRITICAL_CHECK_AND_GET in get_vector_meta). The values are not
+    // exercised here — the test only verifies the empty-mark path returns
+    // NotSupported, but get_vector_meta() runs before that and still
+    // requires these keys to be present.
+    tablet_index->add_index_properties("nlist", "1");
+    tablet_index->add_index_properties("nbits", "8");
+    tablet_index->add_index_properties("m_ivfpq", "3");
 
     auto index_path = test_vector_index_dir + "/" + empty_index_name;
     write_vector_index(index_path, tablet_index);

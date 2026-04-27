@@ -171,8 +171,25 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path)
     std::string vi_filename = gen_vector_index_filename(segment_name, index_id);
     std::string vector_index_path = _location_provider->segment_location(tablet_id, vi_filename);
 
-    auto tablet_index = create_tablet_index(index_id);
+    // Build an ivfpq tablet_index from scratch — using create_tablet_index() and then
+    // setting "index_type" = "ivfpq" via add_common_properties does not work because
+    // TabletIndex::add_common_properties uses std::map::insert (no overwrite), so the
+    // "hnsw" inserted by create_tablet_index() would remain. ivfpq + threshold > rows
+    // is what drives the writer down the flush_empty() path we want to exercise here.
+    auto tablet_index = std::make_shared<TabletIndex>();
+    TabletIndexPB index_pb;
+    index_pb.set_index_id(index_id);
+    index_pb.set_index_name("vector_index");
+    index_pb.set_index_type(IndexType::VECTOR);
+    index_pb.add_col_unique_id(1);
+    tablet_index->init_from_pb(index_pb);
     tablet_index->add_common_properties("index_type", "ivfpq");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_index_properties("nlist", "1");
+    tablet_index->add_index_properties("nbits", "8");
+    tablet_index->add_index_properties("m_ivfpq", "3");
 
     std::unique_ptr<VectorIndexWriter> vector_index_writer;
     VectorIndexWriter::create(tablet_index, vector_index_path, true, &vector_index_writer);
@@ -257,7 +274,7 @@ protected:
             },
             "index_properties": {
                 "efconstruction": "40",
-                "M": "16"
+                "m": "16"
             }
         })";
         idx->set_index_properties(props_json);

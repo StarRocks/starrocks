@@ -119,7 +119,7 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
     tablet_index->add_index_properties("efconstruction", "40");
-    tablet_index->add_index_properties("M", "16");
+    tablet_index->add_index_properties("m", "16");
     tablet_index->add_search_properties("efsearch", "40");
 
     auto index_path = test_vector_index_dir + "/" + vector_index_name;
