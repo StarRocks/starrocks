@@ -2587,9 +2587,8 @@ void SegmentIterator::_compute_brute_force_distances(const Column* vector_column
         // here with a different dim would point to corruption or a schema/index
         // mismatch. Truncate to the shorter side and warn rather than crash.
         if (vec_dim != dim) {
-            LOG_EVERY_N(WARNING, 1024)
-                    << "brute-force vector fallback: row " << i << " dim=" << vec_dim << " differs from query dim "
-                    << dim << " in segment " << _segment->file_name();
+            LOG_EVERY_N(WARNING, 1024) << "brute-force vector fallback: row " << i << " dim=" << vec_dim
+                                       << " differs from query dim " << dim << " in segment " << _segment->file_name();
         }
         size_t calc_dim = std::min(dim, vec_dim);
 
