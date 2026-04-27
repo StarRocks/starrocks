@@ -44,6 +44,7 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -437,7 +438,8 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         }
         MVRefreshProcessor refreshProcessor =
                 ((MVTaskRunProcessor) prevTaskRun.getProcessor()).getMVRefreshProcessor();
-        return refreshProcessor instanceof MVPCTRefreshProcessor && refreshProcessor.isPinnedMode();
+        return (refreshProcessor instanceof MVPCTRefreshProcessor || refreshProcessor instanceof MVHybridRefreshProcessor)
+                && refreshProcessor.isPinnedMode();
     }
 
     @VisibleForTesting
