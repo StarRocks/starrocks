@@ -718,6 +718,7 @@
         "pk_index_sstable_fanout_min_ssts",
         "pk_index_memtable_max_count",
         "pk_index_memtable_max_wait_flush_timeout_ms",
+        "pk_index_cold_rebuild_max_concurrent",
         "pk_index_size_tiered_min_level_size",
         "pk_index_size_tiered_level_multiplier",
         "pk_index_size_tiered_max_level",
