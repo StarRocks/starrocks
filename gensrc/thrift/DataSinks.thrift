@@ -255,6 +255,11 @@ struct TSchemaTableSink {
     2: optional Descriptors.TNodesInfo nodes_info
 }
 
+enum TIcebergWriteMode {
+    APPEND,
+    ROW_DELTA
+}
+
 struct TIcebergTableSink {
     // table location
     1: optional string location
@@ -266,8 +271,8 @@ struct TIcebergTableSink {
     7: optional i64 target_max_file_size
     8: optional i32 tuple_id
     9: optional string data_location
-    // write mode: "ROW_DELTA" for UPDATE/MERGE (mixed delete + data files)
-    10: optional string write_mode
+    // write mode: ROW_DELTA for UPDATE / MERGE (mixed delete + data files)
+    10: optional TIcebergWriteMode write_mode
 }
 
 struct THiveTableSink {
