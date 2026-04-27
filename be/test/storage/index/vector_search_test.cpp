@@ -87,14 +87,7 @@ protected:
         return tablet_index;
     }
 
-    void write_vector_index(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
-        DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
-
-        std::unique_ptr<VectorIndexWriter> vector_index_writer;
-        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
-        CHECK_OK(vector_index_writer->init());
-
-        // construct columns
+    void append_test_data(VectorIndexWriter* vector_index_writer) {
         auto element = FixedLengthColumn<float>::create();
         element->append(1);
         element->append(2);
@@ -114,15 +107,40 @@ protected:
         }
 
         auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
-
         CHECK_OK(vector_index_writer->append(*array_column));
-
         ASSERT_EQ(vector_index_writer->size(), 11);
+    }
+
+    // Threshold met: a real .vi file lands at `path`.
+    void write_vector_index(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
+        DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
+
+        std::unique_ptr<VectorIndexWriter> vector_index_writer;
+        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
+        CHECK_OK(vector_index_writer->init());
+
+        append_test_data(vector_index_writer.get());
 
         uint64_t size = 0;
         CHECK_OK(vector_index_writer->finish(&size));
 
         ASSERT_GT(size, 0);
+    }
+
+    // Threshold not met: finish() short-circuits and no .vi file is produced.
+    void write_vector_index_below_threshold(const std::string& path,
+                                            const std::shared_ptr<TabletIndex>& tablet_index) {
+        std::unique_ptr<VectorIndexWriter> vector_index_writer;
+        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
+        CHECK_OK(vector_index_writer->init());
+
+        append_test_data(vector_index_writer.get());
+
+        uint64_t size = 0;
+        CHECK_OK(vector_index_writer->finish(&size));
+
+        ASSERT_EQ(size, 0);
+        ASSERT_FALSE(fs::path_exist(path));
     }
 };
 
@@ -132,6 +150,11 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
     tablet_index->add_common_properties("dim", "3");
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
+    // Force the writer to build the index immediately rather than wait for the
+    // default (config_vector_index_default_build_threshold) row count. Without
+    // this the 11 rows below would fall under the threshold and finish() would
+    // short-circuit without producing a file the search test below depends on.
+    tablet_index->add_common_properties("index_build_threshold", "0");
     tablet_index->add_index_properties("efconstruction", "40");
     tablet_index->add_index_properties("m", "16");
     tablet_index->add_search_properties("efsearch", "40");
@@ -178,6 +201,10 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
 #endif
 }
 
+// IVFPQ + threshold not met: VectorIndexWriter::finish() short-circuits and no .vi
+// file is produced. Reader-side, VectorIndexReaderFactory::create_from_file surfaces
+// the missing file as NotFound; the segment_iterator brute-force fallback (added by
+// the read PR) handles that case at scan time.
 TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
     config::config_vector_index_default_build_threshold = 100;
     auto tablet_index = prepare_tablet_index();
@@ -196,26 +223,7 @@ TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
     tablet_index->add_index_properties("m_ivfpq", "3");
 
     auto index_path = test_vector_index_dir + "/" + empty_index_name;
-    write_vector_index(index_path, tablet_index);
-
-#ifdef WITH_TENANN
-    try {
-        const auto& empty_meta = std::map<std::string, std::string>{};
-        auto status = get_vector_meta(tablet_index, empty_meta);
-
-        CHECK_OK(status);
-        auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
-
-        std::shared_ptr<VectorIndexReader> ann_reader;
-        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
-
-        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
-
-        ASSERT_TRUE(init_status.is_not_supported());
-    } catch (tenann::Error& e) {
-        LOG(WARNING) << e.what();
-    }
-#endif
+    write_vector_index_below_threshold(index_path, tablet_index);
 }
 
 #ifdef WITH_TENANN

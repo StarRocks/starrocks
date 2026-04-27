@@ -135,7 +135,9 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_write_shared_data_path) {
     ASSERT_OK(_fs->path_exists(vector_index_path));
 
 #ifndef WITH_TENANN
-    // Without tenann, vector index writes empty mark
+    // Without tenann, the EmptyVectorIndexBuilder stub flushes a mark_word file.
+    // (With tenann, a real ANN index is produced; we only assert path existence
+    // and non-zero size above.)
     ASSIGN_OR_ABORT(auto index_file, _fs->new_random_access_file(vector_index_path));
     ASSIGN_OR_ABORT(auto data, index_file->read_all());
     ASSERT_EQ(data, IndexDescriptor::mark_word);
@@ -158,10 +160,10 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_filename_for_shared_data_seg
     ASSERT_EQ(full_path, expected);
 }
 
-// Test VectorIndexWriter writes an empty-mark file when the build threshold is not met
-// (shared-data path). finish() goes through VectorIndexBuilder::flush_empty(), which
-// writes IndexDescriptor::mark_word so the reader can distinguish "threshold not met"
-// from a missing segment.
+// VectorIndexWriter::finish() short-circuits when the IVFPQ build threshold is not
+// met: no .vi file is produced and index_size stays 0. Reader-side, the missing
+// file surfaces as NotFound; vacuum sees no vector_index_id recorded in segment_meta
+// (because has_vector_index_written() stays false), so there is nothing to clean up.
 TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path) {
     ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 100);
 
@@ -201,13 +203,9 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path)
     uint64_t index_size = 0;
     ASSERT_OK(vector_index_writer->finish(&index_size));
 
-    // Threshold not met -> flush_empty() writes IndexDescriptor::mark_word.
-    ASSERT_OK(_fs->path_exists(vector_index_path));
-    ASSERT_EQ(index_size, IndexDescriptor::mark_word.size());
-
-    ASSIGN_OR_ABORT(auto index_file, _fs->new_random_access_file(vector_index_path));
-    ASSIGN_OR_ABORT(auto data, index_file->read_all());
-    ASSERT_EQ(data, IndexDescriptor::mark_word);
+    // Threshold not met -> finish() returns OK without writing any file.
+    ASSERT_EQ(index_size, 0);
+    ASSERT_TRUE(_fs->path_exists(vector_index_path).is_not_found());
 }
 
 // =============== Tablet-writer-level tests ================
