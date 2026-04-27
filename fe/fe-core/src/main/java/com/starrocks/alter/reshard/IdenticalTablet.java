@@ -56,6 +56,11 @@ public class IdenticalTablet implements ReshardingTablet {
         return oldTabletId;
     }
 
+    @Override
+    public long getFirstNewTabletId() {
+        return newTabletId;
+    }
+
     public long getOldTabletId() {
         return oldTabletId;
     }

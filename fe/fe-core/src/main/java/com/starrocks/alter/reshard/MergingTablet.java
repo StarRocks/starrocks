@@ -57,6 +57,11 @@ public class MergingTablet implements ReshardingTablet {
     }
 
     @Override
+    public long getFirstNewTabletId() {
+        return newTabletId;
+    }
+
+    @Override
     public List<Long> getOldTabletIds() {
         return oldTabletIds;
     }
