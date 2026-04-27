@@ -41,6 +41,8 @@ import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
@@ -54,6 +56,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -153,7 +156,22 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                             .setSrTableName(key.tableName)
                                             .setCatalogTableName(key.tableName)
                                             .setNativeTable(nativeTable).build();
-                            return delegate.getPartitions(icebergTable, key.snapshotId, null);
+                            Snapshot snapshot = nativeTable.snapshot(key.snapshotId);
+                            Map<String, String> summary =
+                                    (snapshot != null && snapshot.summary() != null)
+                                            ? snapshot.summary() : Collections.emptyMap();
+                            Map<String, Partition> partitions =
+                                    delegate.getPartitions(icebergTable, key.snapshotId, null);
+                            LOG.info("Loaded iceberg partitions: catalog={}, table={}.{}, snapshot={}, "
+                                            + "partitions={}, dataFiles={}, deleteFiles={}, specs={}, "
+                                            + "partitionFields={}",
+                                    catalogName, key.dbName, key.tableName, key.snapshotId,
+                                    partitions.size(),
+                                    summary.getOrDefault(SnapshotSummary.TOTAL_DATA_FILES_PROP, "?"),
+                                    summary.getOrDefault(SnapshotSummary.TOTAL_DELETE_FILES_PROP, "?"),
+                                    nativeTable.specs().size(),
+                                    nativeTable.spec().fields().size());
+                            return partitions;
                         }
                     });
         long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
