@@ -71,6 +71,34 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         }
     }
 
+    private static class BlockingJDBCQueryMetadata extends MockedJDBCMetadata {
+        private final CountDownLatch started;
+        private final CountDownLatch allowReturn;
+        private final AtomicInteger getTableFromQueryCalls;
+
+        public BlockingJDBCQueryMetadata(Map<String, String> properties,
+                                         CountDownLatch started,
+                                         CountDownLatch allowReturn,
+                                         AtomicInteger getTableFromQueryCalls) {
+            super(properties);
+            this.started = started;
+            this.allowReturn = allowReturn;
+            this.getTableFromQueryCalls = getTableFromQueryCalls;
+        }
+
+        @Override
+        public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+            getTableFromQueryCalls.incrementAndGet();
+            started.countDown();
+            try {
+                allowReturn.await(20, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return super.getTableFromQuery(context, dbName, query);
+        }
+    }
+
     @Test
     public void testCTEWithInternalTable() throws Exception {
         // Test that CTE with internal table works correctly
@@ -189,6 +217,70 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         Assertions.assertTrue(lockCalled.get());
         // Analyzer should reuse pre-resolved external table; metadata getTable must not be called twice.
         Assertions.assertEquals(1, getTableCalls.get());
+    }
+
+    @Test
+    public void testMixedQueryNativeQueryMetadataNotUnderLock() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch allowReturn = new CountDownLatch(1);
+        AtomicInteger getTableFromQueryCalls = new AtomicInteger();
+
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
+        Map<String, String> props = new HashMap<>();
+        props.put(JDBCResource.TYPE, "jdbc");
+        props.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        props.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+        props.put(JDBCResource.USER, "root");
+        props.put(JDBCResource.PASSWORD, "123456");
+        props.put(JDBCResource.CHECK_SUM, "xxxx");
+        props.put(JDBCResource.DRIVER_URL, "xxxx");
+        BlockingJDBCQueryMetadata blocking =
+                new BlockingJDBCQueryMetadata(props, started, allowReturn, getTableFromQueryCalls);
+        metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME, blocking);
+
+        String sql = "select * from t0 join table(jdbc0.native_query('select * from remote_table')) q on true";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+
+        AtomicBoolean lockCalled = new AtomicBoolean(false);
+        PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+            @Override
+            public void lock() {
+                lockCalled.set(true);
+            }
+
+            @Override
+            public void unlock() {
+                // no-op
+            }
+        };
+
+        AtomicBoolean finished = new AtomicBoolean(false);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        Thread t = new Thread(() -> {
+            try {
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+                finished.set(true);
+            } catch (Throwable t0) {
+                error.set(t0);
+            }
+        });
+        t.start();
+
+        Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+        Assertions.assertFalse(lockCalled.get(),
+                "Meta lock was acquired while JDBC native_query metadata was blocked.");
+
+        allowReturn.countDown();
+        t.join(TimeUnit.SECONDS.toMillis(20));
+
+        if (error.get() != null) {
+            throw new RuntimeException(error.get());
+        }
+        Assertions.assertTrue(finished.get());
+        Assertions.assertTrue(lockCalled.get());
+        Assertions.assertEquals(1, getTableFromQueryCalls.get(),
+                "getTableFromQuery was called " + getTableFromQueryCalls.get() + " times, expected 1.");
     }
 
     @Test

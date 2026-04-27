@@ -51,7 +51,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -464,7 +463,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         sqlBuilder.append("(");
         sqlBuilder.append(
                 Optional.ofNullable(tableFunction.getChildExpressions())
-                        .orElse(Collections.emptyList()).stream().map(this::visit)
+                        .orElse(tableFunction.getFunctionParams().exprs()).stream().map(this::visit)
                         .collect(Collectors.joining(",")));
         sqlBuilder.append(")");
         sqlBuilder.append(")"); // TABLE(
