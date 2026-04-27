@@ -216,6 +216,19 @@ DROP Catalog jdbc0;
    SELECT * FROM <table_name>;
    ```
 
+## ネイティブ SQL を使って JDBC データをクエリする
+
+JDBC データソースに対するクエリを単一の external table scan として表現できない場合、たとえばリモート Join、リモートビュー、データベース固有の述語、または事前に絞り込んだサブクエリが必要な場合は、`native_query()` テーブル関数を使用できます。
+
+```SQL
+SELECT *
+FROM TABLE(jdbc0.native_query(
+    'SELECT id, name FROM dim_user'
+));
+```
+
+構文、パラメータルール、および追加例については、[`native_query()`](../../sql-reference/sql-functions/table-functions/native_query.md) を参照してください。
+
 ## FAQ
 
 「Malformed database URL, failed to parse the main URL sections」というエラーが発生した場合はどうすればよいですか？

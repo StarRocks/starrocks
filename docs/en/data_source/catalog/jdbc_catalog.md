@@ -216,6 +216,19 @@ DROP Catalog jdbc0;
    SELECT * FROM <table_name>;
    ```
 
+## Query JDBC data with native SQL
+
+If a query against a JDBC source cannot be expressed as a single external table scan, for example, because it needs remote joins, remote views, vendor-specific predicates, or a pre-filtered subquery, you can use the `native_query()` table function.
+
+```SQL
+SELECT *
+FROM TABLE(jdbc0.native_query(
+    'SELECT id, name FROM dim_user'
+));
+```
+
+For syntax details, parameter rules, and more examples, see [`native_query()`](../../sql-reference/sql-functions/table-functions/native_query.md).
+
 ## FAQ
 
 What do I do if an error suggesting "Malformed database URL, failed to parse the main URL sections" is thrown?

@@ -217,6 +217,19 @@ DROP Catalog jdbc0;
    SELECT * FROM <table_name>;
    ```
 
+## 使用原生 SQL 查询 JDBC 数据
+
+如果针对 JDBC 数据源的查询无法表示为一次简单的外表扫描，例如需要在远端执行 Join、访问远端视图、使用数据库方言特有谓词，或者先在远端做子查询过滤，您可以使用 `native_query()` 表函数。
+
+```SQL
+SELECT *
+FROM TABLE(jdbc0.native_query(
+    'SELECT id, name FROM dim_user'
+));
+```
+
+更多语法、参数规则和示例，请参见 [`native_query()`](../../sql-reference/sql-functions/table-functions/native_query.md)。
+
 ## 常见问题
 
 系统返回 "Malformed database URL, failed to parse the main URL sections" 报错应该如何处理？
