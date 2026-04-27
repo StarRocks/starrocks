@@ -991,14 +991,22 @@ void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
 
     // Not in schema (pruned by FE) — add it
     int32_t col_idx = _segment->tablet_schema().field_index(vector_col_uid);
-    if (col_idx >= 0) {
-        const auto& col = _segment->tablet_schema().column(col_idx);
-        ColumnId cid = static_cast<ColumnId>(col_idx);
-        auto field = std::make_shared<Field>(ChunkHelper::convert_field(cid, col));
-        _vector_index_ctx->vector_data_column_id = cid;
-        _schema.append(field);
-        _vector_index_ctx->added_vector_data_column = true;
+    if (col_idx < 0) {
+        // Schema/index metadata mismatch: the index references a column the
+        // segment does not have. Disable brute-force rather than producing
+        // distances against an undefined column.
+        LOG(WARNING) << "disable brute-force vector fallback: vector column uid " << vector_col_uid
+                     << " not found in tablet schema for segment " << _segment->file_name();
+        _vector_index_ctx->use_brute_force = false;
+        return;
     }
+
+    const auto& col = _segment->tablet_schema().column(col_idx);
+    ColumnId cid = static_cast<ColumnId>(col_idx);
+    auto field = std::make_shared<Field>(ChunkHelper::convert_field(cid, col));
+    _vector_index_ctx->vector_data_column_id = cid;
+    _schema.append(field);
+    _vector_index_ctx->added_vector_data_column = true;
 }
 
 // Handles the case where the segment footer explicitly marks no .vi file (skip_vector_index).
@@ -2557,6 +2565,16 @@ void SegmentIterator::_compute_brute_force_distances(const Column* vector_column
     FloatColumn::MutablePtr distance_column = FloatColumn::create();
     distance_column->reserve(num_rows);
 
+    // Pre-compute the query-vector norm once: it is constant across all rows and
+    // brute-force scans can sweep many rows. (cosine path only.)
+    float query_norm = 0.0f;
+    if (is_cosine_similarity) {
+        for (size_t j = 0; j < dim; j++) {
+            query_norm += query_vec[j] * query_vec[j];
+        }
+        query_norm = std::sqrt(query_norm);
+    }
+
     for (size_t i = 0; i < num_rows; i++) {
         if (null_data && null_data[i]) {
             // Null vector: use max distance / min similarity as sentinel
@@ -2565,17 +2583,24 @@ void SegmentIterator::_compute_brute_force_distances(const Column* vector_column
         }
         const float* vec = elements_data + offsets[i];
         size_t vec_dim = offsets[i + 1] - offsets[i];
+        // tenann's index build validates dim equality at write time, so a row
+        // here with a different dim would point to corruption or a schema/index
+        // mismatch. Truncate to the shorter side and warn rather than crash.
+        if (vec_dim != dim) {
+            LOG_EVERY_N(WARNING, 1024)
+                    << "brute-force vector fallback: row " << i << " dim=" << vec_dim << " differs from query dim "
+                    << dim << " in segment " << _segment->file_name();
+        }
         size_t calc_dim = std::min(dim, vec_dim);
 
         if (is_cosine_similarity) {
             // cosine_similarity = dot(q, v) / (|q| * |v|)
-            float dot = 0, norm_q = 0, norm_v = 0;
+            float dot = 0, norm_v = 0;
             for (size_t j = 0; j < calc_dim; j++) {
                 dot += query_vec[j] * vec[j];
-                norm_q += query_vec[j] * query_vec[j];
                 norm_v += vec[j] * vec[j];
             }
-            float denom = std::sqrt(norm_q) * std::sqrt(norm_v);
+            float denom = query_norm * std::sqrt(norm_v);
             distance_column->append(denom > 0 ? dot / denom : 0.0f);
         } else {
             // l2_distance = sum((q[j] - v[j])^2)

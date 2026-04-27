@@ -526,9 +526,21 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
         // Verify we got rows back and no crash
         ASSERT_EQ(chunk->num_rows(), 3);
 
-        // Verify the distance column exists (appended as virtual column)
-        // The chunk should have id column + distance column
-        ASSERT_GE(chunk->num_columns(), 2);
+        // Verify the distance column exists (appended as virtual column).
+        // FE pruned the vector column, so chunk only has [id, distance].
+        ASSERT_EQ(chunk->num_columns(), 2);
+
+        // Validate the actual L2 distances for query [1, 1, 1]:
+        //   Row 0 (id=1, vec=[1,2,3]): (0)^2 + (-1)^2 + (-2)^2 = 5
+        //   Row 1 (id=2, vec=[4,5,6]): (-3)^2 + (-4)^2 + (-5)^2 = 50
+        //   Row 2 (id=3, vec=[0,0,0]): 1 + 1 + 1 = 3
+        auto dist_col = chunk->get_column_by_slot_id(vector_search_opt->vector_slot_id);
+        ASSERT_NE(dist_col, nullptr);
+        const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
+        ASSERT_EQ(distances->size(), 3);
+        EXPECT_FLOAT_EQ(distances->get_data()[0], 5.0f);
+        EXPECT_FLOAT_EQ(distances->get_data()[1], 50.0f);
+        EXPECT_FLOAT_EQ(distances->get_data()[2], 3.0f);
     }
     // EndOfFile is also acceptable if the iterator processes all data
     ASSERT_TRUE(st.ok() || st.is_end_of_file());
@@ -589,8 +601,10 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
 
     if (st.ok()) {
         ASSERT_EQ(chunk->num_rows(), 2);
-        // Should have id + vector + distance columns
-        ASSERT_GE(chunk->num_columns(), 3);
+        // The vector column was already in read_schema, so _setup_brute_force_fallback
+        // must reuse it instead of appending a duplicate. Final chunk should be exactly
+        // [id, vector, distance] — three columns, with no second vector column.
+        ASSERT_EQ(chunk->num_columns(), 3);
     }
     ASSERT_TRUE(st.ok() || st.is_end_of_file());
 
@@ -648,8 +662,22 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
     if (st.ok()) {
-        // Row 4 (dist=48) should be filtered out, leaving 3 rows
+        // Vectors are appended in input order. With vector_range = 3.0 and
+        // ascending result_order, the brute-force fallback keeps rows whose
+        // L2 distance from query [1,1,1] is <= 3.0:
+        //   Row 0 (id=1, vec=[1,0,0]): dist = 0+1+1 = 2  -> keep
+        //   Row 1 (id=2, vec=[0,0,0]): dist = 1+1+1 = 3  -> keep
+        //   Row 2 (id=3, vec=[1,1,1]): dist = 0          -> keep
+        //   Row 3 (id=4, vec=[5,5,5]): dist = 16+16+16=48 -> filter out
+        // The fallback only filters in place; it does not re-sort, so the
+        // surviving rows stay in input order.
         ASSERT_EQ(chunk->num_rows(), 3);
+        auto id_col = chunk->get_column_by_index(0);
+        const auto* ids_out = down_cast<const Int64Column*>(id_col.get());
+        ASSERT_EQ(ids_out->size(), 3);
+        EXPECT_EQ(ids_out->get_data()[0], 1);
+        EXPECT_EQ(ids_out->get_data()[1], 2);
+        EXPECT_EQ(ids_out->get_data()[2], 3);
     }
     ASSERT_TRUE(st.ok() || st.is_end_of_file());
 
