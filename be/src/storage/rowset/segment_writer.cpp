@@ -187,6 +187,16 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_bitmap_index = column.has_bitmap_index();
         opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
         opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
+        // Bundle-file segments (shared-data) suppress per-column .vi generation: the
+        // segment filename in metadata is the bundle filename, not the per-segment
+        // name used to derive .vi paths, so producing per-segment .vi here would
+        // generate paths that don't match what readers look up. Disable need_vector_index
+        // before the column writers are constructed so ArrayColumnWriter does not try
+        // to spin up a VectorIndexWriter and look up a non-existent entry in
+        // standalone_index_file_paths.
+        if (opts.need_vector_index && _opts.skip_vector_index) {
+            opts.need_vector_index = false;
+        }
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
         if (opts.need_inverted_index) {
@@ -194,7 +204,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                     GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
                                                                    _opts.segment_file_mark.rowset_id, _segment_id,
                                                                    opts.tablet_index.at(GIN).index_id()));
-        } else if (opts.need_vector_index && !_opts.skip_vector_index) {
+        } else if (opts.need_vector_index) {
             int64_t index_id = opts.tablet_index.at(IndexType::VECTOR).index_id();
             // Shared-data mode: tablet writer pre-populates vector_index_file_paths with
             // location-provider-resolved paths. Shared-nothing mode: the map is empty and

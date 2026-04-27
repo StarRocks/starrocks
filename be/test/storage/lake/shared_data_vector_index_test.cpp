@@ -177,7 +177,8 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path)
     // setting "index_type" = "ivfpq" via add_common_properties does not work because
     // TabletIndex::add_common_properties uses std::map::insert (no overwrite), so the
     // "hnsw" inserted by create_tablet_index() would remain. ivfpq + threshold > rows
-    // is what drives the writer down the flush_empty() path we want to exercise here.
+    // is what drives the writer down the threshold-not-met short-circuit we want to
+    // exercise here.
     auto tablet_index = std::make_shared<TabletIndex>();
     TabletIndexPB index_pb;
     index_pb.set_index_id(index_id);
@@ -189,6 +190,9 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path)
     tablet_index->add_common_properties("dim", "3");
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
+    // nlist/nbits/m_ivfpq are required by get_vector_meta's ivfpq validation
+    // (the read PR tightened the schema). They're not exercised here because
+    // finish() short-circuits before any meta consumer runs.
     tablet_index->add_index_properties("nlist", "1");
     tablet_index->add_index_properties("nbits", "8");
     tablet_index->add_index_properties("m_ivfpq", "3");
