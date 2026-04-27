@@ -14,7 +14,7 @@ src/exec/pipeline/pipeline_driver_queue.cpp
 src/exec/pipeline/query_context.cpp
 src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
-src/exec/spill/query_spill_manager.cpp
+src/exec/workgroup/lock_free_work_group_scan_task_queue.cpp
 src/exec/workgroup/scan_task_queue.cpp
 src/exec/write_combined_txn_log.cpp
 src/fs/fs_broker.cpp
@@ -28,6 +28,7 @@ src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp
 src/service/service_be/lake_service.cpp
 src/service/service_be/starrocks_be.cpp
+src/storage/lake/column_mode_partial_update_handler.cpp
 src/storage/lake/compaction_policy.cpp
 src/storage/lake/lake_persistent_index.cpp
 src/storage/lake/lake_replication_txn_manager.cpp
@@ -35,6 +36,7 @@ src/storage/lake/local_pk_index_manager.cpp
 src/storage/lake/metacache.cpp
 src/storage/lake/rowset.cpp
 src/storage/lake/tablet_reader.cpp
+src/storage/lake/tablet_reshard.cpp
 src/storage/lake/transactions.cpp
 src/storage/lake/update_manager.cpp
 src/storage/lake/vacuum.cpp

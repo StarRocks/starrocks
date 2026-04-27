@@ -271,7 +271,15 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    return g_starlet->get_shard_info(id);
+    // Count every actual starmgr RPC issued from this fallback path. A high rate signals that
+    // FE-side task/node selection is scheduling work on a BE whose local cache does not have
+    // the shard (the FE did not push it in time, or the placement was wrong).
+    StarRocksMetrics::instance()->staros_shard_info_fallback_total.increment(1);
+    auto info_or = g_starlet->get_shard_info(id);
+    if (!info_or.ok()) {
+        StarRocksMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
+    }
+    return info_or;
 }
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,

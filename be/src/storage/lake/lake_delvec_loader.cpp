@@ -44,7 +44,10 @@ Status LakeDelvecLoader::load_from_file(const TabletSegmentId& tsid, int64_t ver
     *pdelvec = std::make_shared<DelVector>();
     // 2. find in delvec file
     TabletMetadataPtr metadata;
-    if (_lake_io_opts.location_provider) {
+    if (_cached_metadata != nullptr && _cached_metadata->id() == tsid.tablet_id &&
+        _cached_metadata->version() == version) {
+        metadata = _cached_metadata;
+    } else if (_lake_io_opts.location_provider) {
         const std::string filepath = _lake_io_opts.location_provider->tablet_metadata_location(tsid.tablet_id, version);
         ASSIGN_OR_RETURN(metadata, _tablet_manager->get_tablet_metadata(filepath, _fill_cache, 0, _lake_io_opts.fs));
     } else {

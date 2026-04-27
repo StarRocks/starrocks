@@ -14,10 +14,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
 #include "types/date_value.h"
@@ -91,7 +93,9 @@ TEST(FixedLengthColumnTest, test_nullable) {
     ASSERT_EQ(100, column->size());
     ASSERT_EQ(100 * 5, column->byte_size());
 
-    const auto* data = reinterpret_cast<const int32_t*>(column->raw_data());
+    RawDataVisitor rv;
+    ASSERT_OK(column->accept(&rv));
+    const auto* data = reinterpret_cast<const int32_t*>(rv.result());
     for (int i = 0; i < 100; i++) {
         if (i % 2) {
             ASSERT_EQ(true, column->is_null(i));
@@ -114,7 +118,8 @@ TEST(FixedLengthColumnTest, test_nullable) {
         }
     }
 
-    data = reinterpret_cast<const int32_t*>(column->raw_data());
+    ASSERT_OK(column->accept(&rv));
+    data = reinterpret_cast<const int32_t*>(rv.result());
     for (int i = 0; i < 100; i++) {
         if (i % 3) {
             ASSERT_EQ(true, column->is_null(i));

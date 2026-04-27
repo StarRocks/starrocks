@@ -71,11 +71,6 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-
-    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
-        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
-    }
-
     return Status::OK();
 }
 
@@ -125,7 +120,6 @@ void Operator::set_precondition_ready(RuntimeState* state) {
 }
 
 void Operator::close(RuntimeState* state) {
-    _mem_resource_manager.close();
     if (auto* rf_bloom_filters = _runtime_access->get_runtime_bloom_filters()) {
         _init_rf_counters(false);
         COUNTER_SET(_runtime_in_filter_num_counter, (int64_t)runtime_in_filters().size());

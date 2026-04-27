@@ -1014,7 +1014,6 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/.*jit.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/file_result_writer\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/hive_table_sink\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/table_function_table_sink\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sink/table_function_table_sink_operator\\.cpp$")
 
 # Exclude JVM/JNI dependent metrics on macOS
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/jvm_metrics\\.cpp$")

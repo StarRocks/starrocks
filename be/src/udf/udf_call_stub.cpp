@@ -84,7 +84,8 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const ar
                                                 field_type.nullable(), true);
     if (UNLIKELY(converter == nullptr)) {
         return Status::NotSupported(fmt::format("unsupported arrow type {} to starrocks type {}",
-                                                field_type.type()->ToString(), _func_ctx->get_return_type().type));
+                                                field_type.type()->ToString(),
+                                                static_cast<int>(_func_ctx->get_return_type().type)));
     }
     // UDF return result is always nullable
     auto native_column = FunctionHelper::create_column(_func_ctx->get_return_type(), true);

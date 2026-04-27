@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
@@ -47,7 +48,6 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/compression/block_compression.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
@@ -1016,12 +1016,18 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
                       DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableFlushTime",
                       DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
-    ADD_AND_SET_TIMER(profile, "MemtableIOTime",
-                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size.load(), 0));
-    ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES,
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load(), 0));
+    auto* memtable_disk_size_counter = ADD_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES);
+    COUNTER_SET(memtable_disk_size_counter,
+                DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load(), 0));
+    auto* memtable_io_time_counter = ADD_TIMER(profile, "MemtableIOTime");
+    COUNTER_SET(memtable_io_time_counter, DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
+    ADD_DERIVED_COUNTER(profile, "MemtableIOSpeed", TUnit::BYTES_PER_SECOND, "",
+                        [memtable_disk_size_counter, memtable_io_time_counter] {
+                            return RuntimeProfile::units_per_second(memtable_disk_size_counter,
+                                                                    memtable_io_time_counter);
+                        });
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,

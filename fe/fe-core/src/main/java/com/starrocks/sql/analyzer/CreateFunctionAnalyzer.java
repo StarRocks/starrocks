@@ -403,7 +403,8 @@ public class CreateFunctionAnalyzer {
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
                 .symbolName(mainClass.getCanonicalName())
-                .cloudConfiguration(cloudConfiguration);
+                .cloudConfiguration(cloudConfiguration)
+                .setIsolationType(!"shared".equalsIgnoreCase(isolation));
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;

@@ -20,7 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
@@ -126,7 +126,7 @@ public class CachingIcebergCatalogTest {
 
         Assertions.assertFalse(nativeTable.spec().isUnpartitioned());
         {
-            ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+            ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
             SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
             sv.setEnableConnectorAsyncListPartitions(true);
             requestContext.setQueryMVRewrite(true);
@@ -134,7 +134,7 @@ public class CachingIcebergCatalogTest {
             Assertions.assertNull(res);
         }
         {
-            ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+            ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
             SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
             sv.setEnableConnectorAsyncListPartitions(false);
             requestContext.setQueryMVRewrite(true);

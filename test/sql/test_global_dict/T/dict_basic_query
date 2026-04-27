@@ -66,3 +66,5 @@ select lower(l.v1) as r1, if(l.v1 = 1, 1, null) as r2, upper(r.v2) as r3 from t1
 select v1, if(v1='a', null, 'b') from t4 order by 1;
 
 select * from (select max(v1) over (partition by v2) mv1 from t1) t where mv1 != '99' order by mv1 desc limit 1;
+
+select v1, v1 <=> 'a', v1 <=> 'b', v1 <=> null from t4 order by v1;

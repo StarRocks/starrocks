@@ -68,11 +68,6 @@ public:
 
     bool is_object() const override { return true; }
 
-    const uint8_t* raw_data() const override {
-        DCHECK(false) << "Don't support object column raw_data";
-        return nullptr;
-    }
-
     size_t size() const override { return _pool.size(); }
 
     size_t capacity() const override { return _pool.capacity(); }
@@ -213,10 +208,11 @@ public:
 
     void build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const;
 
-private:
-    // add this to avoid warning clang-diagnostic-overloaded-virtual
+    // Unhide the virtual `Column::append(const Column&)` so derived classes
+    // (e.g. JsonColumn) can also add it back to their scope via `using`.
     using Column::append;
 
+private:
     Buffer<T> _pool;
 };
 } // namespace starrocks

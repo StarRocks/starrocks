@@ -27,6 +27,7 @@
 #include "exec/olap_scan_prepare.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
+#include "exprs/expr_context.h"
 #include "runtime/global_dict/parser.h"
 
 namespace starrocks {
@@ -210,6 +211,8 @@ private:
     std::optional<bool> _partition_order_hint;
 
     std::vector<ExprContext*> _bucket_exprs;
+
+    std::vector<ExprContext*> _partition_exprs;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

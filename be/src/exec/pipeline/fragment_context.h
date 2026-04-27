@@ -156,18 +156,6 @@ public:
     bool enable_resource_group() const { return _workgroup != nullptr; }
     TQueryType::type query_type() const;
 
-    // STREAM MV
-    Status reset_epoch();
-    void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
-    bool is_stream_pipeline() const { return _is_stream_pipeline; }
-    void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
-
-#ifdef BE_TEST
-    // for ut
-    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
-    bool is_stream_test() const { return _is_stream_test; }
-#endif
-
     size_t expired_log_count() { return _expired_log_count; }
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
@@ -228,9 +216,9 @@ private:
 
     std::unique_ptr<EventScheduler> _event_scheduler;
     PipelineTimer* _pipeline_timer = nullptr;
-    PipelineTimerTask* _timeout_task = nullptr;
-    PipelineTimerTask* _report_state_task = nullptr;
-    std::unordered_map<uint64_t, PipelineTimerTask*> _rf_timeout_tasks;
+    std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
+    std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
+    std::unordered_map<uint64_t, std::shared_ptr<PipelineTimerTask>> _rf_timeout_tasks;
 
     RuntimeFilterHub _runtime_filter_hub;
 
@@ -247,13 +235,6 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
-
-    // STREAM MV
-    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
-    bool _is_stream_pipeline = false;
-#ifdef BE_TEST
-    bool _is_stream_test = false;
-#endif
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;

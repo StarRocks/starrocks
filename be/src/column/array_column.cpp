@@ -50,10 +50,6 @@ size_t ArrayColumn::capacity() const {
     return _offsets->capacity() - 1;
 }
 
-const uint8_t* ArrayColumn::raw_data() const {
-    return _elements->raw_data();
-}
-
 size_t ArrayColumn::byte_size(size_t from, size_t size) const {
     const auto offsets = _offsets->immutable_data();
     DCHECK_LE(from + size, this->size()) << "Range error";

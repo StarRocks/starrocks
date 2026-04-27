@@ -62,6 +62,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.analyzer.mv.MVBaseTablePartitionHandlers;
 import com.starrocks.sql.analyzer.mv.MVPartitionCheckContext;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -280,13 +281,37 @@ public class MaterializedViewAnalyzer {
         }
     }
 
+    /** {@code pair.second} for schema columns not produced by any query expression (storage-filled). */
+    private static final int NO_QUERY_OUTPUT = -1;
+
     @VisibleForTesting
     protected static List<Integer> getQueryOutputIndices(List<Pair<Column, Integer>> mvColumnPairs) {
         return Streams
                 .mapWithIndex(mvColumnPairs.stream(), (pair, idx) -> Pair.create(pair.second, (int) idx))
+                .filter(p -> p.first != NO_QUERY_OUTPUT)
                 .sorted(Comparator.comparingInt(x -> x.first))
                 .map(x -> x.second)
                 .collect(Collectors.toList());
+    }
+
+    private static Column createAutoIncrementRowIdColumn() {
+        Column col = new Column(IvmOpUtils.COLUMN_ROW_ID, IntegerType.BIGINT, false);
+        col.setIsKey(true);
+        col.setIsAllowNull(false);
+        col.setIsHidden(true);
+        col.setIsAutoIncrement(true);
+        return col;
+    }
+
+    /** Move/prepend {@code __ROW_ID__} to the head of the sort-keys list. */
+    private static List<String> prependRowIdToKeys(List<String> existing) {
+        List<String> result = Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID);
+        if (existing != null) {
+            existing.stream()
+                    .filter(k -> !IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(k))
+                    .forEach(result::add);
+        }
+        return result;
     }
 
     static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -342,6 +367,7 @@ public class MaterializedViewAnalyzer {
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
+            AnalyzerUtils.prohibitTimeTravelQuery(queryStatement, "create materialized view");
 
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
             if (hasTemporaryTable) {
@@ -369,10 +395,9 @@ public class MaterializedViewAnalyzer {
                     Analyzer.analyze(queryStatement, context);
                     statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
                     statement.setQueryStatement(queryStatement);
-                    // use primary key as default keys type for ivm
-                    if (result.needRetractableSink()) {
-                        statement.setKeysType(KeysType.PRIMARY_KEYS);
-                    }
+                    // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
+                    statement.setKeysType(KeysType.PRIMARY_KEYS);
+                    statement.setRowIdStrategy(result.rowIdStrategy());
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
                 } else {
                     // if not ivm, set query statement directly
@@ -409,8 +434,13 @@ public class MaterializedViewAnalyzer {
             // set the columns into createMaterializedViewStatement
             List<ColWithComment> colWithComments = statement.getColWithComments();
             List<String> keyCols = statement.getSortKeys();
+            if (statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT) {
+                // AUTO_INCREMENT __ROW_ID__ is the PK; force it to be the leading sort key.
+                keyCols = prependRowIdToKeys(keyCols);
+                statement.setSortKeys(keyCols);
+            }
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
-                    queryStatement, colWithComments, keyCols);
+                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyCols);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
 
@@ -431,6 +461,9 @@ public class MaterializedViewAnalyzer {
             // change `queryStatement.getQueryRelation`'s outputs at the same time.
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
             for (Pair<Column, Integer> pair : mvColumnPairs) {
+                if (pair.second == NO_QUERY_OUTPUT) {
+                    continue;   // AUTO_INCREMENT column: storage fills it, no query expr
+                }
                 Preconditions.checkState(pair.second < outputExpressions.size());
                 columnExprMap.put(pair.first, outputExpressions.get(pair.second));
             }
@@ -561,6 +594,7 @@ public class MaterializedViewAnalyzer {
          * from creating materialized view statement.
          */
         private List<Pair<Column, Integer>> genMaterializedViewColumns(KeysType keysType,
+                                                                       RowIdStrategy rowIdStrategy,
                                                                        QueryStatement queryStatement,
                                                                        List<ColWithComment> colWithComments,
                                                                        List<String> keyCols) {
@@ -607,6 +641,13 @@ public class MaterializedViewAnalyzer {
                 mvColumns.add(column);
             }
 
+            // Append the storage-filled __ROW_ID__. Final position is decided by the reorder step
+            // below (caller has already put __ROW_ID__ at the head of keyCols).
+            // QUERY_COMPUTED MVs already have __ROW_ID__ from the loop above (IVMAnalyzer adds it).
+            if (rowIdStrategy == RowIdStrategy.AUTO_INCREMENT) {
+                mvColumns.add(createAutoIncrementRowIdColumn());
+            }
+
             // set duplicate key, when sort key is set, it is dup key col.
             if (CollectionUtils.isEmpty(keyCols)) {
                 keyCols = chooseSortKeysByDefault(mvColumns);
@@ -620,11 +661,13 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
-            // Reorder the MV columns according to sort-key
+            // pair.second is the column's query-output position; appended AUTO_INCREMENT columns
+            // use NO_QUERY_OUTPUT since they don't come from the query.
             Map<String, Pair<Column, Integer>> columnMap = new HashMap<>();
             for (int i = 0; i < mvColumns.size(); i++) {
                 Column col = mvColumns.get(i);
-                if (columnMap.putIfAbsent(col.getName(), Pair.create(col, i)) != null) {
+                int queryOutputIdx = col.isAutoIncrement() ? NO_QUERY_OUTPUT : i;
+                if (columnMap.putIfAbsent(col.getName(), Pair.create(col, queryOutputIdx)) != null) {
                     throw new SemanticException("Duplicate column name '" + col.getName() + "'");
                 }
             }

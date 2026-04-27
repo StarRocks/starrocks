@@ -113,8 +113,6 @@ public:
 
     virtual bool is_struct() const { return false; }
 
-    virtual const uint8_t* raw_data() const = 0;
-
     // Return number of values in column.
     virtual size_t size() const = 0;
 

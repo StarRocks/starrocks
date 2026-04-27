@@ -16,13 +16,13 @@
 
 #include <unordered_map>
 
+#include "base/compression/compression_utils.h"
+#include "base/compression/stream_decompressor.h"
 #include "base/string/utf8_check.h"
 #include "column/column_helper.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/compression/compression_utils.h"
-#include "util/compression/stream_decompressor.h"
 
 namespace starrocks {
 

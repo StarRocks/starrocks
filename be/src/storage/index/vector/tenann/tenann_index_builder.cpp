@@ -19,6 +19,7 @@
 #include <tenann/util/threads.h>
 
 #include "column/array_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_vector_index_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
@@ -61,6 +62,11 @@ Status TenAnnIndexBuilderProxy::init() {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
         _index_builder->index_writer()->SetIndexCache(tenann::IndexCache::GetGlobalInstance());
+        // Use tenann file writer for remote FS (S3/HDFS) in shared-data mode
+        if (_file_writer != nullptr) {
+            _index_builder->index_writer()->SetFileWriter(
+                    std::shared_ptr<tenann::IndexFileWriter>(_file_writer, [](tenann::IndexFileWriter*) {}));
+        }
         if (_is_element_nullable) {
             _index_builder->EnableCustomRowId();
         }
@@ -84,8 +90,10 @@ static Status valid_input_vector(const ArrayColumn& input_column, const size_t i
     }
 
     const size_t num_rows = input_column.size();
-    const auto* offsets = reinterpret_cast<const uint32_t*>(input_column.offsets().raw_data());
-    const auto* nums = reinterpret_cast<const float*>(input_column.elements().raw_data());
+    const auto& offsets = input_column.offsets().immutable_data();
+    RawDataVisitor rv;
+    RETURN_IF_ERROR(input_column.elements().accept(&rv));
+    const auto* nums = reinterpret_cast<const float*>(rv.result());
 
     for (size_t i = 0; i < num_rows; i++) {
         const size_t input_dim = offsets[i + 1] - offsets[i];
@@ -131,8 +139,10 @@ Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t off
         RETURN_IF_ERROR(valid_input_vector<false>(array_col, _dim, is_element_nulls_data));
     }
 
+    RawDataVisitor rv;
+    RETURN_IF_ERROR(array_col.accept(&rv));
     try {
-        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(array_col.raw_data()),
+        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(rv.result()),
                                                 .dim = _dim,
                                                 .size = static_cast<uint32_t>(array_col.size()),
                                                 .elem_type = tenann::kFloatType};
@@ -159,6 +169,13 @@ Status TenAnnIndexBuilderProxy::flush() {
 void TenAnnIndexBuilderProxy::close() const {
     if (_index_builder && !_index_builder->is_closed()) {
         _index_builder->Close();
+    }
+    // TenANN's IndexBuilder::Close() does NOT call IndexFileWriter::Close().
+    // For S3, objects are only visible after close(), so we must explicitly
+    // close the file writer to finalize the upload. VectorIndexFileWriter::Close()
+    // is idempotent, so the destructor path can safely re-enter.
+    if (_file_writer) {
+        _file_writer->Close();
     }
 }
 

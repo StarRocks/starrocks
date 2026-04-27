@@ -37,6 +37,7 @@
 #include <storage/flat_json_config.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -81,6 +82,11 @@ struct SegmentWriterOptions {
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
     SegmentFileMark segment_file_mark;
+    // Full paths (including location scheme) for vector index files, keyed by index_id.
+    // Populated by the tablet writer for shared-data mode where the location provider
+    // resolves object-storage paths; in shared-nothing mode this map is empty and the
+    // segment writer falls back to IndexDescriptor-based path construction.
+    std::map<int64_t, std::string> vector_index_file_paths;
     std::string encryption_meta;
     bool is_compaction = false;
     std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
@@ -162,6 +168,8 @@ public:
     const VariantTuple& get_sort_key_min() { return _sort_key_min; }
 
     const VariantTuple& get_sort_key_max() { return _sort_key_max; }
+
+    const std::map<int64_t, std::string>& vector_index_file_paths() const { return _opts.vector_index_file_paths; }
 
 private:
     Status _write_short_key_index();

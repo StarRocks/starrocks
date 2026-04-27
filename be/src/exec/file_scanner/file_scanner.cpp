@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/compression/stream_decompressor.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -37,7 +38,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "util/compression/stream_decompressor.h"
 
 namespace starrocks {
 

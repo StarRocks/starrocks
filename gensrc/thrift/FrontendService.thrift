@@ -409,6 +409,7 @@ struct TMaterializedViewStatus {
     28: optional string creator
     29: optional string last_refresh_process_time
     30: optional string last_refresh_job_id
+    31: optional string last_refresh_time
 }
 
 struct TListPipesParams {
@@ -1002,6 +1003,8 @@ struct TStreamLoadPutRequest {
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
     56: optional string payload_compression_type
+    // CDC envelope format
+    57: optional PlanNodes.TEnvelopeType envelope
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse

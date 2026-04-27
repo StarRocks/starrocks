@@ -821,4 +821,50 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_dst
     ASSERT_TRUE(st.is_invalid_argument());
 }
 
+PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_string_like_types_are_compatible) {
+    // Any two string-like types (VARCHAR/CHAR/VARBINARY/BINARY) share physical BinaryColumn
+    // storage and should resolve to the lhs type rather than hoisting to VARIANT.
+    auto varchar_varbinary =
+            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARBINARY));
+    ASSERT_TRUE(varchar_varbinary.ok());
+    EXPECT_EQ(TypeDescriptor(TYPE_VARCHAR), varchar_varbinary.value());
+
+    auto char_varchar =
+            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_CHAR), TypeDescriptor(TYPE_VARCHAR));
+    ASSERT_TRUE(char_varchar.ok());
+    EXPECT_EQ(TypeDescriptor(TYPE_CHAR), char_varchar.value());
+
+    auto varbinary_binary =
+            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARBINARY), TypeDescriptor(TYPE_BINARY));
+    ASSERT_TRUE(varbinary_binary.ok());
+    EXPECT_EQ(TypeDescriptor(TYPE_VARBINARY), varbinary_binary.value());
+
+    // A string-like type vs a non-string-like type falls through to numeric/variant hoisting.
+    auto varchar_bigint =
+            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_BIGINT));
+    ASSERT_TRUE(varchar_bigint.ok());
+    EXPECT_EQ(TypeDescriptor(TYPE_VARIANT), varchar_bigint.value());
+}
+
+PARALLEL_TEST(VariantColumnMergerTest, cast_typed_column_string_like_is_noop_clone) {
+    // Casting between string-like types must return a clone of the source column
+    // without any byte-level conversion (they all use BinaryColumn storage).
+    auto src = build_nullable_varchar_column({"hello", "world", ""}, {0, 0, 1});
+
+    auto to_varbinary =
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARBINARY));
+    ASSERT_TRUE(to_varbinary.ok()) << to_varbinary.status().to_string();
+    ASSERT_EQ(3, to_varbinary.value()->size());
+    const auto* result = down_cast<const NullableColumn*>(to_varbinary.value().get());
+    const auto* result_bin = down_cast<const BinaryColumn*>(result->data_column().get());
+    EXPECT_EQ(Slice("hello"), result_bin->get_slice(0));
+    EXPECT_EQ(Slice("world"), result_bin->get_slice(1));
+    EXPECT_EQ(1, result->null_column_data()[2]);
+
+    auto to_char =
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_CHAR));
+    ASSERT_TRUE(to_char.ok()) << to_char.status().to_string();
+    ASSERT_EQ(3, to_char.value()->size());
+}
+
 } // namespace starrocks

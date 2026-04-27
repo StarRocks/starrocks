@@ -22,7 +22,6 @@
 #include "exec/pipeline/primitives/operator_runtime_access.h"
 #include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "exec/spill/operator_mem_resource_manager.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -46,7 +45,6 @@ using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
 class Operator {
     friend class PipelineDriver;
-    friend class StreamPipelineDriver;
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
@@ -200,34 +198,7 @@ public:
     void set_prepare_time(int64_t cost_ns);
     void set_local_prepare_time(int64_t cost_ns);
 
-    // INCREMENTAL MV Methods
-    //
-    // The operator will run periodically which is triggered by FE from PREPARED to EPOCH_FINISHED in one Epoch,
-    // and then reentered into PREPARED state by `reset_epoch` at the next new Epoch.
-    //
-    //                          `reset_epoch`
-    //    ┌───────────────────────────────────────────────────────┐
-    //    │                                                       │
-    //    │                                                       │
-    //    │                                                       │
-    //    ▼                                                       │
-    //  PREPARED ────► PROCESSING ───► EPOCH_FINISHING ──► EPOCH_FINISHED ───► FINISHING ──► FINISHED ────►[CANCELED] ────► CLOSED
-
-    // Mark whether the operator is finishing in one Epoch, `epoch_finishing` is the
-    // state that one operator starts finishing like `is_finishing`.
-    virtual bool is_epoch_finishing() const { return false; }
-    // Mark whether the operator is finished in one Epoch, `epoch_finished` is the
-    // state that one operator finished and not be scheduled again like `is_finished`.
-    virtual bool is_epoch_finished() const { return false; }
-    // Called when the operator's input has been finished, and the operator(self) starts
-    // epoch finishing.
-    virtual Status set_epoch_finishing(RuntimeState* state) { return Status::OK(); }
-    // Called when the operator(self) has been finished.
-    virtual Status set_epoch_finished(RuntimeState* state) { return Status::OK(); }
-    // Called when the new Epoch starts at first to reset operator's internal state.
-    virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
-
-    // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
+    // Adjusts the execution mode of the operator after spill memory heuristics request low-memory mode.
     virtual void set_execute_mode(int performance_level) {}
     // @TODO(silverbullet233): for an operator, the way to reclaim memory is either spill
     // or push the buffer data to the downstream operator.
@@ -237,7 +208,6 @@ public:
     // Operator can free memory/buffer early
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
-    spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
@@ -299,8 +269,6 @@ protected:
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
     RuntimeMembershipFilterEvalContext _bloom_filter_eval_context;
-
-    spill::OperatorMemoryResourceManager _mem_resource_manager;
 
     // the memory that can be released by this operator
     size_t _revocable_mem_bytes = 0;

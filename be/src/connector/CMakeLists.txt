@@ -24,7 +24,6 @@ ADD_BE_LIB(Connector
         benchmark_connector.cpp
         cache_stats_connector.cpp
         file_connector.cpp
-        binlog_connector.cpp
         iceberg_connector.cpp
         connector_chunk_sink.cpp
         file_chunk_sink.cpp

@@ -284,7 +284,7 @@ public class Load {
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction)
             throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, null, null,
-                null, null, null, false, false, Lists.newArrayList());
+                null, null, null, false, false, Lists.newArrayList(), false);
     }
 
     /*
@@ -302,10 +302,10 @@ public class Load {
                                    Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath) throws StarRocksException {
+                                   List<String> columnsFromPath, boolean isLoadJson) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, false, false);
+                columnsFromPath, isLoadJson, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -313,7 +313,7 @@ public class Load {
                                    Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath, boolean isStreamLoadJson,
+                                   List<String> columnsFromPath, boolean isLoadJson,
                                    boolean partialUpdate) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
@@ -411,11 +411,11 @@ public class Load {
                 }
             }
             if (!found) {
-                // stream load json will automatically check __op field in json object iff:
-                // 1. streamload using json
+                // stream load and broker load will automatically check __op field in json object if:
+                // 1. stream load and broker load using json
                 // 2. __op is not specified
                 copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
-                        isStreamLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
+                        isLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
             }
         }
 

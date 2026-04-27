@@ -1101,6 +1101,11 @@ public class FunctionAnalyzer {
             }
             Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s)",
+                        fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, ""),
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }
@@ -1354,6 +1359,11 @@ public class FunctionAnalyzer {
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = FloatType.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s)",
+                        fnName,
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
             // correct decimal's precision and scale
             if (fn.getArgs()[0].isDecimalV3()) {
                 List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);

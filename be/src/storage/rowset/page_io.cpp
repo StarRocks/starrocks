@@ -40,11 +40,13 @@
 #include <string_view>
 
 #include "base/coding.h"
+#include "base/compression/block_compression.h"
 #include "base/hash/crc32c.h"
 #include "base/string/faststring.h"
 #include "base/utility/scoped_cleanup.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
+#include "common/config_compression_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
@@ -57,7 +59,6 @@
 #include "runtime/raw_container_checked.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
@@ -72,14 +73,16 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         return Status::OK();
     }
     if (codec != nullptr && uncompressed_size > 0) {
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            RETURN_IF_ERROR(
-                    codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr));
+            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr,
+                                            compression_options));
         } else {
             compressed_body->resize(codec->max_compressed_len(uncompressed_size));
             Slice compressed_slice(*compressed_body);
-            RETURN_IF_ERROR(codec->compress(body, &compressed_slice));
+            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, compression_options));
             compressed_body->resize(compressed_slice.get_size());
         }
         double space_saving = 1.0 - static_cast<double>(compressed_body->size()) / uncompressed_size;

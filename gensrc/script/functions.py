@@ -862,6 +862,28 @@ vectorized_functions = [
     [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
     [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
 
+    # materialize: identity function that acts as an optimization barrier.
+    # Returns the input unchanged but is opaque to the FE optimizer,
+    # preventing constant folding, partition pruning, and other rewrites.
+    [100030, 'materialize', True, False, 'BOOLEAN', ['BOOLEAN'], "UtilityFunctions::materialize"],
+    [100031, 'materialize', True, False, 'TINYINT', ['TINYINT'], "UtilityFunctions::materialize"],
+    [100032, 'materialize', True, False, 'SMALLINT', ['SMALLINT'], "UtilityFunctions::materialize"],
+    [100033, 'materialize', True, False, 'INT', ['INT'], "UtilityFunctions::materialize"],
+    [100034, 'materialize', True, False, 'BIGINT', ['BIGINT'], "UtilityFunctions::materialize"],
+    [100035, 'materialize', True, False, 'LARGEINT', ['LARGEINT'], "UtilityFunctions::materialize"],
+    [100036, 'materialize', True, False, 'FLOAT', ['FLOAT'], "UtilityFunctions::materialize"],
+    [100037, 'materialize', True, False, 'DOUBLE', ['DOUBLE'], "UtilityFunctions::materialize"],
+    [100038, 'materialize', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::materialize"],
+    [100039, 'materialize', True, False, 'DATE', ['DATE'], "UtilityFunctions::materialize"],
+    [100040, 'materialize', True, False, 'DATETIME', ['DATETIME'], "UtilityFunctions::materialize"],
+    [100041, 'materialize', True, False, 'DECIMALV2', ['DECIMALV2'], "UtilityFunctions::materialize"],
+    [100042, 'materialize', True, False, 'DECIMAL32', ['DECIMAL32'], "UtilityFunctions::materialize"],
+    [100043, 'materialize', True, False, 'DECIMAL64', ['DECIMAL64'], "UtilityFunctions::materialize"],
+    [100044, 'materialize', True, False, 'DECIMAL128', ['DECIMAL128'], "UtilityFunctions::materialize"],
+    [100045, 'materialize', True, False, 'DECIMAL256', ['DECIMAL256'], "UtilityFunctions::materialize"],
+    [100046, 'materialize', True, False, 'JSON', ['JSON'], "UtilityFunctions::materialize"],
+    [100047, 'materialize', True, False, 'VARBINARY', ['VARBINARY'], "UtilityFunctions::materialize"],
+
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],

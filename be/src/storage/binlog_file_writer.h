@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/compression/block_compression.h"
 #include "fs/fs.h"
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_util.h"
 #include "storage/rowset/rowset.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 

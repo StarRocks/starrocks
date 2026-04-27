@@ -243,6 +243,75 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+    public void testCreateMaterializedViewWithTimeTravelClause() {
+        analyzeFail("create materialized view mv_time_travel\n" +
+                        "distributed by hash(id) buckets 3\n" +
+                        "refresh deferred manual\n" +
+                        "as select id, data, date from iceberg0.partitioned_db.t1 for version as of 1",
+                "Do not support create materialized view with time travel clause");
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithTimeTravelClauseInCte() {
+        analyzeFail("create materialized view mv_time_travel_in_cte\n" +
+                        "distributed by hash(id) buckets 3\n" +
+                        "refresh deferred manual\n" +
+                        "as with cte as (select id, data, date from iceberg0.partitioned_db.t1 for version as of 1)\n" +
+                        "select id, data, date from cte",
+                "Do not support create materialized view with time travel clause");
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_mv_time_travel as select k1, k2 from test.tbl1", () ->
+                analyzeFail("create materialized view mv_time_travel_on_view\n" +
+                                "distributed by hash(k2) buckets 3\n" +
+                                "refresh deferred manual\n" +
+                                "as select k1, k2 from test.base_view_mv_time_travel for version as of 1",
+                        "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClause() {
+        analyzeFail("create view test.view_time_travel as " +
+                        "select id, data from iceberg0.partitioned_db.t1 for version as of 1",
+                "Do not support create view with time travel clause");
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClauseInCte() {
+        analyzeFail("create view test.view_time_travel_in_cte as " +
+                        "with cte as (select id, data from iceberg0.partitioned_db.t1 for version as of 1)\n" +
+                        "select id, data from cte",
+                "Do not support create view with time travel clause");
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_time_travel as select k1, k2 from test.tbl1", () ->
+                analyzeFail("create view test.view_time_travel_on_view as " +
+                                "select k1, k2 from test.base_view_time_travel for version as of 1",
+                        "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testAlterViewWithTimeTravelClause() throws Exception {
+        starRocksAssert.withView("create view test.view_alter_time_travel as select k1 from test.tbl1", () ->
+                analyzeFail("alter view test.view_alter_time_travel as " +
+                                "select id, data from iceberg0.partitioned_db.t1 for version as of 1",
+                        "Do not support alter view with time travel clause"));
+    }
+
+    @Test
+    public void testAlterViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_alter_time_travel as select k1, k2 from test.tbl1", () ->
+                starRocksAssert.withView("create view test.target_view_alter_time_travel as select k1, k2 from test.tbl1",
+                        () -> analyzeFail("alter view test.target_view_alter_time_travel as " +
+                                        "select k1, k2 from test.base_view_alter_time_travel for version as of 1",
+                                "Unsupported relation type for temporal clauses, relation type: VIEW")));
+    }
+
+    @Test
     public void testCreateMvWithNotExistResourceGroup() {
         String sql = "create materialized view mv\n" +
                 "PARTITION BY k1\n" +

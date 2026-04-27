@@ -590,6 +590,7 @@ build_thrift() {
         --without-java \
         --without-rs \
         --without-swift \
+        --without-cl \
         --with-cpp \
         --with-libevent="${libevent_prefix}" \
         --with-boost="${TP_INSTALL_DIR}" \

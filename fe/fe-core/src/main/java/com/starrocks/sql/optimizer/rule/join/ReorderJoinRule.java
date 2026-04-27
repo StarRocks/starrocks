@@ -71,9 +71,19 @@ public class ReorderJoinRule extends Rule {
                 return;
             }
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            // For A inner join (B inner join C), we only think A is root tree
             if (joinOperator.isInnerOrCrossJoin()) {
-                // For A inner join (B inner join C), we only think A is root tree
-                if (!findNewRoot) {
+                boolean hasProjectRelyOnTwoChildren = MultiJoinNode.hasProjectRelyOnTwoChildren(root);
+                // if findNewRoot == true && hasProjectRelyOnTwoChildren
+                // like below:
+                //      B
+                //    /   \
+                //   A     C
+                //        /  \
+                //       D    E
+                // if C has project rely on two child, then C is an atom for join tree with B as root,
+                // but we still can reorder join tree whose root is C
+                if (!findNewRoot || hasProjectRelyOnTwoChildren) {
                     findNewRoot = true;
                     results.add(Pair.create(root, Pair.create(parent, childIdx)));
                 }

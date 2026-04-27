@@ -743,6 +743,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
         new_rows_op.add_del_encryption_metas(op_write.del_encryption_metas(i));
     }
+    // Carry over the per-del shared flag populated by tablet-split cross-publish.
+    // Without this, apply_opwrite(new_rows_op) would drop the flag and the del file
+    // would be written into rowset.del_files with shared=false, exposing it to
+    // premature deletion by vacuum on sibling split tablets.
+    for (int i = 0; i < op_write.shared_dels_size(); i++) {
+        new_rows_op.add_shared_dels(op_write.shared_dels(i));
+    }
     if (new_rows_op.rowset().segments_size() > 0 || new_rows_op.dels_size() > 0) {
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
@@ -1201,6 +1208,25 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
     return st;
 }
 
+Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
+                                                        std::vector<SegmentPKIteratorPtr>& pk_iters,
+                                                        std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                                        bool need_lock) {
+    rss_rowids_per_segment->resize(pk_iters.size());
+    Status st;
+    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
+        TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
+        std::unique_ptr<ThreadPoolToken> token;
+        if (config::enable_pk_index_parallel_execution) {
+            token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                    ThreadPool::ExecutionMode::CONCURRENT);
+        }
+        TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
+        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment));
+    }));
+    return st;
+}
+
 static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnContext& ctx, uint32_t ucid,
                                                                int32_t* col_index,
                                                                const TabletSchemaCSPtr& read_tablet_schema) {
@@ -1529,6 +1555,25 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
             continue;
         }
         num_dels += delvec->cardinality();
+    }
+    return num_dels;
+}
+
+size_t UpdateManager::get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta) {
+    size_t num_dels = 0;
+    LakeIOOptions lake_io_opts;
+    lake_io_opts.fill_data_cache = false;
+    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+        DelVector delvec;
+        uint32_t segment_id = get_rssid(rowset_meta, i);
+        auto st = lake::get_del_vec(_tablet_mgr, metadata, segment_id, false /*fill_cache*/, lake_io_opts, &delvec);
+        if (!st.ok()) {
+            LOG(WARNING) << "get_rowset_num_deletes: error get del vector"
+                         << " tablet_id=" << metadata.id() << " metadata_version=" << metadata.version()
+                         << " segment_id=" << segment_id << " status=" << st;
+            continue;
+        }
+        num_dels += delvec.cardinality();
     }
     return num_dels;
 }

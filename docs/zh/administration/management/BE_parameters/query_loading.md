@@ -454,6 +454,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
 - 引入版本：-
 
+### enable_lock_free_scan_task_queue
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 `ScanExecutor` 是否使用 `LockFreeWorkGroupScanTaskQueue` 来调度 OLAP scan 和 connector scan 任务。开启后，扫描任务会通过“每个 workgroup 的无锁队列 + workgroup 级协调器”进行调度，相比原先基于互斥锁的 `WorkGroupScanTaskQueue` 可以降低竞争开销。排障或回滚时，可将该参数设置为 `false` 以切回旧的 scan task queue 实现。
+- 引入版本：v4.1.0
+
 ### pk_index_parallel_get_threadpool_size
 
 - 默认值：1048576

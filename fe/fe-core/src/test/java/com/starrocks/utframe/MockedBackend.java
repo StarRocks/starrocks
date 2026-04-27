@@ -55,7 +55,6 @@ import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
@@ -98,7 +97,6 @@ import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
-import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.BackendService;
@@ -576,11 +574,6 @@ public class MockedBackend {
 
         @Override
         public Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request) {
-            throw new NotImplementedException("TODO");
-        }
-
-        @Override
-        public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
             throw new NotImplementedException("TODO");
         }
 

@@ -152,4 +152,37 @@ TEST_F(FilenamesTest, gen_segment_filename_from) {
         ASSERT_TRUE(new_file_name.empty());
     }
 }
+
+TEST_F(FilenamesTest, gen_vector_index_filename) {
+    // Standard segment filename with .dat extension: strip the extension and append _{index_id}.vi
+    {
+        std::string segment_filename = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.dat";
+        std::string vi_filename = gen_vector_index_filename(segment_filename, 123);
+        ASSERT_EQ("0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_123.vi", vi_filename);
+    }
+
+    // Different index_id
+    {
+        std::string segment_filename = "0123_abcd.dat";
+        std::string vi_filename = gen_vector_index_filename(segment_filename, 456);
+        ASSERT_EQ("0123_abcd_456.vi", vi_filename);
+    }
+
+    // Segment filename without .dat: append _{index_id}.vi to the raw name (fallback branch).
+    {
+        std::string segment_filename = "0123_abcd";
+        std::string vi_filename = gen_vector_index_filename(segment_filename, 789);
+        ASSERT_EQ("0123_abcd_789.vi", vi_filename);
+    }
+}
+
+TEST_F(FilenamesTest, is_vector_index) {
+    ASSERT_TRUE(is_vector_index("0123_abcd_123.vi"));
+    ASSERT_TRUE(is_vector_index("vector_index.vi"));
+    ASSERT_TRUE(is_vector_index("a.vi"));
+    ASSERT_FALSE(is_vector_index("0123_abcd.dat"));
+    ASSERT_FALSE(is_vector_index("file.ivt"));
+    ASSERT_FALSE(is_vector_index(""));
+    ASSERT_FALSE(is_vector_index("file.vi.bak")); // .vi is substring, but suffix is .bak
+}
 } // namespace starrocks::lake

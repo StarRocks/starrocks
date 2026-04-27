@@ -4,6 +4,14 @@ displayed_sidebar: docs
 
 # StarRocks version 4.1
 
+:::danger
+
+**Container Image Issue (v4.1.0)**
+
+Due to an unstable load order issue in the v4.1.0 container image, BE processes may fail to start reliably in container environments. **Container environment users should NOT upgrade to v4.1.0.** Please wait for v4.1.1, which includes the fix ([#71825](https://github.com/StarRocks/starrocks/pull/71825)).
+
+:::
+
 :::warning
 
 **Downgrade Notes**
@@ -38,7 +46,7 @@ Release Date: April 13, 2026
 
 - **Cache Observability**
 
-  Cache hit ratio metrics are exposed in audit logs and the monitoring system for better cache transparency and latency predictability. Detailed Data Cache metrics include memory and disk quota, page cache statistics, and per-table hit rates. [#63964](https://github.com/StarRocks/starrocks/pull/63964)
+  Query-level cache hit ratio is now exposed in audit logs and the monitoring system for better cache transparency and latency diagnosis. Additional Data Cache metrics include memory and disk quota usage, and page cache statistics. [#63964](https://github.com/StarRocks/starrocks/pull/63964)
 
 - Added segment metadata filter for Lake tables to skip irrelevant segments based on sort key range during scans, reducing I/O for range-predicate queries. [#68124](https://github.com/StarRocks/starrocks/pull/68124)
 - Supports fast cancel for Lake DeltaWriter, reducing latency for cancelled ingestion jobs in shared-data clusters. [#68877](https://github.com/StarRocks/starrocks/pull/68877)

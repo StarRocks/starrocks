@@ -66,8 +66,7 @@ public:
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                    const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
-                    const std::vector<std::string>& del_encryption_metas);
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels);
     Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
@@ -123,8 +122,10 @@ private:
         RowsetMetadataPB rowset_pb;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
-        std::vector<std::string> dels;
-        std::vector<std::string> del_encryption_metas;
+        // Per-del metadata: name + shared + encryption_meta carried together so the
+        // parallel-array invariant between filename / shared / encryption can't drift.
+        // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
+        std::vector<FileMetaPB> dels;
         uint32_t assigned_segment_idx = 0;
     };
 

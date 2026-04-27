@@ -307,7 +307,8 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNoNodeValidPath) {
     TopBinding binding{.kind = TopBinding::Kind::VARIANT,
                        .path = "city",
                        .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
-                       .node = nullptr};
+                       .node = nullptr,
+                       .parsed_path = VariantPath({VariantSegment::make_object("city")})};
 
     auto st = VariantColumnReader::append_variant_binding_row(
             0, binding, full_row.get_metadata().raw(),
@@ -315,22 +316,6 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNoNodeValidPath) {
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_EQ(1, dst->size());
     EXPECT_FALSE(down_cast<NullableColumn*>(dst.get())->is_null(0));
-}
-
-// node == nullptr, path string is syntactically invalid → parse error  (lines 1318-1319)
-TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNoNodeInvalidPath) {
-    auto full_row = parse_variant_json(R"({"a":1})");
-    auto dst = NullableColumn::create(VariantColumn::create(), NullColumn::create());
-    // Bracket syntax that VariantPathParser rejects as invalid
-    TopBinding binding{.kind = TopBinding::Kind::VARIANT,
-                       .path = "[invalid",
-                       .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
-                       .node = nullptr};
-
-    auto st = VariantColumnReader::append_variant_binding_row(
-            0, binding, full_row.get_metadata().raw(),
-            VariantRowRef(full_row.get_metadata().raw(), full_row.get_value().raw()), dst.get());
-    EXPECT_FALSE(st.ok());
 }
 
 // ─── encode_datum error paths ───────────────────────────────────────────────
@@ -453,7 +438,8 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowSeekFail) {
     TopBinding binding{.kind = TopBinding::Kind::VARIANT,
                        .path = "name",
                        .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
-                       .node = nullptr};
+                       .node = nullptr,
+                       .parsed_path = VariantPath({VariantSegment::make_object("name")})};
 
     auto st = VariantColumnReader::append_variant_binding_row(
             0, binding, full_row.get_metadata().raw(),
@@ -556,6 +542,98 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(tpar
     opts.row_group_meta = &rg;
 
     return ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
+}
+
+static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with_commit_operation_hint(
+        tparquet::RowGroup& rg, ColumnReaderOptions& opts) {
+    auto scalar_field = [](std::string name, tparquet::Type::type physical_type, int column_index) {
+        ParquetField field;
+        field.name = std::move(name);
+        field.type = ColumnType::SCALAR;
+        field.physical_type = physical_type;
+        field.physical_column_index = column_index;
+        return field;
+    };
+
+    ParquetField meta_f = scalar_field("metadata", tparquet::Type::BYTE_ARRAY, 0);
+    ParquetField val_f = scalar_field("value", tparquet::Type::BYTE_ARRAY, 1);
+
+    ParquetField time_value_f = scalar_field("value", tparquet::Type::BYTE_ARRAY, 2);
+    ParquetField time_typed_f = scalar_field("typed_value", tparquet::Type::INT64, 3);
+    ParquetField time_node;
+    time_node.name = "time_us";
+    time_node.type = ColumnType::STRUCT;
+    time_node.children = {time_value_f, time_typed_f};
+
+    ParquetField commit_value_f = scalar_field("value", tparquet::Type::BYTE_ARRAY, 4);
+    ParquetField operation_value_f = scalar_field("value", tparquet::Type::BYTE_ARRAY, 5);
+    ParquetField operation_typed_f = scalar_field("typed_value", tparquet::Type::INT32, 6);
+    ParquetField operation_node;
+    operation_node.name = "operation";
+    operation_node.type = ColumnType::STRUCT;
+    operation_node.children = {operation_value_f, operation_typed_f};
+
+    ParquetField collection_value_f = scalar_field("value", tparquet::Type::BYTE_ARRAY, 7);
+    ParquetField collection_typed_f = scalar_field("typed_value", tparquet::Type::INT32, 8);
+    ParquetField collection_node;
+    collection_node.name = "collection";
+    collection_node.type = ColumnType::STRUCT;
+    collection_node.children = {collection_value_f, collection_typed_f};
+
+    ParquetField commit_typed_struct;
+    commit_typed_struct.name = "typed_value";
+    commit_typed_struct.type = ColumnType::STRUCT;
+    commit_typed_struct.children = {operation_node, collection_node};
+
+    ParquetField commit_node;
+    commit_node.name = "commit";
+    commit_node.type = ColumnType::STRUCT;
+    commit_node.children = {commit_value_f, commit_typed_struct};
+
+    ParquetField tv_struct;
+    tv_struct.name = "typed_value";
+    tv_struct.type = ColumnType::STRUCT;
+    tv_struct.children = {time_node, commit_node};
+
+    ParquetField field;
+    field.name = "data";
+    field.type = ColumnType::STRUCT;
+    field.children = {meta_f, val_f, tv_struct};
+
+    for (int i = 0; i <= 8; ++i) {
+        tparquet::ColumnChunk chunk;
+        chunk.__set_file_path("col" + std::to_string(i));
+        chunk.file_offset = 0;
+        chunk.meta_data.__set_type((i == 3) ? tparquet::Type::INT64
+                                            : (i == 6 || i == 8) ? tparquet::Type::INT32 : tparquet::Type::BYTE_ARRAY);
+        chunk.meta_data.data_page_offset = i * 10;
+        chunk.meta_data.total_compressed_size = 1;
+        rg.columns.emplace_back(std::move(chunk));
+    }
+    rg.__set_num_rows(5);
+    opts.row_group_meta = &rg;
+
+    VariantShreddedReadHints hints;
+    RETURN_IF_ERROR(hints.add_path("commit.operation"));
+    return ColumnReaderFactory::create_variant_column_reader(opts, &field, hints);
+}
+
+TEST(VariantShreddedPruningTest, CollectIORangeSkipsUnrequestedSiblings) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader_with_commit_operation_hint(rg, opts));
+
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    reader->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+
+    std::vector<int64_t> offsets;
+    offsets.reserve(ranges.size());
+    for (const auto& range : ranges) {
+        offsets.push_back(range.offset);
+    }
+    const std::vector<int64_t> expected_offsets = {0, 10, 50, 60};
+    EXPECT_EQ(expected_offsets, offsets);
 }
 
 static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_reader(tparquet::RowGroup& rg,
@@ -948,6 +1026,20 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsWhenFallbackValueMayContainNonNullRow
     auto bloom_result = zm_reader.row_group_bloom_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(bloom_result);
     EXPECT_FALSE(bloom_result.value());
+}
+
+TEST(ParquetComplexColumnReaderTest, VariantVirtualZoneMapReaderSkipsWhenSourceIsNull) {
+    ASSIGN_OR_ABORT(auto leaf_path, VariantPathParser::parse_shredded_path(std::string_view("age")));
+    VariantVirtualZoneMapReader zm_reader(nullptr, std::move(leaf_path),
+                                          TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+
+    ObjectPool pool;
+    const ColumnReader* leaf_reader = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    bool prepared = zm_reader._prepare_delegate_predicates({}, &pool, 10, &leaf_reader, &rewritten_predicates);
+    EXPECT_FALSE(prepared);
+    EXPECT_EQ(nullptr, leaf_reader);
+    EXPECT_TRUE(rewritten_predicates.empty());
 }
 
 } // namespace starrocks::parquet

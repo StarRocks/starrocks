@@ -34,6 +34,11 @@ public:
     // flush data into disk
     virtual Status flush() = 0;
 
+    // close the index builder and finalize the underlying file.
+    // Must be called after flush() and before reading the index file,
+    // because remote FS (S3) objects are only visible after close().
+    virtual void close() const {};
+
     // we should make sure the independence of TenAnn index, include data and metadata, to make [[IndexScanNode]] simple
     // enough in the future other than to read the meta both in StarRocks and TenAnn.
     // Furthermore, TenAnn index within tablet level should decouple with segment, therefore we should do the empty mark

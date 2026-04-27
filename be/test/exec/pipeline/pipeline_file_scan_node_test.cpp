@@ -100,7 +100,7 @@ public:
         _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
         _pool = _runtime_state->obj_pool();
         auto sink_dop = degree_of_parallelism;
-        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop, false));
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 

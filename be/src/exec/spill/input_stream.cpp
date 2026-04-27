@@ -288,9 +288,17 @@ StatusOr<ChunkUniquePtr> SequenceInputStream::get_next(workgroup::YieldContext& 
     while (true) {
         if (_current_reader == nullptr) {
             bool is_remote = _input_blocks[_current_idx]->is_remote();
-            _options.read_io_bytes = GET_METRICS(is_remote, _serde->parent()->metrics(), restore_bytes);
-            _options.read_io_timer = GET_METRICS(is_remote, _serde->parent()->metrics(), read_io_timer);
-            _options.read_io_count = GET_METRICS(is_remote, _serde->parent()->metrics(), read_io_count);
+            const auto& metrics = _serde->parent()->metrics();
+            _options.read_io_bytes = GET_METRICS(is_remote, metrics, restore_bytes);
+            _options.read_io_timer = GET_METRICS(is_remote, metrics, read_io_timer);
+            _options.read_io_count = GET_METRICS(is_remote, metrics, read_io_count);
+            _options.global_read_bytes = nullptr;
+            _options.global_read_io_duration_ns = nullptr;
+            if (auto* g = metrics.global(is_remote); g != nullptr) {
+                _options.global_read_bytes = g->bytes_read_total.get();
+                _options.global_read_io_duration_ns = g->read_io_duration_ns_total.get();
+                g->blocks_read_total->increment(1);
+            }
             _current_reader = _input_blocks[_current_idx]->get_reader(_options);
         }
         auto& block = _input_blocks[_current_idx];

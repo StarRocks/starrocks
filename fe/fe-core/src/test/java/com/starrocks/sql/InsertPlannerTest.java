@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -339,7 +339,7 @@ public class InsertPlannerTest {
 
                 // Return empty partition list
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new ArrayList<String>();
                 minTimes = 0;
 
@@ -424,7 +424,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new ArrayList<String>(); // Empty partition list
                 minTimes = 0;
 
@@ -481,7 +481,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new Exception("Failed to get partitions");
                 minTimes = 0;
 
@@ -534,7 +534,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new ArrayList<String>();
                 minTimes = 0;
 
@@ -730,11 +730,11 @@ public class InsertPlannerTest {
 
                 // MetadataMgr setup for partition names
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new Delegate<List<String>>() {
                     @SuppressWarnings("unused")
                     List<String> delegate(String catalog, String db, String table,
-                                          ConnectorMetadatRequestContext context) {
+                                          ConnectorMetadataRequestContext context) {
                         List<String> partitions = new ArrayList<>();
                         for (int i = 0; i < partitionCount; i++) {
                             partitions.add("p" + i);
@@ -836,7 +836,7 @@ public class InsertPlannerTest {
 
                 // 100 existing partitions
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -919,7 +919,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1032,7 +1032,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1124,7 +1124,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1219,7 +1219,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1328,7 +1328,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1438,7 +1438,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 

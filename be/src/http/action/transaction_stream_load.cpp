@@ -455,6 +455,14 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     } else {
         request.__set_strip_outer_array(false);
     }
+    if (!http_req->header(HTTP_ENVELOPE).empty()) {
+        auto envelope_str = http_req->header(HTTP_ENVELOPE);
+        if (boost::iequals(envelope_str, "debezium")) {
+            request.__set_envelope(TEnvelopeType::DEBEZIUM);
+        } else if (!boost::iequals(envelope_str, "none")) {
+            return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
+        }
+    }
     if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
         request.__set_partial_update(true);
     } else {

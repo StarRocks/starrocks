@@ -19,12 +19,14 @@
 #include <memory>
 #include <string>
 
+#include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
 #include "types/logical_type.h"
@@ -50,8 +52,10 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         env->GetLongArrayRegion(arr, 0, 4, results);
         const NullableColumn* nullable_column = down_cast<const NullableColumn*>(column.get());
         const Column* data_column = down_cast<const NullableColumn*>(column.get())->data_column().get();
+        RawDataVisitor rv;
+        ASSERT_OK(data_column->accept(&rv));
         ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
-        ASSERT_EQ(results[1], (jlong)data_column->raw_data());
+        ASSERT_EQ(results[1], (jlong)rv.result());
         env->DeleteLocalRef(arr);
     }
     std::vector<LogicalType> string_types = {TYPE_CHAR, TYPE_VARCHAR};
