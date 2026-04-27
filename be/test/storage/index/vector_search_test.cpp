@@ -330,7 +330,6 @@ TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_l
 
 #endif // WITH_TENANN
 
-
 // ==================== Brute-force fallback tests ====================
 // Test SegmentIterator brute-force fallback when .vi file is missing.
 // This covers: _prepare_vector_index, _setup_brute_force_fallback,

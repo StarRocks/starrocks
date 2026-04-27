@@ -1053,8 +1053,8 @@ Status SegmentIterator::_init_ann_reader() {
     {
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
-            index_path = lake::gen_vector_index_path_from_segment_path(_segment->file_name(),
-                                                                       tablet_index_meta->index_id());
+            index_path =
+                    lake::gen_vector_index_path_from_segment_path(_segment->file_name(), tablet_index_meta->index_id());
         } else {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());
