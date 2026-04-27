@@ -383,7 +383,7 @@ public:
 
 private:
     FunctionContext* _ctx;
-    // UDAF object handle, owned by FunctionContext
+    // UDAF object handle, owned by JavaUDAFUniqueContext
     jobject _caller;
     JVMClass _stub_clazz;
     JavaGlobalRef _stub_method;
@@ -533,12 +533,48 @@ struct JavaUDFContext {
     std::unique_ptr<JavaMethodDescriptor> close;
 };
 
-// Function
-struct JavaUDAFContext;
+// Shareable, cacheable UDAF class-level context.
+// Contains class references and method descriptors — no per-aggregation state.
+// Cached via UserFunctionCache::load_cacheable_java_udf.
+struct JavaUDAFSharedContext {
+    std::unique_ptr<ClassLoader> udf_classloader;
+
+    JVMClass udaf_class = nullptr;
+    JVMClass udaf_state_class = nullptr;
+
+    std::unique_ptr<JavaMethodDescriptor> create;
+    std::unique_ptr<JavaMethodDescriptor> destory;
+    std::unique_ptr<JavaMethodDescriptor> update;
+    std::unique_ptr<JavaMethodDescriptor> merge;
+    std::unique_ptr<JavaMethodDescriptor> finalize;
+    std::unique_ptr<JavaMethodDescriptor> serialize;
+    std::unique_ptr<JavaMethodDescriptor> serialize_size;
+
+    // Window function methods (optional)
+    std::unique_ptr<JavaMethodDescriptor> reset;
+    std::unique_ptr<JavaMethodDescriptor> window_update;
+    std::unique_ptr<JavaMethodDescriptor> get_values;
+
+    // Generated stub class/method — used to create a per-aggregator AggBatchCallStub
+    JVMClass update_stub_clazz = nullptr;
+    JavaGlobalRef update_stub_method = nullptr;
+
+    // FunctionStates method objects — looked up once, cloned per aggregator instance
+    JavaGlobalRef states_get_method = nullptr;
+    JavaGlobalRef states_batch_get_method = nullptr;
+    JavaGlobalRef states_add_method = nullptr;
+    JavaGlobalRef states_remove_method = nullptr;
+    JavaGlobalRef states_clear_method = nullptr;
+};
+
+// Per-aggregator UDAF context stored as FunctionContext::THREAD_LOCAL.
+// Holds a reference to the shared class-level JavaUDAFSharedContext plus
+// mutable per-aggregation state.
+struct JavaUDAFUniqueContext;
 
 class UDAFFunction {
 public:
-    UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFContext* ctx)
+    UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFUniqueContext* ctx)
             : _udaf_handle(udaf_handle), _function_context(function_ctx), _ctx(ctx) {}
     // create a new state for UDAF
     int create();
@@ -567,33 +603,29 @@ private:
     // not owned udaf function handle
     jobject _udaf_handle;
     FunctionContext* _function_context;
-    JavaUDAFContext* _ctx;
+    JavaUDAFUniqueContext* _ctx;
 };
 
-struct JavaUDAFContext {
-    JVMClass udaf_class = nullptr;
-    JVMClass udaf_state_class = nullptr;
-    std::unique_ptr<JavaMethodDescriptor> create;
-    std::unique_ptr<JavaMethodDescriptor> destory;
-    std::unique_ptr<UDAFStateList> states;
-    std::unique_ptr<JavaMethodDescriptor> update;
-    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
-    std::unique_ptr<JavaMethodDescriptor> merge;
-    std::unique_ptr<JavaMethodDescriptor> finalize;
-    std::unique_ptr<JavaMethodDescriptor> serialize;
-    std::unique_ptr<JavaMethodDescriptor> serialize_size;
+struct JavaUDAFUniqueContext {
+    // Shared, possibly cached class-level context
+    std::shared_ptr<JavaUDAFSharedContext> ctx;
 
-    std::unique_ptr<JavaMethodDescriptor> reset;
-    std::unique_ptr<JavaMethodDescriptor> window_update;
-    std::unique_ptr<JavaMethodDescriptor> get_values;
-
-    std::unique_ptr<DirectByteBuffer> buffer;
-    // handle for UDAF object
+    // Per-aggregator UDAF object instance and its batch-update stub
     JavaGlobalRef handle = nullptr;
-    std::vector<uint8_t> buffer_data;
+    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
 
+    // Per-aggregator mutable state
+    std::unique_ptr<UDAFStateList> states;
     std::unique_ptr<UDAFFunction> _func;
+    std::unique_ptr<DirectByteBuffer> buffer;
+    std::vector<uint8_t> buffer_data;
 };
+
+// Java UDAF lifecycle management based on FunctionContext::THREAD_LOCAL state.
+JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx);
+void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx);
+void clear_java_udaf_states(FunctionContext* ctx);
+void destroy_java_udaf_context(FunctionContext* ctx);
 
 // Check whether java runtime can work
 Status detect_java_runtime();

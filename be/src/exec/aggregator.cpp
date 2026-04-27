@@ -151,7 +151,7 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context);
+                         FunctionContext* context, bool use_cache = false, bool* cache_hit_out = nullptr);
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
@@ -279,13 +279,37 @@ Status Aggregator::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 #ifndef __APPLE__
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, [this]() {
+        auto& opts = state->query_options();
+        bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
+        auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
+            std::vector<int> attached_udaf_idx;
+            attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
-                    auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                _agg_fn_ctxs[i]);
-                    RETURN_IF_ERROR(st);
+                    // use_cache only when isolation is explicitly shared and enable_cache_udaf is set
+                    bool use_cache = enable_cache && fn.__isset.isolated && !fn.isolated;
+                    bool cache_hit = false;
+                    Status st;
+                    {
+                        SCOPED_TIMER(_agg_stat->udaf_load_timer);
+                        st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                               _agg_fn_ctxs[i], use_cache, use_cache ? &cache_hit : nullptr);
+                    }
+                    if (use_cache) {
+                        if (cache_hit) {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_hit_count, 1);
+                        } else {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
+                        }
+                    }
+                    if (!st.ok()) {
+                        for (int idx : attached_udaf_idx) {
+                            destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+                        }
+                        return st;
+                    }
+                    attached_udaf_idx.emplace_back(i);
                 }
             }
             return Status::OK();
@@ -651,11 +675,13 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
         _release_agg_memory();
     }
 
+#ifndef __APPLE__
     for (int i = 0; i < _agg_functions.size(); i++) {
-        if (_agg_fn_ctxs[i]) {
-            _agg_fn_ctxs[i]->release_mems();
+        if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+            clear_java_udaf_states(_agg_fn_ctxs[i]);
         }
     }
+#endif
 
     _mem_pool->free_all();
     _agg_state_mem_usage = 0;
@@ -729,11 +755,13 @@ void Aggregator::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
+#ifndef __APPLE__
         for (int i = 0; i < _agg_functions.size(); i++) {
-            if (_agg_fn_ctxs[i]) {
-                _agg_fn_ctxs[i]->release_mems();
+            if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                destroy_java_udaf_context(_agg_fn_ctxs[i]);
             }
         }
+#endif
 
         if (_is_only_group_by_columns) {
             _hash_set_variant.reset();
