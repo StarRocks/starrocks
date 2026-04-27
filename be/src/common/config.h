@@ -552,6 +552,18 @@ CONF_mBool(enable_pk_index_rebuild_segment_parallel, "true");
 // iter-060 trace: top slow event 5617 ms = 2707 ms `multi_get_us` + 2630 ms `rebuild_index_del_cost_us`
 // (which itself calls multi_get under `get()`); both paths benefit from this knob.
 CONF_mBool(enable_pk_index_multi_get_parallel, "true");
+// Per-CN admission cap on concurrent cold rebuilds in `LakePersistentIndex::load_from_lake_tablet`.
+// During cold-burst scenarios (BE restart, snapshot MISS, scale-out) the publish-version pool can
+// dispatch tens of cold rebuilds in the same ~100 ms window. Each rebuild is OSS-RTT- and CPU-bound
+// (`multi_get_us` p50=2.49s + `rebuild_index_del_cost_us` p50=1.97s in iter-060/064 traces); when
+// they all run together they contend on local CPU and OSS bandwidth, which inflates the per-task
+// wall time and produces a tail of 7-11 s upsert Max events. Capping concurrency to a small N keeps
+// each admitted task with enough dedicated CPU/IO bandwidth to finish quickly, smoothing the burst
+// from a high-peak/short-duration shape into a lower-peak/longer-duration one. Set <= 0 to disable
+// admission control entirely (legacy behavior). Gate is placed AFTER `try_restore_from_local_snapshot`
+// so snapshot-HIT tablets bypass the gate. Backed by a process-wide `std::mutex` + condition_variable;
+// callers wait on `cold_rebuild_admission_wait_us` (TRACE counter).
+CONF_mInt32(pk_index_cold_rebuild_max_concurrent, "8");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.

@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <tuple>
 #include <unordered_set>
@@ -52,6 +53,53 @@
 #include "storage/sstable/table_builder.h"
 
 namespace starrocks::lake {
+
+namespace {
+
+// Process-wide admission gate for `LakePersistentIndex::load_from_lake_tablet` cold rebuilds.
+// Caps how many cold rebuilds can run concurrently on this BE; the rest wait on a
+// condition_variable until a slot frees up. Backed by a `std::mutex`, so it does NOT
+// suspend a worker on a threadpool token (see iter-061/062 reentrance FATAL): the wait
+// is a plain CV wait that is safe to call from any thread (including publish-pool workers
+// and `pk_index_execution` workers).
+class ColdRebuildAdmission {
+public:
+    static ColdRebuildAdmission& instance() {
+        static ColdRebuildAdmission g;
+        return g;
+    }
+
+    // Acquire a slot. Returns the wait time in microseconds (0 if admitted immediately or
+    // if `max_concurrent <= 0`, in which case the gate is bypassed).
+    int64_t acquire(int max_concurrent) {
+        if (max_concurrent <= 0) {
+            return 0;
+        }
+        const int64_t t0 = GetCurrentTimeMicros();
+        std::unique_lock<std::mutex> lk(_mu);
+        _cv.wait(lk, [this, max_concurrent] { return _in_flight < max_concurrent; });
+        ++_in_flight;
+        return GetCurrentTimeMicros() - t0;
+    }
+
+    void release(int max_concurrent) {
+        if (max_concurrent <= 0) {
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lk(_mu);
+            --_in_flight;
+        }
+        _cv.notify_one();
+    }
+
+private:
+    std::mutex _mu;
+    std::condition_variable _cv;
+    int _in_flight = 0;
+};
+
+} // namespace
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
         : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
@@ -1253,6 +1301,17 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // opened, this is a pure walk).
         RETURN_IF_ERROR(realize_filesets_eagerly());
     }
+    // Cold-rebuild admission control. During a cold burst (BE restart, scale-out, snapshot
+    // MISS) the publish-version pool can dispatch tens of cold rebuilds in the same ~100 ms
+    // window, all of which contend on local CPU and OSS bandwidth. A small process-wide cap
+    // gives each admitted rebuild enough dedicated headroom to finish faster, smoothing the
+    // tail. `pk_index_cold_rebuild_max_concurrent <= 0` disables the gate.
+    const int cold_rebuild_cap = config::pk_index_cold_rebuild_max_concurrent;
+    const int64_t admission_wait_us = ColdRebuildAdmission::instance().acquire(cold_rebuild_cap);
+    DeferOp release_admission([cold_rebuild_cap]() {
+        ColdRebuildAdmission::instance().release(cold_rebuild_cap);
+    });
+    TRACE_COUNTER_INCREMENT("cold_rebuild_admission_wait_us", admission_wait_us);
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());

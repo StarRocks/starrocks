@@ -153,6 +153,11 @@ CONF_mBool(enable_pk_index_rebuild_segment_parallel, "true");
 // per-SST loop. Re-readable at runtime via `set config`.
 CONF_mBool(enable_pk_index_multi_get_parallel, "true");
 
+// Per-CN admission cap on concurrent cold rebuilds in `LakePersistentIndex::load_from_lake_tablet`.
+// See config.h for the full rationale. Default 8; set <=0 to disable. Re-readable at runtime via
+// `set config` (next cold rebuild's gate-acquire reads the current value).
+CONF_mInt32(pk_index_cold_rebuild_max_concurrent, "8");
+
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 
