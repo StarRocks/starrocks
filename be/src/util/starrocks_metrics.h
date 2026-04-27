@@ -215,6 +215,29 @@ public:
     // Accumulated time that waiting replicas costs in LoadChannel#add_chunks
     METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_replica_duration_us, MetricUnit::MICROSECONDS);
 
+    // Shared-data combined_txn_log collection dispatch counters. Each eos on a
+    // LakeTabletsChannel that enters the collection path bumps exactly one of
+    // these. Useful for confirming which strategy is live in a given cluster
+    // after an upgrade or Config flip.
+    //
+    // Legacy: FE didn't set `enable_per_partition_coordinator`, or any open on
+    // the channel disagreed. Collection falls back to "sender_id == 0 collects
+    // all logs".
+    METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_legacy_total, MetricUnit::OPERATIONS);
+    // Per-partition coordinator mode: collection runs through the elected
+    // coordinator per partition (smallest sender_id among those that claimed
+    // the partition via (incremental_)open).
+    METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_per_partition_total, MetricUnit::OPERATIONS);
+    // Diagnostic: number of txn logs produced for a partition that *no*
+    // sender on this channel ever claimed via its (incremental_)open tablet
+    // list. Such a log is dropped (no coordinator covers it), which would
+    // silently re-introduce the publish-time loss this fix targets. Counted
+    // only once per orphan log (by the minimum elected coordinator). A
+    // healthy cluster must hold this at 0; any non-zero value points to a
+    // missing open RPC or an open/data-arrival race and warrants
+    // investigation. Each orphan is also logged at ERROR on the CN.
+    METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_orphan_partition_total, MetricUnit::NOUNIT);
+
     // Metrics for async delta writer
     // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);
