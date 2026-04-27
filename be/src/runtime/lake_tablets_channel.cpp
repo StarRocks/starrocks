@@ -1024,19 +1024,24 @@ void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenReque
     const bool flag_enabled =
             params.has_lake_tablet_params() && params.lake_tablet_params().enable_per_partition_coordinator();
 
-    int32_t sender_id = params.sender_id();
+    const int32_t sender_id = params.sender_id();
+
+    // Build the distinct-partition-id set outside the lock to keep the locked
+    // region small. `PTabletWithPartition.partition_id` is a required field on
+    // the wire, so no has_partition_id() guard is needed.
+    std::unordered_set<int64_t> unique_pids;
+    unique_pids.reserve(params.tablets_size());
+    for (const auto& t : params.tablets()) {
+        unique_pids.insert(t.partition_id());
+    }
+
     std::lock_guard l(_partition_coordinator_mtx);
     _enable_per_partition_coordinator = _enable_per_partition_coordinator && flag_enabled;
     if (!_enable_per_partition_coordinator) {
         // Legacy path: coordinator map unused.
         return;
     }
-
-    // Claim set = distinct partition_ids in this (incremental_)open's tablet list.
-    // `PTabletWithPartition.partition_id` is a required field on the wire, so no
-    // has_partition_id() guard is needed.
-    for (const auto& t : params.tablets()) {
-        int64_t pid = t.partition_id();
+    for (int64_t pid : unique_pids) {
         auto it = _partition_coordinator.find(pid);
         // Smallest sender_id wins (deterministic election across concurrent claimers).
         if (it == _partition_coordinator.end() || sender_id < it->second) {
