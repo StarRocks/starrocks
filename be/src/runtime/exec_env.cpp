@@ -775,13 +775,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
     {
+        // BE_TEST: build the manager but do NOT auto-start the dispatch thread.
+        // Tests that exercise autonomous compaction explicitly call start() in their fixtures.
+        // This keeps the unrelated test suite free of background threads it does not control.
         std::vector<std::string> result_root_dirs;
         for (const auto& sp : _store_paths) result_root_dirs.emplace_back(sp.path);
         _lake_compaction_result_manager =
                 std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
         (void)_lake_compaction_result_manager->scan_on_startup();
-        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager,
-                                                        _lake_compaction_result_manager.get());
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata_pool")
                             .set_min_threads(1)
