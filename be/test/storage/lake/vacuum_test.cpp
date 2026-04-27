@@ -3303,9 +3303,7 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
 
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDir));
     auto data_dir = join_path(kTestDir, kSegmentDirectoryName);
-    auto exists = [&](const std::string& name) {
-        return fs->path_exists(join_path(data_dir, name)).ok();
-    };
+    auto exists = [&](const std::string& name) { return fs->path_exists(join_path(data_dir, name)).ok(); };
 
     // Both compaction-input segments removed.
     EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat"));
