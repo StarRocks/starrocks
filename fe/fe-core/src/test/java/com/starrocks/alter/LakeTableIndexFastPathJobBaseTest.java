@@ -172,6 +172,10 @@ public class LakeTableIndexFastPathJobBaseTest {
         MetadataMgr mm = mock(MetadataMgr.class);
         when(mm.getDb(anyLong())).thenReturn(db);
         when(gsm.getMetadataMgr()).thenReturn(mm);
+        // Locker.lockTablesWithIntensiveDbLock dereferences
+        // GlobalStateMgr.getCurrentState().getLockManager(); supply a real
+        // LockManager so cancelImpl can take its locks.
+        when(gsm.getLockManager()).thenReturn(new com.starrocks.common.util.concurrent.lock.LockManager());
         // Build the EditLog mock OUTSIDE the chained when(..) to avoid
         // Mockito's UnfinishedStubbing detection (mockEditLog itself does
         // doAnswer().when(edit) which Mockito interprets as nested
