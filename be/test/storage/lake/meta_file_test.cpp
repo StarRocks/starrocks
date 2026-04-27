@@ -2202,6 +2202,40 @@ TEST_F(MetaFileTest, test_apply_add_index_index_without_type_skips_flag_bump) {
     EXPECT_FALSE(schema->column(0).is_bf_column());
 }
 
+// CompactionUpdateConflictChecker must detect a racing ADD INDEX (IDG entry
+// version > op_compaction.compact_version) and force the compaction to land
+// as a with_conflict no-op, mirroring the DCG conflict path. This covers
+// column_mode_partial_update_handler.cpp lines 493-502.
+TEST_F(MetaFileTest, test_compaction_conflict_checker_with_idg_race) {
+    const int64_t tablet_id = 32011;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(20);
+    metadata->set_next_rowset_id(300);
+
+    // Input rowset id 210 covers two segments at rssid 210 and 211.
+    auto* input_rowset = metadata->add_rowsets();
+    input_rowset->set_id(210);
+    input_rowset->add_segments("a.dat");
+    input_rowset->add_segments("b.dat");
+
+    // Racing ADD INDEX landed at version 19 on segment 211, *after* the
+    // compaction's compact_version (=18). The checker must report a conflict.
+    auto& idg_ver = (*metadata->mutable_idg_meta()->mutable_idgs())[211];
+    auto* entry = idg_ver.add_entries();
+    entry->set_index_file("race.idx");
+    entry->set_version(19);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(210);
+    op_compaction.set_compact_version(18);
+    op_compaction.mutable_output_rowset()->add_segments("out.dat");
+
+    EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 999, *metadata, &builder));
+}
+
 TEST_F(MetaFileTest, test_apply_drop_index_unknown_id_noop) {
     // Drop op references an index_id not present in schema → table_indices
     // unchanged, dropped_table_indices stays empty, no crash.

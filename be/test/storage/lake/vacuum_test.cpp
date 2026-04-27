@@ -76,7 +76,7 @@ protected:
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
-        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name)) {
+        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name) || is_idx(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -3345,6 +3345,91 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
     EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi"));
     // The alive segment must still exist; vacuum did not crash on the partial-metas rowset.
     EXPECT_TRUE(exists("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat"));
+// IDG: a referenced .idx file (in idg_meta) survives vacuum, while one only
+// listed in orphan_files is removed. Mirrors the DCG referenced/orphan split.
+// The .idx file in idg_meta is *not* in orphan_files so it survives the
+// orphan-cleanup pass; the .idx file marked orphan gets deleted.
+TEST_P(LakeVacuumTest, idg_idx_files_referenced_by_metadata_are_kept) {
+    const std::string ref_idx = "0000000000abc001_idg_referenced.idx";
+    const std::string orphan_idx = "0000000000abc002_idg_orphan.idx";
+    create_data_file(ref_idx);
+    create_data_file(orphan_idx);
+
+    auto meta = std::make_shared<TabletMetadataPB>();
+    meta->set_id(8001);
+    meta->set_version(2);
+    auto& ver = (*meta->mutable_idg_meta()->mutable_idgs())[1];
+    auto* e = ver.add_entries();
+    e->set_index_file(ref_idx);
+    auto* of = meta->add_orphan_files();
+    of->set_name(orphan_idx);
+    of->set_size(11);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(meta));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(true);
+    request.add_tablet_ids(8001);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(12345);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_TRUE(file_exist(ref_idx));
+    EXPECT_FALSE(file_exist(orphan_idx));
+}
+
+// IDG: when an .idx file is in idg_meta of an old version but the latest
+// retained metadata no longer references it, datafile_gc treats it as
+// referenced via the live-versions check (lines 1237-1245).
+TEST_P(LakeVacuumTest, idg_idx_files_unreferenced_are_orphaned) {
+    const std::string live_idx = "0000000000abc010_idg_live.idx";
+    const std::string stranded_idx = "0000000000abc011_idg_stranded.idx";
+    create_data_file(live_idx);
+    create_data_file(stranded_idx);
+
+    auto live = std::make_shared<TabletMetadataPB>();
+    live->set_id(8002);
+    live->set_version(1);
+    auto& ver = (*live->mutable_idg_meta()->mutable_idgs())[2];
+    ver.add_entries()->set_index_file(live_idx);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(live));
+
+    // datafile_gc with do_delete=true must drop stranded_idx but keep live_idx.
+    ASSERT_OK(datafile_gc(kTestDir, "", 0, true));
+    EXPECT_TRUE(file_exist(live_idx));
+    EXPECT_FALSE(file_exist(stranded_idx));
+}
+
+// Drop tablet local cache evicts active IDG .idx files (vacuum.cpp 1524-1528).
+TEST_P(LakeVacuumTest, full_vacuum_drops_local_cache_for_active_idx) {
+    constexpr int64_t kTabletId = 8003;
+
+    auto meta = std::make_shared<TabletMetadataPB>();
+    meta->set_id(kTabletId);
+    meta->set_version(2);
+    meta->set_prev_garbage_version(0);
+    auto& ver = (*meta->mutable_idg_meta()->mutable_idgs())[5];
+    auto* e = ver.add_entries();
+    e->set_index_file("8003_active.idx");
+    e->set_file_size(77);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(meta));
+
+    std::vector<std::string> dropped;
+    SyncPoint::GetInstance()->SetCallBack("drop_tablet_cache:drop_local_cache", [&](void* arg) {
+        auto* path = reinterpret_cast<const std::string*>(arg);
+        dropped.emplace_back(::starrocks::path_util::base_name(*path));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("drop_tablet_cache:drop_local_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(drop_tablet_cache(_tablet_mgr.get(), kTabletId, 2));
+    EXPECT_NE(std::find(dropped.begin(), dropped.end(), std::string("8003_active.idx")), dropped.end());
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
