@@ -70,7 +70,7 @@ public class HyperStatisticSQLs {
             ", $maxFunction" + // VARCHAR
             ", $minFunction" + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
-            " FROM `$dbName`.`$tableName` partition `$partitionName`";
+            " FROM `$dbName`.`$tableName` partition `$partitionName` $laterals";
 
     public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id

@@ -289,7 +289,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     subfieldColumns.put(entry.getKey(), (SubfieldOperator) entry.getValue());
                 } else {
                     statisticsBuilder.addColumnStatistic(entry.getKey(),
-                            ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
+                            ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build(),
+                                    columnRefFactory));
                 }
             }
             // for subfield operator, we get the statistics from statistics storage
@@ -1040,7 +1041,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
             }
             ColumnStatistic outputStatistic =
-                    ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
+                    ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build(), columnRefFactory);
             builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
             allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
         }
@@ -1082,7 +1083,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         double estimateCount = rowCount;
         aggregations.forEach((key, value) -> builder
                 .addColumnStatistic(key,
-                        ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
+                        ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount, columnRefFactory)));
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -1678,17 +1679,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
         return computeTableFunctionNode(context, node.getOutputColRefs(), node.getFn().functionName(),
-                node.getFnParamColumnProject().stream().map(x -> x.first).collect(Collectors.toList()));
+                node.getFnParamColumnProject().stream().map(x -> x.first).collect(Collectors.toList()),
+                node.getFnResultColRefs());
     }
 
     @Override
     public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
         return computeTableFunctionNode(context, node.getOutputColRefs(), node.getFn().functionName(),
-                node.getFnParamColumnRefs());
+                node.getFnParamColumnRefs(), node.getFnResultColRefs());
     }
 
     private Void computeTableFunctionNode(ExpressionContext context, List<ColumnRefOperator> outputColumns,
-                                          String funcName, List<ColumnRefOperator> fnParamColumnRefs) {
+                                          String funcName, List<ColumnRefOperator> fnParamColumnRefs,
+                                          List<ColumnRefOperator> fnResultColRefs) {
         Statistics.Builder builder = Statistics.builder();
 
         Statistics inputStatistics = context.getChildStatistics(0);
@@ -1714,6 +1717,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     }
                 }
             }
+            applyTableFunctionExpressionStatistics(builder, funcName, fnParamColumnRefs, fnResultColRefs);
             rowCount = maxRows;
         }
 
@@ -1721,6 +1725,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);
+    }
+
+    private void applyTableFunctionExpressionStatistics(Statistics.Builder builder, String funcName,
+                                                        List<ColumnRefOperator> fnParamColumnRefs,
+                                                        List<ColumnRefOperator> fnResultColRefs) {
+        ExpressionStatisticLookup.lookupTableFunction(funcName, fnParamColumnRefs, fnResultColRefs, columnRefFactory)
+                .forEach(builder::addColumnStatistic);
     }
 
     public Statistics estimateInnerJoinStatistics(Statistics statistics, List<BinaryPredicateOperator> eqOnPredicates) {
@@ -1893,7 +1904,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             preAggFnCall.forEach((key, value) -> builder
                     .addColumnStatistic(key,
                             ExpressionStatisticCalculator.calculate(value, inputStatistics,
-                                    inputStatistics.getOutputRowCount())));
+                                    inputStatistics.getOutputRowCount(), columnRefFactory)));
         }
 
         if (isTopNPushDownAgg) {
@@ -1980,7 +1991,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
 
         analyticCall.forEach((key, value) -> builder
-                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics)));
+                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics, columnRefFactory)));
 
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
 
@@ -1995,7 +2006,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         Statistics result = statistics;
         for (ScalarOperator predicate : predicateList) {
-            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics, columnRefFactory);
         }
 
         // avoid sample statistics filter all data, save one rows least
@@ -2063,7 +2074,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                     ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                     statisticsBuilder.addColumnStatistic(columnRefOperator,
-                            ExpressionStatisticCalculator.calculate(mapOperator, context.getStatistics()));
+                            ExpressionStatisticCalculator.calculate(mapOperator, context.getStatistics(), columnRefFactory));
                 }
                 context.setStatistics(statisticsBuilder.build());
             }

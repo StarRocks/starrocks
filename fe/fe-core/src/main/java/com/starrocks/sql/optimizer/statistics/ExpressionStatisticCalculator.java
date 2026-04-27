@@ -21,6 +21,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -59,22 +60,33 @@ public class ExpressionStatisticCalculator {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
     }
 
+    public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, ColumnRefFactory columnRefFactory) {
+        return calculate(operator, input, input != null ? input.getOutputRowCount() : 0, columnRefFactory);
+    }
+
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount) {
+        return calculate(operator, input, rowCount, null);
+    }
+
+    public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount,
+                                            ColumnRefFactory columnRefFactory) {
         if (Double.isNaN(rowCount)) {
             LOG.debug("found a NaN row count when calculating column statistic for expr: {}", operator);
             return ColumnStatistic.unknown();
         }
-        return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
+        return operator.accept(new ExpressionStatisticVisitor(input, rowCount, columnRefFactory), null);
     }
 
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
         private final Statistics inputStatistics;
         // Some functions estimate need plan node row count, such as COUNT
         private final double rowCount;
+        private final ColumnRefFactory columnRefFactory;
 
-        public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
+        public ExpressionStatisticVisitor(Statistics statistics, double rowCount, ColumnRefFactory columnRefFactory) {
             this.inputStatistics = statistics;
             this.rowCount = Math.max(1.0, rowCount);
+            this.columnRefFactory = columnRefFactory;
         }
 
         @Override
@@ -243,6 +255,11 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitCall(CallOperator call, Void context) {
+            Optional<ColumnStatistic> expressionStatistic = loadPersistedExpressionStatistic(call);
+            if (expressionStatistic.isPresent()) {
+                return expressionStatistic.get();
+            }
+
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
             Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size(),
@@ -266,6 +283,10 @@ public class ExpressionStatisticCalculator {
             } else {
                 return multiaryExpressionCalculate(call, childrenColumnStatistics);
             }
+        }
+
+        private Optional<ColumnStatistic> loadPersistedExpressionStatistic(CallOperator call) {
+            return ExpressionStatisticLookup.lookupScalar(call, columnRefFactory);
         }
 
         private ColumnStatistic nullaryExpressionCalculate(CallOperator callOperator) {

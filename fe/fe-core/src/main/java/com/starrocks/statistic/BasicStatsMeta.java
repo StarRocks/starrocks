@@ -25,6 +25,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.expression.ExpressionStatsKey;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 
@@ -88,12 +89,16 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("columnStats")
     private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
 
+    @SerializedName("expressionStats")
+    private Map<String, ExpressionStatsMeta> expressionStatsMetaMap = Maps.newConcurrentMap();
+
     @SerializedName("tabletStatsReportTime")
     private LocalDateTime tabletStatsReportTime = LocalDateTime.MIN;
 
     // Used for deserialization
     public BasicStatsMeta() {
         columnStatsMetaMap = Maps.newConcurrentMap();
+        expressionStatsMetaMap = Maps.newConcurrentMap();
     }
 
     public BasicStatsMeta(long dbId, long tableId, List<String> columns,
@@ -135,6 +140,16 @@ public class BasicStatsMeta implements Writable {
             return Collections.emptyList();
         }
         return columns;
+    }
+
+    public List<String> getStatisticStorageKeys() {
+        List<String> storageKeys = Lists.newArrayList(getColumns());
+        if (MapUtils.isNotEmpty(expressionStatsMetaMap)) {
+            expressionStatsMetaMap.values().stream()
+                    .map(ExpressionStatsMeta::getStorageColumnName)
+                    .forEach(storageKeys::add);
+        }
+        return storageKeys;
     }
 
     public StatsConstants.AnalyzeType getType() {
@@ -294,8 +309,41 @@ public class BasicStatsMeta implements Writable {
                 .collect(Collectors.joining(","));
     }
 
+    public String getExpressionStatsString() {
+        if (MapUtils.isEmpty(expressionStatsMetaMap)) {
+            return "";
+        }
+
+        return expressionStatsMetaMap.values().stream()
+                .map(ExpressionStatsMeta::simpleString)
+                .collect(Collectors.joining(","));
+    }
+
     public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
+    }
+
+    public void addExpressionStatsMeta(ExpressionStatsMeta expressionStatsMeta) {
+        if (expressionStatsMetaMap == null) {
+            expressionStatsMetaMap = Maps.newConcurrentMap();
+        }
+        this.expressionStatsMetaMap.put(expressionStatsMeta.getKey().getNormalizedExpression(), expressionStatsMeta);
+    }
+
+    public Optional<ExpressionStatsMeta> getExpressionStatsMeta(ExpressionStatsKey key) {
+        if (MapUtils.isEmpty(expressionStatsMetaMap)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(expressionStatsMetaMap.get(key.getNormalizedExpression()));
+    }
+
+    public Optional<ExpressionStatsMeta> getExpressionStatsMetaByStorageColumnName(String storageColumnName) {
+        if (MapUtils.isEmpty(expressionStatsMetaMap)) {
+            return Optional.empty();
+        }
+        return expressionStatsMetaMap.values().stream()
+                .filter(meta -> meta.getStorageColumnName().equals(storageColumnName))
+                .findFirst();
     }
 
     public void resetDeltaRows() {

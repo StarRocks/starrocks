@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.expression.BuiltinExpressionStatistics;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TResultBatch;
@@ -649,10 +650,18 @@ public class StatisticExecutor {
                         ColumnStatsMeta meta =
                                 new ColumnStatsMeta(column, statsJob.getAnalyzeType(), analyzeStatus.getEndTime());
                         basicStatsMeta.addColumnStatsMeta(meta);
+
+                        Column tableColumn = table.getColumn(column);
+                        if (tableColumn != null) {
+                            BuiltinExpressionStatistics.getApplicable(tableColumn.getType()).stream()
+                                    .map(statistic -> statistic.createMeta(tableColumn, statsJob.getAnalyzeType(),
+                                            analyzeStatus.getEndTime()))
+                                    .forEach(basicStatsMeta::addExpressionStatsMeta);
+                        }
                     }
                     analyzeMgr.addBasicStatsMeta(basicStatsMeta);
                     analyzeMgr.refreshBasicStatisticsCache(
-                            basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
+                            basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getStatisticStorageKeys(),
                             refreshAsync);
                 }
             } else {

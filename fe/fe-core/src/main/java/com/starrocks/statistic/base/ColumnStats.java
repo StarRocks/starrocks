@@ -53,4 +53,8 @@ public interface ColumnStats {
     default boolean supportMeta() {
         return false;
     }
+
+    default String getLateralJoin() {
+        return "";
+    }
 }

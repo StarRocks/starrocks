@@ -57,6 +57,9 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.statistic.expression.BuiltinExpressionStatistics;
+import com.starrocks.statistic.expression.ExpressionStatsKey;
+import com.starrocks.statistic.expression.ExpressionStatistic;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
@@ -656,6 +659,25 @@ public class StatisticUtils {
     }
 
     public static Type getQueryStatisticsColumnType(Table table, String column) {
+        if (column.startsWith(ExpressionStatsKey.STORAGE_PREFIX)) {
+            BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                    .getTableBasicStatsMeta(table.getId());
+            if (basicStatsMeta != null) {
+                Optional<ExpressionStatsMeta> expressionStatsMeta =
+                        basicStatsMeta.getExpressionStatsMetaByStorageColumnName(column);
+                if (expressionStatsMeta.isPresent()) {
+                    Optional<ExpressionStatistic> expressionStatistic =
+                            BuiltinExpressionStatistics.findByName(expressionStatsMeta.get().getName());
+                    if (expressionStatistic.isPresent() && !expressionStatsMeta.get().getBaseColumnIds().isEmpty()) {
+                        Column baseColumn = table.getColumnByUniqueId(expressionStatsMeta.get().getBaseColumnIds().get(0));
+                        if (baseColumn != null) {
+                            return expressionStatistic.get().getExpressionType(baseColumn.getType());
+                        }
+                    }
+                }
+            }
+        }
+
         String[] parts = column.split("\\.");
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);

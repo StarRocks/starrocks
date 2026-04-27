@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -40,6 +41,10 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.base.ColumnStats;
+import com.starrocks.statistic.base.ExpressionColumnStats;
+import com.starrocks.statistic.expression.BuiltinExpressionStatistics;
+import com.starrocks.statistic.expression.ExpressionStatistic;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
@@ -87,7 +92,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
-            " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
+            " FROM ($fromClause) tt";
     private static final String OVERWRITE_PARTITION_TEMPLATE =
             "INSERT INTO " + TABLE_NAME + "(" + StatisticUtils.buildStatsColumnDef(TABLE_NAME).stream().map(ColumnDef::getName)
                     .collect(Collectors.joining(", ")) + ") " + "\n" +
@@ -318,8 +323,18 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                 continue;
             }
             for (int i = 0; i < columnNames.size(); i++) {
-                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnNames.get(i),
-                        columnTypes.get(i)));
+                String columnName = columnNames.get(i);
+                Type columnType = columnTypes.get(i);
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnName, columnType));
+
+                Column tableColumn = table.getColumn(columnName);
+                if (tableColumn == null) {
+                    continue;
+                }
+                for (ExpressionStatistic expressionStatistic : BuiltinExpressionStatistics.getApplicable(columnType)) {
+                    totalQuerySQL.add(buildBatchCollectFullExpressionStatisticSQL(partition,
+                            new ExpressionColumnStats(tableColumn, expressionStatistic)));
+                }
             }
         }
 
@@ -343,6 +358,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("quoteColumnName", quoteColumnName);
+        String fromClause = "select " + quoteColumnName + " as column_key from `" + db.getOriginName() + "`.`" +
+                table.getName() + "` partition `" + partition.getName() + "`";
+        context.put("fromClause", fromClause);
 
         if (!columnType.canStatistic()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
@@ -373,6 +391,25 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
+    }
+
+    private String buildBatchCollectFullExpressionStatisticSQL(Partition partition, ColumnStats columnStats) {
+        VelocityContext context = new VelocityContext();
+        String fromClause = "select * from `" + db.getOriginName() + "`.`" + table.getName() + "` partition `" +
+                partition.getName() + "`" + columnStats.getLateralJoin();
+
+        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION_V5);
+        context.put("partitionId", partition.getId());
+        context.put("columnNameStr", columnStats.getColumnNameStr());
+        context.put("dataSize", columnStats.getFullDataSize());
+        context.put("hllFunction", columnStats.getNDV());
+        context.put("countNullFunction", columnStats.getFullNullCount());
+        context.put("maxFunction", columnStats.getMax());
+        context.put("minFunction", columnStats.getMin());
+        context.put("collectionSizeFunction", columnStats.getCollectionSize());
+        context.put("fromClause", fromClause);
+
+        return build(context, BATCH_FULL_STATISTIC_TEMPLATE);
     }
 
     public static List<String> buildOverwritePartitionSQL(long tableId, long sourcePartitionId,

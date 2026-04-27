@@ -17,6 +17,8 @@ package com.starrocks.statistic.base;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.statistic.expression.BuiltinExpressionStatistics;
+import com.starrocks.statistic.expression.ExpressionStatistic;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 
@@ -49,7 +51,8 @@ public class ColumnClassifier {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
 
-            if (table.getColumn(columnName) != null) {
+            Column tableColumn = table.getColumn(columnName);
+            if (tableColumn != null) {
                 if (columnType.canStatistic()) {
                     if (!columnType.isCollectionType()) {
                         columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
@@ -58,6 +61,10 @@ public class ColumnClassifier {
                     }
                 } else {
                     unSupportStats.add(new ComplexTypeColumnStats(columnName, columnType));
+                }
+
+                for (ExpressionStatistic expressionStatistic : BuiltinExpressionStatistics.getApplicable(columnType)) {
+                    columnStats.add(new ExpressionColumnStats(tableColumn, expressionStatistic));
                 }
             } else {
                 // to split & valid struct subfield column, like 'a.b.c.d'

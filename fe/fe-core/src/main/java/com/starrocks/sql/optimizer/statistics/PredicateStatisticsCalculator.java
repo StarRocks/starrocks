@@ -19,6 +19,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -45,15 +46,20 @@ import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateUtils.com
 
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
+        return statisticsCalculate(predicate, statistics, null);
+    }
+
+    public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics,
+                                                 ColumnRefFactory columnRefFactory) {
         if (predicate == null) {
             return statistics;
         }
 
         // The time-complexity of PredicateStatisticsCalculatingVisitor OR row-count is O(2^n), n is OR number
         if (countDisConsecutiveOr(predicate, 0, false) > StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT) {
-            return predicate.accept(new LargeOrCalculatingVisitor(statistics), null);
+            return predicate.accept(new LargeOrCalculatingVisitor(statistics, columnRefFactory), null);
         } else {
-            return predicate.accept(new BaseCalculatingVisitor(statistics), null);
+            return predicate.accept(new BaseCalculatingVisitor(statistics, columnRefFactory), null);
         }
     }
 
@@ -72,9 +78,11 @@ public class PredicateStatisticsCalculator {
 
     private static class BaseCalculatingVisitor extends ScalarOperatorVisitor<Statistics, Void> {
         protected final Statistics statistics;
+        protected final ColumnRefFactory columnRefFactory;
 
-        public BaseCalculatingVisitor(Statistics statistics) {
+        public BaseCalculatingVisitor(Statistics statistics, ColumnRefFactory columnRefFactory) {
             this.statistics = statistics;
+            this.columnRefFactory = columnRefFactory;
         }
 
         protected boolean checkNeedEvalEstimate(ScalarOperator predicate) {
@@ -377,7 +385,7 @@ public class PredicateStatisticsCalculator {
 
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics =
-                        predicate.getChild(1).accept(new BaseCalculatingVisitor(leftStatistics), null);
+                        predicate.getChild(1).accept(new BaseCalculatingVisitor(leftStatistics, columnRefFactory), null);
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
@@ -388,7 +396,7 @@ public class PredicateStatisticsCalculator {
                 for (int i = 1; i < disjunctive.size(); ++i) {
                     Statistics orItemStatistics = disjunctive.get(i).accept(this, null);
                     Statistics andStatistics =
-                            disjunctive.get(i).accept(new BaseCalculatingVisitor(cumulativeStatistics), null);
+                            disjunctive.get(i).accept(new BaseCalculatingVisitor(cumulativeStatistics, columnRefFactory), null);
                     rowCount = cumulativeStatistics.getOutputRowCount() + orItemStatistics.getOutputRowCount() -
                             andStatistics.getOutputRowCount();
                     rowCount = Math.min(rowCount, statistics.getOutputRowCount());
@@ -485,13 +493,13 @@ public class PredicateStatisticsCalculator {
         }
 
         private ColumnStatistic getExpressionStatistic(ScalarOperator operator) {
-            return ExpressionStatisticCalculator.calculate(operator, statistics);
+            return ExpressionStatisticCalculator.calculate(operator, statistics, columnRefFactory);
         }
     }
 
     private static class LargeOrCalculatingVisitor extends BaseCalculatingVisitor {
-        public LargeOrCalculatingVisitor(Statistics statistics) {
-            super(statistics);
+        public LargeOrCalculatingVisitor(Statistics statistics, ColumnRefFactory columnRefFactory) {
+            super(statistics, columnRefFactory);
         }
 
         @Override
@@ -510,7 +518,7 @@ public class PredicateStatisticsCalculator {
 
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics = predicate.getChild(1)
-                        .accept(new LargeOrCalculatingVisitor(leftStatistics), null);
+                        .accept(new LargeOrCalculatingVisitor(leftStatistics, columnRefFactory), null);
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {

@@ -886,7 +886,7 @@ public class EditLog {
                     // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
                         globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
-                                basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                                basicStatsMeta.getTableId(), basicStatsMeta.getStatisticStorageKeys(), true);
                     }
                     break;
                 }
