@@ -34,7 +34,7 @@ append_if_missing()
     local key=$1
     local value=$2
     local file=$3
-    grep -q "^${key}\s*=" "$file" && return
+    grep -Eq "^[[:space:]]*${key}[[:space:]]*=" "$file" && return
     # ensure the file ends with a newline before appending
     [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ] && echo >> "$file"
     echo "${key} = ${value}" >> "$file"
