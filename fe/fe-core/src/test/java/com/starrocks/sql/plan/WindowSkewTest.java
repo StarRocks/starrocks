@@ -282,6 +282,7 @@ class WindowSkewTest extends PlanTestBase {
 
     @Test
     void testWindowWithComplexPartition() throws Exception {
+<<<<<<< HEAD
         OlapTable table = getOlapTable("window_skew_table");
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
@@ -289,6 +290,11 @@ class WindowSkewTest extends PlanTestBase {
         setTableStatistics(table, 1000);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
+=======
+        // Test that the rewrite is not triggered if the complex expr stats return a lower
+        // null fraction. In our case null fractions from the CASE WHEN should be (1 - 0.2) * 0.2 = 0.16 --> below threshold
+        setColumnStatForP(0.2);
+>>>>>>> f54576efd8 ([Enhancement] Implement MCV propagation for If and constants (#71000))
 
         // Partition by expression (case when) instead of direct column
         String sql = "select p, s, sum(x) " +
