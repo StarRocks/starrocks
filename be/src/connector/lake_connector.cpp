@@ -50,6 +50,31 @@
 
 namespace starrocks::connector {
 
+namespace {
+
+const SlotDescriptor* find_slot_descriptor(const std::vector<SlotDescriptor*>* slots, SlotId slot_id) {
+    if (slots == nullptr) {
+        return nullptr;
+    }
+    for (const auto* slot : *slots) {
+        if (slot != nullptr && slot->id() == slot_id) {
+            return slot;
+        }
+    }
+    return nullptr;
+}
+
+bool contains_runtime_filter(const UnarrivedRuntimeFilterList& filters, int32_t filter_id) {
+    for (const auto* desc : filters.unarrived_runtime_filters) {
+        if (desc != nullptr && desc->filter_id() == filter_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.internal_scan_range) {}
 
@@ -69,8 +94,13 @@ Status LakeDataSource::open(RuntimeState* state) {
         _reuse_pending = false;
         auto late_rf_reinit = detect_late_runtime_filter_reinit();
         if (late_rf_reinit.triggered) {
-            record_late_runtime_filter_reinit(late_rf_reinit);
-            return reinit_reader_for_current_morsel_with_runtime_filters();
+            if (late_rf_reinit.action == LateRuntimeFilterReinitDecision::Action::FULL_REINIT) {
+                record_late_runtime_filter_reinit(late_rf_reinit);
+                return reinit_reader_for_current_morsel_with_runtime_filters();
+            }
+            if (late_rf_reinit.action == LateRuntimeFilterReinitDecision::Action::REFRESH_RUNTIME_RANGE_PRUNER) {
+                RETURN_IF_ERROR(refresh_runtime_range_pruner_for_stream_build_filters());
+            }
         }
         if (can_fast_reopen_current_morsel()) {
             return fast_reopen_reader_for_current_morsel();
@@ -321,6 +351,34 @@ void LakeDataSource::refresh_runtime_filter_versions() {
     }
 }
 
+Status LakeDataSource::refresh_runtime_range_pruner_for_stream_build_filters() {
+    if (_tablet_schema == nullptr || _runtime_filters == nullptr || _conjuncts_manager == nullptr) {
+        return Status::OK();
+    }
+
+    auto* parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
+    UnarrivedRuntimeFilterList filters = _conjuncts_manager->unarrived_runtime_filters();
+    for (const auto& [filter_id, desc] : _runtime_filters->descriptors()) {
+        if (!desc->is_stream_build_filter() || contains_runtime_filter(filters, filter_id) ||
+            !desc->can_push_down_runtime_filter()) {
+            continue;
+        }
+
+        SlotId slot_id = 0;
+        if (!desc->is_probe_slot_ref(&slot_id)) {
+            continue;
+        }
+        const auto* slot_desc = find_slot_descriptor(_slots, slot_id);
+        if (slot_desc == nullptr || !parser->can_pushdown(slot_desc)) {
+            continue;
+        }
+        filters.add_unarrived_rf(desc, slot_desc, runtime_membership_filter_eval_context.driver_sequence);
+    }
+
+    _params.runtime_range_pruner = RuntimeScanRangePruner(parser, filters);
+    return Status::OK();
+}
+
 LakeDataSource::LateRuntimeFilterReinitDecision LakeDataSource::detect_late_runtime_filter_reinit() const {
     LateRuntimeFilterReinitDecision decision;
     if (!config::enable_lake_scan_child_morsel_reinit_on_late_runtime_filter || _runtime_filters == nullptr ||
@@ -328,9 +386,41 @@ LakeDataSource::LateRuntimeFilterReinitDecision LakeDataSource::detect_late_runt
         return decision;
     }
 
+    auto choose_action = [](const RuntimeFilterProbeDescriptor* desc) {
+        return desc->is_stream_build_filter() ? LateRuntimeFilterReinitDecision::Action::REFRESH_RUNTIME_RANGE_PRUNER
+                                              : LateRuntimeFilterReinitDecision::Action::FULL_REINIT;
+    };
+    auto consider_change = [&](LateRuntimeFilterReinitDecision::Reason reason, int32_t filter_id,
+                               const RuntimeFilterProbeDescriptor* desc) {
+        const auto action = choose_action(desc);
+        if (action == LateRuntimeFilterReinitDecision::Action::FULL_REINIT) {
+            decision.triggered = true;
+            decision.action = action;
+            decision.reason = reason;
+            decision.filter_id = filter_id;
+            return true;
+        }
+        if (!decision.triggered) {
+            decision.triggered = true;
+            decision.action = action;
+            decision.reason = reason;
+            decision.filter_id = filter_id;
+        }
+        return false;
+    };
+
     const auto& descriptors = _runtime_filters->descriptors();
+    for (const auto& [filter_id, desc] : descriptors) {
+        if (_runtime_filter_versions.contains(filter_id)) {
+            continue;
+        }
+        if (consider_change(LateRuntimeFilterReinitDecision::Reason::FILTER_SET_CHANGED, filter_id, desc)) {
+            return decision;
+        }
+    }
     if (_runtime_filter_versions.size() != descriptors.size()) {
         decision.triggered = true;
+        decision.action = LateRuntimeFilterReinitDecision::Action::FULL_REINIT;
         decision.reason = LateRuntimeFilterReinitDecision::Reason::FILTER_SET_CHANGED;
         return decision;
     }
@@ -340,22 +430,19 @@ LakeDataSource::LateRuntimeFilterReinitDecision LakeDataSource::detect_late_runt
         const size_t current_version = rf != nullptr ? rf->rf_version() : 0;
         auto it = _runtime_filter_versions.find(filter_id);
         if (it == _runtime_filter_versions.end()) {
-            decision.triggered = true;
-            decision.reason = LateRuntimeFilterReinitDecision::Reason::FILTER_SET_CHANGED;
-            decision.filter_id = filter_id;
-            return decision;
+            continue;
         }
+
         if (it->second == 0 && current_version > 0) {
-            decision.triggered = true;
-            decision.reason = LateRuntimeFilterReinitDecision::Reason::NEWLY_ARRIVED;
-            decision.filter_id = filter_id;
-            return decision;
+            if (consider_change(LateRuntimeFilterReinitDecision::Reason::NEWLY_ARRIVED, filter_id, desc)) {
+                return decision;
+            }
+            continue;
         }
         if (current_version > it->second) {
-            decision.triggered = true;
-            decision.reason = LateRuntimeFilterReinitDecision::Reason::VERSION_CHANGED;
-            decision.filter_id = filter_id;
-            return decision;
+            if (consider_change(LateRuntimeFilterReinitDecision::Reason::VERSION_CHANGED, filter_id, desc)) {
+                return decision;
+            }
         }
     }
     return decision;

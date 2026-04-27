@@ -85,6 +85,12 @@ public:
 
 private:
     struct LateRuntimeFilterReinitDecision {
+        enum class Action {
+            NONE = 0,
+            FULL_REINIT = 1,
+            REFRESH_RUNTIME_RANGE_PRUNER = 2,
+        };
+
         enum class Reason {
             NONE = 0,
             FILTER_SET_CHANGED = 1,
@@ -93,6 +99,7 @@ private:
         };
 
         bool triggered = false;
+        Action action = Action::NONE;
         Reason reason = Reason::NONE;
         int32_t filter_id = -1;
     };
@@ -124,6 +131,7 @@ private:
     void release_reader(RuntimeState* state);
     void refresh_reuse_signature();
     void refresh_runtime_filter_versions();
+    Status refresh_runtime_range_pruner_for_stream_build_filters();
     LateRuntimeFilterReinitDecision detect_late_runtime_filter_reinit() const;
     void record_late_runtime_filter_reinit(const LateRuntimeFilterReinitDecision& decision);
     Status reset_reader_state_for_reinit();
