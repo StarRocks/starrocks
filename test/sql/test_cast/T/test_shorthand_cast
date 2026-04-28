@@ -1,0 +1,19 @@
+-- name: test_shorthand_cast_basic
+select '123'::int;
+select 'abc'::int;
+select 1.5::int;
+select 100::string;
+select 100::varchar(10);
+
+-- name: test_shorthand_cast_chained
+select '5'::int::string;
+select '3.14'::decimal(10,2)::string;
+
+-- name: test_shorthand_cast_precedence
+select 1 + 2::int;
+select 10 - 3::int;
+select -1::int;
+
+-- name: test_shorthand_cast_complex_types
+select '[1,2,3]'::array<int>;
+select cast('{"a":1}' as json)::string;
