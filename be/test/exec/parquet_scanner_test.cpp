@@ -138,12 +138,7 @@ private:
         }
         auto query_globals = TQueryGlobals();
         query_globals.time_zone = timezone;
-<<<<<<< HEAD:be/test/exec/parquet_scanner_test.cpp
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
-=======
-        RuntimeState* state = _obj_pool.add(
-                new RuntimeState(TUniqueId(), query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
->>>>>>> c2c3a48e34 ([BugFix] Support Arrow dictionary values in parquet scanner (#71855)):be/test/exec/file_scanner/parquet_scanner_test.cpp
+        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, nullptr));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
 
