@@ -73,6 +73,12 @@ public:
 
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
+    // Force any in-memory memtables of the cloud-native persistent index to
+    // be flushed into sstables on shared storage. A no-op for LOCAL /
+    // in-memory index types. Used by the reshard flush path where the
+    // default commit()'s heuristic flush is not sufficient.
+    Status sync_flush_persistent_index(int64_t wait_timeout_us);
+
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
