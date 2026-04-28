@@ -62,11 +62,14 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.commons.io.FileUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -78,11 +81,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class GlobalStateMgrTest {
+    private String testMetaDir;
+    private String testPluginDir;
 
     @BeforeEach
     public void setUp() {
-        Config.meta_dir = UUID.randomUUID().toString();
-        Config.plugin_dir = UUID.randomUUID().toString();
+        testMetaDir = UUID.randomUUID().toString();
+        testPluginDir = UUID.randomUUID().toString();
+        Config.meta_dir = testMetaDir;
+        Config.plugin_dir = testPluginDir;
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        FileUtils.deleteQuietly(new File(testMetaDir));
+        FileUtils.deleteQuietly(new File(testPluginDir));
     }
 
     @Test
