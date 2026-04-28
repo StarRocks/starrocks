@@ -170,7 +170,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                 Map<String, String> summary =
                                         (snapshot != null && snapshot.summary() != null)
                                                 ? snapshot.summary() : Collections.emptyMap();
-                                LOG.info("Loaded iceberg partitions: catalog={}, table={}.{}, snapshot={}, "
+                                LOG.info("Loaded large iceberg partition set: catalog={}, table={}.{}, snapshot={}, "
                                                 + "partitions={}, dataFiles={}, deleteFiles={}, specs={}, "
                                                 + "partitionFields={}",
                                         catalogName, key.dbName, key.tableName, loggedSnapshotId,
