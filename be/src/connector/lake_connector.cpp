@@ -331,7 +331,8 @@ bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel
     }
 
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
-    if (split_context == nullptr || split_context->rowid_range == nullptr || split_context->short_key_range != nullptr) {
+    if (split_context == nullptr || split_context->rowid_range == nullptr ||
+        split_context->short_key_range != nullptr) {
         return false;
     }
 
@@ -820,15 +821,15 @@ bool LakeDataSource::can_reuse_current_morsel(const pipeline::ScanMorsel& morsel
 }
 
 bool LakeDataSource::has_reuse_blocker() const {
-    const bool enable_cache_select = _runtime_state != nullptr &&
-                                     _runtime_state->query_options().__isset.enable_cache_select &&
-                                     _runtime_state->query_options().enable_cache_select &&
-                                     config::lake_cache_select_in_physical_way;
+    const bool enable_cache_select =
+            _runtime_state != nullptr && _runtime_state->query_options().__isset.enable_cache_select &&
+            _runtime_state->query_options().enable_cache_select && config::lake_cache_select_in_physical_way;
     return enable_cache_select;
 }
 
 bool LakeDataSource::can_fast_reopen_current_morsel() const {
-    if (!config::enable_lake_scan_child_morsel_fast_reopen || _reader == nullptr || !enable_local_child_morsel_reuse()) {
+    if (!config::enable_lake_scan_child_morsel_fast_reopen || _reader == nullptr ||
+        !enable_local_child_morsel_reuse()) {
         return false;
     }
 
@@ -836,7 +837,8 @@ bool LakeDataSource::can_fast_reopen_current_morsel() const {
     if (split_context == nullptr || split_context->task_type != pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
         return false;
     }
-    if (!_provider->could_split_physically() || split_context->rowid_range == nullptr || split_context->short_key_range != nullptr) {
+    if (!_provider->could_split_physically() || split_context->rowid_range == nullptr ||
+        split_context->short_key_range != nullptr) {
         return false;
     }
     return true;
@@ -871,7 +873,8 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         } else {
             _params.short_key_ranges_option = split_context->short_key_range;
         }
-        if (can_reuse_prepared_state && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
+        if (can_reuse_prepared_state &&
+            split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
             split_context->prepared_read_state != nullptr && split_context->prepared_segment_state != nullptr) {
             _params.prepared_target_rowset_index = static_cast<int64_t>(split_context->rowset_index);
             _params.prepared_target_segment_index = static_cast<int64_t>(split_context->segment_index);
