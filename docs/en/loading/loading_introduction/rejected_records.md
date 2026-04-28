@@ -98,12 +98,15 @@ WHERE target_database = 'mydb'
 GROUP BY error_code, error_column
 ORDER BY cnt DESC;
 
--- All rejected rows for a transaction, joined with the load record
+-- All rejected rows for a load, joined with the load record. Note that
+-- `information_schema.loads` does not expose `txn_id`, so use the load
+-- label as the join key (both sides use it as the stable per-load
+-- handle).
 SELECT r.created_at, r.error_code, r.raw_record, l.state, l.scan_rows
 FROM _statistics_.rejected_records AS r
 JOIN information_schema.loads AS l
-  ON r.txn_id = l.job_id
-WHERE r.txn_id = 12345;
+  ON r.load_label = l.label
+WHERE r.load_label = 'my_load_label_2026_04_28';
 ```
 
 ## Replay rejected rows

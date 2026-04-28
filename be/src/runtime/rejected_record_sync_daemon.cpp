@@ -514,14 +514,27 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // sent as the PUT body through the FE 307 redirect to the CN.
     client.set_custom_method("PUT");
     client.set_content_type("application/json");
-    // Internal cluster trust boundary: the daemon authenticates to the FE
-    // Stream Load endpoint as the built-in `root` account with the empty
-    // password that ships with a fresh install. This is intentionally not
-    // user-configurable -- exposing the credential as a BE config would
-    // leak it through every config dump and would not survive an
-    // operator-initiated root password change anyway. Deployments that
-    // rotate root's password must invest in a proper FE-issued service
-    // token (heartbeat-distributed); that is tracked as a follow-up.
+
+    // Internal-trust authentication: instead of HTTP Basic auth (which
+    // would require the operator-rotated root password to live in BE
+    // memory or config), the daemon presents the FE cluster token that
+    // every BE already receives through heartbeats. The FE's LoadAction
+    // recognizes this header for `_statistics_.rejected_records` only
+    // and short-circuits Basic auth, dispatching the request as the
+    // built-in ROOT identity. The token never leaves the cluster VPC.
+    //
+    // We also send a placeholder Basic auth header so the FE's 307
+    // redirect target (a peer BE running StreamLoadAction) has a
+    // syntactically-valid Authorization header to parse. The BE-side
+    // stream_load handler doesn't actually validate the password
+    // (FrontendServiceImpl.streamLoadPut only consumes the username),
+    // so an empty password is fine here. The placeholder is kept to
+    // avoid touching the BE-side stream load entry point.
+    if (!master_info.__isset.token || master_info.token.empty()) {
+        return Status::Uninitialized(
+                "RejectedRecordSyncDaemon: master FE token not yet propagated (no heartbeat received?)");
+    }
+    client.set_header("X-StarRocks-Internal-Token", master_info.token);
     client.set_basic_auth("root", "");
 
     // Format is json-lines (one JSON object per line); the StarRocks
@@ -532,16 +545,15 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // The FE 307-redirects large PUTs; opt into 100-continue so curl
     // negotiates before uploading the payload body.
     client.set_header("Expect", "100-continue");
-    // Follow the redirect with credentials preserved; the FE issues one.
-    //
-    // Security note: CURLOPT_UNRESTRICTED_AUTH = 1 makes libcurl include
-    // the Basic auth header on the host the FE returned in the Location
-    // header. That host is always another node in the same cluster
-    // (FE-owned redirect to a BE serving the Stream Load), so the
-    // credential never leaves the VPC. Operators running an FE behind a
-    // non-cluster reverse proxy should ensure that proxy only redirects
-    // inside their trust boundary; otherwise the Basic auth header would
-    // leak to whatever host the proxy named in the Location.
+    // Follow the redirect with both the placeholder Basic auth and the
+    // internal-trust token preserved. CURLOPT_UNRESTRICTED_AUTH makes
+    // libcurl keep the Basic auth header on the host the FE returned;
+    // custom headers (the internal token) follow redirects automatically.
+    // Both target BE peers are inside the same cluster VPC so neither
+    // value crosses a trust boundary. Operators running the FE behind a
+    // non-cluster reverse proxy must ensure it only redirects inside
+    // their trust boundary or the headers will follow wherever the
+    // proxy points.
     client.set_unrestricted_auth(1);
 
     client.set_payload(payload);

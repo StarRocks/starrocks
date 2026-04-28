@@ -91,12 +91,14 @@ WHERE target_database = 'mydb'
 GROUP BY error_code, error_column
 ORDER BY cnt DESC;
 
--- 与 information_schema.loads JOIN 查看一次事务的整体信息
+-- 与 information_schema.loads JOIN 查看一次导入的整体信息。
+-- 注意：information_schema.loads 没有 txn_id 列，应当用 label 关联
+-- （两侧都把 label 作为单次导入的稳定句柄）。
 SELECT r.created_at, r.error_code, r.raw_record, l.state, l.scan_rows
 FROM _statistics_.rejected_records AS r
 JOIN information_schema.loads AS l
-  ON r.txn_id = l.job_id
-WHERE r.txn_id = 12345;
+  ON r.load_label = l.label
+WHERE r.load_label = 'my_load_label_2026_04_28';
 ```
 
 ## 回放拒绝行
