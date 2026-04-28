@@ -63,6 +63,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TOlapTableLocationParam;
+import com.starrocks.thrift.TOlapTableSink;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TStatusCode;
@@ -742,5 +743,60 @@ public class OlapTableSinkTest {
         List<Long> nodes = location.getNode_ids();
         Assertions.assertEquals(1, nodes.size());
         Assertions.assertEquals((Long) node2.getId(), nodes.get(0));
+    }
+
+    // Verifies that `Config.lake_enable_per_partition_coordinator_txn_log` is
+    // propagated verbatim onto `TOlapTableSink.enable_lake_per_partition_coordinator_txn_log`
+    // on every built sink plan. This is the FE-side half of the per-partition
+    // coordinator rollout interlock: BE reads the Thrift field on OpenRequest
+    // build time and forwards it to each target CN.
+    @Test
+    public void testPerPartitionCoordinatorFlagFromConfig() throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        // Match testSinglePartition's mocked surface: this is the minimal set
+        // of methods invoked by `OlapTableSink#complete` on branch-4.0.
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+            }
+        };
+
+        boolean original = Config.lake_enable_per_partition_coordinator_txn_log;
+        try {
+            Config.lake_enable_per_partition_coordinator_txn_log = true;
+            OlapTableSink sinkOn = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                    TWriteQuorumType.MAJORITY, false, false, false);
+            sinkOn.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sinkOn.complete();
+            TOlapTableSink tSinkOn = sinkOn.toThrift().getOlap_table_sink();
+            Assertions.assertTrue(tSinkOn.isSetEnable_lake_per_partition_coordinator_txn_log(),
+                    "flag must be set on the wire even when true");
+            Assertions.assertTrue(tSinkOn.isEnable_lake_per_partition_coordinator_txn_log());
+
+            Config.lake_enable_per_partition_coordinator_txn_log = false;
+            OlapTableSink sinkOff = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                    TWriteQuorumType.MAJORITY, false, false, false);
+            sinkOff.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sinkOff.complete();
+            TOlapTableSink tSinkOff = sinkOff.toThrift().getOlap_table_sink();
+            Assertions.assertTrue(tSinkOff.isSetEnable_lake_per_partition_coordinator_txn_log());
+            Assertions.assertFalse(tSinkOff.isEnable_lake_per_partition_coordinator_txn_log());
+        } finally {
+            Config.lake_enable_per_partition_coordinator_txn_log = original;
+        }
     }
 }
