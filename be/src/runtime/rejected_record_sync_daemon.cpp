@@ -514,7 +514,15 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // sent as the PUT body through the FE 307 redirect to the CN.
     client.set_custom_method("PUT");
     client.set_content_type("application/json");
-    client.set_basic_auth(config::rejected_record_sync_user, config::rejected_record_sync_password);
+    // Internal cluster trust boundary: the daemon authenticates to the FE
+    // Stream Load endpoint as the built-in `root` account with the empty
+    // password that ships with a fresh install. This is intentionally not
+    // user-configurable -- exposing the credential as a BE config would
+    // leak it through every config dump and would not survive an
+    // operator-initiated root password change anyway. Deployments that
+    // rotate root's password must invest in a proper FE-issued service
+    // token (heartbeat-distributed); that is tracked as a follow-up.
+    client.set_basic_auth("root", "");
 
     // Format is json-lines (one JSON object per line); the StarRocks
     // Stream Load parses this when `strip_outer_array=false` (the
@@ -532,9 +540,8 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // (FE-owned redirect to a BE serving the Stream Load), so the
     // credential never leaves the VPC. Operators running an FE behind a
     // non-cluster reverse proxy should ensure that proxy only redirects
-    // inside their trust boundary; otherwise the
-    // rejected_record_sync_password would leak to whatever host the
-    // proxy named in the Location.
+    // inside their trust boundary; otherwise the Basic auth header would
+    // leak to whatever host the proxy named in the Location.
     client.set_unrestricted_auth(1);
 
     client.set_payload(payload);
@@ -593,8 +600,7 @@ void RejectedRecordSyncDaemon::garbage_collect_stale_files() {
             // dashboards can alert on it.
             LOG(WARNING) << "RejectedRecordSyncDaemon: dropping stale rejected-record file " << f << " (retention "
                          << retention_hours << "h exceeded); rejected rows in this file"
-                         << " are lost. Check FE availability and rejected_record_sync_user / "
-                            "rejected_record_sync_password if this repeats.";
+                         << " are lost. Check FE availability if this repeats.";
             remove_file(f);
             ++dropped_this_cycle;
         }

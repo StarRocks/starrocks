@@ -794,24 +794,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Maximum age for per-fragment JSON Lines files before the daemon garbage-collects them. Intended as a last-resort cap: sync failures normally retry on every tick, but a misconfigured cluster (FE unreachable, system table dropped, auth broken) cannot slowly fill the store path when this setting is in effect.
 - Introduced in: -
 
-### rejected_record_sync_user
-
-- Default: root
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: Username the `RejectedRecordSyncDaemon` authenticates as when it posts to the FE Stream Load endpoint for `_statistics_.rejected_records`. Production deployments should override this with a dedicated service account that holds exactly `INSERT` on `_statistics_.rejected_records` rather than `root`.
-- Introduced in: -
-
-### rejected_record_sync_password
-
-- Default: (empty)
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: Password paired with `rejected_record_sync_user`. Empty by default, which matches an out-of-the-box StarRocks install; set to the dedicated service account password in production.
-- Introduced in: -
-
 ### rejected_record_sync_post_timeout_sec
 
 - Default: 60

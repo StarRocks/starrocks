@@ -217,6 +217,4 @@ to the reporting role.
 | BE | `rejected_record_sync_interval_sec` | `30` | Sync tick interval |
 | BE | `rejected_record_sync_max_batch_rows` | `10000` | Soft cap on rows per merge-commit batch |
 | BE | `rejected_record_local_retention_hours` | `24` | Local file GC for un-syncable records |
-| BE | `rejected_record_sync_user` | `root` | Service account the daemon Stream-Loads as |
-| BE | `rejected_record_sync_password` | _(empty)_ | Paired password |
 | BE | `rejected_record_sync_post_timeout_sec` | `60` | Per-request Stream Load timeout |

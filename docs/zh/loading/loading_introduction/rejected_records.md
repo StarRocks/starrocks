@@ -194,6 +194,4 @@ WHERE target_database = 'mydb'
 | BE | `rejected_record_sync_interval_sec` | `30` | 同步调度周期 |
 | BE | `rejected_record_sync_max_batch_rows` | `10000` | 单次 merge-commit 批次行数软上限 |
 | BE | `rejected_record_local_retention_hours` | `24` | 本地文件 GC 保留上限 |
-| BE | `rejected_record_sync_user` | `root` | 守护线程 Stream Load 使用的用户 |
-| BE | `rejected_record_sync_password` | _(空)_ | 配套密码 |
 | BE | `rejected_record_sync_post_timeout_sec` | `60` | 单次 Stream Load 请求超时 |

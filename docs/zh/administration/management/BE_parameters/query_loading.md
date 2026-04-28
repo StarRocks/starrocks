@@ -788,24 +788,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：本地 JSON Lines 文件被守护线程回收前的最长保留时间。作为兜底上限：同步失败通常每个 tick 都会重试，但在 FE 不可达、系统表被删除、鉴权异常等配置异常场景下，该配置可防止文件无限堆积占满存储路径。
 - 引入版本：-
 
-### rejected_record_sync_user
-
-- 默认值：root
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：`RejectedRecordSyncDaemon` 向 FE Stream Load 端点写入 `_statistics_.rejected_records` 时使用的用户名。生产部署应当使用仅对 `_statistics_.rejected_records` 持有 `INSERT` 权限的专用服务账号，而不是 `root`。
-- 引入版本：-
-
-### rejected_record_sync_password
-
-- 默认值：（空）
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：与 `rejected_record_sync_user` 配套使用的密码。默认空值适用于开箱即用的 StarRocks 安装；生产环境请替换为对应服务账号的密码。
-- 引入版本：-
-
 ### rejected_record_sync_post_timeout_sec
 
 - 默认值：60
