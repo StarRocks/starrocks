@@ -1647,12 +1647,12 @@ build_arrow() {
     # Hoist Arrow's bundled zstd — zstd is not in Darwin's package-manifest.sh,
     # so this is TP's only source (matches Linux build-thirdparty.sh).
     if [ -f ./zstd_ep-install/lib64/libzstd.a ]; then
-        cp -rf ./zstd_ep-install/lib64/libzstd.a ${TP_INSTALL_DIR}/lib/libzstd.a
+        cp -rf ./zstd_ep-install/lib64/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
     else
-        cp -rf ./zstd_ep-install/lib/libzstd.a ${TP_INSTALL_DIR}/lib/libzstd.a
+        cp -rf ./zstd_ep-install/lib/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
     fi
-    mkdir -p ${TP_INSTALL_DIR}/include/zstd
-    cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
+    mkdir -p "${TP_INSTALL_DIR}/include/zstd"
+    cp ./zstd_ep-install/include/* "${TP_INSTALL_DIR}/include/zstd"
 
     restore_env_var PKG_CONFIG_PATH "${old_pkg_config_path}"
 
