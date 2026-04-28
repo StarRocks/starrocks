@@ -19,6 +19,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -98,16 +100,29 @@ public class ExpressionStatisticCalculator {
                 return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0,
                         operator.getType().getTypeSize(), 0);
             }
+
+            var builder = ColumnStatistic.builder() //
+                    .setNullsFraction(0) //
+                    .setAverageRowSize(operator.getType().getTypeSize()) //
+                    .setDistinctValuesCount(1);
+
+            operator.castTo(VarcharType.VARCHAR)
+                    .map(ConstantOperator::toString)
+                    .ifPresent(key -> {
+                        final var mcv = Collections.singletonMap(key, Math.round(rowCount));
+                        builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+                    });
+
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
-                return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
-                        operator.getType().getTypeSize(), 1);
+                builder.setMinValue(value.getAsDouble()) //
+                        .setMaxValue(value.getAsDouble());
             } else if (operator.getType().isStringType()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                        operator.toString().length(), 1);
-            } else {
-                return ColumnStatistic.unknown();
+                builder.setMinValue(Double.NEGATIVE_INFINITY) //
+                        .setMaxValue(Double.POSITIVE_INFINITY) //
+                        .setAverageRowSize(operator.toString().length());
             }
+            return builder.build();
         }
 
         @Override
@@ -159,12 +174,10 @@ public class ExpressionStatisticCalculator {
                 long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
                 // Add MCV for each branch
                 if (trueRows > 0) {
-                    final var castedMcv = ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR);
-                    castedMcv.ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
+                    mcvs.put(booleanToMcvValue(true), trueRows);
                 }
                 if (falseRows > 0) {
-                    final var castedMcv = ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR);
-                    castedMcv.ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
+                    mcvs.put(booleanToMcvValue(false), falseRows);
                 }
             }
 
@@ -717,14 +730,54 @@ public class ExpressionStatisticCalculator {
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.IF:
-                    distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
-                            childColumnStatisticList.get(2).getDistinctValuesCount();
-                    double minValue = Math.min(childColumnStatisticList.get(1).getMinValue(),
-                            childColumnStatisticList.get(2).getMinValue());
-                    double maxValue = Math.max(childColumnStatisticList.get(1).getMaxValue(),
-                            childColumnStatisticList.get(2).getMaxValue());
-                    return new ColumnStatistic(minValue, maxValue, 0,
-                            callOperator.getType().getTypeSize(), distinctValues);
+                    final var condStat = childColumnStatisticList.get(0);
+                    final var thenStat = childColumnStatisticList.get(1);
+                    final var elseStat = childColumnStatisticList.get(2);
+
+                    // As a base case, assume both branches are reachable and equally weighted.
+                    distinctValues = thenStat.getDistinctValuesCount() + elseStat.getDistinctValuesCount();
+                    double minValue = Math.min(thenStat.getMinValue(), elseStat.getMinValue());
+                    double maxValue = Math.max(thenStat.getMaxValue(), elseStat.getMaxValue());
+                    nullsFraction = (thenStat.getNullsFraction() + elseStat.getNullsFraction()) / 2;
+
+                    // If condition MCVs are available, use branch row weights and collapse
+                    // stats to the surviving branch when one side is unreachable.
+                    final var conditionHistogram = condStat.getHistogram();
+                    if (conditionHistogram != null && conditionHistogram.getMCV() != null) {
+                        final var conditionMcv = conditionHistogram.getMCV();
+                        final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
+                        final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
+                        final long totalRows = trueRows + falseRows;
+                        if (totalRows > 0) {
+                            final double trueWeight = (double) trueRows / totalRows;
+                            final double falseWeight = (double) falseRows / totalRows;
+                            nullsFraction = thenStat.getNullsFraction() * trueWeight
+                                    + elseStat.getNullsFraction() * falseWeight;
+
+                            if (trueRows == 0) {
+                                // Only ELSE branch is reachable
+                                distinctValues = elseStat.getDistinctValuesCount();
+                                minValue = elseStat.getMinValue();
+                                maxValue = elseStat.getMaxValue();
+                            } else if (falseRows == 0) {
+                                // Only THEN branch is reachable
+                                distinctValues = thenStat.getDistinctValuesCount();
+                                minValue = thenStat.getMinValue();
+                                maxValue = thenStat.getMaxValue();
+                            }
+                        }
+                    }
+
+                    final var histogram = buildIfMcv(condStat, thenStat, elseStat);
+
+                    return ColumnStatistic.builder() //
+                            .setMinValue(minValue) //
+                            .setMaxValue(maxValue) //
+                            .setNullsFraction(nullsFraction) //
+                            .setAverageRowSize(callOperator.getType().getTypeSize()) //
+                            .setDistinctValuesCount(distinctValues) //
+                            .setHistogram(histogram) //
+                            .build();
                 // use child column statistics for now
                 case FunctionSet.SUBSTRING:
                 case FunctionSet.REGEXP_REPLACE:
@@ -744,6 +797,69 @@ public class ExpressionStatisticCalculator {
 
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
+        }
+
+        private static String booleanToMcvValue(boolean bool) {
+            final var op = ConstantOperator.createBoolean(bool).castTo(VarcharType.VARCHAR);
+
+            if (op.isEmpty()) {
+                throw new StarRocksPlannerException("Could not convert bool to string MCV key", ErrorType.INTERNAL_ERROR);
+            }
+            return op.get().toString();
+        }
+
+        private Histogram buildIfMcv(ColumnStatistic condStat,
+                                     ColumnStatistic thenStat,
+                                     ColumnStatistic elseStat) {
+            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null) {
+                return null;
+            }
+
+            final var conditionMcv = condStat.getHistogram().getMCV();
+
+            long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
+            long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
+
+            final boolean thenHasHist = thenStat.getHistogram() != null && thenStat.getHistogram().getMCV() != null;
+            final boolean elseHasHist = elseStat.getHistogram() != null && elseStat.getHistogram().getMCV() != null;
+
+            // If neither branch has a histogram, nothing to propagate.
+            if (!thenHasHist && !elseHasHist) {
+                return null;
+            }
+
+            // If one branch is unreachable, return the other branch MCV.
+            if (trueRows == 0 && elseHasHist) {
+                return elseStat.getHistogram();
+            } else if (falseRows == 0 && thenHasHist) {
+                return thenStat.getHistogram();
+            }
+
+            // Both branches are reachable; require both to have histograms for merging.
+            if (!thenHasHist || !elseHasHist) {
+                return null;
+            }
+
+            Map<String, Long> mcvs = new HashMap<>();
+            scaleBranchMcvAndMerge(thenStat.getHistogram().getMCV(), trueRows, mcvs);
+            scaleBranchMcvAndMerge(elseStat.getHistogram().getMCV(), falseRows, mcvs);
+
+            return mcvs.isEmpty() ? null : new Histogram(Collections.emptyList(), mcvs);
+        }
+
+        private void scaleBranchMcvAndMerge(Map<String, Long> branchMcv, long branchRows,
+                                            Map<String, Long> targetMcv) {
+            if (branchRows <= 0) {
+                return;
+            }
+            for (final var entry : branchMcv.entrySet()) {
+                // Scale the MCVs to be relative to the output row count. `branchRows` is the absolute count of rows in this
+                // branch which we have to scale to match the output count.
+                long scaled = Math.round((double) entry.getValue() * branchRows / rowCount);
+                if (scaled > 0) {
+                    targetMcv.merge(entry.getKey(), scaled, Long::sum);
+                }
+            }
         }
 
         private ColumnStatistic deriveBasicColStats(CallOperator call) {
