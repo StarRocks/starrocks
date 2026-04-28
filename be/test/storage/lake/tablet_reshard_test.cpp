@@ -20,16 +20,7 @@
 
 #include <limits>
 
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "base/path/filesystem_util.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "common/config_storage_fwd.h"
->>>>>>> a72f264c45 ([BugFix] Flush PK index memtable before tablet merge in shared-data (#72031))
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -46,6 +37,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {

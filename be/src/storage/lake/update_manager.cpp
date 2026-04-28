@@ -14,20 +14,6 @@
 
 #include "storage/lake/update_manager.h"
 
-<<<<<<< HEAD
-=======
-#include "base/container/lru_cache.h"
-#include "base/debug/trace.h"
-#include "base/failpoint/fail_point.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "base/utility/pretty_printer.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/config_rowset_fwd.h"
-#include "fs/fs_factory.h"
->>>>>>> a72f264c45 ([BugFix] Flush PK index memtable before tablet merge in shared-data (#72031))
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
@@ -56,6 +42,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"

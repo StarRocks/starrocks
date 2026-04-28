@@ -22,12 +22,6 @@
 #include <unordered_set>
 #include <vector>
 
-<<<<<<< HEAD
-#include "fs/fs_util.h"
-=======
-#include "base/hash/crc32c.h"
-#include "base/testutil/sync_point.h"
->>>>>>> a72f264c45 ([BugFix] Flush PK index memtable before tablet merge in shared-data (#72031))
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
