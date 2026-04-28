@@ -156,7 +156,8 @@ StatusOr<std::pair<bool, std::any>> UserFunctionCache::load_cacheable_java_udf(
         const TCloudConfiguration& cloud_configuration) {
     UserFunctionCacheEntryPtr entry;
     bool cache_hit = false;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry, loader, cloud_configuration, &cache_hit));
+    RETURN_IF_ERROR(
+            _get_cache_entry(fid, url, checksum, function_type, &entry, loader, cloud_configuration, &cache_hit));
     return std::make_pair(cache_hit, entry->cache_handle);
 }
 
