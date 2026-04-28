@@ -176,7 +176,12 @@ Status CompactionResultManager::append_result(const CompactionResultPB& result) 
     }
 
     {
-        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        // sync_on_close=false: results are small (a few KB) and the source of
+        // truth after publish is the S3 TxnLog, not the local result. Trading
+        // crash-recovery completeness for write latency / test friendliness;
+        // any results lost on a hard crash will simply be re-computed by the
+        // next compaction round.
+        WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(opts, tmp_path));
         RETURN_IF_ERROR(wf->append(serialized));
         RETURN_IF_ERROR(wf->close());
