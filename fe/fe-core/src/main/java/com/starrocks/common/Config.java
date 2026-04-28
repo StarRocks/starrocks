@@ -4191,11 +4191,18 @@ public class Config extends ConfigBase {
     public static boolean enable_trace_historical_node = false;
 
     /**
-     * The size of the thread pool for deploy serialization.
+     * The max size of the thread pool for deploy serialization.
      * If set to -1, it means same as cpu core number.
+     * Values smaller than cpu core number are treated as cpu core number.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int deploy_serialization_thread_pool_size = -1;
+
+    /**
+     * The min size (core pool size) of the thread pool for deploy serialization.
+     */
+    @ConfField(mutable = true)
+    public static int deploy_serialization_min_thread_pool_size = 1;
 
     /**
      * The size of the queue for deploy serialization thread pool.
