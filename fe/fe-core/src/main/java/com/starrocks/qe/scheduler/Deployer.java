@@ -18,6 +18,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
@@ -38,7 +39,6 @@ import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.AttachmentRequest;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -83,7 +83,10 @@ public class Deployer {
                 new LinkedBlockingQueue<>(threadPoolQueueSize), new ThreadPoolExecutor.AbortPolicy(),
                 "deployer", true);
         ThreadPoolManager.registerAllThreadPoolMetric();
-        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+    }
+
+    public static void registerConfigListener(ConfigRefreshDaemon daemon) {
+        daemon.registerListener(() -> {
             int newMax = resolveMaxThreadPoolSize(Config.deploy_serialization_thread_pool_size);
             int newMin = clampMinThreadPoolSize(Config.deploy_serialization_min_thread_pool_size, newMax);
             resizeExecutor(EXECUTOR, newMin, newMax);

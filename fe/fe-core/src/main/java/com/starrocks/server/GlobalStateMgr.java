@@ -199,6 +199,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -850,6 +851,7 @@ public class GlobalStateMgr {
                 LOG.warn("check config failed", e);
             }
         });
+        Deployer.registerConfigListener(getConfigRefreshDaemon());
 
         this.replicationMgr = new ReplicationMgr();
 
