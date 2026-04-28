@@ -75,6 +75,7 @@ public class ViewAnalyzer {
             }
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
+            AnalyzerUtils.prohibitTimeTravelQuery(stmt.getQueryStatement(), "create view");
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
             if (hasTemporaryTable) {
                 throw new SemanticException("View can't base on temporary table");
@@ -127,11 +128,11 @@ public class ViewAnalyzer {
             if (alterClause instanceof AlterViewClause) {
                 AlterViewClause alterViewClause = (AlterViewClause) alterClause;
                 Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+                AnalyzerUtils.prohibitTimeTravelQuery(alterViewClause.getQueryStatement(), "alter view");
                 boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
                 if (hasTemporaryTable) {
                     throw new SemanticException("View can't base on temporary table");
                 }
-
                 List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
                         alterViewClause.getColWithComments());
                 alterViewClause.setColumns(viewColumns);

@@ -367,6 +367,7 @@ public class MaterializedViewAnalyzer {
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
+            AnalyzerUtils.prohibitTimeTravelQuery(queryStatement, "create materialized view");
 
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
             if (hasTemporaryTable) {
