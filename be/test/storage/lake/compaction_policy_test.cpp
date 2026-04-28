@@ -639,4 +639,100 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_cont
     }
 }
 
+// ------ pick_rowsets_with_limit (autonomous compaction) ------
+// Default impl in CompactionPolicy::pick_rowsets_with_limit calls pick_rowsets()
+// then post-filters by excluded set + max_input_bytes.
+
+TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_no_constraints) {
+    config::enable_size_tiered_compaction_strategy = false;
+    _tablet_metadata->set_cumulative_point(3);
+    _tablet_metadata->set_version(2);
+    for (int i = 1; i < 6; ++i) {
+        auto* rs = _tablet_metadata->mutable_rowsets()->Add();
+        rs->mutable_segments()->Add("file");
+        rs->set_overlapped(i > 3);
+        rs->set_id(i);
+        rs->set_data_size(100);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    // No exclusions, no byte limit -> same set as pick_rowsets()
+    ASSIGN_OR_ABORT(auto picked, policy->pick_rowsets());
+    ASSIGN_OR_ABORT(auto with_limit, policy->pick_rowsets_with_limit({}, /*max_input_bytes=*/0));
+    EXPECT_EQ(picked.size(), with_limit.size());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_excludes_rowsets) {
+    config::enable_size_tiered_compaction_strategy = false;
+    _tablet_metadata->set_cumulative_point(3);
+    _tablet_metadata->set_version(2);
+    for (int i = 1; i < 6; ++i) {
+        auto* rs = _tablet_metadata->mutable_rowsets()->Add();
+        rs->mutable_segments()->Add("file");
+        rs->set_overlapped(i > 3);
+        rs->set_id(i);
+        rs->set_data_size(100);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto picked, policy->pick_rowsets());
+    ASSERT_FALSE(picked.empty());
+    // Exclude the first rowset that pick_rowsets() picked.
+    uint32_t exclude_id = picked.front()->id();
+    ASSIGN_OR_ABORT(auto with_limit, policy->pick_rowsets_with_limit({exclude_id}, 0));
+    for (const auto& r : with_limit) {
+        EXPECT_NE(exclude_id, r->id());
+    }
+    EXPECT_EQ(picked.size() - 1, with_limit.size());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_caps_total_bytes) {
+    config::enable_size_tiered_compaction_strategy = false;
+    _tablet_metadata->set_cumulative_point(3);
+    _tablet_metadata->set_version(2);
+    for (int i = 1; i < 6; ++i) {
+        auto* rs = _tablet_metadata->mutable_rowsets()->Add();
+        rs->mutable_segments()->Add("file");
+        rs->set_overlapped(i > 3);
+        rs->set_id(i);
+        rs->set_data_size(100);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    // Cap at 250 bytes -> at most 3 rowsets of 100 bytes (100, 200, 300 -> stop before 400).
+    ASSIGN_OR_ABORT(auto with_limit, policy->pick_rowsets_with_limit({}, /*max_input_bytes=*/250));
+    int64_t total = 0;
+    for (const auto& r : with_limit) total += r->data_size();
+    // Implementation: include while total_bytes==0 OR total+rsz<=cap, so 2 rowsets of 100
+    EXPECT_LE(total, 250);
+    EXPECT_GE(with_limit.size(), 1u);
+}
+
+TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_first_rowset_always_included) {
+    config::enable_size_tiered_compaction_strategy = false;
+    _tablet_metadata->set_cumulative_point(3);
+    _tablet_metadata->set_version(2);
+    for (int i = 1; i < 6; ++i) {
+        auto* rs = _tablet_metadata->mutable_rowsets()->Add();
+        rs->mutable_segments()->Add("file");
+        rs->set_overlapped(i > 3);
+        rs->set_id(i);
+        rs->set_data_size(1000);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    // Cap is below the size of any single rowset; default impl includes the first
+    // rowset anyway so progress is possible.
+    ASSIGN_OR_ABORT(auto with_limit, policy->pick_rowsets_with_limit({}, /*max_input_bytes=*/100));
+    EXPECT_EQ(1u, with_limit.size());
+}
+
 } // namespace starrocks::lake
