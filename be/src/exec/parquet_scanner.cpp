@@ -14,6 +14,7 @@
 
 #include "exec/parquet_scanner.h"
 
+#include <arrow/compute/api.h>
 #include <fmt/format.h>
 
 #include "column/chunk.h"
@@ -177,6 +178,12 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
 Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc, bool is_nullable,
                                   TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast,
                                   bool strict_mode) {
+    if (arrow_type->id() == ArrowTypeId::DICTIONARY) {
+        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(arrow_type);
+        return build_dest(dictionary_type->value_type().get(), type_desc, is_nullable, raw_type_desc, conv_func,
+                          need_cast, strict_mode);
+    }
+
     auto at = arrow_type->id();
     auto lt = type_desc->type;
     conv_func->func = get_arrow_converter(at, lt, is_nullable, strict_mode);
@@ -321,6 +328,17 @@ Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_
                                                const arrow::Array* array, ColumnPtr& column, size_t batch_start_idx,
                                                size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
+    if (array->type_id() == ArrowTypeId::DICTIONARY) {
+        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
+        auto sliced_array = array->Slice(batch_start_idx, num_elements);
+        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type());
+        if (!decoded_array_res.ok()) {
+            return Status::InternalError(decoded_array_res.status().ToString());
+        }
+        return convert_array_to_column(conv_func, num_elements, decoded_array_res->get(), column, 0, chunk_start_idx,
+                                       chunk_filter, conv_ctx);
+    }
+
     // for timestamp type, state->timezone which is specified by user. convert function
     // obtains timezone from array. thus timezone in array should be rectified to
     // state->timezone.
