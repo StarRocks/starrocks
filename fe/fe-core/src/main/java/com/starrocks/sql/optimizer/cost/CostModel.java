@@ -439,6 +439,14 @@ public class CostModel {
                 case ROUND_ROBIN:
                     result = CostEstimate.of(outputSize * factor, 0, outputSize * factor);
                     break;
+                case RANGE_LOCAL:
+                    // RangeDistributionSpec is scan-local only and must never
+                    // reach a PhysicalDistributionOperator (enforced by
+                    // DistributionProperty.appendEnforcers). Reaching the cost
+                    // model for RANGE_LOCAL is a bug.
+                    throw new StarRocksPlannerException(
+                            "RangeDistributionSpec cannot be the required property of an exchange",
+                            ErrorType.UNSUPPORTED);
                 default:
                     throw new StarRocksPlannerException(
                             "not support " + distributionSpec.getType() + "distribution type",
