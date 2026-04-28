@@ -415,6 +415,56 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
+    public void testHllColumnsWithDeserialize() throws StarRocksException {
+
+        DescriptorTable descTbl = new DescriptorTable();
+
+        List<Column> columns = getHllSchema();
+        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            if (column.isAllowNull()) {
+                slot.setIsNullable(true);
+            } else {
+                slot.setIsNullable(false);
+            }
+        }
+
+        new Expectations() {{
+            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_DESERIALIZE), Lists.newArrayList(),
+                    IntegerType.BIGINT, false);
+        }};
+
+        new Expectations() {
+            {
+                dstTable.getColumn("k1");
+                result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+
+                dstTable.getColumn("k2");
+                result = null;
+
+                dstTable.getColumn("v1");
+                result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+            }
+        };
+
+        TStreamLoadPutRequest request = getBaseRequest();
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setColumns("k1,k2, v1=" + FunctionSet.HLL_DESERIALIZE + "(k2)");
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
+        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+        scanNode.init(descTbl);
+        scanNode.finalizeStats();
+        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+        TPlanNode planNode = new TPlanNode();
+        scanNode.toThrift(planNode);
+    }
+
+    @Test
     public void testHllColumnsNoHllHash() {
         assertThrows(StarRocksException.class, () -> {
             

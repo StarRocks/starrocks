@@ -429,15 +429,17 @@ public class FileScanNode extends LoadScanNode {
             // check hll_hash
             if (destSlotDesc.getType().getPrimitiveType() == PrimitiveType.HLL) {
                 if (!(expr instanceof FunctionCallExpr)) {
-                    throw new AnalysisException("HLL column must use hll_hash function, like "
-                            + destSlotDesc.getColumn().getName() + "=hll_hash(xxx)");
+                    throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
+                            + destSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH + "(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
                 if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH) &&
-                        !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
-                    throw new AnalysisException("HLL column must use hll_hash function, like "
-                            + destSlotDesc.getColumn().getName() + "=hll_hash(xxx) or " +
-                            destSlotDesc.getColumn().getName() + "=hll_empty()");
+                        !fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_EMPTY) &&
+                        !fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_DESERIALIZE)) {
+                    throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
+                            + destSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH + "(xxx) or " +
+                            destSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_EMPTY + "() or " +
+                            destSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_DESERIALIZE + "(xxx)");
                 }
                 expr.setType(HLLType.HLL);
             }

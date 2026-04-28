@@ -542,6 +542,7 @@ public class FunctionSet {
 
     // Other functions:
     public static final String HLL_HASH = "hll_hash";
+    public static final String HLL_DESERIALIZE = "hll_deserialize";
     public static final String HLL_CARDINALITY = "hll_cardinality";
     public static final String DEFAULT_VALUE = "default_value";
     public static final String REPLACE_VALUE = "replace_value";

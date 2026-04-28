@@ -353,10 +353,12 @@ public class StreamLoadScanNode extends LoadScanNode {
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
                 if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH)
-                        && !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
+                        && !fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_EMPTY)
+                        && !fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_DESERIALIZE)) {
                     throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH
-                            + "(xxx) or " + dstSlotDesc.getColumn().getName() + "=hll_empty()");
+                            + "(xxx) or " + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_EMPTY
+                            + "() or " + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_DESERIALIZE + "(xxx)");
                 }
                 expr.setType(HLLType.HLL);
             }

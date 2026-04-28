@@ -20,11 +20,24 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.catalog.TableName;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -42,6 +55,7 @@ import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -627,6 +641,354 @@ public class FileScanNodeTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "The valid bytes length for 'row delimiter' is [1, 50]",
                 () -> scanNode.init(descTable));
+    }
+
+    @Test
+    public void testHllColumnsWithDeserialize(@Mocked GlobalStateMgr globalStateMgr,
+                                              @Mocked SystemInfoService systemInfoService,
+                                              @Mocked ConnectContext connectContext,
+                                              @Injectable Database db, @Injectable OlapTable table)
+            throws StarRocksException {
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+        };
+
+        List<Column> columns = Lists.newArrayList();
+        Column k1 = new Column("k1", IntegerType.BIGINT, true);
+        columns.add(k1);
+        Column v1 = new Column("v1", HLLType.HLL);
+        v1.setIsKey(false);
+        v1.setIsAllowNull(true);
+        v1.setAggregationType(AggregateType.HLL_UNION, false);
+        columns.add(v1);
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            result = systemInfoService;
+            systemInfoService.getIdToBackend();
+            result = idToBackend;
+            table.getBaseSchema();
+            result = columns;
+            table.getFullSchema();
+            result = columns;
+            table.getPartitions();
+            minTimes = 0;
+            result = Arrays.asList(partition);
+            partition.getId();
+            minTimes = 0;
+            result = 0;
+            table.getColumn("k1");
+            result = columns.get(0);
+            table.getColumn("k2");
+            result = null;
+            table.getColumn("v1");
+            result = columns.get(1);
+            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_DESERIALIZE),
+                    Lists.newArrayList(), IntegerType.BIGINT, false);
+        }};
+
+        List<ImportColumnDesc> columnExprs = Lists.newArrayList();
+        columnExprs.add(new ImportColumnDesc("k1"));
+        columnExprs.add(new ImportColumnDesc("k2"));
+        FunctionCallExpr hllDeserializeExpr = new FunctionCallExpr(
+                FunctionSet.HLL_DESERIALIZE,
+                Lists.newArrayList((Expr) new SlotRef((TableName) null, "k2")));
+        columnExprs.add(new ImportColumnDesc("v1", hllDeserializeExpr));
+
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("k1", "k2"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "columnExprList", columnExprs);
+        fileGroups.add(brokerFileGroup);
+
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 1024, true));
+        fileStatusesList.add(fileStatusList);
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTable.addSlotDescriptor(tupleDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            slot.setIsNullable(column.isAllowNull());
+        }
+
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
+
+        List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+        Assertions.assertFalse(locationsList.isEmpty());
+    }
+
+    @Test
+    public void testHllColumnsWithHash(@Mocked GlobalStateMgr globalStateMgr,
+                                       @Mocked SystemInfoService systemInfoService,
+                                       @Mocked ConnectContext connectContext,
+                                       @Injectable Database db, @Injectable OlapTable table)
+            throws StarRocksException {
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+        };
+
+        List<Column> columns = Lists.newArrayList();
+        Column k1 = new Column("k1", IntegerType.BIGINT, true);
+        columns.add(k1);
+        Column v1 = new Column("v1", HLLType.HLL);
+        v1.setIsKey(false);
+        v1.setIsAllowNull(true);
+        v1.setAggregationType(AggregateType.HLL_UNION, false);
+        columns.add(v1);
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            result = systemInfoService;
+            systemInfoService.getIdToBackend();
+            result = idToBackend;
+            table.getBaseSchema();
+            result = columns;
+            table.getFullSchema();
+            result = columns;
+            table.getPartitions();
+            minTimes = 0;
+            result = Arrays.asList(partition);
+            partition.getId();
+            minTimes = 0;
+            result = 0;
+            table.getColumn("k1");
+            result = columns.get(0);
+            table.getColumn("k2");
+            result = null;
+            table.getColumn("v1");
+            result = columns.get(1);
+            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_HASH),
+                    Lists.newArrayList(), IntegerType.BIGINT, false);
+        }};
+
+        List<ImportColumnDesc> columnExprs = Lists.newArrayList();
+        columnExprs.add(new ImportColumnDesc("k1"));
+        columnExprs.add(new ImportColumnDesc("k2"));
+        FunctionCallExpr hllHashExpr = new FunctionCallExpr(
+                FunctionSet.HLL_HASH,
+                Lists.newArrayList((Expr) new SlotRef((TableName) null, "k2")));
+        columnExprs.add(new ImportColumnDesc("v1", hllHashExpr));
+
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("k1", "k2"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "columnExprList", columnExprs);
+        fileGroups.add(brokerFileGroup);
+
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 1024, true));
+        fileStatusesList.add(fileStatusList);
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTable.addSlotDescriptor(tupleDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            slot.setIsNullable(column.isAllowNull());
+        }
+
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
+
+        List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+        Assertions.assertFalse(locationsList.isEmpty());
+    }
+
+    @Test
+    public void testHllColumnsNoFunction(@Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked SystemInfoService systemInfoService,
+                                         @Injectable Database db, @Injectable OlapTable table) {
+        List<Column> columns = Lists.newArrayList();
+        Column k1 = new Column("k1", IntegerType.BIGINT, true);
+        columns.add(k1);
+        Column v1 = new Column("v1", HLLType.HLL);
+        v1.setIsKey(false);
+        v1.setIsAllowNull(true);
+        v1.setAggregationType(AggregateType.HLL_UNION, false);
+        columns.add(v1);
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            result = systemInfoService;
+            systemInfoService.getIdToBackend();
+            result = idToBackend;
+            table.getBaseSchema();
+            result = columns;
+            table.getFullSchema();
+            result = columns;
+            table.getPartitions();
+            minTimes = 0;
+            result = Arrays.asList(partition);
+            partition.getId();
+            minTimes = 0;
+            result = 0;
+            table.getColumn("k1");
+            result = columns.get(0);
+            table.getColumn("v1");
+            result = columns.get(1);
+        }};
+
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("k1", "v1"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        fileGroups.add(brokerFileGroup);
+
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 1024, true));
+        fileStatusesList.add(fileStatusList);
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTable.addSlotDescriptor(tupleDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            slot.setIsNullable(column.isAllowNull());
+        }
+
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "HLL column must use hll_hash function",
+                () -> {
+                    scanNode.init(descTable);
+                    scanNode.finalizeStats();
+                });
+    }
+
+    @Test
+    public void testHllColumnsWrongFunction(@Mocked GlobalStateMgr globalStateMgr,
+                                            @Mocked SystemInfoService systemInfoService,
+                                            @Mocked ConnectContext connectContext,
+                                            @Injectable Database db, @Injectable OlapTable table) {
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+        };
+
+        List<Column> columns = Lists.newArrayList();
+        Column k1 = new Column("k1", IntegerType.BIGINT, true);
+        columns.add(k1);
+        Column v1 = new Column("v1", HLLType.HLL);
+        v1.setIsKey(false);
+        v1.setIsAllowNull(true);
+        v1.setAggregationType(AggregateType.HLL_UNION, false);
+        columns.add(v1);
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            result = systemInfoService;
+            systemInfoService.getIdToBackend();
+            result = idToBackend;
+            table.getBaseSchema();
+            result = columns;
+            table.getFullSchema();
+            result = columns;
+            table.getPartitions();
+            minTimes = 0;
+            result = Arrays.asList(partition);
+            partition.getId();
+            minTimes = 0;
+            result = 0;
+            table.getColumn("k1");
+            result = columns.get(0);
+            table.getColumn("k2");
+            result = null;
+            table.getColumn("v1");
+            result = columns.get(1);
+            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+            result = new ScalarFunction(new FunctionName("wrong_func"),
+                    Lists.newArrayList(), IntegerType.BIGINT, false);
+            minTimes = 0;
+        }};
+
+        List<ImportColumnDesc> columnExprs = Lists.newArrayList();
+        columnExprs.add(new ImportColumnDesc("k1"));
+        columnExprs.add(new ImportColumnDesc("k2"));
+        FunctionCallExpr wrongFuncExpr = new FunctionCallExpr(
+                "wrong_func",
+                Lists.newArrayList((Expr) new SlotRef((TableName) null, "k2")));
+        columnExprs.add(new ImportColumnDesc("v1", wrongFuncExpr));
+
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("k1", "k2"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "columnExprList", columnExprs);
+        fileGroups.add(brokerFileGroup);
+
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 1024, true));
+        fileStatusesList.add(fileStatusList);
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTable.addSlotDescriptor(tupleDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            slot.setIsNullable(column.isAllowNull());
+        }
+
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "HLL column must use hll_hash function",
+                () -> {
+                    scanNode.init(descTable);
+                    scanNode.finalizeStats();
+                });
     }
 
     @Test
