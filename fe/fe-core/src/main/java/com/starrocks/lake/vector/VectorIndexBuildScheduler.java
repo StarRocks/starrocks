@@ -134,6 +134,12 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
     /**
      * One-time scan after becoming leader.
      * Finds all tablets in async vector index tables where builtVersion &lt; visibleVersion.
+     *
+     * TODO: this scan is currently synchronous and runs on the daemon thread. On large
+     * clusters (many DBs/tables/partitions) it can block checkRunningTasks /
+     * checkRunningTaskTimeout / scheduleFromPending for the duration of the scan and
+     * compete with DDL for catalog readlocks. Make it incremental (paged) and/or move
+     * it off the daemon thread so the scheduler stays responsive after a leader switch.
      */
     void recoveryScan() {
         int count = 0;
@@ -169,7 +175,10 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                                 builtVersion = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
                             }
                             if (builtVersion < visibleVersion) {
-                                pendingTablets.put(tablet.getId(), visibleVersion);
+                                // Use merge(Math::max) so a concurrent onPublishComplete
+                                // enqueue with a newer target version is not overwritten
+                                // by recoveryScan's snapshot of visibleVersion.
+                                pendingTablets.merge(tablet.getId(), visibleVersion, Math::max);
                                 count++;
                             }
                         }

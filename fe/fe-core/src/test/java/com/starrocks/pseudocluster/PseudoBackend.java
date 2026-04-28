@@ -1232,7 +1232,13 @@ public class PseudoBackend {
 
         @Override
         public Future<BuildVectorIndexResponse> buildVectorIndex(BuildVectorIndexRequest request) {
-            return CompletableFuture.completedFuture(null);
+            // Return a non-null OK response so VectorIndexBuildScheduler treats this as
+            // a successful build instead of looping/re-enqueuing on null and spamming logs.
+            BuildVectorIndexResponse response = new BuildVectorIndexResponse();
+            StatusPB pStatus = new StatusPB();
+            pStatus.statusCode = 0;
+            response.status = pStatus;
+            return CompletableFuture.completedFuture(response);
         }
     }
 
