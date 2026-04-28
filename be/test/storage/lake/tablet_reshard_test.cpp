@@ -5459,5 +5459,4 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
     }
 }
 
-
 } // namespace starrocks
