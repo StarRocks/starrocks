@@ -312,15 +312,9 @@ public class CompactionScheduler extends Daemon {
                 return null;
             }
 
-<<<<<<< HEAD
-            // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
-            // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
-            txnId = beginTransaction(partitionIdentifier);
-=======
             // Note: call `beginTransaction()` while holding the per-table READ lock (intensive path) to make sure
             // no shadow index will be added to this table (i.e., no schema change) before calling `beginTransaction()`.
-            txnId = beginTransaction(partitionIdentifier, partition, info.computeResource);
->>>>>>> d701d15606 ([BugFix] CompactionScheduler: relax DB READ to IS + table-READ in startCompaction (#72178))
+            txnId = beginTransaction(partitionIdentifier);
 
             partition.setMinRetainVersion(currentVersion);
 
