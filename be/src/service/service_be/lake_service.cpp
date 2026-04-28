@@ -1429,6 +1429,11 @@ void LakeServiceImpl::compact_collect_and_publish(::google::protobuf::RpcControl
         // TxnLog and any output segments it references.
         (void)result_mgr->delete_results(tablet_id, consumed_result_ids);
     }
+    // Always populate at least one field on the response. Otherwise the BRpc
+    // wire payload is zero bytes and the FE-side Future<CompactResponse>.get()
+    // resolves to null, causing CompactionTask.getResult() to NPE on
+    // response.failedTablets and the dispatch daemon thread to spin uselessly.
+    response->mutable_status()->set_status_code(0);
     LOG(INFO) << "compact_collect_and_publish total=" << total_tablets << " with_compaction=" << with_compaction
               << " without_compaction=" << without_compaction << " failed=" << failed << " base=" << base_version
               << " txn=" << txn_id;
