@@ -73,8 +73,6 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -753,9 +751,7 @@ public class OlapTableSinkTest {
     // coordinator rollout interlock: BE reads the Thrift field on OpenRequest
     // build time and forwards it to each target CN.
     @Test
-    public void testPerPartitionCoordinatorFlagFromConfig(@Mocked GlobalStateMgr globalStateMgr,
-                                                          @Mocked GlobalTransactionMgr globalTransactionMgr)
-            throws StarRocksException {
+    public void testPerPartitionCoordinatorFlagFromConfig() throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -764,16 +760,10 @@ public class OlapTableSinkTest {
                 2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
+        // Match testSinglePartition's mocked surface: this is the minimal set
+        // of methods invoked by `OlapTableSink#complete` on branch-4.0.
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                globalStateMgr.getGlobalTransactionMgr();
-                result = globalTransactionMgr;
-                globalTransactionMgr.getTransactionState(anyLong, anyLong);
-                result = new TransactionState();
-                globalStateMgr.getNodeMgr().getClusterInfo();
-                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitionInfo();
@@ -782,8 +772,6 @@ public class OlapTableSinkTest {
                 result = Lists.newArrayList(partition);
                 dstTable.getPartition(2L);
                 result = partition;
-                dstTable.getDefaultDistributionInfo();
-                result = distInfo;
             }
         };
 
