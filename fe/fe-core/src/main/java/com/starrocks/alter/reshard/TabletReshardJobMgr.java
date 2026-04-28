@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -83,6 +84,10 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
     public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause mergeTabletClause)
             throws StarRocksException {
+        if (!Config.tablet_reshard_enable_tablet_merge) {
+            throw new StarRocksException("Tablet merge is disabled. " +
+                    "Set tablet_reshard_enable_tablet_merge=true to enable it.");
+        }
         TabletReshardJob job = new MergeTabletJobFactory(db, table, mergeTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
     }
@@ -96,6 +101,14 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(tabletReshardJob);
+
+        if (MetricRepo.hasInit) {
+            if (tabletReshardJob.getJobType() == TabletReshardJob.JobType.SPLIT_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL.increase(1L);
+            } else if (tabletReshardJob.getJobType() == TabletReshardJob.JobType.MERGE_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL.increase(1L);
+            }
+        }
 
         LOG.info("Added tablet reshard job. {}", tabletReshardJob);
     }

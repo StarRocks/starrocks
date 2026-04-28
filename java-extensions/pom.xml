@@ -34,6 +34,7 @@
         <java-extensions.home>${basedir}</java-extensions.home>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <hadoop.version>3.4.3</hadoop.version>
+        <zookeeper.version>3.8.6</zookeeper.version>
         <iceberg.version>1.10.0</iceberg.version>
         <log4j2.version>2.23.1</log4j2.version>
         <junit.version>5.10.3</junit.version>
@@ -41,7 +42,7 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
-        <io.netty.version>4.1.128.Final</io.netty.version>
+        <io.netty.version>4.1.132.Final</io.netty.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
@@ -54,7 +55,7 @@
         <guava.version>32.0.1-jre</guava.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
-        <jetty.version>9.4.57.v20241219</jetty.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
         <parquet.version>1.15.2</parquet.version>
         <airlift.version>2.0.3</airlift.version>
         <avro.version>1.12.0</avro.version>
@@ -93,6 +94,14 @@
 
             <dependency>
                 <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${io.netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
                 <version>${io.netty.version}</version>
             </dependency>
@@ -125,6 +134,18 @@
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>${commons-io.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>${zookeeper.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper-jute</artifactId>
+                <version>${zookeeper.version}</version>
             </dependency>
 
             <!-- hadoop -->
@@ -163,6 +184,12 @@
                         <groupId>io.netty</groupId>
                         <artifactId>netty-handler</artifactId>
                     </exclusion>
+                    <!-- https://github.com/StarRocks/starrocks/issues/71898 -->
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -189,6 +216,11 @@
                     <exclusion>
                         <groupId>org.apache.hadoop</groupId>
                         <artifactId>hadoop-common</artifactId>
+                    </exclusion>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -266,12 +298,26 @@
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-azure</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-azure-datalake</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -477,8 +523,10 @@
 
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
-                <artifactId>bundle</artifactId>
+                <artifactId>bom</artifactId>
                 <version>${aws-v2-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->

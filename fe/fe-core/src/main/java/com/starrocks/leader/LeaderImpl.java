@@ -412,6 +412,7 @@ public class LeaderImpl {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
+                createReplicaTask.markSendSucceeded();
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
                 LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
                         tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());

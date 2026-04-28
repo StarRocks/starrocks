@@ -34,6 +34,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -50,6 +51,8 @@ import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.text.translate.UnicodeUnescaper;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -420,10 +423,23 @@ public class AstToStringBuilder {
                 .append(" (\n");
 
         // Columns
-        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL).
-                collect(Collectors.toList());
+        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL)
+                .collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
+
+        // Primary key
+        if (table.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            List<String> primaryKeys = paimonTable.getPrimaryKeyColumnNames();
+            if (!primaryKeys.isEmpty()) {
+                createTableSql.append("\nPRIMARY KEY (");
+                createTableSql.append(primaryKeys.stream()
+                        .map(key -> "`" + key + "`")
+                        .collect(Collectors.joining(", ")));
+                createTableSql.append(")");
+            }
+        }
 
         // Partition column names
         List<String> partitionNames;
@@ -437,7 +453,6 @@ public class AstToStringBuilder {
                 createTableSql.append("\nPARTITION BY ").append(String.join(", ", partitionNames));
             }
         }
-
 
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
@@ -486,6 +501,12 @@ public class AstToStringBuilder {
         } catch (NotImplementedException e) {
         }
 
+        // Iceberg format-version is not stored in properties, need to add it explicitly
+        if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            properties.put("format-version", String.valueOf(icebergTable.getFormatVersion()));
+        }
+
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
             createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
@@ -526,7 +547,18 @@ public class AstToStringBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
         sb.append(column.getType().toSql());
-        sb.append(" DEFAULT NULL");
+        if (!column.isAllowNull()) {
+            sb.append(" NOT NULL");
+        } else {
+            String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
+            if (defaultValue == null) {
+                sb.append(" DEFAULT NULL");
+            } else {
+                sb.append(" DEFAULT \"")
+                        .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                        .append("\"");
+            }
+        }
 
         if (!Strings.isNullOrEmpty(column.getComment())) {
             sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");

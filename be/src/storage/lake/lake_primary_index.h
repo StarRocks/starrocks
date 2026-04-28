@@ -101,6 +101,15 @@ public:
     // This function could be called in cloud native persistent index only.
     Status parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator, DeletesMap* new_deletes);
 
+    // Parallel query of PK index to retrieve rss_rowids for all segments at once.
+    // Submits chunks from all segments to a single shared thread pool token, enabling
+    // cross-segment parallelism. Each rss_rowids[i] = (rssid << 32 | rowid) for the
+    // i-th primary key, or NullIndexValue if the key doesn't exist.
+    // Used by column mode partial update to build the update-row-to-source-row mapping.
+    Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
+                                         std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
+                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment);
+
     // This function will be called when parallel upsert happens.
     // The process flow of parallel upsert is:
     // 1. upsert into memtable. (serialize)
@@ -111,6 +120,11 @@ public:
 
     // Flush memtable data into sstable.
     Status flush_memtable(bool force = false);
+
+    // Publish-phase SST flush stats (for cloud native persistent index)
+    void reset_publish_sst_stats();
+    int32_t publish_sst_flush_count() const;
+    int64_t publish_sst_flush_bytes() const;
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

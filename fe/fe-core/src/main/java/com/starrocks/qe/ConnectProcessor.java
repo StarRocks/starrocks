@@ -57,6 +57,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergTimeTravelQueryAnalyzer;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -72,8 +73,10 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
@@ -93,6 +96,7 @@ import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -112,9 +116,11 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -245,27 +251,61 @@ public class ConnectProcessor {
                 .setPreparedStmtId(executor == null ? null : executor.getPreparedStmtId());
 
         if (ctx.getState().isQuery()) {
-            MetricRepo.COUNTER_QUERY_ALL.increase(1L);
-            ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
-            if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                // err query
-                MetricRepo.COUNTER_QUERY_ERR.increase(1L);
-                ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-                //represent analysis err
-                if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
-                    MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
-                } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
-                    MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
-                } else {
-                    MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+            if (ctx.getState().getErrType() != QueryState.ErrType.BLACKLISTED) {
+                MetricRepo.COUNTER_QUERY_ALL.increase(1L);
+                EnumSet<IcebergTimeTravelQueryAnalyzer.TimeTravelType> timeTravelQueryTypes =
+                        IcebergTimeTravelQueryAnalyzer.collectTimeTravelTypes(parsedStmt);
+                if (!timeTravelQueryTypes.isEmpty()) {
+                    MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.increase(1L);
+                    timeTravelQueryTypes.forEach(type ->
+                            MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric(type.getMetricLabel())
+                                    .increase(1L));
                 }
-            } else {
-                // ok query
-                MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
-                MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
-                ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
-                if (elapseMs > Config.qe_slow_log_ms) {
-                    MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
+                if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                    // err query
+                    MetricRepo.COUNTER_QUERY_ERR.increase(1L);
+                    ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
+                    //represent analysis err
+                    if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
+                        MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                    } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                        MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
+                    } else {
+                        MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+                    }
+                } else {
+                    // ok query
+                    MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
+                    MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
+                    ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
+                    if (elapseMs > Config.qe_slow_log_ms) {
+                        MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                    }
+                }
+
+                // Catalog-type metrics
+                if (executor != null) {
+                    Set<String> catalogTypes = executor.getCatalogTypesInvolved();
+                    for (String catalogType : catalogTypes) {
+                        MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric(catalogType).increase(1L);
+                        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                            MetricRepo.COUNTER_CATALOG_QUERY_ERR.getMetric(catalogType).increase(1L);
+                            if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
+                                MetricRepo.COUNTER_CATALOG_QUERY_ANALYSIS_ERR.getMetric(catalogType).increase(1L);
+                            } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                                MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT.getMetric(catalogType).increase(1L);
+                            } else {
+                                MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR.getMetric(catalogType).increase(1L);
+                            }
+                        } else {
+                            MetricRepo.COUNTER_CATALOG_QUERY_SUCCESS.getMetric(catalogType).increase(1L);
+                            MetricRepo.getOrCreateCatalogQueryLatencyHistogram(catalogType).update(elapseMs);
+                            if (elapseMs > Config.qe_slow_log_ms) {
+                                MetricRepo.COUNTER_CATALOG_SLOW_QUERY.getMetric(catalogType).increase(1L);
+                            }
+                        }
+                    }
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
@@ -296,6 +336,8 @@ public class ConnectProcessor {
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
+        ctx.getAuditEventBuilder().setQueriedRelations(
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt));
 
         ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
@@ -926,6 +968,10 @@ public class ConnectProcessor {
             return result;
         }
 
+        if (request.isSetUser_groups()) {
+            ctx.setGroups(new HashSet<>(request.getUser_groups()));
+        }
+
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
@@ -1070,6 +1116,9 @@ public class ConnectProcessor {
         // no matter the master execute success or fail, the master must transfer the result to follower
         // and tell the follower the current journalID.
         result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+        if (RunMode.isSharedDataMode()) {
+            result.setMaxStarMgrJournalId(StarMgrServer.getCurrentState().getMaxJournalId());
+        }
         // following stmt will not be executed, when current stmt is failed,
         // so only set SERVER_MORE_RESULTS_EXISTS Flag when stmt executed successfully
         if (!ctx.getIsLastStmt()

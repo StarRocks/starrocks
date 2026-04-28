@@ -35,10 +35,18 @@ import static java.lang.Math.max;
 
 public class SqlServerSchemaResolver extends JDBCSchemaResolver {
 
+    public SqlServerSchemaResolver() {
+        this.defaultTableTypes = new String[] {"TABLE", "VIEW"};
+    }
+
     @Override
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null,
-                new String[] {"TABLE", "VIEW"});
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null, defaultTableTypes);
+    }
+
+    @Override
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, tblName, defaultTableTypes);
     }
 
     @Override

@@ -431,10 +431,37 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     int inactive_threads = _num_threads + _num_threads_pending_start - _active_threads;
     int additional_threads = static_cast<int>(_queue.size()) + threads_from_this_submit - inactive_threads;
     bool need_a_thread = false;
+    bool sole_thread = false;
     if (additional_threads > 0 &&
         _num_threads + _num_threads_pending_start < _max_threads.load(std::memory_order_acquire)) {
         need_a_thread = true;
         _num_threads_pending_start++;
+        sole_thread = (_num_threads + _num_threads_pending_start == 1);
+    }
+
+    // When this submit needs to create the very first thread for the pool
+    // (sole_thread == true), create it while still holding the lock and BEFORE
+    // enqueuing the task.
+    //
+    // Why create before enqueue?
+    //   If thread creation fails and no threads exist, the caller receives an
+    //   error and performs its own cleanup (e.g. counting down a latch). If the
+    //   task were already in the queue, a later successful submit could spawn a
+    //   thread that picks up the orphaned task, executing it against already-
+    //   destroyed state — a use-after-free.
+    //
+    // Why hold the lock during thread creation?
+    //   If we released the lock, a concurrent submitter could see our
+    //   _num_threads_pending_start and assume a thread is available, enqueue
+    //   its task without creating a thread, and then have that task stranded
+    //   if our create_thread() fails. The pool has zero threads here, so no
+    //   worker is blocked waiting for this lock.
+    if (sole_thread) {
+        Status status = create_thread();
+        if (!status.ok()) {
+            _num_threads_pending_start--;
+            return status;
+        }
     }
 
     TEST_SYNC_POINT_CALLBACK("ThreadPool::do_submit:replace_task", &r);
@@ -467,15 +494,11 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     }
     unique_lock.unlock();
 
-    if (need_a_thread) {
+    if (need_a_thread && !sole_thread) {
         Status status = create_thread();
         if (!status.ok()) {
             unique_lock.lock();
             _num_threads_pending_start--;
-            if (_num_threads + _num_threads_pending_start == 0) {
-                // If we have no threads, we can't do any work.
-                return status;
-            }
             // If we failed to create a thread, but there are still some other
             // worker threads, log a warning message and continue.
             LOG(ERROR) << "Thread pool failed to create thread: " << status.to_string() << "\n" << get_stack_trace();
@@ -738,6 +761,11 @@ void ThreadPool::dispatch_thread() {
 }
 
 Status ThreadPool::create_thread() {
+    Status status;
+    TEST_SYNC_POINT_CALLBACK("ThreadPool::create_thread", &status);
+    if (!status.ok()) {
+        return status;
+    }
     return Thread::create("thread pool", _name, &ThreadPool::dispatch_thread, this, nullptr);
 }
 

@@ -1,0 +1,283 @@
+-- name: testIcebergV3DefaultValueCreateTable
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_def_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_def_hadoop${uuid0}.ice_def_db${uuid0};
+-- result:
+-- !result
+create table ice_def_hadoop${uuid0}.ice_def_db${uuid0}.default_value_test (
+    id int,
+    name string,
+    age int default "18",
+    score double default "100.0"
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+function: assert_query_contains("show create table ice_def_hadoop${uuid0}.ice_def_db${uuid0}.default_value_test", 'age` int(11) DEFAULT "18"')
+desc ice_def_hadoop${uuid0}.ice_def_db${uuid0}.default_value_test;
+-- result:
+id	INT	Yes	false	None		None
+name	VARCHAR(1073741824)	Yes	false	None		None
+age	INT	Yes	false	18		None
+score	DOUBLE	Yes	false	100.0		None
+-- !result
+drop catalog ice_def_hadoop${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: testIcebergV3DefaultValueInsertAndRead
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_insert/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_def_insert${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_insert/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_def_insert${uuid0}.ice_def_db${uuid0};
+-- result:
+-- !result
+create table ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test (
+    id int,
+    name string
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test values (1, 'alice');
+-- result:
+-- !result
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test values (2, 'bob');
+-- result:
+-- !result
+alter table ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test add column age int default "20";
+-- result:
+-- !result
+function: assert_query_contains("show create table ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test", 'age` int(11) DEFAULT "20"')
+select * from ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test order by id;
+-- result:
+1	alice	20
+2	bob	20
+-- !result
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test (id, name) values (3, 'charlie');
+-- result:
+-- !result
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test values (4, 'david', 25);
+-- result:
+-- !result
+select * from ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test order by id;
+-- result:
+1	alice	20
+2	bob	20
+3	charlie	20
+4	david	25
+-- !result
+drop catalog ice_def_insert${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_insert/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: testIcebergV3DefaultValueAlterColumn
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_alter/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_def_alter${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_alter/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_def_alter${uuid0}.ice_def_db${uuid0};
+-- result:
+-- !result
+create table ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test (
+    id int,
+    name string,
+    status string default 'active'
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+insert into ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test (id, name) values (1, 'item1');
+-- result:
+-- !result
+select * from ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test;
+-- result:
+1	item1	active
+-- !result
+alter table ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test modify column status string default "inactive";
+-- result:
+-- !result
+function: assert_query_contains("show create table ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test", 'status` varchar(1073741824) DEFAULT "inactive"')
+insert into ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test (id, name) values (2, 'item2');
+-- result:
+-- !result
+select * from ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test order by id;
+-- result:
+1	item1	active
+2	item2	inactive
+-- !result
+drop catalog ice_def_alter${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_alter/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: testIcebergV3DefaultValueMultipleTypes
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_types/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_def_types${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_types/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_def_types${uuid0}.ice_def_db${uuid0};
+-- result:
+-- !result
+create table ice_def_types${uuid0}.ice_def_db${uuid0}.types_test (
+    id int,
+    int_col int default "100",
+    bigint_col bigint default "1000000",
+    float_col float default "1.5",
+    double_col double default "3.14159",
+    string_col string default 'default_string',
+    bool_col boolean default "true"
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+function: assert_query_contains("show create table ice_def_types${uuid0}.ice_def_db${uuid0}.types_test", 'int_col` int(11) DEFAULT "100"')
+function: assert_query_contains("show create table ice_def_types${uuid0}.ice_def_db${uuid0}.types_test", 'double_col` double DEFAULT "3.14159"')
+insert into ice_def_types${uuid0}.ice_def_db${uuid0}.types_test (id) values (1);
+-- result:
+-- !result
+insert into ice_def_types${uuid0}.ice_def_db${uuid0}.types_test (id, int_col, string_col) values (2, 200, 'custom_string');
+-- result:
+-- !result
+select * from ice_def_types${uuid0}.ice_def_db${uuid0}.types_test order by id;
+-- result:
+1	100	1000000	1.5	3.14159	default_string	1
+2	200	1000000	1.5	3.14159	custom_string	1
+-- !result
+drop catalog ice_def_types${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_types/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: testIcebergV3DefaultValueSchemaEvolution
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_def_schema${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_schema/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_def_schema${uuid0}.ice_def_db${uuid0};
+-- result:
+-- !result
+create table ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test (
+    id int,
+    value int
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test values (1, 100);
+-- result:
+-- !result
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test values (2, 200);
+-- result:
+-- !result
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+-- result:
+1	100
+2	200
+-- !result
+alter table ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test add column bonus double default "50.5";
+-- result:
+-- !result
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+-- result:
+1	100	50.5
+2	200	50.5
+-- !result
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test (id, value) values (3, 300);
+-- result:
+-- !result
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test values (4, 400, 99.9);
+-- result:
+-- !result
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+-- result:
+1	100	50.5
+2	200	50.5
+3	300	50.5
+4	400	99.9
+-- !result
+alter table ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test add column category string default 'normal';
+-- result:
+-- !result
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+-- result:
+1	100	50.5	normal
+2	200	50.5	normal
+3	300	50.5	normal
+4	400	99.9	normal
+-- !result
+drop catalog ice_def_schema${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

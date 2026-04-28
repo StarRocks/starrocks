@@ -418,6 +418,124 @@ public class TableFunctionTableTest {
     }
 
     @Test
+    public void testCSVEncloseEscapeForUnload() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file:///test_dir");
+        properties.put("format", "csv");
+
+        // default: neither specified, both are 0 (disabled)
+        {
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) 0, (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) 0, (byte) Deencapsulation.getField(table, "csvEscape"));
+            // toTTableFunctionTable should not set these fields when disabled
+            Assertions.assertFalse(table.toTTableFunctionTable().isSetCsv_enclose());
+            Assertions.assertFalse(table.toTTableFunctionTable().isSetCsv_escape());
+        }
+
+        // enclose='"' and escape='"' (RFC 4180 style)
+        {
+            properties.put("csv.enclose", "\"");
+            properties.put("csv.escape", "\"");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) '"', (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) '"', (byte) Deencapsulation.getField(table, "csvEscape"));
+            Assertions.assertTrue(table.toTTableFunctionTable().isSetCsv_enclose());
+            Assertions.assertEquals((byte) '"', table.toTTableFunctionTable().getCsv_enclose());
+            Assertions.assertTrue(table.toTTableFunctionTable().isSetCsv_escape());
+            Assertions.assertEquals((byte) '"', table.toTTableFunctionTable().getCsv_escape());
+        }
+
+        // enclose='"' and escape='\\' (backslash escape style)
+        {
+            properties.put("csv.enclose", "\"");
+            properties.put("csv.escape", "\\");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) '"', (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) '\\', (byte) Deencapsulation.getField(table, "csvEscape"));
+            Assertions.assertEquals((byte) '"', table.toTTableFunctionTable().getCsv_enclose());
+            Assertions.assertEquals((byte) '\\', table.toTTableFunctionTable().getCsv_escape());
+        }
+
+        // only enclose specified (escape disabled)
+        {
+            properties.remove("csv.escape");
+            properties.put("csv.enclose", "|");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertEquals((byte) '|', (byte) Deencapsulation.getField(table, "csvEnclose"));
+            Assertions.assertEquals((byte) 0, (byte) Deencapsulation.getField(table, "csvEscape"));
+            Assertions.assertTrue(table.toTTableFunctionTable().isSetCsv_enclose());
+            Assertions.assertFalse(table.toTTableFunctionTable().isSetCsv_escape());
+        }
+
+        // abnormal: empty csv.enclose
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.enclose", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.enclose must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: empty csv.escape
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.escape", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.escape must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-character csv.enclose (would previously silently take first byte)
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.enclose", "ab");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.enclose must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-character csv.escape
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.escape", "\\\\");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.escape must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-byte (non-ASCII) csv.enclose (Chinese char is 3 UTF-8 bytes)
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.enclose", "中");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.enclose must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+
+        // abnormal: multi-byte (non-ASCII) csv.escape
+        {
+            properties.clear();
+            properties.put("path", "file:///test_dir");
+            properties.put("format", "csv");
+            properties.put("csv.escape", "中");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "csv.escape must be a single-byte ASCII character",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+    }
+
+    @Test
     public void testAutoDetectTypes() throws NoSuchFieldException {
         Map<String, String> properties = new HashMap<>();
         properties.put(TableFunctionTable.PROPERTY_PATH, "fake://test/path");

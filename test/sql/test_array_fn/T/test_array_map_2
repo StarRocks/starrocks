@@ -88,3 +88,4 @@ PROPERTIES (
 );
 insert into array_map_x values (1, array_repeat("abcdefghasdasdasirnqwrq", 2), array_repeat(100, 2));
 select cast(if (1 > rand(), "[]", "") as array<string>) l , array_map((x)-> (concat(x,l)), arr_str) from array_map_x;
+SELECT cast(array_map(x->cast(json_query(x, '$.Id') as varchar), ['a','b']) as array<varchar>);

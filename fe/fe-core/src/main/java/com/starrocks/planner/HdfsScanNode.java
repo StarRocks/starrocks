@@ -198,6 +198,7 @@ public class HdfsScanNode extends ScanNode {
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+        setConnectorCatalogType(msg);
     }
 
     public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {
@@ -300,5 +301,11 @@ public class HdfsScanNode extends ScanNode {
     @Override
     public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
         scanRangeSource.setSampleStrategy(strategy);
+    }
+
+    @Override
+    public void prepareRetry() {
+        reachLimit = false;
+        this.scanRangeSource.reset();
     }
 }

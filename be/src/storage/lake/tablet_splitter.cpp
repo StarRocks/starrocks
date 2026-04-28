@@ -14,18 +14,22 @@
 
 #include "storage/lake/tablet_splitter.h"
 
+#include <bvar/bvar.h>
+
 #include <algorithm>
 #include <set>
 #include <unordered_map>
 #include <vector>
 
 #include "common/logging.h"
-#include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/update_manager.h"
 #include "storage/tablet_range.h"
 #include "storage/variant_tuple.h"
+
+extern bvar::Adder<int64_t> g_tablet_reshard_split_fallback_total;
 
 namespace starrocks::lake {
 
@@ -34,12 +38,72 @@ namespace {
 struct Statistic {
     int64_t num_rows = 0;
     int64_t data_size = 0;
+    int64_t num_dels = 0;
 };
 
 struct TabletRangeInfo {
     TabletRangePB range;
     std::unordered_map<uint32_t, Statistic> rowset_stats;
 };
+
+// Split the parent rowset's total_num_dels across the split groups proportional to
+// each group's share of the rowset's rows, using the Hare-Niemeyer (largest-remainder)
+// method. Writes the result into TabletRangeInfo.rowset_stats[source_id].num_dels.
+// Guarantees the sum of allocated values equals total_num_dels when at least one
+// group has rows for this source.
+//
+// Each split child keeps the same shared segment files and inherits the parent's
+// delvec cardinality, so without this proportional estimate get_tablet_stats would
+// subtract the full parent num_dels from each child's partial num_rows and collapse
+// the partition's live-row count (see lake_service.cpp:1166).
+void allocate_rowset_num_dels_across_splits(uint32_t source_id, int64_t total_num_dels,
+                                            std::vector<TabletRangeInfo>* split_ranges) {
+    if (total_num_dels <= 0 || split_ranges == nullptr || split_ranges->empty()) {
+        return;
+    }
+
+    int64_t total_rows = 0;
+    for (auto& split_range : *split_ranges) {
+        auto it = split_range.rowset_stats.find(source_id);
+        if (it != split_range.rowset_stats.end()) {
+            total_rows += it->second.num_rows;
+        }
+    }
+    if (total_rows <= 0) {
+        return;
+    }
+
+    std::vector<int64_t> allocated(split_ranges->size(), 0);
+    std::vector<std::pair<int64_t, size_t>> fractional_remainders;
+    fractional_remainders.reserve(split_ranges->size());
+    int64_t sum_allocated = 0;
+    for (size_t i = 0; i < split_ranges->size(); ++i) {
+        auto it = (*split_ranges)[i].rowset_stats.find(source_id);
+        if (it == (*split_ranges)[i].rowset_stats.end() || it->second.num_rows <= 0) continue;
+        // Use 128-bit intermediate: both operands can realistically reach 1e10 on very
+        // large rowsets, whose product overflows int64_t. base fits because it is
+        // bounded by total_num_dels; fractional_remainder fits because it is < total_rows.
+        __int128 numerator = static_cast<__int128>(total_num_dels) * static_cast<__int128>(it->second.num_rows);
+        int64_t base = static_cast<int64_t>(numerator / total_rows);
+        int64_t fractional_remainder = static_cast<int64_t>(numerator % total_rows);
+        allocated[i] = base;
+        sum_allocated += base;
+        fractional_remainders.emplace_back(fractional_remainder, i);
+    }
+
+    std::sort(fractional_remainders.begin(), fractional_remainders.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first; });
+    int64_t leftover = total_num_dels - sum_allocated;
+    for (size_t k = 0; k < fractional_remainders.size() && leftover > 0; ++k, --leftover) {
+        allocated[fractional_remainders[k].second]++;
+    }
+
+    for (size_t i = 0; i < split_ranges->size(); ++i) {
+        if (allocated[i] > 0) {
+            (*split_ranges)[i].rowset_stats[source_id].num_dels = allocated[i];
+        }
+    }
+}
 
 Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                int32_t split_count, std::vector<TabletRangeInfo>* split_ranges) {
@@ -54,7 +118,6 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
         Statistic stat;
     };
 
-    const bool use_delvec = is_primary_key(*tablet_metadata) && tablet_metadata->has_delvec_meta();
     std::vector<SegmentInfo> segment_infos;
     for (const auto& rowset : tablet_metadata->rowsets()) {
         if (rowset.segments_size() != rowset.segment_size_size() ||
@@ -69,23 +132,6 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
             RETURN_IF_ERROR(segment_info.max.from_proto(segment_meta.sort_key_max()));
             segment_info.stat.num_rows = segment_meta.num_rows();
             segment_info.stat.data_size = rowset.segment_size(i);
-            if (use_delvec) {
-                const uint32_t segment_id = rowset.id() + get_segment_idx(rowset, i);
-                DelVector delvec;
-                LakeIOOptions lake_io_opts{.fill_data_cache = false};
-                auto st = lake::get_del_vec(tablet_manager, *tablet_metadata, segment_id, false, lake_io_opts, &delvec);
-                if (!st.ok()) {
-                    LOG(WARNING) << "Failed to get delvec for tablet " << tablet_metadata->id() << ", segment_id "
-                                 << segment_id << ", status: " << st;
-                    continue;
-                }
-                const int64_t total_rows = segment_info.stat.num_rows;
-                const int64_t deleted_rows = delvec.cardinality();
-                const int64_t live_rows = std::max<int64_t>(0, total_rows - deleted_rows);
-                const int64_t live_size = total_rows > 0 ? segment_info.stat.data_size * live_rows / total_rows : 0;
-                segment_info.stat.num_rows = live_rows;
-                segment_info.stat.data_size = live_size;
-            }
         }
     }
 
@@ -275,6 +321,23 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
         return Status::InvalidArgument("Not enough split ranges available");
     }
 
+    // Only PK tablets maintain delete vectors; duplicate/aggregate keys never populate
+    // num_dels so there is nothing to scale.
+    if (is_primary_key(*tablet_metadata)) {
+        for (const auto& rowset : tablet_metadata->rowsets()) {
+            int64_t total_num_dels = 0;
+            if (rowset.has_num_dels()) {
+                total_num_dels = rowset.num_dels();
+            } else if (tablet_manager != nullptr) {
+                // Legacy metadata without num_dels: derive from the delvec. This costs
+                // one delvec read per rowset, acceptable on the one-shot split path.
+                total_num_dels = static_cast<int64_t>(
+                        tablet_manager->update_mgr()->get_rowset_num_deletes(*tablet_metadata, rowset));
+            }
+            allocate_rowset_num_dels_across_splits(rowset.id(), total_num_dels, split_ranges);
+        }
+    }
+
     return Status::OK();
 }
 
@@ -296,6 +359,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     Status status = get_tablet_split_ranges(tablet_manager, old_tablet_metadata, splitting_tablet.new_tablet_ids_size(),
                                             &split_ranges);
     if (!status.ok()) {
+        g_tablet_reshard_split_fallback_total << 1;
         LOG(WARNING) << "Failed to get tablet split ranges, will not split this tablet: " << old_tablet_metadata->id()
                      << ", version: " << old_tablet_metadata->version() << ", txn_id: " << txn_info.txn_id()
                      << ", status: " << status;
@@ -304,6 +368,9 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         new_tablet_metadata->set_version(new_version);
         new_tablet_metadata->set_commit_time(txn_info.commit_time());
         new_tablet_metadata->set_gtid(txn_info.gtid());
+        new_tablet_metadata->clear_compaction_inputs();
+        new_tablet_metadata->clear_orphan_files();
+        new_tablet_metadata->clear_prev_garbage_version();
         new_metadatas.emplace(new_tablet_metadata->id(), std::move(new_tablet_metadata));
         return new_metadatas;
     }
@@ -315,6 +382,9 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         new_tablet_new_metadata->set_version(new_version);
         new_tablet_new_metadata->set_commit_time(txn_info.commit_time());
         new_tablet_new_metadata->set_gtid(txn_info.gtid());
+        new_tablet_new_metadata->clear_compaction_inputs();
+        new_tablet_new_metadata->clear_orphan_files();
+        new_tablet_new_metadata->clear_prev_garbage_version();
         new_tablet_new_metadata->mutable_range()->CopyFrom(split_ranges[i].range);
         tablet_reshard_helper::set_all_data_files_shared(new_tablet_new_metadata.get());
 
@@ -322,11 +392,14 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
             RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&rowset_metadata, split_ranges[i].range));
             const auto it = split_ranges[i].rowset_stats.find(rowset_metadata.id());
             if (it != split_ranges[i].rowset_stats.end()) {
+                int64_t scaled_num_dels = std::min<int64_t>(it->second.num_dels, it->second.num_rows);
                 rowset_metadata.set_num_rows(it->second.num_rows);
                 rowset_metadata.set_data_size(it->second.data_size);
+                rowset_metadata.set_num_dels(scaled_num_dels);
             } else {
                 rowset_metadata.set_num_rows(0);
                 rowset_metadata.set_data_size(0);
+                rowset_metadata.set_num_dels(0);
             }
         }
 

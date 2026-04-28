@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <vector>
+
 #include "common/status.h"
 #include "fs/encryption.h"
 #include "gen_cpp/AgentService_types.h"
@@ -23,8 +27,10 @@
 
 namespace starrocks {
 struct FileEncryptionPair;
+struct WritableFileOptions;
 class TabletMetadataPB;
 class FileSystem;
+class ThreadPool;
 } // namespace starrocks
 
 using starrocks::FileConverterCreatorFunc;
@@ -34,6 +40,8 @@ class TabletManager;
 
 class LakeReplicationTxnManager {
 public:
+    using ReplicationTask = std::function<Status()>;
+
     explicit LakeReplicationTxnManager(lake::TabletManager* tablet_manager)
             : _tablet_manager(tablet_manager)
 #ifdef USE_STAROS
@@ -89,8 +97,23 @@ public:
     Status update_tablet_metadata_segment_sizes(const std::shared_ptr<TabletMetadataPB>& tablet_metadata,
                                                 const std::unordered_map<std::string, size_t>& segment_size_changes);
 
+    // Copy a non-segment file (e.g. .del, .sst, .delvec, .cols) with size verification and retry.
+    // Gets source file size first, then copies with retry on failure or size mismatch.
+    // Returns the actual file size after a successful copy.
+    static StatusOr<size_t> copy_non_segment_file_with_retry(const std::string& src_file_location,
+                                                             const std::shared_ptr<FileSystem>& shared_src_fs,
+                                                             const std::string& target_file_location,
+                                                             const WritableFileOptions& opts, int max_retry);
+
+    // Decide whether to use parallel copy for current tablet files.
+    static bool should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool);
+
 private:
+    ThreadPool* get_replicate_file_thread_pool();
+
     TabletManager* _tablet_manager;
+    // Non-owning pointer managed by AgentServer.
+    ThreadPool* _replicate_file_thread_pool = nullptr;
 #ifdef USE_STAROS
     // Used for non-S3 storage types to construct relative paths
     // S3 storage type uses full path provided by FE instead

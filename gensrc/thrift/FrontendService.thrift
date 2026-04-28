@@ -532,8 +532,10 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
-    15: optional string job_id
-    16: optional i64 process_time
+    15: optional string warehouse
+
+    16: optional string job_id
+    17: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -851,6 +853,8 @@ struct TMasterOpRequest {
 
     39: optional bool is_arrow_flight_sql;
 
+    40: optional list<string> user_groups;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
 
@@ -896,6 +900,8 @@ struct TMasterOpResult {
     9: optional i64 txn_id;
     // SQL digest computed by Leader after analyze
     10:optional string sql_digest;
+    // StarMgr max journal ID for shared-data mode follower sync
+    11:optional i64 maxStarMgrJournalId;
 }
 
 struct TIsMethodSupportedRequest {
@@ -1047,6 +1053,8 @@ struct TRLTaskTxnCommitAttachment {
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
+    // If true, the error is non-retryable and routine load job should be paused
+    13: optional bool nonRetryable
 }
 
 struct TMiniLoadTxnCommitAttachment {

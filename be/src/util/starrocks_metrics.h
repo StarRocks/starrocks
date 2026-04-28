@@ -44,6 +44,7 @@
 #include "util/jvm_metrics.h"
 #endif
 #include "util/metrics.h"
+#include "util/metrics/catalog_scan_metrics.h"
 #include "util/metrics/file_scan_metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
@@ -217,6 +218,29 @@ public:
     // Accumulated time that waiting replicas costs in LoadChannel#add_chunks
     METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_replica_duration_us, MetricUnit::MICROSECONDS);
 
+    // Shared-data combined_txn_log collection dispatch counters. Each eos on a
+    // LakeTabletsChannel that enters the collection path bumps exactly one of
+    // these. Useful for confirming which strategy is live in a given cluster
+    // after an upgrade or Config flip.
+    //
+    // Legacy: FE didn't set `enable_per_partition_coordinator`, or any open on
+    // the channel disagreed. Collection falls back to "sender_id == 0 collects
+    // all logs".
+    METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_legacy_total, MetricUnit::OPERATIONS);
+    // Per-partition coordinator mode: collection runs through the elected
+    // coordinator per partition (smallest sender_id among those that claimed
+    // the partition via (incremental_)open).
+    METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_per_partition_total, MetricUnit::OPERATIONS);
+    // Diagnostic: number of txn logs produced for a partition that *no*
+    // sender on this channel ever claimed via its (incremental_)open tablet
+    // list. Such a log is dropped (no coordinator covers it), which would
+    // silently re-introduce the publish-time loss this fix targets. Counted
+    // only once per orphan log (by the minimum elected coordinator). A
+    // healthy cluster must hold this at 0; any non-zero value points to a
+    // missing open RPC or an open/data-arrival race and warrants
+    // investigation. Each orphan is also logged at ERROR on the CN.
+    METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_orphan_partition_total, MetricUnit::NOUNIT);
+
     // Metrics for async delta writer
     // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);
@@ -292,6 +316,14 @@ public:
     METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(pk_index_sst_read_error_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(pk_index_sst_write_error_total, MetricUnit::REQUESTS);
+
+    // StarOS shared-data fallback metrics. Incremented when StarOSWorker issues
+    // a g_starlet->get_shard_info() RPC to starmgr because the local cache did
+    // not have the shard info (i.e. the FE did not push the shard to this BE
+    // before a query referenced it). A high rate is a signal of FE-side
+    // task/node mis-selection or shard push lag.
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
 
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
@@ -378,6 +410,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+    METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
@@ -408,6 +441,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(clone);
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
+    METRICS_DEFINE_THREAD_POOL(automatic_partition);
 
     METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
 
@@ -441,6 +475,7 @@ public:
     TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
     FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
+    CatalogScanMetrics* catalog_scan_metrics() { return _catalog_scan_metrics.get(); }
 
 private:
     // Don't allow constructor
@@ -462,6 +497,7 @@ private:
     TableMetricsManager _table_metrics_mgr;
 
     std::unique_ptr<FileScanMetrics> _file_scan_metrics;
+    std::unique_ptr<CatalogScanMetrics> _catalog_scan_metrics;
 };
 
 }; // namespace starrocks

@@ -259,7 +259,7 @@ class LargeIntParser extends ColumnParser {
         } catch (NumberFormatException e) {
             return false;
         } catch (ArithmeticException e) {
-            LOG.warn("int value is too big even for java BigInteger,value={}" + value);
+            LOG.warn("int value is too big even for java BigInteger,value=" + value);
             return false;
         } catch (Exception e) {
             throw new RuntimeException("large int parse failed:" + value, e);

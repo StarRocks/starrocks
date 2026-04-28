@@ -41,7 +41,9 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TimerTask;
 
 /*
@@ -58,6 +60,11 @@ public class MetricCalculator extends TimerTask {
     private long lastQueryTimeOutCounter = -1;
 
     private long lastQueryEventTime = -1;
+
+    private Map<String, Long> lastCatalogQueryErrCounters = new HashMap<>();
+    private Map<String, Long> lastCatalogQueryTimeoutCounters = new HashMap<>();
+    private Map<String, Long> lastCatalogQueryAnalysisErrCounters = new HashMap<>();
+    private Map<String, Long> lastCatalogQueryInternalErrCounters = new HashMap<>();
 
     @Override
     public void run() {
@@ -115,6 +122,9 @@ public class MetricCalculator extends TimerTask {
         double timeoutErrRate = (double) (currentTimeoutErrCounter - lastQueryTimeOutCounter) / interval;
         MetricRepo.GAUGE_QUERY_TIMEOUT_RATE.setValue(timeoutErrRate < 0 ? 0.0 : timeoutErrRate);
         lastQueryTimeOutCounter = currentTimeoutErrCounter;
+
+        // catalog-type rates
+        updateCatalogRates(interval);
 
         lastTs = currentTs;
 
@@ -188,5 +198,35 @@ public class MetricCalculator extends TimerTask {
         RoutineLoadLagTimeMetricMgr.getInstance().cleanupStaleMetrics();
 
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
+    }
+
+    private void updateCatalogRates(long interval) {
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_ERR,
+                MetricRepo.GAUGE_CATALOG_QUERY_ERR_RATE, lastCatalogQueryErrCounters, interval);
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT,
+                MetricRepo.GAUGE_CATALOG_QUERY_TIMEOUT_RATE, lastCatalogQueryTimeoutCounters, interval);
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_ANALYSIS_ERR,
+                MetricRepo.GAUGE_CATALOG_QUERY_ANALYSIS_ERR_RATE, lastCatalogQueryAnalysisErrCounters, interval);
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR,
+                MetricRepo.GAUGE_CATALOG_QUERY_INTERNAL_ERR_RATE, lastCatalogQueryInternalErrCounters, interval);
+    }
+
+    private void updateCatalogRate(MetricWithLabelGroup<LongCounterMetric> counterGroup,
+                                    MetricWithLabelGroup<GaugeMetricImpl<Double>> gaugeGroup,
+                                    Map<String, Long> lastCounters, long interval) {
+        for (Map.Entry<String, LongCounterMetric> entry : counterGroup.getMetrics().entrySet()) {
+            String catalogType = entry.getKey();
+            long currentValue = entry.getValue().getValue();
+            if (!lastCounters.containsKey(catalogType)) {
+                // First time seeing this catalog type — seed baseline to avoid an initial spike.
+                lastCounters.put(catalogType, currentValue);
+                gaugeGroup.getMetric(catalogType).setValue(0.0);
+                continue;
+            }
+            long lastValue = lastCounters.get(catalogType);
+            double rate = (double) (currentValue - lastValue) / interval;
+            gaugeGroup.getMetric(catalogType).setValue(rate < 0 ? 0.0 : rate);
+            lastCounters.put(catalogType, currentValue);
+        }
     }
 }

@@ -57,7 +57,7 @@ public class SqlDigestBlackList {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             if (sqlDigestBlackList.contains(digest)) {
                 MetricRepo.COUNTER_SQL_BLOCK_HIT_COUNT.increase(1L);
-                ErrorReport.reportAnalysisException(
+                ErrorReport.reportSqlBlackListException(
                         ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR.formatErrorMsg() + ". Digest: %s",
                         ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR, -1, digest);
             }
@@ -124,4 +124,3 @@ public class SqlDigestBlackList {
         }
     }
 }
-

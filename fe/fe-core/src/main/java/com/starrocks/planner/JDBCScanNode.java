@@ -180,6 +180,10 @@ public class JDBCScanNode extends ScanNode {
         }
 
         ArrayList<Expr> jdbcConjuncts = ExprUtils.cloneList(conjuncts, sMap);
+        // Filters instead of conjuncts are used in BE to filter rows, the types of conjuncts' children
+        // would be unmatched after remove cast operator in PushDownPredicateTOExternalTableScanRule, which
+        // would cause BE report error "VectorizedInPredicate type not same";
+        conjuncts.clear();
         for (Expr p : jdbcConjuncts) {
             p = ExprUtils.replaceLargeStringLiteral(p);
             filters.add(AstToStringBuilder.toString(p));
@@ -200,6 +204,8 @@ public class JDBCScanNode extends ScanNode {
         msg.jdbc_scan_node.setColumns(columns);
         msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

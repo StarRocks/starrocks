@@ -47,6 +47,8 @@ public enum OperatorType {
     LOGICAL_JOIN,
     LOGICAL_AGGR,
     LOGICAL_FILTER,
+    LOGICAL_DELTA,
+    LOGICAL_VERSION,
     LOGICAL_LIMIT,
     LOGICAL_TOPN,
     LOGICAL_APPLY,
@@ -63,6 +65,7 @@ public enum OperatorType {
     LOGICAL_CTE_PRODUCE,
     LOGICAL_CTE_CONSUME,
     LOGICAL_SPJG_PIECES,
+    LOGICAL_CACHE_STATS_SCAN,
 
     /**
      * Physical operator
@@ -91,6 +94,7 @@ public enum OperatorType {
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
+    PHYSICAL_CACHE_STATS_SCAN,
 
     PHYSICAL_PROJECT,
     PHYSICAL_SORT,

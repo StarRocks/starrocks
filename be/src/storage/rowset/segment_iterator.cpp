@@ -896,7 +896,8 @@ Status SegmentIterator::_init_internal() {
     RETURN_IF_ERROR(_init_context());
 
     // reverse scan_range
-    if (!_opts.asc_hint) {
+    // when desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range
+    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
         _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
     }
 
@@ -2034,6 +2035,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                     offset += cur_size;
                     size -= cur_size;
                 }
+            }
+        }
+
+        // Warmup SST files for cloud-native PK index, executed once per tablet
+        if (_opts.lake_io_opts.sst_warmup_fn && _opts.lake_io_opts.sst_warmup_done) {
+            bool expected = false;
+            if (_opts.lake_io_opts.sst_warmup_done->compare_exchange_strong(expected, true)) {
+                RETURN_IF_ERROR(_opts.lake_io_opts.sst_warmup_fn());
             }
         }
 

@@ -73,6 +73,8 @@ The following variables only take effect globally. They cannot take effect for a
 * cngroup_resource_usage_fresh_ratio
 * cngroup_schedule_mode
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -201,6 +203,22 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 * **Default**: `*,,`
 * **Data Type**: String
 * **Introduced in**: -
+
+### binary_encoding_format
+
+* **Scope**: Session
+* **Description**: Controls how `BINARY` / `VARBINARY` values are encoded when StarRocks serializes MySQL text results. Valid values are `raw`, `hex`, and `base64`. The default is `hex`. This variable works together with `binary_encoding_level`. MySQL clients can already handle top-level binary values, but nested binary values inside `ARRAY`, `MAP`, or `STRUCT` are returned through JSON-like strings, so they may need extra encoding to stay printable and well-formed. Set this variable to `base64` if you prefer a denser printable representation, or `raw` to disable extra encoding entirely.
+* **Default**: `hex`
+* **Data Type**: String
+* **Introduced in**: v4.1
+
+### binary_encoding_level
+
+* **Scope**: Session
+* **Description**: Controls which binary values are encoded for MySQL text results. Valid values are `nested` and `all`. The default is `nested`, which preserves historical behavior for top-level binary columns while still encoding nested binary values inside `ARRAY`, `MAP`, or `STRUCT`, where the result is rendered as a JSON-like string. Set this variable to `all` if your team wants a uniform convention and prefers top-level binary values to be encoded as well. If `binary_encoding_format = raw`, no additional binary encoding is applied even when this variable is set to `nested` or `all`, which may make nested output less readable.
+* **Default**: `nested`
+* **Data Type**: String
+* **Introduced in**: v4.1
 
 ### auto_increment_increment
 
@@ -528,6 +546,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_cache_udaf
+
+* **Description**: When set to `true`, enables in-memory caching of the class-level Java UDAF initialization (class loading, method introspection, and batch-update stub generation). The cache is populated on first use and reused across all aggregator/analytor instances within the same BE process, eliminating the repeated per-instance initialization overhead that is otherwise proportional to pipeline DOP. Caching only applies to UDAFs and window functions that were created with `"isolation" = "shared"`. Functions created with `"isolation" = "private"` always go through the uncached path regardless of this setting. Default is `false`; enable after verifying that shared-isolation UDAFs are safe to share their class-level state across concurrent queries. The runtime profile exposes `UdafCacheHitCount`, `UdafCachePopulateCount`, and `UdafLoadTime` counters to observe cache behavior.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.4.0
+
 ### enable_color_explain_output
 
 * **Scope**: Session
@@ -693,7 +719,21 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
 * **Default**: 64
 * **Data Type**: int
-* **Introduced in**: v3.5.12
+* **Introduced in**: v3.5.16, v4.0.9, v4.1
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* **Description**: Whether to preserve the target `VARCHAR(N)` length when `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast. Enable this variable to keep prepare and execute result-set metadata consistent for statements such as `CAST(col AS VARCHAR(N))`.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9, v4.1
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* **Description**: Whether to synchronize the reused planner `Expr` type and origin type with the rewritten `VARCHAR(N)` type after `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast.
+* **Default**: true
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9, v4.1
 
 ### enable_load_profile
 
@@ -1455,14 +1495,6 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 * **Default**: auto
 * **Introduced in**: v3.3.2
 
-### prefer_compute_node
-
-* **Description**: Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
-  * `true`: indicates that the FEs distribute query execution plans to CN nodes.
-  * `false`: indicates that the FEs do not distribute query execution plans to CN nodes.
-* **Default**: false
-* **Introduced in**: v2.4
-
 ### query_cache_agg_cardinality_limit
 
 * **Description**: The upper limit of cardinality for GROUP BY in Query Cache. Query Cache is not enabled if the rows generated by GROUP BY exceeds this value. Default value: 5000000. If `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` is set to 0, the Passthrough mode is used even when no computation results are generated from the involved tablets.
@@ -1752,16 +1784,6 @@ Used for MySQL client compatibility. No practical usage. The alias is `transacti
 * **Default**: `10`
 * **Data Type**: long
 * **Introduced in**: v3.2.0
-
-### use_compute_nodes
-
-* **Description**: The maximum number of CN nodes that can be used. This variable is valid when `prefer_compute_node=true`. Valid values:
-
-  * `-1`: indicates that all CN nodes are used.
-  * `0`: indicates that no CN nodes are used.
-* **Default**: -1
-* **Data type**: Int
-* **Introduced in**: v2.4
 
 ### use_page_cache
 

@@ -22,7 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -334,7 +334,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<String> listPartitionNames(IcebergTable icebergTable, ConnectorMetadatRequestContext requestContext,
+    public List<String> listPartitionNames(IcebergTable icebergTable, ConnectorMetadataRequestContext requestContext,
                                            ExecutorService executorService) {
         SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
         // optimization for query mv rewrite, we can optionally return null to bypass it.

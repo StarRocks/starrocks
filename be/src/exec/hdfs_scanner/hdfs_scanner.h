@@ -233,6 +233,9 @@ struct HdfsScannerParams {
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
     std::vector<int> materialize_index_in_chunk;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
 
     // columns of partition info
     std::vector<SlotDescriptor*> partition_slots;
@@ -276,6 +279,12 @@ struct HdfsScannerParams {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool use_min_max_opt = false;
+    // Mirrors THdfsScanNode.can_use_any_column.  When true, PruneHDFSScanColumnRule
+    // injected a placeholder materialized column because all queried columns were
+    // partition columns.  Used together with use_min_max_opt to skip reading the
+    // placeholder from the data file.
+    bool can_use_any_column = false;
+
     bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
@@ -348,6 +357,11 @@ struct HdfsScannerContext {
     bool orc_use_column_names = false;
 
     bool use_min_max_opt = false;
+    // Set when can_use_any_column is propagated from the scan node.  In combination
+    // with use_min_max_opt this tells update_min_max_columns() that any materialized
+    // column without a min/max entry is a placeholder and should be filled with a
+    // default value instead of being read from the data file.
+    bool can_use_any_column = false;
 
     bool use_count_opt = false;
     bool is_first_split = false;
@@ -413,6 +427,9 @@ struct HdfsScannerContext {
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
     // for iceberg reserved fields
     std::vector<SlotDescriptor*> reserved_field_slots;
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
@@ -507,7 +524,12 @@ protected:
 
 public:
     static constexpr const char* ICEBERG_ROW_ID = "_row_id";
+    static constexpr const char* ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
     static constexpr const char* ICEBERG_ROW_POSITION = "_pos";
+    // Iceberg v3 spec reserved field IDs for row lineage columns.
+    // See: https://iceberg.apache.org/spec/#reserved-field-ids
+    static constexpr int32_t ICEBERG_ROW_ID_COLUMN_ID = 2147483540;
+    static constexpr int32_t ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID = 2147483539;
 };
 
 } // namespace starrocks

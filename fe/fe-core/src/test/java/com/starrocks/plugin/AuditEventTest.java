@@ -20,6 +20,8 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 public class AuditEventTest {
     @Test
     public void testAuditEvent() {
@@ -44,6 +46,7 @@ public class AuditEventTest {
                 .setSessionId("sessionId")
                 .setCustomQueryId("customQueryId")
                 .setCNGroup("test_cngroup")
+                .setQueriedRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"))
                 .addReadLocalCnt(100)
                 .addReadRemoteCnt(100);
 
@@ -74,6 +77,8 @@ public class AuditEventTest {
         Assertions.assertEquals("sessionId", event.sessionId);
         Assertions.assertEquals("customQueryId", event.customQueryId);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
+        Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"),
+                event.queriedRelations);
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
         Assertions.assertEquals(100, event.writeClientTimeMs);
         Assertions.assertEquals((float) 50, event.getCacheMissRatio());

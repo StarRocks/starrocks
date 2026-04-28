@@ -522,8 +522,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                 column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
                 num_rows(), path);
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_value_iter->init(iter_opts));
         return default_value_iter;
     }
 }
@@ -548,8 +546,6 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         auto default_iter = std::make_unique<DefaultValueColumnIterator>(column.has_default_value(),
                                                                          column.default_value(), column.is_nullable(),
                                                                          type_info, column.length(), num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_iter->init(iter_opts));
         VLOG(2) << "root column '" << col_name << "' not found in segment, return default for path: " << full_path;
         return default_iter;
     }
@@ -599,8 +595,6 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_null_iter->init(iter_opts));
         VLOG(2) << "json field " << full_path << " not found in segment, return NULL directly";
         return default_null_iter;
     }

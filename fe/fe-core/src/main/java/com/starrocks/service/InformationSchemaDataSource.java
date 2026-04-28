@@ -544,14 +544,14 @@ public class InformationSchemaDataSource {
             List<BasicTable> tables = new ArrayList<>();
             List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
             for (String tableName : tableNames) {
-                if (request.isSetTable_name() &&
-                        !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                if (matcher != null && !matcher.match(tableName)) {
                     continue;
                 }
 
                 BasicTable table = null;
                 try {
-                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
+                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName,
+                        Config.enable_external_catalog_information_schema_tables_access_full_metadata);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }

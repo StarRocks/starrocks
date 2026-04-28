@@ -30,6 +30,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Field;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -109,9 +110,14 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         continue;
                     }
                 }
-                if (value instanceof String) {
-                    String stringValue = (String) value;
-                    if ((stringValue == null || stringValue.isEmpty()) && af.ignore_empty()) {
+                if (value instanceof String stringValue) {
+                    if (stringValue.isEmpty() && af.ignore_empty()) {
+                        continue;
+                    }
+                }
+                if (value instanceof Collection) {
+                    Collection<?> collectionValue = (Collection<?>) value;
+                    if (collectionValue.isEmpty() && af.ignore_empty()) {
                         continue;
                     }
                 }

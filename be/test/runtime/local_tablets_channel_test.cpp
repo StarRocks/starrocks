@@ -32,13 +32,14 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
 #include "util/reusable_closure.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
 
-class SecondaryReplicasWaiterTestCase;
+struct SecondaryReplicasWaiterTestCase;
 
 class LocalTabletsChannelTest : public testing::Test {
 protected:
@@ -216,12 +217,12 @@ protected:
 
     std::vector<PNetworkAddress> _nodes;
     PUniqueId _load_id;
-    int64_t _txn_id;
-    int64_t _db_id;
-    int64_t _table_id;
-    int64_t _partition_id;
-    int32_t _index_id;
-    int32_t _sink_id;
+    int64_t _txn_id = 0;
+    int64_t _db_id = 0;
+    int64_t _table_id = 0;
+    int64_t _partition_id = 0;
+    int32_t _index_id = 0;
+    int32_t _sink_id = 0;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<RuntimeProfile> _root_profile;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
@@ -923,6 +924,77 @@ TEST_F(LocalTabletsChannelTest, test_get_replica_status) {
     ASSERT_EQ(_tablets[3]->tablet_id(), result4.replica_statuses(3).tablet_id());
     ASSERT_EQ(LoadReplicaStatePB::NOT_PRESENT, result4.replica_statuses(3).state());
     ASSERT_EQ("can't find delta writer", result4.replica_statuses(3).message());
+}
+
+// Reproducer for the use-after-free in LoadChannel::get_load_replica_status.
+//
+// Root cause: the temporary shared_ptr returned by get_tablets_channel() is destroyed at
+// the semicolon, leaving only a raw pointer.  If another thread erases the map entry before
+// the raw pointer is used, the LocalTabletsChannel is freed and the subsequent method call
+// is a heap-use-after-free (caught by ASAN).
+//
+// The fix is to keep the shared_ptr in a named local variable so its lifetime covers the
+// entire call.
+TEST_F(LocalTabletsChannelTest, test_get_load_replica_status_use_after_free) {
+    _create_tablets(2);
+
+    std::vector<ReplicaInfo> replica_infos;
+    for (auto& tablet : _tablets) {
+        replica_infos.push_back({tablet->tablet_id(), {_nodes[0]}});
+    }
+
+    // Open the channel through LoadChannel so it is registered in _tablets_channels.
+    PTabletWriterOpenRequest open_request;
+    _create_open_request(0 /*node_id = primary*/, replica_infos, &open_request);
+    PTabletWriterOpenResult open_response;
+    LoadChannelOpenContext ctx;
+    ctx.cntl = nullptr;
+    ctx.request = &open_request;
+    ctx.response = &open_response;
+    ctx.done = nullptr;
+    ctx.receive_rpc_time_ns = MonotonicNanos();
+    _load_channel->open(ctx);
+    ASSERT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
+
+    TabletsChannelKey channel_key(_load_id, _sink_id, _index_id);
+    ASSERT_NE(nullptr, _load_channel->get_tablets_channel(channel_key));
+
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("LoadChannel::get_load_replica_status::after_raw_ptr");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    bool sync_triggered = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LoadChannel::get_load_replica_status::after_raw_ptr", [&](void*) {
+        // Simulate a concurrent channel close: erase the map entry, dropping
+        // the last shared_ptr reference from the channel manager's perspective.
+        //
+        // Buggy code  : local_tablets_channel is now a dangling pointer ->
+        //               ASAN reports heap-use-after-free on the next line.
+        // Fixed code  : the caller holds a named shared_ptr, so ref-count
+        //               stays >= 1 and the object remains alive.
+        std::lock_guard l(_load_channel->_lock);
+        _load_channel->_tablets_channels.erase(channel_key);
+        sync_triggered = true;
+    });
+
+    PLoadReplicaStatusRequest status_request;
+    status_request.mutable_load_id()->CopyFrom(_load_id);
+    status_request.set_txn_id(_txn_id);
+    status_request.set_index_id(_index_id);
+    status_request.set_sink_id(_sink_id);
+    status_request.set_node_id(0);
+    for (auto& tablet : _tablets) {
+        status_request.add_tablet_ids(tablet->tablet_id());
+    }
+
+    PLoadReplicaStatusResult status_response;
+    _load_channel->get_load_replica_status("127.0.0.1", &status_request, &status_response);
+
+    ASSERT_TRUE(sync_triggered);
+    // After the fix the call completes successfully; each tablet should have a status entry.
+    ASSERT_EQ(static_cast<int>(_tablets.size()), status_response.replica_statuses_size());
 }
 
 } // namespace starrocks

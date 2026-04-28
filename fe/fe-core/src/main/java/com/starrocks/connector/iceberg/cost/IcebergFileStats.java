@@ -47,6 +47,7 @@ public class IcebergFileStats {
     private Map<Integer, Long> columnSizes;
     private Set<Integer> corruptedStats;
     private boolean hasValidColumnMetrics;
+    private Map<Integer, Long> columnSizeRecordCounts;
 
     public IcebergFileStats(
             Map<Integer, Type.PrimitiveType> idToTypeMapping,
@@ -79,7 +80,13 @@ public class IcebergFileStats {
                             (!nullCounts.containsKey(id) || nullCounts.get(id) != recordCount))
                     .collect(toSet());
             this.nullCounts = new HashMap<>(nullCounts);
-            this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : null;
+            this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : new HashMap<>();
+            this.columnSizeRecordCounts = new HashMap<>();
+            if (columnSizes != null) {
+                for (Integer fieldId : columnSizes.keySet()) {
+                    columnSizeRecordCounts.put(fieldId, recordCount);
+                }
+            }
             hasValidColumnMetrics = true;
         }
     }
@@ -159,6 +166,22 @@ public class IcebergFileStats {
 
     public void incrementRecordCount(long count) {
         this.recordCount += count;
+    }
+
+    public void incrementColumnSizeRecordCounts(Set<Integer> fieldIds, long recordCount) {
+        if (columnSizeRecordCounts == null) {
+            columnSizeRecordCounts = new HashMap<>();
+        }
+        for (Integer fieldId : fieldIds) {
+            columnSizeRecordCounts.merge(fieldId, recordCount, Long::sum);
+        }
+    }
+
+    public long getColumnSizeRecordCount(Integer fieldId) {
+        if (columnSizeRecordCounts == null) {
+            return 0;
+        }
+        return columnSizeRecordCounts.getOrDefault(fieldId, 0L);
     }
 
     public void incrementFileCount() {

@@ -24,8 +24,8 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -97,7 +97,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
             schemaResolver = new ClickhouseSchemaResolver(properties);
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
-            schemaResolver = new OracleSchemaResolver();
+            schemaResolver = new OracleSchemaResolver(properties);
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
             schemaResolver = new SqlServerSchemaResolver();
         } else {
@@ -292,8 +292,12 @@ public class JDBCMetadata implements ConnectorMetadata {
 
                         Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
                                 j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
-                        return schemaResolver.getTable(tableId, tblName, fullSchema,
+                        Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
+                        if (table != null) {
+                            table.setComment(schemaResolver.getTableComment(connection, dbName, tblName));
+                        }
+                        return table;
                     } catch (SQLException | DdlException e) {
                         LOG.warn("get table for JDBC catalog fail!", e);
                         return null;
@@ -302,7 +306,8 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {

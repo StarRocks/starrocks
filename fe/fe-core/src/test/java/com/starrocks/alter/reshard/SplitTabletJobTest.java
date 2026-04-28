@@ -26,15 +26,18 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.TabletRangePB;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
@@ -42,6 +45,8 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -57,6 +62,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class SplitTabletJobTest {
     protected static ConnectContext connectContext;
@@ -358,6 +364,41 @@ public class SplitTabletJobTest {
         tabletReshardJob.setJobState(TabletReshardJob.JobState.ABORTED);
         tabletReshardJob.replay();
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testRunRunningUsesBackgroundComputeResource() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ComputeResource expectedResource = WarehouseComputeResource.of(10086L);
+        AtomicReference<ComputeResource> actualResource = new AtomicReference<>();
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                Assertions.assertEquals(table.getId(), tableId);
+                return expectedResource;
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
+                                       long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                       Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                       Map<Long, Long> tabletRowNums, boolean useAggregatePublish) {
+                actualResource.set(computeResource);
+            }
+        };
+
+        try {
+            splitJob.run();
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
+            Assertions.assertSame(expectedResource, actualResource.get());
+        } finally {
+            splitJob.replayAbortedJob();
+            physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
+        }
     }
 
     private static Tuple createTuple(int value) {

@@ -337,7 +337,7 @@ public class CompactionScheduler extends Daemon {
 
             // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
             // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
-            txnId = beginTransaction(partitionIdentifier, info.computeResource);
+            txnId = beginTransaction(partitionIdentifier, partition, info.computeResource);
 
             partition.setMinRetainVersion(currentVersion);
 
@@ -442,11 +442,18 @@ public class CompactionScheduler extends Daemon {
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
 
+        // Track the candidate aggregator nodes (those that actually own tablets in the
+        // batch). We prefer one of them as aggregator so the BE side can resolve the
+        // first tablet id locally through the staros worker cache when deriving the
+        // combined_txn_log / bundle_tablet_metadata file path.
+        List<ComputeNode> candidateAggregatorNodes = Lists.newArrayList();
+
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
                 throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
             }
+            candidateAggregatorNodes.add(node);
             ComputeNodePB nodePB = new ComputeNodePB();
             nodePB.setHost(node.getHost());
             nodePB.setBrpcPort(node.getBrpcPort());
@@ -479,7 +486,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         // 2. pick aggregator node and build lake service
-        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource);
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }
@@ -509,8 +516,9 @@ public class CompactionScheduler extends Daemon {
         return beToTablets;
     }
 
-    // REQUIRE: has acquired the exclusive lock of Database.
-    protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource)
+    // REQUIRE: has acquired the read lock of Database.
+    protected long beginTransaction(PartitionIdentifier partition, PhysicalPartition physicalPartition,
+            ComputeResource computeResource)
             throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
@@ -521,8 +529,21 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
 
-        return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
+        long txnId = transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
                 loadJobSourceType, Config.lake_compaction_default_timeout_second, computeResource);
+
+        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // not the latest (which may change due to tablet split).
+        TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
+        if (txnState != null) {
+            List<Long> indexIds = physicalPartition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)
+                    .stream().map(MaterializedIndex::getId)
+                    .collect(Collectors.toList());
+            txnState.addPartitionLoadedIndexes(tableId, physicalPartition.getId(), indexIds);
+        }
+
+        return txnId;
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)

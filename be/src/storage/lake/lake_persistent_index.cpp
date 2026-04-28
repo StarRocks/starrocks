@@ -57,29 +57,85 @@ LakePersistentIndex::~LakePersistentIndex() {
     _sstable_filesets.clear();
 }
 
+StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
+        const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id, Cache* cache,
+        const TabletMetadataPtr& metadata) {
+    const int num_sstables = sstable_meta.sstables_size();
+    std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
+
+    std::mutex mutex;
+    Status shared_status;
+    auto open_one = [&](int idx) {
+        auto& pb = sstable_meta.sstables(idx);
+        auto res = PersistentIndexSstable::new_sstable(pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
+                                                       true /* need filter */, nullptr, metadata, tablet_mgr);
+        if (res.ok()) {
+            sstables[idx] = std::move(res.value());
+        } else {
+            std::lock_guard<std::mutex> lock(mutex);
+            shared_status.update(res.status());
+        }
+    };
+
+    std::unique_ptr<ThreadPoolToken> token;
+    if (config::enable_pk_index_parallel_execution) {
+        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+    }
+    for (int i = 0; i < num_sstables; i++) {
+        if (token) {
+            auto st = token->submit_func([&open_one, i]() { open_one(i); });
+            if (!st.ok()) {
+                open_one(i);
+            }
+        } else {
+            open_one(i);
+        }
+    }
+    if (token) {
+        token->wait();
+    }
+
+    RETURN_IF_ERROR(shared_status);
+    return std::move(sstables);
+}
+
 Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_init_us");
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
     const PersistentIndexSstableMetaPB& sstable_meta = metadata->sstable_meta();
+    const int num_sstables = sstable_meta.sstables_size();
+    TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", num_sstables);
+
+    int64_t sst_open_us = 0;
+    std::vector<PersistentIndexSstableUniquePtr> sstables;
+    {
+        int64_t t_open = GetCurrentTimeMicros();
+        ASSIGN_OR_RETURN(sstables, _open_sstables_parallel(sstable_meta, _tablet_mgr, _tablet_id, block_cache->cache(),
+                                                           metadata));
+        sst_open_us = GetCurrentTimeMicros() - t_open;
+    }
+
+    // Group SSTables into filesets (sequential, preserves order).
+    int64_t total_sst_filesize = 0;
     uint64_t max_rss_rowid = 0;
     std::vector<std::unique_ptr<PersistentIndexSstable>> cur_fileset;
-    for (auto& sstable_pb : sstable_meta.sstables()) {
-        ASSIGN_OR_RETURN(auto sstable,
-                         PersistentIndexSstable::new_sstable(
-                                 sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
-                                 block_cache->cache(), true /* need filter */, nullptr, metadata, _tablet_mgr));
+    for (int i = 0; i < num_sstables; i++) {
+        auto& sstable_pb = sstable_meta.sstables(i);
+        total_sst_filesize += sstable_pb.filesize();
         if (cur_fileset.empty() ||
             (cur_fileset.back()->sstable_pb().has_fileset_id() &&
              UniqueId(cur_fileset.back()->sstable_pb().fileset_id()) == UniqueId(sstable_pb.fileset_id()))) {
-            cur_fileset.emplace_back(std::move(sstable));
+            cur_fileset.emplace_back(std::move(sstables[i]));
         } else {
             auto fileset = std::make_unique<PersistentIndexSstableFileset>();
             RETURN_IF_ERROR(fileset->init(cur_fileset));
             _sstable_filesets.emplace_back(std::move(fileset));
             cur_fileset.clear();
-            cur_fileset.emplace_back(std::move(sstable));
+            cur_fileset.emplace_back(std::move(sstables[i]));
         }
         max_rss_rowid = std::max(max_rss_rowid, sstable_pb.max_rss_rowid());
     }
@@ -90,6 +146,9 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
         _sstable_filesets.emplace_back(std::move(fileset));
         cur_fileset.clear();
     }
+    TRACE_COUNTER_INCREMENT("pindex_init_sst_open_us", sst_open_us);
+    TRACE_COUNTER_INCREMENT("pindex_init_sst_total_bytes", total_sst_filesize);
+    TRACE_COUNTER_INCREMENT("pindex_init_fileset_cnt", _sstable_filesets.size());
     // create memtable with previous rebuild `max_rss_rowid`,
     // to make sure we can generate sst order by `max_rss_rowid`.
     _memtable = std::make_unique<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, max_rss_rowid);
@@ -126,6 +185,10 @@ bool LakePersistentIndex::too_many_rebuild_rows() const {
 }
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
+    // Track SST flush stats for publish phase monitoring
+    _publish_sst_flush_count++;
+    _publish_sst_flush_bytes += sstable->sstable_pb().filesize();
+
     bool need_create_new_fileset = false;
     if (_sstable_filesets.empty()) {
         // first fileset
@@ -154,6 +217,14 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
         return Status::InternalError("Block cache is null.");
     }
     RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+    // Skip if this SST already exists in _sstable_filesets (loaded by init from metadata
+    // with correct shared and fileset_id). This avoids duplicate ingest during tablet split
+    // where the SST was already loaded from the shared metadata.
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset->contains_sst(sst_meta.name())) {
+            return Status::OK();
+        }
+    }
     TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_latency_us");
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
@@ -168,6 +239,10 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     sstable_pb.set_shared_rssid(rssid);
     sstable_pb.set_shared_version(version);
     sstable_pb.set_encryption_meta(sst_meta.encryption_meta());
+    // Preserve the shared flag from sst_meta. During tablet split cross-publish,
+    // newly-ingested SSTs may be shared with sibling split tablets; losing this flag
+    // would allow vacuum to delete a file that is still referenced elsewhere.
+    sstable_pb.set_shared(sst_meta.shared());
     // sstable generated by compaction need delvec to resolve conflict.
     if (delvec_page.size() > 0) {
         sstable_pb.mutable_delvec()->CopyFrom(delvec_page);
@@ -733,19 +808,24 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         RETURN_IF_ERROR(new_sstable_fileset->init(new_sstables));
     }
 
-    std::unordered_set<std::string> standalone_sstable_filename;
+    // Collect all input sstable filenames unconditionally, so that standalone filesets
+    // (which match by filename) can always be found — even when the input sstable has a
+    // fileset_id. This handles the case where an sstable was written with fileset_id but
+    // the in-memory fileset is classified as standalone (no range field), which would
+    // previously cause "no matching sstable fileset found" errors.
+    std::unordered_set<std::string> input_sstable_filenames;
     std::unordered_set<UniqueId> fileset_ids;
     for (const auto& input_sstable : op_compaction.input_sstables()) {
+        input_sstable_filenames.insert(input_sstable.filename());
         if (input_sstable.has_fileset_id()) {
             fileset_ids.insert(input_sstable.fileset_id());
-        } else {
-            standalone_sstable_filename.insert(input_sstable.filename());
         }
     }
     // Whether contains this fileset.
+    // Standalone filesets (no range) are matched by filename; non-standalone by fileset_id.
     auto fileset_contains_func = [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
         if (fileset->is_standalone_sstable()) {
-            return standalone_sstable_filename.contains(fileset->standalone_sstable_filename());
+            return input_sstable_filenames.contains(fileset->standalone_sstable_filename());
         }
         return fileset_ids.contains(fileset->fileset_id());
     };
@@ -957,6 +1037,7 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -1001,7 +1082,34 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             continue;
         }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        // Build per-segment rowid ranges to skip rows already covered by SSTables.
+        // For the segment containing rebuild_rss_rowid_point, only rows after that point need rebuild.
+        std::vector<SparseRangePtr> rowid_ranges(rowset->num_segments());
+        if (rebuild_rss_rowid_point > 0) {
+            for (int32_t si = 0; si < rowset->num_segments(); si++) {
+                uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), si);
+                if (rssid == rebuild_rss_id) {
+                    uint32_t low_rowid = rebuild_rss_rowid_point & 0xFFFFFFFF;
+                    if (low_rowid < std::numeric_limits<uint32_t>::max()) {
+                        uint32_t start_rowid = low_rowid + 1;
+                        auto range = std::make_shared<SparseRange<>>();
+                        range->add(Range<>(start_rowid, std::numeric_limits<rowid_t>::max()));
+                        rowid_ranges[si] = std::move(range);
+                    } else {
+                        // low_rowid == UINT32_MAX means the entire segment is covered by SSTables,
+                        // set an empty range so the segment iterator skips all rows.
+                        rowid_ranges[si] = std::make_shared<SparseRange<>>();
+                    }
+                    break;
+                }
+            }
+        }
+        StatusOr<std::vector<ChunkIteratorPtr>> res;
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
+            res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats,
+                                                                &rowid_ranges);
+        }
         if (!res.ok()) {
             return res.status();
         }
@@ -1085,6 +1193,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
+    TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);
+    TRACE_COUNTER_INCREMENT("segment_io_count_remote", stats.io_count_remote);
     return Status::OK();
 }
 

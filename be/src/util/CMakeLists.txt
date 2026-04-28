@@ -52,6 +52,7 @@ set(UTIL_FILES
   mem_info.cpp
   metrics.cpp
   metrics/file_scan_metrics.cpp
+  metrics/catalog_scan_metrics.cpp
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp
