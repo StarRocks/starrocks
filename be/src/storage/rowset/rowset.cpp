@@ -483,6 +483,18 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
                             _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
+                    // .vi may be absent when the writer skipped the build below
+                    // threshold; the segment footer is then set to NONE and
+                    // the read path skips this index without ever opening it.
+                    // Tolerate ENOENT only — fail on real IO errors so we
+                    // don't silently produce a cloned rowset that's missing a
+                    // file the segment metadata still expects.
+                    auto st = FileSystem::Default()->path_exists(src_index_file_path);
+                    if (st.is_not_found()) {
+                        VLOG(2) << "skip linking non-existent vector index file " << src_index_file_path;
+                        continue;
+                    }
+                    if (!st.ok()) return st;
                     if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
                         PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
                         return Status::RuntimeError("Fail to link index data file");

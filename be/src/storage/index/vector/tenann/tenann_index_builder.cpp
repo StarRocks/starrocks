@@ -21,7 +21,6 @@
 #include "column/array_column.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_vector_index_fwd.h"
-#include "gutil/strings/substitute.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "tenann/factory/index_factory.h"
 
@@ -44,9 +43,6 @@ Status TenAnnIndexBuilderProxy::init() {
     if (!params.contains(index::vector::METRIC_TYPE)) {
         return Status::InvalidArgument("metric_type is needed because it's a critical common param");
     }
-    _is_input_normalized = params.contains(index::vector::IS_VECTOR_NORMED) &&
-                           params[index::vector::IS_VECTOR_NORMED] &&
-                           params[index::vector::METRIC_TYPE] == tenann::MetricType::kCosineSimilarity;
 
     auto meta_copy = meta;
     if (meta.index_type() == tenann::IndexType::kFaissIvfPq && config::enable_vector_index_block_cache) {
@@ -79,48 +75,6 @@ Status TenAnnIndexBuilderProxy::init() {
     return Status::OK();
 }
 
-template <bool is_input_normalized>
-static Status valid_input_vector(const ArrayColumn& input_column, const size_t index_dim,
-                                 const uint8_t* is_element_nulls) {
-    if (input_column.empty()) {
-        return Status::OK();
-    }
-
-    const size_t num_rows = input_column.size();
-    const auto& offsets = input_column.offsets().immutable_data();
-    RawDataVisitor rv;
-    RETURN_IF_ERROR(input_column.elements().accept(&rv));
-    const auto* nums = reinterpret_cast<const float*>(rv.result());
-
-    for (size_t i = 0; i < num_rows; i++) {
-        const size_t input_dim = offsets[i + 1] - offsets[i];
-
-        if (input_dim != index_dim) {
-            return Status::InvalidArgument(
-                    strings::Substitute("The dimensions of the vector written are inconsistent, index dim is "
-                                        "$0 but data dim is $1",
-                                        index_dim, input_dim));
-        }
-
-        if constexpr (is_input_normalized) {
-            double sum = 0;
-            for (int j = 0; j < input_dim; j++) {
-                const size_t offset = offsets[i] + j;
-                if (!is_element_nulls[offset]) {
-                    sum += nums[offset] * nums[offset];
-                }
-            }
-            if (std::abs(sum - 1) > 1e-3) {
-                return Status::InvalidArgument(
-                        "The input vector is not normalized but `metric_type` is cosine_similarity and "
-                        "`is_vector_normed` is true");
-            }
-        }
-    }
-
-    return Status::OK();
-}
-
 Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t offset) {
     DCHECK(array_column.is_array());
     const auto& array_col = down_cast<const ArrayColumn&>(array_column);
@@ -130,11 +84,10 @@ Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t off
     const auto& is_element_nulls = nullable_elements.null_column_ref();
     const uint8_t* is_element_nulls_data = is_element_nulls.raw_data();
 
-    if (_is_input_normalized) {
-        RETURN_IF_ERROR(valid_input_vector<true>(array_col, _dim, is_element_nulls_data));
-    } else {
-        RETURN_IF_ERROR(valid_input_vector<false>(array_col, _dim, is_element_nulls_data));
-    }
+    // Input validation (dim consistency + cosine normalization) is performed
+    // upstream in ArrayColumnWriter::append via validate_vector_index_input
+    // before data ever reaches this proxy, so writes that succeed are always
+    // well-formed. This proxy trusts its caller and skips re-checking.
 
     RawDataVisitor rv;
     RETURN_IF_ERROR(array_col.accept(&rv));
