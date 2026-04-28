@@ -421,6 +421,30 @@
       "allowed_test_targets": ["exec_sorting_core_test"],
       "allowed_test_link_deps": ["ExecSortingCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecSortingCore limited to reusable sorting algorithms; leave merge-path pipeline observer integration, chunk sorters, spill-aware sorting, and exec-node adapters in higher modules."
+    },
+    {
+      "id": "execjoincore",
+      "doc_label": "ExecJoinCore",
+      "summary": "Reusable exec join hash table algorithms without join nodes, pipeline, storage, service, or util coupling.",
+      "owned_targets": ["ExecJoinCore"],
+      "owned_globs": [
+        "be/src/exec/join/**"
+      ],
+      "allowed_include_prefixes": ["exec/join/", "exec/sorting/sort_helper.h", "exprs/", "serde/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/", "exec/pipeline/", "exec/spill/", "exec/workgroup/", "runtime/batch_write/", "runtime/routine_load/", "runtime/stream_load/", "storage/", "service/", "http/", "cache/", "connector/", "util/"],
+      "forbidden_includes": [
+        "exec/cross_join_node.h",
+        "exec/data_sink.h",
+        "exec/exec_node.h",
+        "exec/hash_join_components.h",
+        "exec/hash_join_node.h",
+        "exec/hash_joiner.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["exec_join_core_test"],
+      "allowed_test_link_deps": ["ExecJoinCore", "ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
     }
   ]
 }

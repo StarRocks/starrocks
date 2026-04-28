@@ -135,6 +135,44 @@ target_link_libraries(ExecSortingCore PUBLIC
     StarRocksGen
 )
 
+set(EXEC_JOIN_CORE_FILES
+    join/join_hash_table_descriptor.cpp
+    join/join_key_constructor.cpp
+    join/join_hash_table.cpp
+    join/join_hash_map_mapping_inst.cpp
+    join/join_hash_map_linear_chained_inst.cpp
+    join/join_hash_map_linear_chained_set_inst.cpp
+    join/join_hash_map_bucket_chained_inst.cpp
+    join/join_hash_map_asof_inst.cpp
+)
+
+ADD_BE_LIB(ExecJoinCore
+    ${EXEC_JOIN_CORE_FILES}
+)
+
+target_link_libraries(ExecJoinCore PUBLIC
+    ExecSortingCore
+    ExprCore
+    Serde
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
+if (WITH_PCH)
+    target_precompile_headers(ExecJoinCore
+        PRIVATE
+        join/join_hash_map.h
+        join/join_hash_map.hpp
+        join/join_hash_map_method.hpp
+    )
+endif()
+
 # Staged pipeline compatibility groups. These source lists are not final clean
 # module boundaries yet; keep them named by intended ownership so later
 # cycle-cut leaves can promote them into real targets incrementally.
@@ -361,9 +399,6 @@ set(EXEC_NON_PIPELINE_FILES
     hash_joiner.cpp
     hash_join_node.cpp
     hash_join_components.cpp
-    join/join_hash_table_descriptor.cpp
-    join/join_key_constructor.cpp
-    join/join_hash_table.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp
@@ -494,30 +529,12 @@ add_library(pipeline_extensions_exec_objs OBJECT
     ${PIPELINE_EXTENSIONS_SRCS}
 )
 
-add_library(join_hash_map_inst_objs OBJECT
-    join/join_hash_map_mapping_inst.cpp
-    join/join_hash_map_linear_chained_inst.cpp
-    join/join_hash_map_linear_chained_set_inst.cpp
-    join/join_hash_map_bucket_chained_inst.cpp
-    join/join_hash_map_asof_inst.cpp
-)
-
 IF(ENABLE_MULTI_DYNAMIC_LIBS)
     set_property(TARGET pipeline_primitives_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_runtime_compat_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_operators_batch_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_extensions_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
-    set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
 ENDIF()
-
-if (WITH_PCH)
-    target_precompile_headers(join_hash_map_inst_objs
-        PRIVATE
-        join/join_hash_map.h
-        join/join_hash_map.hpp
-        join/join_hash_map_method.hpp
-    )
-endif()
 
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
@@ -525,7 +542,6 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
-    $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore)
+target_link_libraries(Exec PUBLIC ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)
