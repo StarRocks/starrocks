@@ -191,6 +191,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
         request.mutable_lake_tablet_params()->set_enable_data_file_bundling(_parent->_enable_data_file_bundling);
         request.mutable_lake_tablet_params()->set_is_multi_statements_txn(_parent->_is_multi_statements_txn);
+        // Transaction-level switch, controlled by FE. When true, the target CN
+        // elects one coordinator per partition for combined_txn_log collection
+        // (claim set derived from per-tablet partition_id in this request). When
+        // false/unset, the legacy "sender_id == 0 collects all" rule is used.
+        request.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(
+                _parent->_enable_lake_per_partition_coordinator_txn_log);
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);

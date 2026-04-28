@@ -191,6 +191,7 @@ private:
     bool _write_txn_log = false;
     bool _enable_data_file_bundling = false;
     bool _is_multi_statements_txn = false;
+    bool _enable_lake_per_partition_coordinator_txn_log = false;
 
     TKeysType::type _keys_type;
 
