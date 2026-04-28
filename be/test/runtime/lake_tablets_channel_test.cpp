@@ -26,7 +26,6 @@
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/async_delta_writer.h"
@@ -46,6 +45,7 @@
 #include "util/bthreads/util.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
+#include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
