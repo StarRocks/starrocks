@@ -1460,7 +1460,8 @@ Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t v
             VLOG(3) << "fail to get file system for tablet " << tablet_id << ", error: " << fs_or.status();
         }
     };
-    while (version > 0) {
+    // Skip version 1 which is the initial empty metadata (no rowsets, no delvecs to drop).
+    while (version > 1) {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* No need to fill meta cache */,
                                                    false /* No need to fill data cache */);
         if (res.status().is_not_found()) {
