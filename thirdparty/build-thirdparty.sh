@@ -148,13 +148,9 @@ fi
 
 eval set -- "${OPTS}"
 
-KERNEL="$(uname -s)"
-
-if [[ "${KERNEL}" == 'Darwin' ]]; then
-    PARALLEL="$(($(sysctl -n hw.logicalcpu) / 4 + 1))"
-else
-    PARALLEL="$(($(nproc) / 4 + 1))"
-fi
+# PARALLEL precedence: -j arg (set later in the case loop) > env var > auto-detect.
+# vars.sh (sourced above) already resolves env var > auto-detect via
+# `PARALLEL=${PARALLEL:-$default_parallel}`, so do not overwrite it here.
 
 HELP=0
 CLEAN=0
