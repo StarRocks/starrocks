@@ -157,6 +157,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public static void dropTabletAndDeleteShard(ComputeResource computeResource,
                                                 List<Long> shardIds, StarOSAgent starOSAgent,
                                                 boolean isFileBundling) {
+        if (shardIds.isEmpty()) {
+            return;
+        }
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
 
@@ -601,7 +604,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         continue;
                     }
                     // collect shard in starmgr but not in fe
-                    redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
+                    if (!starmgrShardIdsSet.isEmpty()) {
+                        redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
+                    }
                 }
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
