@@ -656,8 +656,7 @@ TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_no_constraints) {
     }
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto policy,
-                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
     // No exclusions, no byte limit -> same set as pick_rowsets()
     ASSIGN_OR_ABORT(auto picked, policy->pick_rowsets());
     ASSIGN_OR_ABORT(auto with_limit, policy->pick_rowsets_with_limit({}, /*max_input_bytes=*/0));
@@ -677,8 +676,7 @@ TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_excludes_rowsets) 
     }
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto policy,
-                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
     ASSIGN_OR_ABORT(auto picked, policy->pick_rowsets());
     ASSERT_FALSE(picked.empty());
     // Exclude the first rowset that pick_rowsets() picked.
@@ -703,8 +701,7 @@ TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_caps_total_bytes) 
     }
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto policy,
-                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
     // Cap at 250 bytes -> at most 3 rowsets of 100 bytes (100, 200, 300 -> stop before 400).
     ASSIGN_OR_ABORT(auto with_limit, policy->pick_rowsets_with_limit({}, /*max_input_bytes=*/250));
     int64_t total = 0;
@@ -727,8 +724,7 @@ TEST_F(LakeCompactionPolicyTest, test_pick_rowsets_with_limit_first_rowset_alway
     }
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto policy,
-                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
     // Cap is below the size of any single rowset; default impl includes the first
     // rowset anyway so progress is possible.
     ASSIGN_OR_ABORT(auto with_limit, policy->pick_rowsets_with_limit({}, /*max_input_bytes=*/100));
