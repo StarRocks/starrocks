@@ -745,16 +745,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             const bool i_collect = per_partition_mode ? !my_partitions.empty() : (sender_id == 0);
 
             if (!st.ok()) {
-                // Deduplicate timeout reporting so FE sees a single error:
-                //   - legacy mode: only sender 0 collects, so i_collect alone
-                //     is already singular.
-                //   - per_partition mode: any coordinator (i.e. every sender
-                //     with at least one owned partition) would otherwise have
-                //     i_collect=true and pollute the response with duplicate
-                //     TimedOut entries; pick the minimum coordinator sender_id
-                //     to match the orphan-reporter dedup below.
-                const bool report_timeout = per_partition_mode ? (sender_id == min_coord_sender_id) : i_collect;
-                if (report_timeout) {
+                // Coordinators (or sender 0 in legacy) report the timeout. In
+                // per-partition mode multiple coordinators may call this in
+                // parallel, but `WriteContext::update_status` is first-wins
+                // (it no-ops once the response status is already non-OK), so
+                // the response carries a single error.
+                if (i_collect) {
                     context->update_status(st);
                 }
             } else if (i_collect) {
