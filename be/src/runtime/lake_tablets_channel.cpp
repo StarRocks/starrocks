@@ -1064,12 +1064,17 @@ void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenReque
         unique_pids.insert(t.partition_id());
     }
 
+    // Both the flag store and the map populate are done under the mutex so
+    // that the close-path's snapshot (which reads `_enable_per_partition_coordinator`
+    // and iterates `_partition_coordinator` while holding the same mutex) sees
+    // a consistent flag/map pair. The pre-wait coarse gate reads the atomic
+    // without the lock (safe because the flag is monotonic true→false: a stale
+    // `true` only causes an unneeded wait that bails out post-wait).
+    std::lock_guard l(_partition_coordinator_mtx);
     if (!flag_enabled) {
-        // Sticky off: AND-down to legacy mode for the rest of the channel.
         _enable_per_partition_coordinator.store(false, std::memory_order_release);
         return;
     }
-    std::lock_guard l(_partition_coordinator_mtx);
     if (!_enable_per_partition_coordinator.load(std::memory_order_acquire)) {
         // Already in legacy mode (some earlier open AND'd it down). Coord
         // map unused; nothing to record.
