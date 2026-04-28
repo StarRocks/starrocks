@@ -64,8 +64,6 @@ using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
 namespace {
 
-constexpr size_t kMinAdaptiveSegmentCount = 2;
-
 struct AdaptiveSplitStats {
     size_t segment_prepare_tasks = 0;
     size_t prepared_segments = 0;
@@ -83,13 +81,12 @@ enum class LakeSplitPlanMode {
 
 enum class AdaptiveSegmentPrepareDecision {
     USE = 0,
-    SKIP_SEGMENT_COUNT = 1,
-    SKIP_NO_PRUNABLE_INPUT = 2,
+    SKIP_NO_SEGMENT = 1,
 };
 
 struct LakeSplitPlan {
     LakeSplitPlanMode mode = LakeSplitPlanMode::DIRECT_BASELINE;
-    AdaptiveSegmentPrepareDecision decision = AdaptiveSegmentPrepareDecision::SKIP_NO_PRUNABLE_INPUT;
+    AdaptiveSegmentPrepareDecision decision = AdaptiveSegmentPrepareDecision::SKIP_NO_SEGMENT;
     size_t segment_count = 0;
 
     bool use_prepared_physical_split() const { return mode == LakeSplitPlanMode::PREPARED_PHYSICAL_SPLIT; }
@@ -113,41 +110,19 @@ size_t count_adaptive_split_segments(const std::vector<std::shared_ptr<Rowset>>&
     return segment_count;
 }
 
-AdaptiveSegmentPrepareDecision get_adaptive_segment_prepare_decision(size_t segment_count,
-                                                                     const TabletReaderParams& read_params,
-                                                                     const RowsetReadOptions& rs_opts) {
-    const int64_t divisor = std::max<int64_t>(1, config::lake_adaptive_segment_prepare_scan_dop_divisor);
-    const size_t dop_based_threshold =
-            std::max<size_t>(kMinAdaptiveSegmentCount, static_cast<size_t>(read_params.scan_dop) / divisor);
-    size_t threshold = dop_based_threshold;
-    if (config::lake_adaptive_segment_prepare_max_threshold > 0) {
-        threshold = std::min<size_t>(threshold, config::lake_adaptive_segment_prepare_max_threshold);
-    }
-    if (segment_count < threshold) {
-        return AdaptiveSegmentPrepareDecision::SKIP_SEGMENT_COUNT;
-    }
-    if (!config::enable_lake_adaptive_segment_prepare_ignore_prunable_inputs) {
-        if (!rs_opts.ranges.empty()) {
-            return AdaptiveSegmentPrepareDecision::USE;
-        }
-        return !rs_opts.pred_tree_for_zone_map.empty() ? AdaptiveSegmentPrepareDecision::USE
-                                                       : AdaptiveSegmentPrepareDecision::SKIP_NO_PRUNABLE_INPUT;
-    }
-    return AdaptiveSegmentPrepareDecision::USE;
-}
-
-LakeSplitPlan make_lake_split_plan(bool could_split_physically, const std::vector<std::shared_ptr<Rowset>>& rowsets,
-                                   const TabletReaderParams& read_params, const RowsetReadOptions& rs_opts) {
+LakeSplitPlan make_lake_split_plan(bool could_split_physically, const std::vector<std::shared_ptr<Rowset>>& rowsets) {
     LakeSplitPlan plan;
     if (!could_split_physically || !config::enable_lake_index_pruned_physical_split) {
         return plan;
     }
 
     plan.segment_count = count_adaptive_split_segments(rowsets);
-    plan.decision = get_adaptive_segment_prepare_decision(plan.segment_count, read_params, rs_opts);
-    if (plan.decision == AdaptiveSegmentPrepareDecision::USE) {
-        plan.mode = LakeSplitPlanMode::PREPARED_PHYSICAL_SPLIT;
+    if (plan.segment_count == 0) {
+        plan.decision = AdaptiveSegmentPrepareDecision::SKIP_NO_SEGMENT;
+        return plan;
     }
+    plan.decision = AdaptiveSegmentPrepareDecision::USE;
+    plan.mode = LakeSplitPlanMode::PREPARED_PHYSICAL_SPLIT;
     return plan;
 }
 
@@ -155,10 +130,8 @@ const char* adaptive_segment_prepare_decision_name(AdaptiveSegmentPrepareDecisio
     switch (decision) {
     case AdaptiveSegmentPrepareDecision::USE:
         return "use";
-    case AdaptiveSegmentPrepareDecision::SKIP_SEGMENT_COUNT:
-        return "skip_segment_count";
-    case AdaptiveSegmentPrepareDecision::SKIP_NO_PRUNABLE_INPUT:
-        return "skip_no_prunable_input";
+    case AdaptiveSegmentPrepareDecision::SKIP_NO_SEGMENT:
+        return "skip_no_segment";
     }
     return "unknown";
 }
@@ -178,19 +151,8 @@ void record_adaptive_segment_prepare_profile(RuntimeProfile* profile, AdaptiveSe
     case AdaptiveSegmentPrepareDecision::USE:
         COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareUsed", TUnit::UNIT), 1);
         break;
-    case AdaptiveSegmentPrepareDecision::SKIP_SEGMENT_COUNT:
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkipSegmentCount", TUnit::UNIT), 1);
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkippedSegments", TUnit::UNIT),
-                       static_cast<int64_t>(segment_count));
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkippedSegmentsBySegmentCount", TUnit::UNIT),
-                       static_cast<int64_t>(segment_count));
-        break;
-    case AdaptiveSegmentPrepareDecision::SKIP_NO_PRUNABLE_INPUT:
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkipNoPrunableInput", TUnit::UNIT), 1);
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkippedSegments", TUnit::UNIT),
-                       static_cast<int64_t>(segment_count));
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkippedSegmentsByNoPrunableInput", TUnit::UNIT),
-                       static_cast<int64_t>(segment_count));
+    case AdaptiveSegmentPrepareDecision::SKIP_NO_SEGMENT:
+        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkipNoSegment", TUnit::UNIT), 1);
         break;
     }
 
@@ -470,9 +432,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 
         if (_could_split_physically) {
             if (config::enable_lake_index_pruned_physical_split) {
-                RowsetReadOptions rs_opts;
-                RETURN_IF_ERROR(init_rowset_read_options(read_params, &rs_opts));
-                auto split_plan = make_lake_split_plan(_could_split_physically, _rowsets, read_params, rs_opts);
+                auto split_plan = make_lake_split_plan(_could_split_physically, _rowsets);
                 if (split_plan.use_prepared_physical_split()) {
                     auto st = _build_prepared_physical_split_tasks(read_params, split_plan.segment_count);
                     if (st.ok()) {
@@ -561,10 +521,6 @@ Status TabletReader::_build_prepared_physical_split_tasks(const TabletReaderPara
                                                                           : std::make_shared<PreparedReadState>();
     RETURN_IF_ERROR(build_prepared_read_state(read_params, prepared_state.get()));
 
-    RowsetReadOptions rs_opts;
-    RETURN_IF_ERROR(init_rowset_read_options(read_params, &rs_opts));
-    rs_opts.lake_io_opts = lake_io_opts;
-
     _split_tasks.clear();
     AdaptiveSplitStats stats;
     for (size_t rowset_idx = 0; rowset_idx < prepared_state->rowsets.size(); ++rowset_idx) {
@@ -584,8 +540,7 @@ Status TabletReader::_build_prepared_physical_split_tasks(const TabletReaderPara
     LOG(INFO) << "Lake adaptive physical split scheduled segment-prepare tasks"
               << ", query_id: " << print_id(read_params.runtime_state->query_id())
               << ", tablet_id: " << _tablet_metadata->id() << ", segment_count: " << segment_count
-              << ", split_tasks: " << stats.segment_prepare_tasks << ", ranges: " << rs_opts.ranges.size()
-              << ", zonemap_predicates: " << rs_opts.pred_tree_for_zone_map.size();
+              << ", split_tasks: " << stats.segment_prepare_tasks;
     record_adaptive_segment_prepare_profile(read_params.profile, AdaptiveSegmentPrepareDecision::USE, segment_count,
                                             stats.segment_prepare_tasks);
     return Status::OK();

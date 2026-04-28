@@ -73,6 +73,21 @@ bool contains_runtime_filter(const UnarrivedRuntimeFilterList& filters, int32_t 
     return false;
 }
 
+void disable_split_context_prepared_state(const pipeline::ScanSplitContext* split_context) {
+    const auto* lake_split_context = dynamic_cast<const pipeline::LakeSplitContext*>(split_context);
+    if (lake_split_context == nullptr || lake_split_context->prepared_read_state == nullptr) {
+        return;
+    }
+    lake_split_context->prepared_read_state->disable_segment_prepared_state.store(true, std::memory_order_release);
+}
+
+bool can_use_split_context_prepared_state(const pipeline::LakeSplitContext* split_context) {
+    if (split_context == nullptr || split_context->prepared_read_state == nullptr) {
+        return false;
+    }
+    return !split_context->prepared_read_state->disable_segment_prepared_state.load(std::memory_order_acquire);
+}
+
 } // namespace
 
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
@@ -95,6 +110,7 @@ Status LakeDataSource::open(RuntimeState* state) {
         auto late_rf_reinit = detect_late_runtime_filter_reinit();
         if (late_rf_reinit.triggered) {
             if (late_rf_reinit.action == LateRuntimeFilterReinitDecision::Action::FULL_REINIT) {
+                disable_split_context_prepared_state(_split_context);
                 record_late_runtime_filter_reinit(late_rf_reinit);
                 return reinit_reader_for_current_morsel_with_runtime_filters();
             }
@@ -842,6 +858,7 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     _params.prepared_target_segment_index = -1;
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
     const bool can_reuse_prepared_state = !_ignore_split_context_prepared_state_once && split_context != nullptr &&
+                                          can_use_split_context_prepared_state(split_context) &&
                                           enable_local_child_prepared_state_reuse();
     if (can_reuse_prepared_state && split_context->prepared_read_state != nullptr) {
         _prepared_read_state = split_context->prepared_read_state;
@@ -922,8 +939,9 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
     refresh_glm_context();
 
     const auto* split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
-    const bool can_reuse_prepared_state =
-            !_ignore_split_context_prepared_state_once && enable_local_child_prepared_state_reuse();
+    const bool can_reuse_prepared_state = !_ignore_split_context_prepared_state_once &&
+                                          can_use_split_context_prepared_state(split_context) &&
+                                          enable_local_child_prepared_state_reuse();
     if (can_reuse_prepared_state && split_context->prepared_read_state != nullptr) {
         _prepared_read_state = split_context->prepared_read_state;
     } else {

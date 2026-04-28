@@ -346,33 +346,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Lake shared-data scan 策略的临时 A/B 配置，用于控制 provider 侧的粗粒度门槛，即“当前 tablet 已经足够多，因此不再启用 tablet-internal parallel”。只有当 `num_total_scan_ranges >= pipeline_dop * lake_tablet_internal_parallel_enough_tablet_dop_multiplier` 时，StarRocks 才会跳过 tablet-internal parallel。将其设置为 `1` 可恢复到之前的行为。
 - 引入版本：v4.1
 
-### lake_adaptive_segment_prepare_scan_dop_divisor
-
-- 默认值：8
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：Lake adaptive prepared-split 策略的临时 A/B 配置。基础 segment 数门槛先按 `max(2, scan_dop / lake_adaptive_segment_prepare_scan_dop_divisor)` 计算，再由 `lake_adaptive_segment_prepare_max_threshold` 进行封顶。该值越小，prepared path 越保守。将其设置为 `4` 可恢复到之前的行为。
-- 引入版本：v4.1
-
-### lake_adaptive_segment_prepare_max_threshold
-
-- 默认值：4
-- 类型：Int
-- 单位：Segments
-- 是否动态：是
-- 描述：Lake adaptive prepared-split segment 门槛的临时 A/B 封顶值。大于 `0` 时，会在基于 `scan_dop` 的门槛计算后再做一次上限裁剪；小于等于 `0` 时表示不封顶。将其设置为 `0` 可恢复到之前的不封顶行为。
-- 引入版本：v4.1
-
-### enable_lake_adaptive_segment_prepare_ignore_prunable_inputs
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：Lake adaptive prepared-split 策略的临时 A/B 开关。开启后，只要 segment 数达到门槛，即使当前没有 seek range 或 zone-map pruning predicate，StarRocks 也允许进入 prepared physical split 路径；关闭后，会恢复之前的行为，即必须存在 key range 或 `pred_tree_for_zone_map` 等可裁剪输入才会进入该路径。
-- 引入版本：v4.1
-
 ### max_hdfs_file_handle
 
 - 默认值：1000

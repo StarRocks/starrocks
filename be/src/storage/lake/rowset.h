@@ -65,6 +65,7 @@ struct PreparedSegmentReadState {
 using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
 
 struct PreparedTabletReadState {
+    std::atomic<bool> disable_segment_prepared_state{false};
     std::vector<RowsetPtr> rowsets;
     std::vector<std::vector<std::shared_ptr<Segment>>> rowset_segments;
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;

@@ -1097,20 +1097,6 @@ CONF_mBool(enable_lake_scan_child_morsel_reinit_on_late_runtime_filter, "false")
 // split. Set to 1 to restore the previous `num_total_scan_ranges >= pipeline_dop` behavior.
 CONF_mInt64(lake_tablet_internal_parallel_enough_tablet_dop_multiplier, "2");
 
-// Temporary A/B switch for the adaptive Lake prepared-split segment threshold. The threshold is
-// `max(2, scan_dop / divisor)` before applying `lake_adaptive_segment_prepare_max_threshold`.
-// Set to 4 to restore the previous `scan_dop / 4` behavior.
-CONF_mInt64(lake_adaptive_segment_prepare_scan_dop_divisor, "8");
-
-// Temporary A/B cap for the adaptive Lake prepared-split segment threshold. Values <= 0 disable the cap. Set to 0 to
-// restore the previous uncapped behavior.
-CONF_mInt64(lake_adaptive_segment_prepare_max_threshold, "4");
-
-// Temporary A/B switch for whether the adaptive Lake prepared-split decision may ignore missing key-range / zonemap
-// pruning inputs and still enter the prepared path when the segment-count threshold is met. Set to false to restore
-// the previous behavior that required prunable inputs.
-CONF_mBool(enable_lake_adaptive_segment_prepare_ignore_prunable_inputs, "true");
-
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 

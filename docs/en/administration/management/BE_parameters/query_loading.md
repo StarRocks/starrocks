@@ -358,33 +358,6 @@ This topic introduces the following types of FE configurations:
 - Description: Temporary A/B config for Lake shared-data scan strategy. It controls the coarse provider-side gate that decides when "there are already enough tablets, so do not use tablet-internal parallel". StarRocks skips tablet-internal parallel only when `num_total_scan_ranges >= pipeline_dop * lake_tablet_internal_parallel_enough_tablet_dop_multiplier`. Set this item to `1` to restore the previous behavior.
 - Introduced in: v4.1
 
-### lake_adaptive_segment_prepare_scan_dop_divisor
-
-- Default: 8
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: Temporary A/B config for Lake adaptive prepared-split strategy. The base segment-count threshold is computed as `max(2, scan_dop / lake_adaptive_segment_prepare_scan_dop_divisor)` before applying `lake_adaptive_segment_prepare_max_threshold`. Smaller values make the prepared path more conservative. Set this item to `4` to restore the previous behavior.
-- Introduced in: v4.1
-
-### lake_adaptive_segment_prepare_max_threshold
-
-- Default: 4
-- Type: Int
-- Unit: Segments
-- Is mutable: Yes
-- Description: Temporary A/B cap for the adaptive Lake prepared-split segment threshold. Values greater than `0` cap the threshold after the `scan_dop`-based calculation; values less than or equal to `0` disable the cap. Set this item to `0` to restore the previous uncapped behavior.
-- Introduced in: v4.1
-
-### enable_lake_adaptive_segment_prepare_ignore_prunable_inputs
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Temporary A/B switch for the adaptive Lake prepared-split strategy. When enabled, StarRocks may still choose the prepared physical split path after the segment-count threshold is met even if there are no seek ranges or zone-map pruning predicates. When disabled, StarRocks restores the previous behavior that required prunable inputs such as key ranges or `pred_tree_for_zone_map`.
-- Introduced in: v4.1
-
 ### late_materialization_ratio
 
 - Default: 10
