@@ -314,10 +314,7 @@ private:
     // populated only while the flag stays true; in legacy mode it is empty.
     mutable StackTraceMutex<bthread::Mutex> _partition_coordinator_mtx;
     std::unordered_map<int64_t, int32_t> _partition_coordinator;
-    // Atomic so the close-path coarse gate can read it without taking
-    // `_partition_coordinator_mtx`. Monotonic true → false (legacy fallback);
-    // never flips back to true.
-    std::atomic<bool> _enable_per_partition_coordinator{true};
+    bool _enable_per_partition_coordinator{true};
 
     std::map<string, string> _column_to_expr_value;
 
@@ -710,7 +707,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         //     is decided post-wait. Non-coordinator wakes wake quickly via
         //     the sticky latch and just return.
         //   - legacy mode: only sender 0 enters (matches pre-fix behavior).
-        const bool should_enter_wait = _enable_per_partition_coordinator || (sender_id == 0);
+        bool per_partition_mode_pre;
+        {
+            std::lock_guard l(_partition_coordinator_mtx);
+            per_partition_mode_pre = _enable_per_partition_coordinator;
+        }
+        const bool should_enter_wait = per_partition_mode_pre || (sender_id == 0);
 
         if (should_enter_wait) {
             rolk.unlock();
@@ -1064,20 +1066,10 @@ void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenReque
         unique_pids.insert(t.partition_id());
     }
 
-    // Both the flag store and the map populate are done under the mutex so
-    // that the close-path's snapshot (which reads `_enable_per_partition_coordinator`
-    // and iterates `_partition_coordinator` while holding the same mutex) sees
-    // a consistent flag/map pair. The pre-wait coarse gate reads the atomic
-    // without the lock (safe because the flag is monotonic true→false: a stale
-    // `true` only causes an unneeded wait that bails out post-wait).
     std::lock_guard l(_partition_coordinator_mtx);
-    if (!flag_enabled) {
-        _enable_per_partition_coordinator.store(false, std::memory_order_release);
-        return;
-    }
-    if (!_enable_per_partition_coordinator.load(std::memory_order_acquire)) {
-        // Already in legacy mode (some earlier open AND'd it down). Coord
-        // map unused; nothing to record.
+    _enable_per_partition_coordinator = _enable_per_partition_coordinator && flag_enabled;
+    if (!_enable_per_partition_coordinator) {
+        // Legacy path: coordinator map unused.
         return;
     }
     for (int64_t pid : unique_pids) {
