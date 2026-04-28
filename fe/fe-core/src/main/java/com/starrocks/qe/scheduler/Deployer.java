@@ -38,6 +38,7 @@ import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.AttachmentRequest;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -74,13 +75,43 @@ public class Deployer {
     private static final ThreadPoolExecutor EXECUTOR;
 
     static {
-        int threadPoolSize = Math.max(ThreadPoolManager.cpuCores(), Config.deploy_serialization_thread_pool_size);
+        int threadPoolSize = resolveMaxThreadPoolSize(Config.deploy_serialization_thread_pool_size);
+        int minThreadPoolSize = clampMinThreadPoolSize(Config.deploy_serialization_min_thread_pool_size, threadPoolSize);
         int threadPoolQueueSize = Config.deploy_serialization_queue_size > 0 ? Config.deploy_serialization_queue_size :
                 threadPoolSize * 2;
-        EXECUTOR = ThreadPoolManager.newDaemonThreadPool(1, threadPoolSize, 60, TimeUnit.SECONDS,
+        EXECUTOR = ThreadPoolManager.newDaemonThreadPool(minThreadPoolSize, threadPoolSize, 60, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(threadPoolQueueSize), new ThreadPoolExecutor.AbortPolicy(),
                 "deployer", true);
         ThreadPoolManager.registerAllThreadPoolMetric();
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            int newMax = resolveMaxThreadPoolSize(Config.deploy_serialization_thread_pool_size);
+            int newMin = clampMinThreadPoolSize(Config.deploy_serialization_min_thread_pool_size, newMax);
+            resizeExecutor(EXECUTOR, newMin, newMax);
+        });
+    }
+
+    static int resolveMaxThreadPoolSize(int configured) {
+        return Math.max(ThreadPoolManager.cpuCores(), configured);
+    }
+
+    static int clampMinThreadPoolSize(int configured, int maxPoolSize) {
+        return Math.min(Math.max(1, configured), maxPoolSize);
+    }
+
+    static void resizeExecutor(ThreadPoolExecutor executor, int newMin, int newMax) {
+        int curMax = executor.getMaximumPoolSize();
+        int curMin = executor.getCorePoolSize();
+        if (newMax == curMax && newMin == curMin) {
+            return;
+        }
+        // ThreadPoolExecutor enforces core <= max on each setter, so order matters.
+        if (newMax >= curMax) {
+            executor.setMaximumPoolSize(newMax);
+            executor.setCorePoolSize(newMin);
+        } else {
+            executor.setCorePoolSize(newMin);
+            executor.setMaximumPoolSize(newMax);
+        }
     }
 
     private final ConnectContext context;
