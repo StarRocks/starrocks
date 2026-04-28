@@ -359,9 +359,9 @@ private:
         ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
         std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
 
-        auto arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
-        auto status = parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
-                                                 parquet::default_writer_properties(), arrow_props);
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
         ASSERT_TRUE(status.ok()) << status.ToString();
         ASSERT_TRUE(output->Close().ok());
     }
@@ -391,9 +391,9 @@ private:
         ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
         std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
 
-        auto arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
-        auto status = parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
-                                                 parquet::default_writer_properties(), arrow_props);
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
         ASSERT_TRUE(status.ok()) << status.ToString();
         ASSERT_TRUE(output->Close().ok());
     }
@@ -421,9 +421,9 @@ private:
         ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
         std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
 
-        auto arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
-        auto status = parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
-                                                 parquet::default_writer_properties(), arrow_props);
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
         ASSERT_TRUE(status.ok()) << status.ToString();
         ASSERT_TRUE(output->Close().ok());
     }
@@ -455,9 +455,9 @@ private:
         ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
         std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
 
-        auto arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
-        auto status = parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
-                                                 parquet::default_writer_properties(), arrow_props);
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
         ASSERT_TRUE(status.ok()) << status.ToString();
         ASSERT_TRUE(output->Close().ok());
     }
