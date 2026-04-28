@@ -16,6 +16,16 @@ displayed_sidebar: docs
 cast(input as type)
 ```
 
+StarRocks 同时支持 PostgreSQL 风格的 `::` 简写形式：
+
+```Haskell
+input :: type
+```
+
+`input :: type` 与 `cast(input as type)` 完全等价，生成相同的 AST 和查询计划。`::` 的优先级高于二元运算符，因此 `a + b::INT` 解析为 `a + (b::INT)`。它支持链式写法：`x::INT::STRING` 等价于 `cast(cast(x as int) as string)`。
+
+注意：无论原始查询使用哪种语法，`EXPLAIN`、`SHOW CREATE VIEW` 和审计日志都会输出标准的 `CAST(... AS ...)` 形式。
+
 ## 参数说明
 
 `input`: 待转换类型的数据
@@ -60,7 +70,17 @@ cast(input as type)
     +-----------------------+
 ```
 
-示例二：转换为 ARRAY 类型。
+示例二：使用 `::` 简写形式进行相同的转换。
+
+```Plain Text
+    select '9.5'::DECIMAL(10,2);
+    select NULL::INT;
+    select 1::BIGINT;
+    select '5'::INT::STRING;       -- 链式转换
+    select (1 + 2)::DECIMAL(10,2); -- 带括号的表达式
+```
+
+示例三：转换为 ARRAY 类型。
 
 ```Plain Text
     -- Convert string to ARRAY<ANY>.
@@ -117,7 +137,7 @@ cast(input as type)
     +--------------------------------------------------------------+
 ```
 
-示例三：导入中转换原始数据。
+示例四：导入中转换原始数据。
 
 ```bash
 curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \

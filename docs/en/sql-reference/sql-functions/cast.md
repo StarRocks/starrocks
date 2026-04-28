@@ -17,6 +17,16 @@ From v2.4, StarRocks supports conversion to the ARRAY type.
 cast (input as type)
 ```
 
+StarRocks also supports the PostgreSQL-style `::` shorthand:
+
+```Haskell
+input :: type
+```
+
+`input :: type` is fully equivalent to `cast(input as type)` — they produce the same AST and the same query plan. The shorthand binds tighter than binary operators, so `a + b::INT` parses as `a + (b::INT)`. It can be chained: `x::INT::STRING` is equivalent to `cast(cast(x as int) as string)`.
+
+Note: `EXPLAIN`, `SHOW CREATE VIEW`, and audit logs always print the canonical `CAST(... AS ...)` form, regardless of which syntax was used in the original query.
+
 ## Parameters
 
 `input`: the data you want to convert.
@@ -60,7 +70,17 @@ Example 1: common data conversions
     +-------------------+
 ```
 
-Example 2: Convert the input into ARRAY.
+Example 2: Same conversions using the `::` shorthand.
+
+```Plain Text
+    select '9.5'::DECIMAL(10,2);
+    select NULL::INT;
+    select 1::BIGINT;
+    select '5'::INT::STRING;       -- chained cast
+    select (1 + 2)::DECIMAL(10,2); -- parenthesized expression
+```
+
+Example 3: Convert the input into ARRAY.
 
 ```Plain Text
     -- Convert string to ARRAY<ANY>.
@@ -117,7 +137,7 @@ Example 2: Convert the input into ARRAY.
     +--------------------------------------------------------------+
 ```
 
-Example 3: Convert data during loading.
+Example 4: Convert data during loading.
 
 ```bash
     curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \

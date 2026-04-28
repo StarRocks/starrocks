@@ -15,6 +15,16 @@ sidebar_position: 0.9
 cast (input as type)
 ```
 
+StarRocks は PostgreSQL スタイルの `::` 短縮記法もサポートしています:
+
+```Haskell
+input :: type
+```
+
+`input :: type` は `cast(input as type)` と完全に等価で、同じ AST と同じ実行計画を生成します。`::` は二項演算子よりも結合が強いため、`a + b::INT` は `a + (b::INT)` として解析されます。チェーン記述も可能で、`x::INT::STRING` は `cast(cast(x as int) as string)` と等価です。
+
+注意: 元のクエリでどの構文を使用しても、`EXPLAIN`、`SHOW CREATE VIEW`、および監査ログは常に正規形式の `CAST(... AS ...)` で出力します。
+
 ## パラメータ
 
 `input`: 変換したいデータ。
@@ -58,7 +68,17 @@ cast (input as type)
     +-------------------+
 ```
 
-例 2: 入力を ARRAY に変換
+例 2: `::` 短縮記法による同等の変換
+
+```Plain Text
+    select '9.5'::DECIMAL(10,2);
+    select NULL::INT;
+    select 1::BIGINT;
+    select '5'::INT::STRING;       -- チェーン変換
+    select (1 + 2)::DECIMAL(10,2); -- 括弧付きの式
+```
+
+例 3: 入力を ARRAY に変換
 
 ```Plain Text
     -- 文字列を ARRAY<ANY> に変換
@@ -115,7 +135,7 @@ cast (input as type)
     +--------------------------------------------------------------+
 ```
 
-例 3: ロード中のデータ変換
+例 4: ロード中のデータ変換
 
 ```bash
     curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \
