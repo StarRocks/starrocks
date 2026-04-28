@@ -24,6 +24,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/decimalv3_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
@@ -125,6 +126,64 @@ TEST_F(JavaNativeMethodTest, get_column_logical_type) {
         auto logical_type_2 = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c2.get()));
         ASSERT_EQ(type, logical_type_1);
         ASSERT_EQ(type, logical_type_2);
+    }
+}
+
+// DECIMAL columns are FixedLengthColumnBase but not FixedLengthColumn, so the
+// generic visitor overload doesn't match. The dedicated DECIMAL specialization
+// below has to map int32/int64/int128/int256 -> DECIMAL32/64/128/256.
+TEST_F(JavaNativeMethodTest, get_column_logical_type_decimal) {
+    auto env = getJNIEnv();
+    struct Case {
+        LogicalType type;
+        int precision;
+        int scale;
+    };
+    std::vector<Case> decimal_cases = {
+            {TYPE_DECIMAL32, 9, 2},
+            {TYPE_DECIMAL64, 18, 4},
+            {TYPE_DECIMAL128, 38, 10},
+            {TYPE_DECIMAL256, 76, 10},
+    };
+    for (const auto& c : decimal_cases) {
+        auto desc = TypeDescriptor::create_decimalv3_type(c.type, c.precision, c.scale);
+        auto c1 = ColumnHelper::create_column(desc, true);
+        auto c2 = ColumnHelper::create_column(desc, false);
+        auto logical_type_1 = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c1.get()));
+        auto logical_type_2 = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c2.get()));
+        ASSERT_EQ(c.type, logical_type_1);
+        ASSERT_EQ(c.type, logical_type_2);
+    }
+}
+
+// getAddrs on DECIMAL columns must hand back data, precision, scale (in addition to
+// the null buffer), matching the DECIMAL-aware specialization in GetColumnAddrVisitor.
+TEST_F(JavaNativeMethodTest, get_addrs_decimal) {
+    auto env = getJNIEnv();
+    struct Case {
+        LogicalType type;
+        int precision;
+        int scale;
+    };
+    std::vector<Case> decimal_cases = {
+            {TYPE_DECIMAL32, 9, 2},
+            {TYPE_DECIMAL64, 18, 4},
+            {TYPE_DECIMAL128, 38, 10},
+            {TYPE_DECIMAL256, 76, 10},
+    };
+    for (const auto& c : decimal_cases) {
+        auto desc = TypeDescriptor::create_decimalv3_type(c.type, c.precision, c.scale);
+        auto column = ColumnHelper::create_column(desc, true);
+        column->resize(4);
+        auto arr = JavaNativeMethods::getAddrs(env, nullptr, reinterpret_cast<size_t>(column.get()));
+        ASSERT_NE(arr, nullptr);
+        jlong results[4];
+        env->GetLongArrayRegion(arr, 0, 4, results);
+        const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+        ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
+        ASSERT_EQ(results[2], static_cast<jlong>(c.precision));
+        ASSERT_EQ(results[3], static_cast<jlong>(c.scale));
+        env->DeleteLocalRef(arr);
     }
 }
 TEST_F(JavaNativeMethodTest, resize) {
