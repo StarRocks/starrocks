@@ -53,10 +53,12 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -65,6 +67,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
@@ -199,10 +202,13 @@ import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
+import com.starrocks.thrift.TBatchGetTabletMetadataRequest;
+import com.starrocks.thrift.TBatchGetTabletMetadataResponse;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TCloudTabletMeta;
 import com.starrocks.thrift.TClusterSnapshotJobsRequest;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
 import com.starrocks.thrift.TClusterSnapshotsRequest;
@@ -274,6 +280,8 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTabletMetadataRequest;
+import com.starrocks.thrift.TGetTabletMetadataResponse;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -373,6 +381,7 @@ import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletLocation;
+import com.starrocks.thrift.TTabletRange;
 import com.starrocks.thrift.TTabletReshardJobsRequest;
 import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
@@ -3585,6 +3594,133 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         return batchResponse;
+    }
+
+    @Override
+    public TBatchGetTabletMetadataResponse getTabletMetadata(
+            TBatchGetTabletMetadataRequest batchRequest) {
+        TBatchGetTabletMetadataResponse batchResponse = new TBatchGetTabletMetadataResponse();
+        batchResponse.setStatus(new TStatus(OK));
+        if (batchRequest.isSetRequests()) {
+            for (TGetTabletMetadataRequest request : batchRequest.getRequests()) {
+                batchResponse.addToResponses(handleGetTabletMetadata(request));
+            }
+        }
+        return batchResponse;
+    }
+
+    private TGetTabletMetadataResponse handleGetTabletMetadata(TGetTabletMetadataRequest request) {
+        TGetTabletMetadataResponse response = new TGetTabletMetadataResponse();
+        // Only version 1 (initial empty metadata) is supported today. Higher versions
+        // would require returning rowsets and historical schemas, which are not yet
+        // wired through this RPC.
+        long version = request.isSetVersion() ? request.getVersion() : 1;
+        if (version != 1) {
+            TStatus status = new TStatus(TStatusCode.NOT_IMPLEMENTED_ERROR);
+            status.addToError_msgs("only version 1 is supported, requested version: " + version);
+            response.setStatus(status);
+            return response;
+        }
+        long tableId = request.getTable_id();
+        long partitionId = request.getPartition_id();
+        long indexId = request.getIndex_id();
+
+        long tabletId = request.getTablet_id();
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+        if (tabletMeta == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("tablet not found: " + tabletId);
+            response.setStatus(status);
+            return response;
+        }
+        long dbId = tabletMeta.getDbId();
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("table not found, db_id: " + dbId + ", table_id: " + tableId);
+            response.setStatus(status);
+            return response;
+        }
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs("not a cloud native table, table_id: " + tableId);
+            response.setStatus(status);
+            return response;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(
+                new Locker(), dbId, Collections.singletonList(tableId), LockType.READ)) {
+            PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                status.addToError_msgs("partition not found: " + partitionId);
+                response.setStatus(status);
+                return response;
+            }
+
+            MaterializedIndex index = partition.getIndex(indexId);
+            if (index == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                status.addToError_msgs("index not found: " + indexId);
+                response.setStatus(status);
+                return response;
+            }
+
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(index.getMetaId());
+            if (indexMeta == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                status.addToError_msgs("index meta not found for metaId: " + index.getMetaId());
+                response.setStatus(status);
+                return response;
+            }
+
+            TCloudTabletMeta meta = new TCloudTabletMeta();
+            meta.setTablet_id(tabletId);
+
+            long indexMetaId = index.getMetaId();
+            SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(olapTable, indexMetaId, indexMeta);
+            meta.setSchema(schemaInfo.toTabletSchema());
+
+            meta.setEnable_persistent_index(olapTable.enablePersistentIndex());
+            if (olapTable.getPersistentIndexType() != null) {
+                meta.setPersistent_index_type(olapTable.getPersistentIndexType());
+            }
+            meta.setCompaction_strategy(olapTable.getCompactionStrategy());
+            FlatJsonConfig flatJsonConfig = olapTable.getFlatJsonConfig();
+            if (flatJsonConfig != null) {
+                meta.setFlat_json_config(flatJsonConfig.toTFlatJsonConfig());
+            }
+            if (olapTable.getCompressionType() != null) {
+                meta.setCompression_type(olapTable.getCompressionType());
+            }
+            meta.setCompression_level(olapTable.getCompressionLevel());
+
+            // tablet_ranges holds all tablets' ranges in this index, only for range distribution
+            if (olapTable.isRangeDistribution()) {
+                Map<Long, TTabletRange> tabletRanges = new java.util.HashMap<>();
+                for (Tablet tablet : index.getTablets()) {
+                    if (tablet.getRange() != null) {
+                        tabletRanges.put(tablet.getId(), tablet.getRange().toThrift());
+                    }
+                }
+                if (!tabletRanges.isEmpty()) {
+                    meta.setTablet_ranges(tabletRanges);
+                }
+            }
+
+            meta.setGtid(0);
+
+            response.setMeta(meta);
+            response.setStatus(new TStatus(TStatusCode.OK));
+        } catch (Exception e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs("failed to get tablet metadata, table_id: " + tableId
+                    + ", partition_id: " + partitionId + ", index_id: " + indexId
+                    + ", error: " + e.getMessage());
+            response.setStatus(status);
+        }
+        return response;
     }
 
     private static class CreatePartitionMetrics {
