@@ -704,8 +704,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         // Pre-wait coarse gate: enter the wait/collect path if there is any
         // chance this sender will need to collect logs.
         //   - per_partition mode: every sender enters; the actual coordinator
-        //     is decided post-wait. Non-coordinator wakes wake quickly via
-        //     the sticky latch and just return.
+        //     is decided post-wait. Non-coordinators wake quickly via the
+        //     sticky latch and just return.
         //   - legacy mode: only sender 0 enters (matches pre-fix behavior).
         bool per_partition_mode_pre;
         {
@@ -716,7 +716,11 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
         if (should_enter_wait) {
             rolk.unlock();
-            auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+            int64_t t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+            // Clamp to non-negative: a budget already exhausted means no wait,
+            // and we report the timeout immediately rather than feeding a
+            // negative value to ConditionVariable::wait_for.
+            if (t < 0) t = 0;
             auto ok = _txn_log_collector.wait(t);
             auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
 
@@ -741,10 +745,17 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             const bool i_collect = per_partition_mode ? !my_partitions.empty() : (sender_id == 0);
 
             if (!st.ok()) {
-                // Only the elected coordinator (or sender 0 in legacy) reports
-                // the timeout, so FE sees a single error and non-coordinators
-                // don't pollute the response.
-                if (i_collect) {
+                // Deduplicate timeout reporting so FE sees a single error:
+                //   - legacy mode: only sender 0 collects, so i_collect alone
+                //     is already singular.
+                //   - per_partition mode: any coordinator (i.e. every sender
+                //     with at least one owned partition) would otherwise have
+                //     i_collect=true and pollute the response with duplicate
+                //     TimedOut entries; pick the minimum coordinator sender_id
+                //     to match the orphan-reporter dedup below.
+                const bool report_timeout =
+                        per_partition_mode ? (sender_id == min_coord_sender_id) : i_collect;
+                if (report_timeout) {
                     context->update_status(st);
                 }
             } else if (i_collect) {
