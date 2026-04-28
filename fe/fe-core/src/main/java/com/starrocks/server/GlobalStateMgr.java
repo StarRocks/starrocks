@@ -199,6 +199,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -377,6 +378,7 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
+    private boolean deployerListenerRegistered = false;
 
     private HAProtocol haProtocol = null;
 
@@ -1547,6 +1549,12 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
             StarMgrServer.getCurrentState().startCheckpointWorker();
+        }
+        // Register listeners that need a fully-constructed GlobalStateMgr (e.g. classes whose
+        // own static initializer transitively touches MetricRepo / getCurrentState()).
+        if (!deployerListenerRegistered) {
+            Deployer.registerConfigListener(configRefreshDaemon);
+            deployerListenerRegistered = true;
         }
         configRefreshDaemon.start();
 
