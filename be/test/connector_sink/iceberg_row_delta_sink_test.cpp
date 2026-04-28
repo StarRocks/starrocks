@@ -58,12 +58,21 @@ public:
 
     void rollback() override { ++rollback_count; }
 
+    Status finish() override {
+        ++finish_count;
+        return Status::OK();
+    }
+
+    bool is_finished() override { return finished; }
+
     // Expose protected _op_mem_mgr so tests can assert init() wired it.
     SinkOperatorMemoryManager* get_op_mem_mgr() const { return _op_mem_mgr; }
 
     std::vector<ChunkPtr> received_chunks;
     int total_rows = 0;
     int rollback_count = 0;
+    int finish_count = 0;
+    bool finished = false;
 };
 
 class IcebergRowDeltaSinkTest : public ::testing::Test {
@@ -345,6 +354,42 @@ TEST_F(IcebergRowDeltaSinkTest, add_fast_path_all_insert_skips_copy) {
     ASSERT_EQ(data_mock->received_chunks.size(), 1u);
     EXPECT_EQ(data_mock->received_chunks[0].get(), chunk.get());
     EXPECT_TRUE(delete_mock->received_chunks.empty());
+}
+
+// Test 9: finish() forwards to both sub-sinks.
+TEST_F(IcebergRowDeltaSinkTest, finish_forwards_to_both_sub_sinks) {
+    auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+
+    EXPECT_EQ(delete_mock->finish_count, 0);
+    EXPECT_EQ(data_mock->finish_count, 0);
+
+    ASSERT_OK(sink->finish());
+
+    EXPECT_EQ(delete_mock->finish_count, 1);
+    EXPECT_EQ(data_mock->finish_count, 1);
+}
+
+// Test 10: is_finished() is true only when both sub-sinks report finished.
+TEST_F(IcebergRowDeltaSinkTest, is_finished_requires_both_sub_sinks) {
+    auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+
+    EXPECT_FALSE(sink->is_finished());
+
+    delete_mock->finished = true;
+    EXPECT_FALSE(sink->is_finished()); // data sub-sink not yet finished
+
+    data_mock->finished = true;
+    EXPECT_TRUE(sink->is_finished());
+}
+
+// Test 11: callback_on_commit() is a no-op on the composite sink — sub-sinks
+// handle their own commit callbacks.
+TEST_F(IcebergRowDeltaSinkTest, callback_on_commit_is_noop) {
+    auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+
+    CommitResult result;
+    sink->callback_on_commit(result); // must not crash; no observable side effect
+    SUCCEED();
 }
 
 } // namespace starrocks::connector
