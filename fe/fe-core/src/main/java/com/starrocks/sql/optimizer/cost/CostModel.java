@@ -382,8 +382,8 @@ public class CostModel {
             // Basic skew detection on the group by columns. We are weighting this heavily if we know
             // that group by columns are skewed since this optimization has significant speed up then.
             if (isGroupBySkewed(groupByStatistics, inputStatistics)) {
-                skewInfo.setGroupBySkewDetected(true);
                 if (enableForceGroupBySkewEliminateWhenSkewed) {
+                    skewInfo.setGroupBySkewDetected(true);
                     return 0.0;
                 }
                 return 0.2;
