@@ -63,11 +63,20 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+=======
+import org.apache.commons.io.FileUtils;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+>>>>>>> 5ff7275313 ([UT] fix dir leak after fe-ut GlobalStateMgrTest (#72037))
 import org.mockito.Mockito;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -77,11 +86,21 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
+    private String testMetaDir;
+    private String testPluginDir;
 
     @Before
     public void setUp() {
-        Config.meta_dir = UUID.randomUUID().toString();
-        Config.plugin_dir = UUID.randomUUID().toString();
+        testMetaDir = UUID.randomUUID().toString();
+        testPluginDir = UUID.randomUUID().toString();
+        Config.meta_dir = testMetaDir;
+        Config.plugin_dir = testPluginDir;
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        FileUtils.deleteQuietly(new File(testMetaDir));
+        FileUtils.deleteQuietly(new File(testPluginDir));
     }
 
     @Test
