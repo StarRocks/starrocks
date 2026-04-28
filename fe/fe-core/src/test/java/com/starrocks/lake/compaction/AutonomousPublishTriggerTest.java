@@ -52,24 +52,12 @@ public class AutonomousPublishTriggerTest {
     }
 
     /**
-     * Replicate the trigger condition expression used in CompactionScheduler.schedulePartitionPublish
-     * (kept in lock-step manually so tests can exercise just the predicate).
-     *
-     * @param lastPublishTimeMs 0 means "never published" — max-interval check is skipped.
+     * Thin wrapper over the production predicate so tests stay readable.
      */
     private static boolean shouldTrigger(long versionDelta, double lastScore, long timeSinceLastPublishMs,
                                           long lastPublishTimeMs) {
-        if (versionDelta <= 0) {
-            return false;
-        }
-        if (versionDelta >= Config.lake_compaction_version_delta_threshold) {
-            return true;
-        }
-        if (lastScore > Config.lake_compaction_high_score_threshold &&
-                versionDelta >= Config.lake_compaction_min_version_delta_for_high_score) {
-            return true;
-        }
-        return lastPublishTimeMs > 0 && timeSinceLastPublishMs > Config.lake_compaction_max_interval_ms;
+        long now = lastPublishTimeMs + timeSinceLastPublishMs;
+        return CompactionScheduler.evaluatePublishTrigger(versionDelta, lastScore, lastPublishTimeMs, now) != null;
     }
 
     // Convenience overload: assume some prior publish so max-interval can fire.
@@ -167,6 +155,43 @@ public class AutonomousPublishTriggerTest {
     public void zeroAndNegativeVersionDeltaNeverTrigger() {
         assertFalse(shouldTrigger(0, 1000.0, 1_000_000));
         assertFalse(shouldTrigger(-5, 1000.0, 1_000_000));
+    }
+
+    @Test
+    public void evaluatePublishTriggerReturnsNullWhenNoTrigger() {
+        Config.lake_compaction_version_delta_threshold = 100;
+        Config.lake_compaction_high_score_threshold = 1000;
+        Config.lake_compaction_min_version_delta_for_high_score = 100;
+        Config.lake_compaction_max_interval_ms = 999_999L;
+        // versionDelta=1 below all thresholds, no prior publish -> null
+        assertEquals(null, CompactionScheduler.evaluatePublishTrigger(1, 0.0, 0L, 100L));
+    }
+
+    @Test
+    public void evaluatePublishTriggerReturnsReasonStringForVersionDelta() {
+        Config.lake_compaction_version_delta_threshold = 5;
+        String reason = CompactionScheduler.evaluatePublishTrigger(10, 0.0, 0L, 100L);
+        assertTrue(reason != null && reason.contains("version_delta"));
+    }
+
+    @Test
+    public void evaluatePublishTriggerReturnsReasonStringForHighScore() {
+        Config.lake_compaction_version_delta_threshold = 100;
+        Config.lake_compaction_high_score_threshold = 50.0;
+        Config.lake_compaction_min_version_delta_for_high_score = 5;
+        String reason = CompactionScheduler.evaluatePublishTrigger(5, 60.0, 0L, 100L);
+        assertTrue(reason != null && reason.contains("high_score"));
+    }
+
+    @Test
+    public void evaluatePublishTriggerReturnsReasonStringForMaxInterval() {
+        Config.lake_compaction_version_delta_threshold = 100;
+        Config.lake_compaction_high_score_threshold = 1000;
+        Config.lake_compaction_min_version_delta_for_high_score = 100;
+        Config.lake_compaction_max_interval_ms = 100L;
+        // versionDelta=1; lastPublishTimeMs=10, now=10+200=210 -> elapsed 200 > 100
+        String reason = CompactionScheduler.evaluatePublishTrigger(1, 0.0, 10L, 210L);
+        assertTrue(reason != null && reason.contains("max_interval"));
     }
 
     @Test

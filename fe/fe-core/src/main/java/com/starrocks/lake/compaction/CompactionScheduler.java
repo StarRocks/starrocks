@@ -139,6 +139,35 @@ public class CompactionScheduler extends Daemon {
      * cache for this partition and publish_version with force_publish=true so all tablets
      * reach the same new_version even when some have no local results.
      */
+    /**
+     * Pure decision function for the autonomous publish trigger. Extracted so unit tests
+     * can exercise every branch without spinning up FE state.
+     *
+     * @return null if no trigger fires; otherwise a short reason string for logging.
+     */
+    static String evaluatePublishTrigger(long versionDelta, double lastScore,
+                                          long lastPublishTimeMs, long nowMs) {
+        if (versionDelta <= 0) {
+            return null;
+        }
+        if (versionDelta >= Config.lake_compaction_version_delta_threshold) {
+            return "version_delta>=" + Config.lake_compaction_version_delta_threshold;
+        }
+        if (lastScore > Config.lake_compaction_high_score_threshold &&
+                versionDelta >= Config.lake_compaction_min_version_delta_for_high_score) {
+            return "high_score(" + lastScore + ")&&version_delta>="
+                    + Config.lake_compaction_min_version_delta_for_high_score;
+        }
+        // Skip max-interval check until the first successful publish records a
+        // timestamp; otherwise lastPublishTimeMs == 0 makes "now - 0" always
+        // exceed the interval and bursts trigger on every partition the
+        // moment the feature is enabled.
+        if (lastPublishTimeMs > 0 && (nowMs - lastPublishTimeMs) > Config.lake_compaction_max_interval_ms) {
+            return "max_interval_ms exceeded";
+        }
+        return null;
+    }
+
     private void schedulePartitionPublish() {
         for (PartitionIdentifier partition : compactionManager.getAllPartitions()) {
             if (runningCompactions.containsKey(partition)) {
@@ -153,35 +182,10 @@ public class CompactionScheduler extends Daemon {
             }
             PartitionStatisticsSnapshot snapshot = stats.getSnapshot();
             long currentVersion = stats.getCurrentVersion() == null ? 0L : stats.getCurrentVersion().getVersion();
-            long lastPublishVersion = stats.getLastPublishVisibleVersion();
-            long versionDelta = currentVersion - lastPublishVersion;
-            if (versionDelta <= 0) {
-                continue;
-            }
-            double lastScore = stats.getLastPublishScore();
-            long now = System.currentTimeMillis();
-            long timeSinceLastPublish = now - stats.getLastPublishTimeMs();
-
-            boolean trigger = false;
-            String reason = null;
-            if (versionDelta >= Config.lake_compaction_version_delta_threshold) {
-                trigger = true;
-                reason = "version_delta>=" + Config.lake_compaction_version_delta_threshold;
-            } else if (lastScore > Config.lake_compaction_high_score_threshold &&
-                    versionDelta >= Config.lake_compaction_min_version_delta_for_high_score) {
-                trigger = true;
-                reason = "high_score(" + lastScore + ")&&version_delta>="
-                        + Config.lake_compaction_min_version_delta_for_high_score;
-            } else if (stats.getLastPublishTimeMs() > 0 &&
-                    timeSinceLastPublish > Config.lake_compaction_max_interval_ms) {
-                // Skip max-interval check until the first successful publish records a
-                // timestamp; otherwise lastPublishTimeMs == 0 makes "now - 0" always
-                // exceed the interval and bursts trigger on every partition the
-                // moment the feature is enabled.
-                trigger = true;
-                reason = "max_interval_ms exceeded";
-            }
-            if (!trigger) {
+            long versionDelta = currentVersion - stats.getLastPublishVisibleVersion();
+            String reason = evaluatePublishTrigger(versionDelta, stats.getLastPublishScore(),
+                    stats.getLastPublishTimeMs(), System.currentTimeMillis());
+            if (reason == null) {
                 continue;
             }
 
