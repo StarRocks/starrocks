@@ -155,6 +155,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -3335,15 +3336,20 @@ public class PlanFragmentBuilder {
         }
 
         private boolean isColocateJoin(OptExpression optExpression) {
-            // through the required properties type check if it is colocate join
+            // Colocate join detection: a required property is colocate when
+            // it is either a hash-LOCAL spec (classic colocate) or a
+            // RangeDistributionSpec (range colocate; scan-local by invariant).
             return optExpression.getRequiredProperties().stream().allMatch(
                     physicalPropertySet -> {
+                        DistributionSpec spec = physicalPropertySet.getDistributionProperty().getSpec();
+                        if (spec instanceof RangeDistributionSpec) {
+                            return true;
+                        }
                         if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
                             return false;
                         }
                         HashDistributionDesc.SourceType hashSourceType =
-                                ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                        .getHashDistributionDesc().getSourceType();
+                                ((HashDistributionSpec) spec).getHashDistributionDesc().getSourceType();
                         return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
                     });
         }

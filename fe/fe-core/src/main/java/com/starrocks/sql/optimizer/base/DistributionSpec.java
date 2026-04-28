@@ -59,6 +59,7 @@ public class DistributionSpec {
         SHUFFLE,
         GATHER,
         ROUND_ROBIN,
+        RANGE_LOCAL,
         ;
 
         public TDistributionType toThrift() {
@@ -68,6 +69,10 @@ public class DistributionSpec {
                 return TDistributionType.BROADCAST;
             } else if (this == SHUFFLE) {
                 return TDistributionType.SHUFFLE;
+            } else if (this == RANGE_LOCAL) {
+                // RangeDistributionSpec is scan-local and must never reach thrift serialization.
+                throw new IllegalStateException(
+                        "DistributionType.RANGE_LOCAL must not be serialized to thrift");
             } else {
                 return TDistributionType.GATHER;
             }
