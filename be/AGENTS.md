@@ -197,6 +197,14 @@ Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client
 - Allowed target deps: `ExecSchemaScannerCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_schema_scanners_test`
 - Remediation: Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries.
+
+### ExecSortingCore (`execsortingcore`)
+Reusable exec sorting algorithms without pipeline, spill, workgroup, storage, or service coupling.
+- Targets: `ExecSortingCore`
+- Allowed internal include prefixes: `exec/sorting/`, `exprs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `exec_sorting_core_test`
+- Remediation: Keep ExecSortingCore limited to reusable sorting algorithms; leave merge-path pipeline observer integration, chunk sorters, spill-aware sorting, and exec-node adapters in higher modules.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 
 ## BE-Specific Sync Rules

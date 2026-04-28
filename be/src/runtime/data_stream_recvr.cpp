@@ -48,6 +48,7 @@
 #include "common/util/debug_util.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/sorting/sort_cursor.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/chunk_cursor.h"

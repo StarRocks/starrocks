@@ -109,6 +109,32 @@ target_link_libraries(ExecSchemaScanners PUBLIC
     StarRocksGen
 )
 
+set(EXEC_SORTING_CORE_FILES
+    sorting/compare_column.cpp
+    sorting/merge.cpp
+    sorting/merge_cascade.cpp
+    sorting/merge_column.cpp
+    sorting/sort_column.cpp
+    sorting/sort_cursor.cpp
+    sorting/sort_permute.cpp
+)
+
+ADD_BE_LIB(ExecSortingCore
+    ${EXEC_SORTING_CORE_FILES}
+)
+
+target_link_libraries(ExecSortingCore PUBLIC
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(PIPELINE_PRIMITIVES_SRCS
     pipeline/operator.cpp
 )
@@ -433,13 +459,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_keywords_scanner.cpp
     schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     jdbc_scanner.cpp
-    sorting/compare_column.cpp
-    sorting/merge.cpp
-    sorting/merge_column.cpp
     sorting/merge_path.cpp
-    sorting/merge_cascade.cpp
-    sorting/sort_column.cpp
-    sorting/sort_permute.cpp
     connector_scan_node.cpp
     workgroup/work_group.cpp
     workgroup/mem_tracker_manager.cpp
@@ -503,4 +523,4 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners)
+target_link_libraries(Exec PUBLIC ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore)

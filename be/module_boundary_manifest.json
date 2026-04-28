@@ -391,6 +391,36 @@
       "allowed_test_targets": ["exec_schema_scanners_test"],
       "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
+    },
+    {
+      "id": "execsortingcore",
+      "doc_label": "ExecSortingCore",
+      "summary": "Reusable exec sorting algorithms without pipeline, spill, workgroup, storage, or service coupling.",
+      "owned_targets": ["ExecSortingCore"],
+      "owned_globs": [
+        "be/src/exec/sorting/compare_column.cpp",
+        "be/src/exec/sorting/merge.*",
+        "be/src/exec/sorting/merge_cascade.cpp",
+        "be/src/exec/sorting/merge_column.cpp",
+        "be/src/exec/sorting/sort_column.cpp",
+        "be/src/exec/sorting/sort_cursor.*",
+        "be/src/exec/sorting/sort_helper.h",
+        "be/src/exec/sorting/sort_permute.*",
+        "be/src/exec/sorting/sorting.h"
+      ],
+      "excluded_globs": [
+        "be/src/exec/sorting/merge_path.*"
+      ],
+      "allowed_include_prefixes": ["exec/sorting/", "exprs/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "exec/spill/", "exec/workgroup/", "runtime/", "storage/", "connector/", "service/", "http/"],
+      "forbidden_includes": [
+        "exec/chunks_sorter.h",
+        "exec/sort_exec_exprs.h"
+      ],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["exec_sorting_core_test"],
+      "allowed_test_link_deps": ["ExecSortingCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecSortingCore limited to reusable sorting algorithms; leave merge-path pipeline observer integration, chunk sorters, spill-aware sorting, and exec-node adapters in higher modules."
     }
   ]
 }
