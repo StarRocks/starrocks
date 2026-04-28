@@ -215,8 +215,7 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
         }
         if (metadata().segment_metas_size() > 0) {
             auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
-            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            file.write_sort_key_fields_to(segment_meta);
             segment_meta->set_num_rows(file.num_rows);
             segment_meta->set_segment_idx(next_segment_id++);
         }

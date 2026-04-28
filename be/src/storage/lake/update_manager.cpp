@@ -754,8 +754,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         }
         uint32_t segment_idx = new_rows_op.rowset().segments_size() - 1;
         auto* segment_meta = new_rows_op.mutable_rowset()->add_segment_metas();
-        writer.get_sort_key_min().to_proto(segment_meta->mutable_sort_key_min());
-        writer.get_sort_key_max().to_proto(segment_meta->mutable_sort_key_max());
+        writer.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(writer.num_rows());
         segment_meta->set_segment_idx(segment_idx);
 

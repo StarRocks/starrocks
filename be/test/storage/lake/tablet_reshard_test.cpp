@@ -314,6 +314,65 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     EXPECT_EQ(0, tablet_ranges.size());
 }
 
+// Regression for the crash discovered during SSB SF100 testing: FE requests
+// N new tablet ids, but the sampled algorithm can only produce M < N ranges.
+// Before the fix, get_tablet_split_ranges silently returned M ranges and
+// split_tablet read OOB on split_ranges[M..N-1]. Now get_tablet_split_ranges
+// returns InvalidArgument and split_tablet falls back to identical-tablet
+// publish (only new_tablet_ids(0) consumed).
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_falls_back) {
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+
+    // Single segment with 2 sort-key samples -> 4 boundary points -> 3
+    // candidate ranges. Requesting 8 splits cannot be satisfied.
+    auto* rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    rowset_meta_pb->add_segments("seg_0.dat");
+    rowset_meta_pb->add_segment_size(1024);
+    auto* segment_meta = rowset_meta_pb->add_segment_metas();
+    segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
+    segment_meta->set_num_rows(300);
+    segment_meta->set_sort_key_sample_row_interval(100);
+    segment_meta->add_sort_key_samples()->CopyFrom(generate_sort_key(100));
+    segment_meta->add_sort_key_samples()->CopyFrom(generate_sort_key(200));
+    rowset_meta_pb->set_num_rows(300);
+    rowset_meta_pb->set_data_size(1024);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting_tablet = *resharding.mutable_splitting_tablet_info();
+    splitting_tablet.set_old_tablet_id(tablet_id);
+    for (int i = 0; i < 8; ++i) {
+        splitting_tablet.add_new_tablet_ids(next_id());
+    }
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res =
+            lake::publish_resharding_tablet(_tablet_manager.get(), resharding, metadata.version(),
+                                            metadata.version() + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_OK(res);
+    // Fallback produces: old_tablet_id (committed under new_version) +
+    // new_tablet_ids(0) carrying all data. The remaining 7 new tablet ids
+    // are abandoned by BE; FE is responsible for reclaiming them.
+    EXPECT_EQ(2U, tablet_metadatas.size());
+    EXPECT_EQ(1U, tablet_ranges.size());
+    EXPECT_TRUE(tablet_metadatas.count(tablet_id));
+    EXPECT_TRUE(tablet_metadatas.count(splitting_tablet.new_tablet_ids(0)));
+    for (int i = 1; i < splitting_tablet.new_tablet_ids_size(); ++i) {
+        EXPECT_FALSE(tablet_metadatas.count(splitting_tablet.new_tablet_ids(i)));
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
     starrocks::TabletMetadata metadata;
     auto tablet_id = next_id();

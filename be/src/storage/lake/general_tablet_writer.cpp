@@ -196,8 +196,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
             // This is a bundle data file.
             segment_file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
         }
-        segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
-        segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
+        _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
@@ -337,8 +336,7 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_file_info.path = std::string(basename(segment_path));
         segment_file_info.size = segment_size;
         segment_file_info.encryption_meta = segment_writer->encryption_meta();
-        segment_file_info.sort_key_min = segment_writer->get_sort_key_min();
-        segment_file_info.sort_key_max = segment_writer->get_sort_key_max();
+        segment_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = segment_writer->num_rows();
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
