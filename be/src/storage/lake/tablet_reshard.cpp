@@ -26,7 +26,9 @@
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_splitter.h"
+#include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+#include "util/defer_op.h"
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
@@ -387,6 +389,48 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
     return Status::OK();
 }
 
+// Pick a single stable tablet id from |info| to serve as the BE-side publish
+// slot for this reshard. We always anchor on the old side — SPLIT has one
+// old tablet, MERGE picks the first of its old_tablet_ids, IDENTICAL uses its
+// old_tablet_id. This keeps three properties:
+//
+//   1. Retry dedup: all retries of the same reshard carry the same
+//      ReshardingTabletInfoPB, so they lock the same id.
+//   2. BE-level fail-safe against DML: the same id is what a DML
+//      publish_version with PUBLISH_NORMAL would acquire, so any DML that
+//      isn't routed through cross-publish also serializes against reshard.
+//   3. Deterministic convergence: a single CAS has no partial-acquire /
+//      rollback window, so concurrent retries cannot convoy each other the
+//      way a multi-tablet acquire-in-loop could.
+int64_t reshard_serialization_id(const ReshardingTabletInfoPB& info) {
+    if (info.has_splitting_tablet_info()) {
+        return info.splitting_tablet_info().old_tablet_id();
+    }
+    if (info.has_merging_tablet_info()) {
+        DCHECK(!info.merging_tablet_info().old_tablet_ids().empty());
+        return info.merging_tablet_info().old_tablet_ids(0);
+    }
+    if (info.has_identical_tablet_info()) {
+        return info.identical_tablet_info().old_tablet_id();
+    }
+    return 0;
+}
+
+Status acquire_publish_tablets(const ReshardingTabletInfoPB& info) {
+    const int64_t id = reshard_serialization_id(info);
+    if (!acquire_publish_tablet(id)) {
+        return Status::ResourceBusy(
+                fmt::format("The previous publish task for tablet {} has not finished. You can ignore this "
+                            "error and the task will retry later.",
+                            id));
+    }
+    return Status::OK();
+}
+
+void release_publish_tablets(const ReshardingTabletInfoPB& info) {
+    release_publish_tablet(reshard_serialization_id(info));
+}
+
 } // namespace
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info) {
@@ -438,6 +482,20 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                                  std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
     g_tablet_reshard_total << 1;
     auto reshard_start_ts = butil::gettimeofday_us();
+
+    // Reserve the per-reshard publish slot. All retries of the same reshard
+    // resolve to the same id (see reshard_serialization_id), so this
+    // single-CAS acquire dedups FE's 10 ms resubmits. Mutual exclusion with
+    // concurrent DML publish on the old-side tablet falls out for free: the
+    // chosen id matches what a PUBLISH_NORMAL DML would acquire in
+    // publish_version. Cross-tablet correctness for the rest of the reshard
+    // (all N inputs + the new tablet) is provided by FE commitVersion
+    // ordering and convert_txn_log routing, not by this slot.
+    if (auto st = acquire_publish_tablets(resharding_tablet); !st.ok()) {
+        g_tablet_reshard_failed << 1;
+        return st;
+    }
+    DeferOp release_tablets([&] { release_publish_tablets(resharding_tablet); });
 
     LOG(INFO) << "Start publish resharding tablet"
               << ", resharding_tablet=" << resharding_tablet.DebugString() << ", txn_info=" << txn_info.DebugString()

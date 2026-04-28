@@ -344,14 +344,22 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
 } // namespace
 
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
-        TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
+        TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
         const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info) {
-    if (old_tablet_metadata == nullptr) {
-        return Status::InvalidArgument("old tablet metadata is null");
+    if (tablet_metadata == nullptr) {
+        return Status::InvalidArgument("tablet metadata is null");
     }
     if (splitting_tablet.new_tablet_ids_size() <= 0) {
         return Status::InvalidArgument("splitting tablet has no new tablet");
     }
+
+    // Flush the parent's PK-index memtable into sstables before propagating
+    // metadata to the children, so every child inherits an sstable_meta that
+    // already covers its rowsets' live data. This is the pre-split half of
+    // the "reshard inputs must have full sstable coverage" invariant; merge
+    // does the post-split half in merge_sstables.
+    ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
+                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata));
 
     std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
 

@@ -42,6 +42,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
@@ -212,6 +213,59 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
         guard.reset(nullptr);
         _index_cache.remove(index_entry);
     }
+}
+
+StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata) {
+    if (!is_primary_key(*metadata) || !metadata->enable_persistent_index() ||
+        metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return metadata;
+    }
+    const int64_t tablet_id = metadata->id();
+    const int64_t base_version = metadata->version();
+
+    lock_shard_pk_index_shard(tablet_id);
+    DeferOp unlock_shard([&] { unlock_shard_pk_index_shard(tablet_id); });
+
+    // Single mutable deep-copy of metadata. The MetaFileBuilder requires a
+    // MutableTabletMetadataPtr, and LakePersistentIndex::commit writes the
+    // flushed sstable_meta straight into it — so this same pointer is
+    // returned to the caller.
+    auto mutable_metadata = std::make_shared<TabletMetadataPB>(*metadata);
+    Tablet tablet(_tablet_mgr, tablet_id);
+    MetaFileBuilder builder(tablet, mutable_metadata);
+
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
+    ASSIGN_OR_RETURN(auto* index_entry, prepare_primary_index(metadata, &builder, base_version,
+                                                              /*new_version=*/base_version, write_guard));
+
+    // Default = failure cleanup: match PrimaryKeyTxnLogApplier::handle_failure
+    // ordering exactly — unload the index first (while the write_guard is
+    // still held), then release the guard, then evict from cache so the next
+    // attempt rebuilds fresh. Call cancel() after success.
+    CancelableDefer failure_cleanup([&] {
+        index_entry->value().unload();
+        write_guard.reset(nullptr);
+        remove_primary_index_cache(index_entry);
+    });
+
+    // DML's LakePersistentIndex::commit only flushes memtable when rebuild
+    // counts are heavy; reshard needs an unconditional flush so the spliced
+    // sstable_meta covers all live data.
+    RETURN_IF_ERROR(index_entry->value().sync_flush_persistent_index(
+            config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+
+    // Reuse the DML publish path: commit → dump_sstable_meta →
+    // MetaFileBuilder::finalize_sstable_meta writes the result into
+    // mutable_metadata->sstable_meta(). builder.finalize() is NOT called
+    // here — this flush does not produce its own metadata version; the
+    // returned metadata is consumed by the surrounding reshard publish.
+    RETURN_IF_ERROR(index_entry->value().commit(metadata, &builder));
+
+    // Success: dismiss the failure cleanup and release the cache entry.
+    // write_guard is released when it goes out of scope at function return.
+    failure_cleanup.cancel();
+    release_primary_index_cache(index_entry);
+    return mutable_metadata;
 }
 
 StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(

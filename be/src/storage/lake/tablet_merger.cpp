@@ -22,12 +22,12 @@
 #include <unordered_set>
 #include <vector>
 
-#include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "testutil/sync_point.h"
 #include "util/crc32c.h"
@@ -41,6 +41,10 @@ public:
     explicit TabletMergeContext(TabletMetadataPtr metadata) : _metadata(std::move(metadata)) {}
 
     const TabletMetadataPtr& metadata() const { return _metadata; }
+    // Reseat the backing metadata pointer. Used by flush_persistent_index to
+    // substitute a spliced snapshot (same rowsets, sstable_meta updated to
+    // include freshly-flushed PK-index sstables).
+    void set_metadata(TabletMetadataPtr metadata) { _metadata = std::move(metadata); }
 
     int64_t rssid_offset() const { return _rssid_offset; }
     void set_rssid_offset(int64_t offset) { _rssid_offset = offset; }
@@ -559,12 +563,21 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     return Status::OK();
 }
 
-Status merge_sstables(const std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata) {
+Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
+                      TabletMetadataPB* new_metadata) {
     auto* dest = new_metadata->mutable_sstable_meta()->mutable_sstables();
     // key: filename -> index in dest, for shared dedup + consistency check
     std::unordered_map<std::string, int> shared_dedup;
 
-    for (const auto& ctx : merge_contexts) {
+    auto* update_manager = tablet_manager->update_mgr();
+    for (auto& ctx : merge_contexts) {
+        // Flush the tablet's PK-index memtable into sstables so that the
+        // inherited sstable_meta covers all live data of its rowsets. Covers
+        // the case where a child accumulated post-split DML that never
+        // reached shared storage before merge; see the symmetric call in
+        // split_tablet for the pre-split side of the invariant.
+        ASSIGN_OR_RETURN(auto flushed_metadata, update_manager->flush_pk_memtable(ctx.metadata()));
+        ctx.set_metadata(std::move(flushed_metadata));
         if (!ctx.metadata()->has_sstable_meta()) continue;
 
         for (const auto& sst : ctx.metadata()->sstable_meta().sstables()) {
@@ -572,13 +585,16 @@ Status merge_sstables(const std::vector<TabletMergeContext>& merge_contexts, Tab
             if (sst.shared()) {
                 auto [it, inserted] = shared_dedup.emplace(sst.filename(), dest->size());
                 if (!inserted) {
-                    // Dedup hit: consistency check (only fields that are not projected)
+                    // Dedup hit: check the fields that identify the physical file.
+                    // fileset_id is intentionally excluded: it is a grouping hint that
+                    // PersistentIndexSstableFileset::init may synthesize per-load when
+                    // the source sstable has no persisted id, so two ctxs sharing the
+                    // same legacy file can legitimately hold different ids. The merged
+                    // tablet re-derives grouping from whatever id the dedup keeps.
                     const auto& existing = dest->Get(it->second);
                     if (existing.filesize() != sst.filesize() || existing.encryption_meta() != sst.encryption_meta() ||
                         existing.range().start_key() != sst.range().start_key() ||
-                        existing.range().end_key() != sst.range().end_key() ||
-                        existing.fileset_id().hi() != sst.fileset_id().hi() ||
-                        existing.fileset_id().lo() != sst.fileset_id().lo()) {
+                        existing.range().end_key() != sst.range().end_key()) {
                         return Status::Corruption("Shared sstable metadata mismatch for same filename");
                     }
                     continue; // skip duplicate
@@ -608,14 +624,32 @@ Status merge_sstables(const std::vector<TabletMergeContext>& merge_contexts, Tab
                     out->mutable_delvec()->CopyFrom(dv_it->second);
                 }
             } else {
-                // No shared_rssid (legacy format): use rssid_offset
+                // No shared_rssid (legacy format): accumulate rssid_offset so that a
+                // stacked merge (parent sstable already has an offset from a prior
+                // merge) composes correctly. The read path at
+                // persistent_index_sstable.cpp:214 adds the sstable's rssid_offset
+                // once to each stored rssid, so the stored offset must be the total
+                // cumulative shift from the original rowset-id to the current tablet.
                 if (sst.has_delvec() && sst.delvec().size() > 0) {
                     return Status::Corruption("Sstable has delvec but no shared_rssid, cannot project delvec");
                 }
-                out->set_rssid_offset(static_cast<int32_t>(ctx.rssid_offset()));
+                const int64_t accumulated_offset = static_cast<int64_t>(sst.rssid_offset()) + ctx.rssid_offset();
+                if (accumulated_offset < std::numeric_limits<int32_t>::min() ||
+                    accumulated_offset > std::numeric_limits<int32_t>::max()) {
+                    return Status::Corruption(fmt::format(
+                            "accumulated rssid_offset exceeds int32 range: sst_offset={} ctx_offset={} sum={}",
+                            sst.rssid_offset(), ctx.rssid_offset(), accumulated_offset));
+                }
+                out->set_rssid_offset(static_cast<int32_t>(accumulated_offset));
                 uint64_t low = sst.max_rss_rowid() & 0xffffffffULL;
                 int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
-                out->set_max_rss_rowid((static_cast<uint64_t>(high + ctx.rssid_offset()) << 32) | low);
+                const int64_t new_high = high + ctx.rssid_offset();
+                if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
+                    return Status::Corruption(
+                            fmt::format("rssid high overflow in merge projection: high={} ctx_offset={} new_high={}",
+                                        high, ctx.rssid_offset(), new_high));
+                }
+                out->set_max_rss_rowid((static_cast<uint64_t>(new_high) << 32) | low);
                 out->clear_delvec();
             }
         }
@@ -746,7 +780,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                       new_tablet_metadata.get()));
     }
 
-    RETURN_IF_ERROR(merge_sstables(merge_contexts, new_tablet_metadata.get()));
+    RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));
 
     // Phase 4: Finalize
     merge_schemas(merge_contexts, new_tablet_metadata.get());
