@@ -15,19 +15,17 @@
 #include "udf_downloader.h"
 
 #include <fmt/format.h>
-#include <fs/fs.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <memory>
 
-#include "base/crypto/md5.h"
-#include "base/statusor.h"
-#include "base/utility/defer_op.h"
-#include "common/config_object_storage_fwd.h"
+#include "common/config.h"
+#include "common/statusor.h"
 #include "fs/fs.h"
-#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "http/http_client.h"
+#include "util/defer_op.h"
+#include "util/md5.h"
 
 namespace starrocks {
 class UDFDownLoader {
@@ -96,7 +94,7 @@ public:
     Status do_download(std::string& dst_path, const std::string& remote_path, const std::string& md5sum,
                        const FSOptions& options) override {
         LOG(INFO) << fmt::format("Downloading udf file from {}", remote_path);
-        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(remote_path, options));
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(remote_path, options));
         if (!fs) {
             LOG(ERROR) << fmt::format("No matching filesystem for {}", remote_path);
             return Status::NotFound(fmt::format("No matching filesystem available for {}", remote_path));
