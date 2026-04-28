@@ -309,6 +309,13 @@ CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
+// Row interval between consecutive sort-key samples recorded by the segment
+// writer. Samples are consumed by tablet split and range-split parallel
+// compaction to accurately estimate row distribution for overlapping segments.
+// Setting to 0 disables sampling. The per-segment value is persisted in
+// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
+// does not break cross-version readers.
+CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
