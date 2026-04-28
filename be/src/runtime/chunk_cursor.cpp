@@ -18,7 +18,6 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "exec/sort_exec_exprs.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks {
@@ -179,45 +178,6 @@ void ChunkCursor::next_chunk_for_pipeline() {
         auto col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), _current_chunk.get());
         _current_order_by_columns.push_back(std::move(col));
     }
-}
-
-SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkProvider chunk_provider, const std::vector<ExprContext*>* sort_exprs)
-        : _chunk_provider(std::move(chunk_provider)), _sort_exprs(sort_exprs) {}
-
-bool SimpleChunkSortCursor::is_data_ready() {
-    if (!_data_ready && !_chunk_provider(nullptr, nullptr)) {
-        return false;
-    }
-    _data_ready = true;
-    return true;
-}
-
-std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
-    DCHECK(_data_ready);
-    DCHECK(_sort_exprs);
-
-    if (_eos) {
-        return {nullptr, Columns{}};
-    }
-    ChunkUniquePtr chunk = nullptr;
-    if (!_chunk_provider(&chunk, &_eos) || !chunk) {
-        return {nullptr, Columns{}};
-    }
-    if (!chunk || chunk->is_empty()) {
-        return {nullptr, Columns{}};
-    }
-
-    Columns sort_columns;
-    for (ExprContext* expr : *_sort_exprs) {
-        // TODO: handle the error correctly
-        auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
-        sort_columns.push_back(column);
-    }
-    return {std::move(chunk), std::move(sort_columns)};
-}
-
-bool SimpleChunkSortCursor::is_eos() {
-    return _eos;
 }
 
 } // namespace starrocks

@@ -27,6 +27,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
+#include "exec/sorting/sort_cursor.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
