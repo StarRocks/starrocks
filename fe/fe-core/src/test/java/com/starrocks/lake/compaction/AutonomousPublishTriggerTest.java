@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public class AutonomousPublishTriggerTest {
 
-    private long savedVersionDelta;
+    private int savedVersionDelta;
     private double savedHighScore;
     private int savedMinDeltaForHighScore;
     private long savedMaxIntervalMs;
