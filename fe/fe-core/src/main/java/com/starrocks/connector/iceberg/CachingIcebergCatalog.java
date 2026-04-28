@@ -40,6 +40,8 @@ import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
@@ -53,6 +55,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -70,6 +73,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
+    // Only emit the partition-load INFO line when a refresh exceeds this many partitions, so the log
+    // remains useful for diagnosing slow loads on large tables without flooding for normal-sized ones.
+    private static final int PARTITION_LOAD_LOG_THRESHOLD = 10000;
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
@@ -151,7 +157,28 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                             .setSrTableName(key.tableName)
                                             .setCatalogTableName(key.tableName)
                                             .setNativeTable(nativeTable).build();
-                            return delegate.getPartitions(icebergTable, key.snapshotId, null);
+                            Map<String, Partition> partitions =
+                                    delegate.getPartitions(icebergTable, key.snapshotId, null);
+                            if (partitions.size() > PARTITION_LOAD_LOG_THRESHOLD) {
+                                // -1 is used by callers as "use current snapshot" (see IcebergCatalog#getPartitions);
+                                // resolve it here so the summary and logged snapshot id reflect the snapshot actually scanned.
+                                Snapshot snapshot = key.snapshotId == -1
+                                        ? nativeTable.currentSnapshot() : nativeTable.snapshot(key.snapshotId);
+                                long loggedSnapshotId = snapshot != null ? snapshot.snapshotId() : key.snapshotId;
+                                Map<String, String> summary =
+                                        (snapshot != null && snapshot.summary() != null)
+                                                ? snapshot.summary() : Collections.emptyMap();
+                                LOG.info("Loaded large iceberg partition set: catalog={}, table={}.{}, snapshot={}, "
+                                                + "partitions={}, dataFiles={}, deleteFiles={}, specs={}, "
+                                                + "partitionFields={}",
+                                        catalogName, key.dbName, key.tableName, loggedSnapshotId,
+                                        partitions.size(),
+                                        summary.getOrDefault(SnapshotSummary.TOTAL_DATA_FILES_PROP, "?"),
+                                        summary.getOrDefault(SnapshotSummary.TOTAL_DELETE_FILES_PROP, "?"),
+                                        nativeTable.specs().size(),
+                                        nativeTable.spec().fields().size());
+                            }
+                            return partitions;
                         }
                     });
         long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
