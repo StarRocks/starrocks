@@ -52,15 +52,6 @@ public:
 
     size_t partition_end_offset(size_t partition_id) { return _partition_row_indexes_start_points[partition_id + 1]; }
 
-    size_t partition_memory_usage(size_t partition_id) {
-        if (partition_id >= _partition_memory_usage.size() || partition_id < 0) {
-            throw std::runtime_error(fmt::format("invalid index {} to get partition memory usage, whose size = {}.",
-                                                 partition_id, _partition_memory_usage.size()));
-        } else {
-            return _partition_memory_usage[partition_id];
-        }
-    }
-
 protected:
     LocalExchangeSourceOperatorFactory* _source;
 
@@ -69,7 +60,6 @@ protected:
     // It will easy to get number of rows belong to one channel by doing
     // _partition_row_indexes_start_points[i + 1] - _partition_row_indexes_start_points[i]
     std::vector<size_t> _partition_row_indexes_start_points;
-    std::vector<size_t> _partition_memory_usage;
     std::vector<uint32_t> _shuffle_channel_id;
 };
 
