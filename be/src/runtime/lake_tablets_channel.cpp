@@ -753,8 +753,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                 //     i_collect=true and pollute the response with duplicate
                 //     TimedOut entries; pick the minimum coordinator sender_id
                 //     to match the orphan-reporter dedup below.
-                const bool report_timeout =
-                        per_partition_mode ? (sender_id == min_coord_sender_id) : i_collect;
+                const bool report_timeout = per_partition_mode ? (sender_id == min_coord_sender_id) : i_collect;
                 if (report_timeout) {
                     context->update_status(st);
                 }
