@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
 #include "storage/tablet_range.h"
 #include "storage/types.h"
+#include "testutil/assert.h"
 
 namespace starrocks::lake {
 

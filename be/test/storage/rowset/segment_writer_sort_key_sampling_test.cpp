@@ -18,7 +18,6 @@
 #include <string>
 #include <vector>
 
-#include "testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
@@ -28,6 +27,7 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
