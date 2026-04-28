@@ -2739,6 +2739,7 @@ primaryExpression
     | columnReference                                                                     #columnRef
     | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
+    | primaryExpression DOUBLE_COLON type                                                 #typeCast
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
     | '(' expression ')'                                                                  #parenthesizedExpression
