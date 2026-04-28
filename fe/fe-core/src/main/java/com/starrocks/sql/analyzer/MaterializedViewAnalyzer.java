@@ -170,9 +170,11 @@ public class MaterializedViewAnalyzer {
     }
 
     public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement) {
+        return getBaseTableInfos(AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement));
+    }
+
+    public static Set<BaseTableInfo> getBaseTableInfos(Map<TableName, Table> tableNameTableMap) {
         Set<BaseTableInfo> baseTableInfos = Sets.newHashSet();
-        Map<TableName, Table> tableNameTableMap =
-                AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement);
         for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
             TableName tableName = entry.getKey();
             Table table = entry.getValue();
@@ -228,16 +230,19 @@ public class MaterializedViewAnalyzer {
         return false;
     }
 
-    public static void checkBaseTables(Set<BaseTableInfo> baseTableInfos, boolean allowIcebergPartitionEvolution) {
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table = MvUtils.getTableChecked(baseTableInfo);
+    public static void checkBaseTables(Map<TableName, Table> tableNameTableMap, boolean allowIcebergPartitionEvolution) {
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            TableName tableName = entry.getKey();
+            Table table = entry.getValue();
+            Preconditions.checkState(table != null, "Materialized view base table is null");
             if (!isSupportBasedOnTable(table)) {
                 throw new SemanticException("Create/Rebuild materialized view do not support the table type: " +
-                        table.getType());
+                        table.getType(), tableName.getPos());
             }
             if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                 throw new SemanticException(
-                        "Create/Rebuild materialized view from inactive materialized view: " + table.getName());
+                        "Create/Rebuild materialized view from inactive materialized view: " + table.getName(),
+                        tableName.getPos());
             }
 
             // The view itself is recorded as an MV dependency, but its underlying base tables
@@ -250,13 +255,13 @@ public class MaterializedViewAnalyzer {
                 IcebergTable icebergTable = (IcebergTable) table;
                 if (icebergTable.getNativeTable().specs().size() > 1) {
                     throw new SemanticException("Do not support create materialized view when base iceberg table " +
-                            table.getName() + " has done partition evolution");
+                            table.getName() + " has done partition evolution", tableName.getPos());
                 }
             }
             if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
                 throw new SemanticException(
                         "Only supports creating materialized views based on the external table " +
-                                "which created by catalog");
+                                "which created by catalog", tableName.getPos());
             }
         }
     }
@@ -400,8 +405,10 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException(errMsg, statement.getTableRef().getPos());
             }
             boolean allowIcebergPartitionEvolution = CollectionUtils.isEmpty(statement.getPartitionByExprs());
-            Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement);
-            checkBaseTables(baseTableInfos, allowIcebergPartitionEvolution);
+            Map<TableName, Table> tableNameTableMap =
+                    AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement);
+            Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(tableNameTableMap);
+            checkBaseTables(tableNameTableMap, allowIcebergPartitionEvolution);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {

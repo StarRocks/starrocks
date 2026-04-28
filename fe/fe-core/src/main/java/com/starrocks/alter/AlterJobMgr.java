@@ -50,6 +50,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
@@ -88,6 +89,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -247,10 +249,12 @@ public class AlterJobMgr {
             }
 
             // Skip checks to maintain eventual consistency when replay
-            Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement);
+            Map<TableName, Table> tableNameTableMap =
+                    AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(mvQueryStatement);
+            Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
             if (!isReplay) {
                 MaterializedViewAnalyzer.checkBaseTables(
-                        baseTableInfos, materializedView.getPartitionInfo().isUnPartitioned());
+                        tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
             }
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = taskManager.getTask(materializedView);
