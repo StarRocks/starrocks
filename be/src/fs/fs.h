@@ -74,6 +74,17 @@ struct FileInfo {
     std::shared_ptr<FileSystem> fs;
     // It is used to store the file offset of the bundle file.
     std::optional<int64_t> bundle_file_offset;
+
+    // Cache key uniquely identifying this FileInfo as a *slice* of a physical file. Caches keyed
+    // on file identity (e.g. lake metacache for Segments) must use this rather than `path` so two
+    // slices of the same physical file at different `bundle_file_offset` get distinct entries.
+    // Non-bundled files collapse to the path alone, preserving the pre-existing cache layout.
+    std::string cache_key() const {
+        if (bundle_file_offset.has_value() && bundle_file_offset.value() > 0) {
+            return path + "#" + std::to_string(bundle_file_offset.value());
+        }
+        return path;
+    }
 };
 
 struct FileWriteStat {
@@ -321,17 +332,28 @@ public:
               _stream(std::move(stream)),
               _name(std::move(name)) {}
 
-    explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name, bool is_cache_hit)
+    explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name, bool is_cache_hit,
+                              int64_t bundle_offset = 0)
             : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
               _stream(std::move(stream)),
               _name(std::move(name)),
-              _is_cache_hit(is_cache_hit) {}
+              _is_cache_hit(is_cache_hit),
+              _bundle_offset(bundle_offset) {}
 
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
     const std::string& filename() const override { return _name; }
 
     bool is_cache_hit() const override { return _is_cache_hit; }
+
+    // When this RandomAccessFile names a bundled-slice view of a physical file (the wrapper
+    // hides the slice's start offset behind a stream-relative coordinate), the slice's base
+    // offset must be folded into the page-cache key, otherwise two slices that share the same
+    // physical-file `_name` collide at the same stream-relative offset. For non-bundled files
+    // `_bundle_offset` is 0 and the encoding is `(path, stream_offset)` as before.
+    std::string page_cache_key(int64_t stream_offset) const override {
+        return io::SeekableInputStream::page_cache_key(_bundle_offset + stream_offset);
+    }
 
     static std::unique_ptr<RandomAccessFile> from(std::unique_ptr<io::SeekableInputStream> stream,
                                                   const std::string& name, bool is_cache_hit,
@@ -342,6 +364,9 @@ private:
     std::string _name;
     // for cachefs in fs_starlet
     bool _is_cache_hit{false};
+    // Slice base offset within the underlying physical file when this RandomAccessFile wraps a
+    // BundleSeekableInputStream; 0 otherwise. Used only by page_cache_key to keep slices distinct.
+    int64_t _bundle_offset{0};
 };
 
 // A file abstraction for sequential writing.  The implementation

@@ -56,7 +56,11 @@ StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_w
         auto bundle_file = std::make_unique<BundleSeekableInputStream>(
                 file->stream(), file_info.bundle_file_offset.value(), file_info.size.value());
         RETURN_IF_ERROR(bundle_file->init());
-        return std::make_unique<RandomAccessFile>(std::move(bundle_file), file->filename(), file->is_cache_hit());
+        // Pass the slice's base offset to the outer RandomAccessFile so its page_cache_key folds
+        // it in. The outer wrapper otherwise sees only `path` and would produce identical keys
+        // for every slice of the same physical file.
+        return std::make_unique<RandomAccessFile>(std::move(bundle_file), file->filename(), file->is_cache_hit(),
+                                                  file_info.bundle_file_offset.value());
     } else {
         return new_random_access_file(opts, file_info);
     }

@@ -140,20 +140,6 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
     return Status::OK();
 }
 
-// The unique key identifying entries in the page cache.
-// Each cached page corresponds to a specific offset within
-// a file.
-//
-// TODO(zc): Now we use file name(std::string) as a part of key,
-//  which is not efficient. We should make it better later
-std::string encode_cache_key(const std::string& fname, int64_t offset) {
-    std::string str;
-    str.reserve(fname.size() + sizeof(offset));
-    str.append(fname);
-    str.append((char*)&offset, sizeof(offset));
-    return str;
-}
-
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 Status drop_local_cache_data(const std::string& fname) {
     if (!config::lake_clear_corrupted_cache_data) {
@@ -326,7 +312,11 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
     bool page_cache_available = (cache != nullptr) && cache->available();
 #endif
     PageCacheHandle cache_handle;
-    std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_pointer.offset);
+    // Let the stream produce its own page-cache key for opts.page_pointer.offset. For non-bundled
+    // streams this is just (filename, offset); for bundle slices the override folds in the slice
+    // base offset so two slices of the same physical file never collide at equal stream-relative
+    // offsets. Callers do not need to know whether the stream is a slice.
+    std::string cache_key = opts.read_file->page_cache_key(opts.page_pointer.offset);
     if (opts.use_page_cache && page_cache_available && cache->lookup(cache_key, &cache_handle)) {
         return parse_page_from_cache(handle, body, footer, &cache_handle, opts);
     }
