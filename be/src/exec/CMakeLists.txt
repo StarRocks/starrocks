@@ -135,6 +135,9 @@ target_link_libraries(ExecSortingCore PUBLIC
     StarRocksGen
 )
 
+# Staged pipeline compatibility groups. These source lists are not final clean
+# module boundaries yet; keep them named by intended ownership so later
+# cycle-cut leaves can promote them into real targets incrementally.
 set(PIPELINE_PRIMITIVES_SRCS
     pipeline/operator.cpp
 )
@@ -216,7 +219,6 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/sink/result_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
-    pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
@@ -293,7 +295,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     spill/executor.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
-    spill/spill_components.cpp
     spill/mem_table.cpp
     spill/serde.cpp
     spill/input_stream.cpp
@@ -473,6 +474,10 @@ add_library(pipeline_primitives_exec_objs OBJECT
     ${PIPELINE_PRIMITIVES_SRCS}
 )
 
+# `pipeline/aggregate/aggregate_operators.cpp` intentionally includes the
+# aggregate operator implementation .cpp files to control template
+# instantiation. Do not add those implementation files separately here.
+#
 # Keep graph and adapter sources named separately, but compile them through the
 # runtime compatibility staging target until later cycle-cut leaves land.
 add_library(pipeline_runtime_compat_exec_objs OBJECT
