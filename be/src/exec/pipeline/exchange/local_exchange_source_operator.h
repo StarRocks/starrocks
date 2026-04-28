@@ -27,12 +27,12 @@ class LocalExchangeSourceOperator final : public SourceOperator {
     class PartitionChunk {
     public:
         PartitionChunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, const uint32_t from,
-                       const uint32_t size, const size_t memory_usage)
+                       const uint32_t size, std::shared_ptr<ChunkBufferMemoryEntry> memory_entry)
                 : chunk(std::move(chunk)),
                   indexes(std::move(indexes)),
                   from(from),
                   size(size),
-                  memory_usage(memory_usage) {}
+                  memory_entry(std::move(memory_entry)) {}
 
         PartitionChunk(const PartitionChunk&) = delete;
 
@@ -42,13 +42,22 @@ class LocalExchangeSourceOperator final : public SourceOperator {
         std::shared_ptr<std::vector<uint32_t>> indexes;
         const uint32_t from;
         const uint32_t size;
-        const size_t memory_usage;
+        std::shared_ptr<ChunkBufferMemoryEntry> memory_entry;
+    };
+
+    struct PassthroughChunk {
+        ChunkPtr chunk;
+        std::shared_ptr<ChunkBufferMemoryEntry> memory_entry;
+    };
+
+    struct KeyPartitionChunk {
+        ChunkUniquePtr chunk;
+        std::shared_ptr<ChunkBufferMemoryEntry> memory_entry;
     };
 
     struct PartialChunks {
-        std::queue<ChunkUniquePtr> queue;
+        std::queue<KeyPartitionChunk> queue;
         int64_t num_rows{0};
-        size_t memory_usage{0};
         std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_key_datum;
     };
 
@@ -56,14 +65,12 @@ public:
     LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager)
             : SourceOperator(factory, id, "local_exchange_source", plan_node_id, true, driver_sequence),
-              _memory_manager(memory_manager) {
-        _local_memory_limit = _memory_manager->get_memory_limit_per_driver() * 0.8;
-    }
+              _memory_manager(memory_manager) {}
 
     void add_chunk(ChunkPtr chunk);
 
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
-                     uint32_t size, size_t memory_bytes);
+                     uint32_t size, std::shared_ptr<ChunkBufferMemoryEntry> memory_entry);
 
     Status add_chunk(const std::vector<std::optional<std::string>>& partition_key,
                      const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum, ChunkUniquePtr chunk);
@@ -102,8 +109,6 @@ private:
     std::map<std::vector<std::optional<std::string>>, LocalExchangeSourceOperator::PartialChunks>::iterator
     _max_row_partition_chunks();
 
-    bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
-
     bool _key_partition_pending_chunk_empty() const {
         for (const auto& pending_chunks : _partition_key2partial_chunks) {
             if (!pending_chunks.second.queue.empty()) {
@@ -114,11 +119,9 @@ private:
     }
 
     bool _is_finished = false;
-    std::queue<ChunkPtr> _full_chunk_queue;
+    std::queue<PassthroughChunk> _full_chunk_queue;
     std::queue<PartitionChunk> _partition_chunk_queue;
     size_t _partition_rows_num = 0;
-    size_t _local_memory_usage = 0;
-    size_t _local_memory_limit = 0;
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
@@ -146,6 +149,8 @@ public:
 
     void set_exchanger(LocalExchanger* exchanger) { _exchanger = exchanger; }
     LocalExchanger* exchanger() { return _exchanger; }
+
+    ChunkBufferMemoryManager* memory_manager() { return _memory_manager.get(); }
 
     std::vector<LocalExchangeSourceOperator*>& get_sources() { return _sources; }
 

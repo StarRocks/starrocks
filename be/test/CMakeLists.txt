@@ -74,6 +74,7 @@ set(EXEC_FILES
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
+        ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
