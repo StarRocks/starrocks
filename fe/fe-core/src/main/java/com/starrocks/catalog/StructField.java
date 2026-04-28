@@ -138,7 +138,6 @@ public class StructField {
         return sb.toString();
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/StructField.java
     public void toThrift(TTypeDesc container, TTypeNode node) {
         TStructField field = new TStructField();
         field.setName(name);
@@ -147,7 +146,8 @@ public class StructField {
         field.setPhysical_name(fieldPhysicalName);
         node.struct_fields.add(field);
         type.toThrift(container);
-=======
+    }
+
     private static String backquoteName(String value) {
         if (StringUtils.isEmpty(value)) {
             return value;
@@ -155,7 +155,6 @@ public class StructField {
         // Escape embedded backticks by doubling them so the resulting identifier is always parseable.
         String escaped = value.replace("`", "``");
         return "`" + escaped + "`";
->>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967)):fe/fe-type/src/main/java/com/starrocks/type/StructField.java
     }
 
     @Override

@@ -225,21 +225,12 @@ public class TypeTest {
     @Test
     public void testMysqlColumnType() {
         Object[][] testCases = new Object[][] {
-<<<<<<< HEAD
                 {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
                 {ScalarType.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
                 {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
                 {new ArrayType(Type.INT), "array<int(11)>"},
                 {new MapType(Type.INT, Type.INT), "map<int(11),int(11)>"},
-                {new StructType(Lists.newArrayList(Type.INT)), "struct<col1 int(11)>"},
-=======
-                {BooleanType.BOOLEAN, "tinyint(1)"},
-                {IntegerType.LARGEINT, "bigint(20) unsigned"},
-                {TypeFactory.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
-                {new ArrayType(IntegerType.INT), "array<int(11)>"},
-                {new MapType(IntegerType.INT, IntegerType.INT), "map<int(11),int(11)>"},
-                {new StructType(Lists.newArrayList(IntegerType.INT)), "struct<`col1` int(11)>"},
->>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
+                {new StructType(Lists.newArrayList(Type.INT)), "struct<`col1` int(11)>"},
         };
 
         for (Object[] tc : testCases) {

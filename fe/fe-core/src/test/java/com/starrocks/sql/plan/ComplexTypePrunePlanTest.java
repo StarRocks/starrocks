@@ -237,16 +237,10 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         String sql = "select c1.b[cast('  111   ' as bigint)] from test";
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "1:Project\n" +
-<<<<<<< HEAD
-                "  |  output columns:\n" +
-                "  |  5 <-> 2: c1.b[true][111]",
-                "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
-=======
                         "  |  output columns:\n" +
                         "  |  5 <-> [2: c1, struct<`a` int(11), `b` array<struct<`a` int(11), `b` int(11)>>>, " +
                         "true].b[true][111]",
                 "Pruned type: 2 <-> [struct<`a` int(11), `b` array<struct<`a` int(11), `b` int(11)>>>]");
->>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
     }
 
     @Test
