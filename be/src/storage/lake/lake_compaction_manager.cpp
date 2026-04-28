@@ -94,8 +94,12 @@ double LakeCompactionManager::compute_score_locked(int64_t tablet_id) {
 void LakeCompactionManager::notify_task_finished(int64_t tablet_id,
                                                  const std::vector<uint32_t>& consumed_input_rowsets) {
     std::lock_guard<std::mutex> guard(_mu);
+    // Only decrement when there is a matching reservation. notify without a
+    // prior dispatch (test fixtures, racy retry paths) must not let counters
+    // go negative — that would break the global-cap check in dispatch_loop.
     auto it = _running_per_tablet.find(tablet_id);
-    if (it != _running_per_tablet.end()) {
+    bool had_reservation = (it != _running_per_tablet.end());
+    if (had_reservation) {
         if (--it->second <= 0) _running_per_tablet.erase(it);
     }
     auto rit = _running_inputs.find(tablet_id);
@@ -106,8 +110,10 @@ void LakeCompactionManager::notify_task_finished(int64_t tablet_id,
         }
         if (rit->second.empty()) _running_inputs.erase(rit);
     }
-    int64_t prev = _running_total.fetch_sub(1, std::memory_order_relaxed);
-    (void)prev;
+    if (had_reservation) {
+        int64_t prev = _running_total.fetch_sub(1, std::memory_order_relaxed);
+        DCHECK_GT(prev, 0) << "running_total underflow";
+    }
     _cv.notify_one();
 }
 

@@ -172,7 +172,12 @@ public class CompactionScheduler extends Daemon {
                 trigger = true;
                 reason = "high_score(" + lastScore + ")&&version_delta>="
                         + Config.lake_compaction_min_version_delta_for_high_score;
-            } else if (timeSinceLastPublish > Config.lake_compaction_max_interval_ms) {
+            } else if (stats.getLastPublishTimeMs() > 0 &&
+                    timeSinceLastPublish > Config.lake_compaction_max_interval_ms) {
+                // Skip max-interval check until the first successful publish records a
+                // timestamp; otherwise lastPublishTimeMs == 0 makes "now - 0" always
+                // exceed the interval and bursts trigger on every partition the
+                // moment the feature is enabled.
                 trigger = true;
                 reason = "max_interval_ms exceeded";
             }
@@ -182,11 +187,11 @@ public class CompactionScheduler extends Daemon {
 
             CompactionJob job = startPublishOnly(snapshot, currentVersion, reason);
             if (job != null) {
-                stats.setLastPublishVisibleVersion(currentVersion);
-                stats.setLastPublishTimeMs(now);
-                if (snapshot.getCompactionScore() != null) {
-                    stats.setLastPublishScore(snapshot.getCompactionScore().getMax());
-                }
+                // NOTE: lastPublish* markers are intentionally NOT updated here. Updating
+                // before the txn becomes VISIBLE leaves stale state if commit/publish
+                // fails: version_delta would compute as 0 and the partition would never
+                // be retried until a new visible version appears. The completion handler
+                // in scheduleNewCompaction updates these once the txn reaches VISIBLE.
                 runningCompactions.put(partition, job);
             }
         }
@@ -338,6 +343,19 @@ public class CompactionScheduler extends Daemon {
                 }
             }
             if (job.transactionHasCommitted() && job.waitTransactionVisible(50, TimeUnit.MILLISECONDS)) {
+                // For PUBLISH_ONLY jobs, record the lastPublish markers ONLY now that
+                // the txn has reached VISIBLE. If we updated them at dispatch time and
+                // the publish later failed, version_delta would compute as 0 and the
+                // partition would never be retried until a new version appeared.
+                if (job.getJobType() == CompactionJob.JobType.PUBLISH_ONLY && statistics != null) {
+                    long publishedVersion = job.getPartition().getVisibleVersion();
+                    statistics.setLastPublishVisibleVersion(publishedVersion);
+                    statistics.setLastPublishTimeMs(System.currentTimeMillis());
+                    Quantiles score = statistics.getCompactionScore();
+                    if (score != null) {
+                        statistics.setLastPublishScore(score.getMax());
+                    }
+                }
                 iterator.remove();
                 job.finish();
                 history.offer(CompactionRecord.build(job));
@@ -593,12 +611,11 @@ public class CompactionScheduler extends Daemon {
                 request.parallelConfig = parallelConfig;
             }
 
-            // Autonomous compaction: redirect EXECUTE-side compaction output to BE-local result
-            // files; an upcoming PUBLISH_ONLY job will merge & publish them.
-            if (Config.enable_lake_autonomous_compaction) {
-                request.writeToLocalResult = true;
-            }
-
+            // NOTE: do NOT set writeToLocalResult here. Legacy COMPACT_AND_PUBLISH jobs
+            // must keep writing TxnLog to remote storage so the existing publish flow
+            // can pick them up. Autonomous EXECUTE-side compactions that should write
+            // local results are dispatched by Phase 4's BE-side LakeCompactionManager,
+            // not by this FE-driven path.
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
         }

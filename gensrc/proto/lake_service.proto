@@ -130,9 +130,12 @@ message TabletParallelConfig {
 //   their TxnLog to remote storage so that FE can publish them later.
 // COLLECT_AND_PUBLISH (autonomous-compaction path): BE collects already-finished
 //   compaction results held in its local CompactionResultManager (filtered by
-//   visible_version), assembles each tablet's results into one OpParallelCompaction
-//   TxnLog, and invokes publish_version with force_publish=true so tablets without
-//   any pending results still get a uniform version bump.
+//   visible_version) and assembles each tablet's results into a single
+//   OpParallelCompaction TxnLog written to remote storage. The actual
+//   publish_version is driven later by FE's PublishVersionDaemon after the
+//   transaction is committed; FE sets force_publish=true on the TxnInfoPB so
+//   tablets without local results take the ignore_txn_log path on the BE and
+//   still get a uniform version bump.
 enum CompactionMode {
     EXECUTE = 0;
     COLLECT_AND_PUBLISH = 1;

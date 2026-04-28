@@ -140,12 +140,16 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     bool is_first_range = false;
     bool is_last_range = false;
 
-    // Autonomous compaction: when true, compaction_task does NOT write the txn log
-    // to remote storage. Instead, after the task completes, it persists the result
-    // locally via CompactionResultManager so that a later COLLECT_AND_PUBLISH
-    // request can merge and publish it. Mutually compatible with skip_write_txnlog
-    // (which only suppresses the remote write); this extra flag triggers the
-    // local persistence step.
+    // Autonomous compaction: when true, compaction_task is expected to persist
+    // the compaction result locally via CompactionResultManager so a later
+    // COLLECT_AND_PUBLISH request can merge and publish it.
+    //
+    // Precedence in horizontal/vertical_compaction_task: skip_write_txnlog is
+    // checked FIRST (legacy aggregate path); if true, the txn_log is returned
+    // to the caller via _context->txn_log and write_to_local_result is NOT
+    // honored in that branch. write_to_local_result only fires when
+    // skip_write_txnlog == false. Don't set both at once unless the task
+    // implementation is updated to handle the combination explicitly.
     bool write_to_local_result = false;
     // The base_version (== op_compaction.compact_version) recorded when the
     // compaction task started. Stored separately in CompactionResultPB so that

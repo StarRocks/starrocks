@@ -215,6 +215,183 @@ TEST_F(CompactionResultManagerTest, persist_helper_from_txn_log) {
     EXPECT_EQ(2u, p.size());
 }
 
+TEST_F(CompactionResultManagerTest, append_rejects_missing_required_fields) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+
+    // Missing tablet_id
+    CompactionResultPB no_tablet;
+    no_tablet.set_base_version(1);
+    no_tablet.set_result_id(0);
+    no_tablet.mutable_op_compaction()->set_compact_version(1);
+    EXPECT_FALSE(mgr.append_result(no_tablet).ok());
+
+    // Missing base_version
+    CompactionResultPB no_base;
+    no_base.set_tablet_id(1);
+    no_base.set_result_id(0);
+    no_base.mutable_op_compaction()->set_compact_version(1);
+    EXPECT_FALSE(mgr.append_result(no_base).ok());
+
+    // Missing op_compaction
+    CompactionResultPB no_op;
+    no_op.set_tablet_id(1);
+    no_op.set_base_version(1);
+    no_op.set_result_id(0);
+    EXPECT_FALSE(mgr.append_result(no_op).ok());
+
+    // Missing result_id
+    CompactionResultPB no_rid;
+    no_rid.set_tablet_id(1);
+    no_rid.set_base_version(1);
+    no_rid.mutable_op_compaction()->set_compact_version(1);
+    EXPECT_FALSE(mgr.append_result(no_rid).ok());
+}
+
+TEST_F(CompactionResultManagerTest, empty_root_dirs_rejects_append) {
+    CompactionResultManager mgr({});
+    ASSERT_OK(mgr.scan_on_startup());
+    auto r = make_result(1, 1, 0, {1});
+    EXPECT_FALSE(mgr.append_result(r).ok());
+}
+
+TEST_F(CompactionResultManagerTest, load_results_for_unknown_tablet_returns_empty) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    auto loaded = mgr.load_results(99999, 100);
+    ASSERT_TRUE(loaded.ok());
+    EXPECT_TRUE(loaded.value().empty());
+}
+
+TEST_F(CompactionResultManagerTest, pending_inputs_unknown_tablet_returns_empty) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    auto p = mgr.pending_inputs(99999);
+    EXPECT_TRUE(p.empty());
+}
+
+TEST_F(CompactionResultManagerTest, list_results_for_tablet_unknown_returns_empty) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    auto v = mgr.list_results_for_tablet(99999);
+    EXPECT_TRUE(v.empty());
+}
+
+TEST_F(CompactionResultManagerTest, list_results_for_tablet_after_append) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    ASSERT_OK(mgr.append_result(make_result(123, 5, 0, {1, 2})));
+    ASSERT_OK(mgr.append_result(make_result(123, 6, 1, {3})));
+    auto refs = mgr.list_results_for_tablet(123);
+    EXPECT_EQ(2u, refs.size());
+}
+
+TEST_F(CompactionResultManagerTest, delete_results_unknown_tablet_is_noop) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    EXPECT_OK(mgr.delete_results(99999, {0, 1, 2}));
+    EXPECT_EQ(0u, mgr.result_count());
+}
+
+TEST_F(CompactionResultManagerTest, delete_results_empty_id_list_is_noop) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    ASSERT_OK(mgr.append_result(make_result(123, 5, 0, {1, 2})));
+    EXPECT_OK(mgr.delete_results(123, {}));
+    EXPECT_EQ(1u, mgr.result_count());
+}
+
+TEST_F(CompactionResultManagerTest, next_result_id_monotonic_per_tablet) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    EXPECT_EQ(0, mgr.next_result_id(100));
+    EXPECT_EQ(1, mgr.next_result_id(100));
+    EXPECT_EQ(2, mgr.next_result_id(100));
+    // Different tablet has its own counter.
+    EXPECT_EQ(0, mgr.next_result_id(200));
+    EXPECT_EQ(3, mgr.next_result_id(100));
+}
+
+TEST_F(CompactionResultManagerTest, scan_skips_unrecognized_filenames) {
+    auto subdir = _root / CompactionResultManager::kSubDir;
+    std::filesystem::create_directories(subdir);
+    // Files that don't match the pattern <tablet>_<ver>_<id>.pb
+    {
+        std::ofstream(subdir / "garbage.txt") << "x";
+        std::ofstream(subdir / "100_only_two") << "x";
+        std::ofstream(subdir / "100_10_extra_underscore_5.pb") << "x";
+    }
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    EXPECT_EQ(0u, mgr.result_count());
+}
+
+TEST_F(CompactionResultManagerTest, persist_helper_rejects_null_manager) {
+    TxnLogPB log;
+    log.set_tablet_id(1);
+    log.mutable_op_compaction()->set_compact_version(1);
+    auto st = persist_compaction_result_from_txn_log(nullptr, 1, 1, log);
+    EXPECT_FALSE(st.ok());
+}
+
+TEST_F(CompactionResultManagerTest, persist_helper_rejects_no_op_compaction) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    TxnLogPB log;
+    log.set_tablet_id(1);
+    // No op_compaction.
+    auto st = persist_compaction_result_from_txn_log(&mgr, 1, 1, log);
+    EXPECT_FALSE(st.ok());
+}
+
+TEST_F(CompactionResultManagerTest, merge_empty_results_produces_empty_op_parallel) {
+    auto log = merge_results_to_txn_log({}, 999, 1);
+    ASSERT_TRUE(log != nullptr);
+    EXPECT_EQ(999, log->tablet_id());
+    ASSERT_TRUE(log->has_op_parallel_compaction());
+    EXPECT_EQ(0, log->op_parallel_compaction().subtask_compactions_size());
+}
+
+TEST_F(CompactionResultManagerTest, total_bytes_decreases_after_delete) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    int64_t before = mgr.total_bytes();
+    ASSERT_OK(mgr.append_result(make_result(123, 5, 0, {1, 2, 3})));
+    int64_t after_append = mgr.total_bytes();
+    EXPECT_GT(after_append, before);
+    ASSERT_OK(mgr.delete_results(123, {0}));
+    int64_t after_delete = mgr.total_bytes();
+    EXPECT_LT(after_delete, after_append);
+}
+
+TEST_F(CompactionResultManagerTest, load_results_filters_by_upper_bound_strictly) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    ASSERT_OK(mgr.append_result(make_result(100, 5, 0, {1})));
+    ASSERT_OK(mgr.append_result(make_result(100, 10, 1, {2})));
+    ASSERT_OK(mgr.append_result(make_result(100, 15, 2, {3})));
+    // upper_bound_version=10 → returns base_version=5 and 10, not 15
+    auto loaded = mgr.load_results(100, 10).value();
+    EXPECT_EQ(2u, loaded.size());
+    // Sorted by base_version asc.
+    EXPECT_EQ(5, loaded[0].base_version());
+    EXPECT_EQ(10, loaded[1].base_version());
+}
+
+TEST_F(CompactionResultManagerTest, load_results_orders_by_result_id_within_same_version) {
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    // Insert in reverse result_id order; load should return ascending.
+    ASSERT_OK(mgr.append_result(make_result(100, 10, 5, {1})));
+    ASSERT_OK(mgr.append_result(make_result(100, 10, 2, {2})));
+    ASSERT_OK(mgr.append_result(make_result(100, 10, 8, {3})));
+    auto loaded = mgr.load_results(100, 10).value();
+    ASSERT_EQ(3u, loaded.size());
+    EXPECT_EQ(2, loaded[0].result_id());
+    EXPECT_EQ(5, loaded[1].result_id());
+    EXPECT_EQ(8, loaded[2].result_id());
+}
+
 // TODO(Phase 2.3 follow-up): integration tests requiring a full Lake fixture
 // (TabletManager + UpdateManager + real TabletMetadata) — tracked separately:
 //  1. Mixed batch: 50 tablets with results + 50 without -> all 100 reach new_version,
