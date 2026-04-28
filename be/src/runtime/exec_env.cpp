@@ -695,18 +695,25 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
-    // NOTE: Intentionally NOT initializing _lake_compaction_result_manager nor
-    // starting LakeCompactionManager dispatch thread here. The autonomous
-    // compaction feature is gated by config::enable_lake_autonomous_compaction
-    // (default false); a future Phase 4 commit will wire the lazy
-    // construction + start/stop into a config-change watcher.
-    //
-    // We previously observed CN nodes never registering with the FE when this
-    // init block ran during BE startup; rather than chase the exact cause now
-    // (logging is not easily accessible on TSP clusters), keep init identical
-    // to the pre-feature baseline. All COLLECT_AND_PUBLISH paths look up the
-    // manager via the singleton accessor so they will fall back gracefully
-    // when nullptr is returned.
+    {
+        std::vector<std::string> result_root_dirs;
+        result_root_dirs.reserve(store_paths.size());
+        for (const auto& sp : store_paths) {
+            result_root_dirs.emplace_back(sp.path);
+        }
+        _lake_compaction_result_manager =
+                std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
+        auto scan_st = _lake_compaction_result_manager->scan_on_startup();
+        if (!scan_st.ok()) {
+            LOG(WARNING) << "CompactionResultManager scan_on_startup failed: " << scan_st;
+        }
+        // LakeCompactionManager dispatch thread is gated by the runtime config
+        // and only needed when autonomous compaction is enabled. We launch it
+        // unconditionally here — the dispatch_loop is a no-op (cv.wait_for) when
+        // the feature is off, so the cost is negligible.
+        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager,
+                                                       _lake_compaction_result_manager.get());
+    }
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
         std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
@@ -768,10 +775,15 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
-    // NOTE: Intentionally NOT initializing _lake_compaction_result_manager in
-    // BE_TEST. Tests that exercise autonomous compaction construct their own
-    // CompactionResultManager with a temp dir; tests that don't shouldn't pay
-    // any cost. (Production USE_STAROS branch does init it.)
+    {
+        std::vector<std::string> result_root_dirs;
+        for (const auto& sp : _store_paths) result_root_dirs.emplace_back(sp.path);
+        _lake_compaction_result_manager =
+                std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
+        (void)_lake_compaction_result_manager->scan_on_startup();
+        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager,
+                                                       _lake_compaction_result_manager.get());
+    }
     RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata_pool")
                             .set_min_threads(1)
                             .set_max_threads(1)

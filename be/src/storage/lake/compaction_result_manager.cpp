@@ -102,8 +102,13 @@ Status CompactionResultManager::scan_on_startup() {
             }
         }
     }
-    LOG(INFO) << "CompactionResultManager: scan_on_startup loaded result_count=" << result_count()
-              << " total_bytes=" << total_bytes();
+    // Inline compute count + bytes — DO NOT call result_count() / total_bytes()
+    // accessors here, they re-acquire _mu (already held by this scope) and would
+    // self-deadlock on the non-recursive mutex.
+    size_t loaded_count = 0;
+    for (const auto& kv : _tablet_results) loaded_count += kv.second.size();
+    LOG(INFO) << "CompactionResultManager: scan_on_startup loaded result_count=" << loaded_count
+              << " total_bytes=" << _total_bytes.load(std::memory_order_relaxed);
     return Status::OK();
 }
 
