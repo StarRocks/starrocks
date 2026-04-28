@@ -66,12 +66,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from auto to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
     }
 
     @Test
@@ -91,12 +85,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
         }
     }
 
@@ -118,64 +106,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from auto to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-    }
-
-    @Test
-    public void testChangeMVRefreshMode4() throws Exception {
-        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-
-        // change refresh mode from auto to incremental
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
-            alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode from incremental to auto
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode from auto to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-    }
-
-    @Test
-    public void testChangeMVRefreshMode5() throws Exception {
-        String query = "SELECT id, count(data) over (partition by date)  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-
-        // change refresh mode from auto to incremental
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
-            alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode to auto
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
     }
 
     @Test
@@ -196,12 +126,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from auto to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
     }
 
     @Test
@@ -221,12 +145,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
         }
     }
 

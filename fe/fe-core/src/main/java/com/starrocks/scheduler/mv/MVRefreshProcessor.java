@@ -640,7 +640,7 @@ public abstract class MVRefreshProcessor {
                 if (currentRefreshMode.isIncremental()) {
                     throw new SemanticException("Materialized view %s.%s refresh failed: base table %s schema " +
                             "or identity changed, cannot do incremental refresh in %s mode. " +
-                            "Please trigger a full refresh.",
+                            "Please drop and re-create the materialized view.",
                             db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr(), currentRefreshMode);
                 }
                 toRepairTables.add(Pair.create(newTable, baseTableInfo));
