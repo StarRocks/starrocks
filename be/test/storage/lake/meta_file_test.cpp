@@ -2177,7 +2177,9 @@ TEST_F(MetaFileTest, test_apply_add_index_no_segment_entries_only_index_pb) {
     new_ix->add_col_unique_id(1);
     builder.apply_add_index(op);
 
-    EXPECT_FALSE(metadata->has_idg_meta());
+    // mutable_idg_meta() lazy-allocates so has_idg_meta() is true; the
+    // contract-relevant check is that the idgs map stayed empty.
+    EXPECT_TRUE(metadata->idg_meta().idgs().empty());
     EXPECT_EQ(1, schema->table_indices_size());
     EXPECT_TRUE(schema->column(0).has_bitmap_index());
 }

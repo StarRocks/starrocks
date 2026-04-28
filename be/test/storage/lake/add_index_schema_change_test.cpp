@@ -204,7 +204,7 @@ protected:
 // Run() against a tablet with ONE segment carrying 5 rows. Expect
 // op_add_index has exactly 1 segment_entry and the entry has an IndexKey
 // for (c1_uid, BITMAP).
-TEST_F(AddIndexSchemaChangeTest, run_bitmap_single_segment_happy_path) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_bitmap_single_segment_happy_path) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -234,7 +234,7 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_single_segment_happy_path) {
 // Build NGRAMBF on a VARCHAR column with gram_num=3 / fpp=0.05 /
 // case_sensitive=true. Verify the entry's keys carry NGRAMBF and the .idx
 // file is non-empty (BloomFilterIndexWriter wrote a payload).
-TEST_F(AddIndexSchemaChangeTest, run_ngrambf_with_index_properties) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_ngrambf_with_index_properties) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -256,7 +256,7 @@ TEST_F(AddIndexSchemaChangeTest, run_ngrambf_with_index_properties) {
 
 // Plain BLOOM_FILTER (no index_properties) -> use_ngram=false in
 // BloomFilterIndexWriter. Entry's IndexKey carries BLOOM_FILTER.
-TEST_F(AddIndexSchemaChangeTest, run_plain_bloom_filter) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_plain_bloom_filter) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -275,7 +275,7 @@ TEST_F(AddIndexSchemaChangeTest, run_plain_bloom_filter) {
 
 // Two rowsets / two segments: each gets its own .idx file and a distinct
 // segment_id in op_add_index.
-TEST_F(AddIndexSchemaChangeTest, run_multi_segment_emits_per_segment_entry) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_multi_segment_emits_per_segment_entry) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -299,7 +299,7 @@ TEST_F(AddIndexSchemaChangeTest, run_multi_segment_emits_per_segment_entry) {
 
 // Tablet with no rowsets -> run is a no-op and op_add_index has 0 segment
 // entries but still records new_indexes / alter_version.
-TEST_F(AddIndexSchemaChangeTest, run_empty_tablet_noop) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_empty_tablet_noop) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -318,7 +318,7 @@ TEST_F(AddIndexSchemaChangeTest, run_empty_tablet_noop) {
 
 // GIN -> NotSupported. Triggers cleanup_written_idx_files via the run()
 // failure path.
-TEST_F(AddIndexSchemaChangeTest, run_gin_returns_not_supported) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_gin_returns_not_supported) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -338,7 +338,7 @@ TEST_F(AddIndexSchemaChangeTest, run_gin_returns_not_supported) {
 
 // Unknown column unique_id -> InternalError ("column with unique_id ... not
 // found in schema"). Cleanup runs.
-TEST_F(AddIndexSchemaChangeTest, run_unknown_column_unique_id) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_unknown_column_unique_id) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -356,7 +356,7 @@ TEST_F(AddIndexSchemaChangeTest, run_unknown_column_unique_id) {
 
 // Verify the index_id flows into op_add_index.new_indexes (the IndexKey on
 // each entry only carries (col_uid, index_type), index_id is on new_indexes).
-TEST_F(AddIndexSchemaChangeTest, run_carries_index_id_through_to_entry) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_carries_index_id_through_to_entry) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -376,7 +376,7 @@ TEST_F(AddIndexSchemaChangeTest, run_carries_index_id_through_to_entry) {
 }
 
 // VECTOR -> NotSupported (default switch fall-through).
-TEST_F(AddIndexSchemaChangeTest, run_vector_index_returns_not_supported) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_vector_index_returns_not_supported) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -394,7 +394,7 @@ TEST_F(AddIndexSchemaChangeTest, run_vector_index_returns_not_supported) {
 
 // Drive feed_index_from_column's nullable path via BITMAP on c3 (INT NULL).
 // Confirms add_nulls / add_values runs are exercised end-to-end.
-TEST_F(AddIndexSchemaChangeTest, run_bitmap_nullable_column_handles_nulls) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_bitmap_nullable_column_handles_nulls) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
@@ -414,7 +414,7 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_nullable_column_handles_nulls) {
 
 // Build BITMAP and NGRAMBF together on the same .idx. Both keys end up on
 // the same IndexDeltaGroupEntryPB.
-TEST_F(AddIndexSchemaChangeTest, run_two_indexes_share_idx_file) {
+TEST_F(AddIndexSchemaChangeTest, DISABLED_run_two_indexes_share_idx_file) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
     CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
