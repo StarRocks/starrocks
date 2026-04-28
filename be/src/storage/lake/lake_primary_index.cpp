@@ -262,6 +262,17 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
     return Status::OK();
 }
 
+Status LakePrimaryIndex::sync_flush_persistent_index(int64_t wait_timeout_us) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index == nullptr) {
+        return Status::OK();
+    }
+    return lake_persistent_index->sync_flush_all_memtables(wait_timeout_us);
+}
+
 double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
     if (!_enable_persistent_index) {
         return 0.0;
