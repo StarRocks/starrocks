@@ -26,7 +26,7 @@ displayed_sidebar: docs
 
 - **大容量タブレットサポート（フェーズ1）**
 
-  共有データクラスター向けに、タブレットあたりのデータ容量を大幅に拡大し、長期的な目標としてタブレットあたり100 GBを目指します。フェーズ1では、単一のLakeタブレット内での並列コンパクションと並列MemTableファイナライズを可能にすることに焦点を当て、タブレットサイズが大きくなるにつれて取り込みとコンパクションのオーバーヘッドを削減します。[#66586](https://github.com/StarRocks/starrocks/pull/66586) [#68677](https://github.com/StarRocks/starrocks/pull/68677)
+  共有データクラスター向けに、タブレットあたりのデータ容量を大幅に拡大し、長期的な目標としてタブレットあたり100 GBを目指します。フェーズ1では、単一のLakeタブレット内での並列コンパクションと並列MemTableファイナライズを可能にすることに焦点を当て、タブレットサイズが大きくなるにつれて取り込みとコンパクションのオーバーヘッドを削減します。[#66424](https://github.com/StarRocks/starrocks/pull/66424) [#66522](https://github.com/StarRocks/starrocks/pull/66522) [#66778](https://github.com/StarRocks/starrocks/pull/66778) [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#67432](https://github.com/StarRocks/starrocks/pull/67432) [#67478](https://github.com/StarRocks/starrocks/pull/67478) [#67554](https://github.com/StarRocks/starrocks/pull/67554) [#66796](https://github.com/StarRocks/starrocks/pull/66796) [#67392](https://github.com/StarRocks/starrocks/pull/67392) [#67878](https://github.com/StarRocks/starrocks/pull/67878) [#65908](https://github.com/StarRocks/starrocks/pull/65908) [#68677](https://github.com/StarRocks/starrocks/pull/68677) [#68123](https://github.com/StarRocks/starrocks/pull/68123) [#69865](https://github.com/StarRocks/starrocks/pull/69865)
 
 - **高速スキーマ進化 V2**
 
