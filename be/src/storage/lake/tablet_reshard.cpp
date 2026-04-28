@@ -19,7 +19,6 @@
 
 #include <unordered_map>
 
-#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
@@ -29,6 +28,7 @@
 #include "storage/lake/tablet_splitter.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+#include "util/defer_op.h"
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
