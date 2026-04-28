@@ -493,7 +493,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(table.getAllPhysicalPartitions()).thenReturn(Collections.singletonList(pp));
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
-        when(gsm.getGlobalTransactionMgr()).thenReturn(mockTxnMgrYielding(7777L));
+        GlobalTransactionMgr txnMgr1 = mockTxnMgrYielding(7777L);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr1);
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
@@ -540,7 +541,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(table.getAllPhysicalPartitions()).thenReturn(Collections.singletonList(pp));
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
-        when(gsm.getGlobalTransactionMgr()).thenReturn(mockTxnMgrYielding(42L));
+        GlobalTransactionMgr txnMgr2 = mockTxnMgrYielding(42L);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr2);
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
