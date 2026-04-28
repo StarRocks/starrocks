@@ -34,7 +34,7 @@ displayed_sidebar: docs
 
 - **大容量 Tablet 支持（第一阶段）**
 
-  支持存算分离集群中更大的单 Tablet 数据容量，长期目标是每个 Tablet 100 GB。第一阶段侧重于在单个 Lake Tablet 中实现并行 Compaction 和并行 MemTable 最终化，从而随着 Tablet 大小增长而减少导入和 Compaction 开销。[#66586](https://github.com/StarRocks/starrocks/pull/66586) [#68677](https://github.com/StarRocks/starrocks/pull/68677)
+  支持存算分离集群中更大的单 Tablet 数据容量，长期目标是每个 Tablet 100 GB。第一阶段侧重于在单个 Lake Tablet 中实现并行 Compaction 和并行 MemTable 最终化，从而随着 Tablet 大小增长而减少导入和 Compaction 开销。[#66424](https://github.com/StarRocks/starrocks/pull/66424) [#66522](https://github.com/StarRocks/starrocks/pull/66522) [#66778](https://github.com/StarRocks/starrocks/pull/66778) [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#67432](https://github.com/StarRocks/starrocks/pull/67432) [#67478](https://github.com/StarRocks/starrocks/pull/67478) [#67554](https://github.com/StarRocks/starrocks/pull/67554) [#66796](https://github.com/StarRocks/starrocks/pull/66796) [#67392](https://github.com/StarRocks/starrocks/pull/67392) [#67878](https://github.com/StarRocks/starrocks/pull/67878) [#65908](https://github.com/StarRocks/starrocks/pull/65908) [#68677](https://github.com/StarRocks/starrocks/pull/68677) [#68123](https://github.com/StarRocks/starrocks/pull/68123) [#69865](https://github.com/StarRocks/starrocks/pull/69865)
 
 - **Fast Schema Evolution V2**
 

@@ -34,7 +34,7 @@ Release Date: April 13, 2026
 
 - **Large-Capacity Tablet Support (Phase 1)**
 
-  Supports significantly larger per-tablet data capacity for shared-data clusters, with a long-term target of 100 GB per tablet. Phase 1 focuses on enabling parallel Compaction and parallel MemTable finalization within a single Lake tablet, reducing ingestion and Compaction overhead as tablet size grows. [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#68677](https://github.com/StarRocks/starrocks/pull/68677)
+  Supports significantly larger per-tablet data capacity for shared-data clusters, with a long-term target of 100 GB per tablet. Phase 1 focuses on enabling parallel Compaction and parallel MemTable finalization within a single Lake tablet, reducing ingestion and Compaction overhead as tablet size grows. [#66424](https://github.com/StarRocks/starrocks/pull/66424) [#66522](https://github.com/StarRocks/starrocks/pull/66522) [#66778](https://github.com/StarRocks/starrocks/pull/66778) [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#67432](https://github.com/StarRocks/starrocks/pull/67432) [#67478](https://github.com/StarRocks/starrocks/pull/67478) [#67554](https://github.com/StarRocks/starrocks/pull/67554) [#66796](https://github.com/StarRocks/starrocks/pull/66796) [#67392](https://github.com/StarRocks/starrocks/pull/67392) [#67878](https://github.com/StarRocks/starrocks/pull/67878) [#65908](https://github.com/StarRocks/starrocks/pull/65908) [#68677](https://github.com/StarRocks/starrocks/pull/68677) [#68123](https://github.com/StarRocks/starrocks/pull/68123) [#69865](https://github.com/StarRocks/starrocks/pull/69865)
 
 - **Fast Schema Evolution V2**
 
