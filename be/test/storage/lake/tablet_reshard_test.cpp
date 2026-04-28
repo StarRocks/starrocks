@@ -1685,18 +1685,14 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
 
     EXPECT_EQ(publish_tablet_info.get_tablet_id_in_metadata(), converted->tablet_id());
     expect_shared_and_range(converted->op_write().rowset(), 10, 15);
-    expect_shared_and_range(converted->op_compaction().output_rowset(), 12, 20);
-    ASSERT_TRUE(converted->op_compaction().has_output_sstable());
-    EXPECT_TRUE(converted->op_compaction().output_sstable().shared());
-    ASSERT_EQ(1, converted->op_compaction().output_sstables_size());
-    EXPECT_TRUE(converted->op_compaction().output_sstables(0).shared());
+    // op_compaction and op_parallel_compaction are dropped on SPLITTING cross-publish
+    // (see convert_txn_log_for_splitting); range narrowing is exercised on the surviving
+    // op_write / op_schema_change / op_replication payloads. Drop coverage lives in
+    // test_convert_txn_log_splitting_drops_op_compaction* tests.
+    EXPECT_FALSE(converted->has_op_compaction());
+    EXPECT_FALSE(converted->has_op_parallel_compaction());
     expect_shared_and_range(converted->op_schema_change().rowsets(0), 10, 20);
     expect_shared_and_range(converted->op_replication().op_writes(0).rowset(), 18, 20);
-    expect_shared_and_range(converted->op_parallel_compaction().subtask_compactions(0).output_rowset(), 19, 20);
-    ASSERT_TRUE(converted->op_parallel_compaction().has_output_sstable());
-    EXPECT_TRUE(converted->op_parallel_compaction().output_sstable().shared());
-    ASSERT_EQ(1, converted->op_parallel_compaction().output_sstables_size());
-    EXPECT_TRUE(converted->op_parallel_compaction().output_sstables(0).shared());
 }
 
 // --- New tests for split-then-merge correctness ---
@@ -3939,6 +3935,115 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_merging_drops_op_parallel_com
 
     EXPECT_FALSE(converted->has_op_parallel_compaction());
     EXPECT_EQ(merged_tablet_id, converted->tablet_id());
+}
+
+// --- Tests for SPLITTING cross-publish drop-as-empty-compaction ---
+//
+// Symmetric to the MERGING tests above. A pre-split compaction txn whose
+// publish lands on a SPLIT child has the rows-mapper (.lcrm) and output rowset
+// shaped against the parent tablet's full key range. Each child only owns a
+// subrange, so when the conflict resolver runs over its op_compaction the
+// segment iteration consumes fewer rows than the mapper's stored row_count,
+// and `RowsMapperIterator::status()` (storage/rows_mapper.cpp:155) hard-fails
+// the publish with "Chunk vs rows mapper's row count mismatch", wedging
+// CLEANING. Convert_txn_log must therefore drop op_compaction /
+// op_parallel_compaction during SPLITTING cross-publish (mirroring MERGING),
+// leaving op_write payloads intact and preserving the child range / data-stat
+// adjustments.
+
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_splitting_drops_op_compaction) {
+    const int64_t source_tablet_id = next_id();
+    const int64_t child_tablet_id = next_id();
+    auto log = make_op_compaction_log(source_tablet_id);
+
+    // Base metadata only needs a range — the splitter narrows op_write rowset
+    // ranges against it. op_compaction is unconditionally dropped before any
+    // range-narrowing runs, so the range value is irrelevant for this test.
+    auto base_metadata = std::make_shared<TabletMetadataPB>();
+    base_metadata->set_id(source_tablet_id);
+    base_metadata->set_version(1);
+    base_metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+    base_metadata->mutable_range()->set_lower_bound_included(true);
+    base_metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+    base_metadata->mutable_range()->set_upper_bound_included(false);
+
+    lake::PublishTabletInfo info(lake::PublishTabletInfo::SPLITTING_TABLET, source_tablet_id, child_tablet_id, 4, 0);
+    ASSIGN_OR_ABORT(auto converted, lake::convert_txn_log(log, base_metadata, info));
+
+    // Compaction payload cleared — apply becomes a no-op. The child tablet's
+    // background compaction will rerun the merge over its own range.
+    EXPECT_FALSE(converted->has_op_compaction());
+    EXPECT_FALSE(converted->has_op_parallel_compaction());
+    // Other fields preserved.
+    EXPECT_EQ(child_tablet_id, converted->tablet_id());
+    EXPECT_EQ(log->txn_id(), converted->txn_id());
+}
+
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_splitting_drops_op_parallel_compaction) {
+    const int64_t source_tablet_id = next_id();
+    const int64_t child_tablet_id = next_id();
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(source_tablet_id);
+    log->set_txn_id(2030);
+    auto* op_parallel_compaction = log->mutable_op_parallel_compaction();
+    for (int i = 0; i < 2; ++i) {
+        auto* subtask = op_parallel_compaction->add_subtask_compactions();
+        subtask->mutable_output_rowset()->add_segments(fmt::format("split_subtask_seg_{}.dat", i));
+        subtask->mutable_output_sstable()->set_filename(fmt::format("split_subtask_{}.sst", i));
+    }
+
+    auto base_metadata = std::make_shared<TabletMetadataPB>();
+    base_metadata->set_id(source_tablet_id);
+    base_metadata->set_version(1);
+    base_metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+    base_metadata->mutable_range()->set_lower_bound_included(true);
+    base_metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+    base_metadata->mutable_range()->set_upper_bound_included(false);
+
+    lake::PublishTabletInfo info(lake::PublishTabletInfo::SPLITTING_TABLET, source_tablet_id, child_tablet_id, 2, 1);
+    ASSIGN_OR_ABORT(auto converted, lake::convert_txn_log(log, base_metadata, info));
+
+    EXPECT_FALSE(converted->has_op_parallel_compaction());
+    EXPECT_EQ(child_tablet_id, converted->tablet_id());
+}
+
+// Regression: op_write-only logs through SPLITTING cross-publish must NOT have
+// their op_write fields cleared by the new compaction-drop path. Only the
+// compaction ops are dropped; op_write is preserved (and gets shared-flag /
+// range / data-stat adjustments applied to it).
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_splitting_op_write_preserved) {
+    const int64_t source_tablet_id = next_id();
+    const int64_t child_tablet_id = next_id();
+
+    auto base_metadata = std::make_shared<TabletMetadataPB>();
+    base_metadata->set_id(source_tablet_id);
+    base_metadata->set_version(1);
+    base_metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    base_metadata->mutable_range()->set_lower_bound_included(true);
+    base_metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+    base_metadata->mutable_range()->set_upper_bound_included(false);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(source_tablet_id);
+    log->set_txn_id(3000);
+    auto* rowset = log->mutable_op_write()->mutable_rowset();
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(60);
+    rowset->set_data_size(600);
+    rowset->add_segments("write_seg.dat");
+    rowset->add_segment_size(600);
+
+    lake::PublishTabletInfo info(lake::PublishTabletInfo::SPLITTING_TABLET, source_tablet_id, child_tablet_id, 3, 0);
+    ASSIGN_OR_ABORT(auto converted, lake::convert_txn_log(log, base_metadata, info));
+
+    ASSERT_TRUE(converted->has_op_write());
+    EXPECT_EQ(child_tablet_id, converted->tablet_id());
+    // Splitter scaled num_rows / data_size by split_count and applied
+    // shared-flag to op_write rowset.
+    EXPECT_EQ(20, converted->op_write().rowset().num_rows());
+    EXPECT_EQ(200, converted->op_write().rowset().data_size());
+    ASSERT_TRUE(converted->op_write().rowset().shared_segments_size() > 0);
+    EXPECT_TRUE(converted->op_write().rowset().shared_segments(0));
 }
 
 // Regression: op_parallel_compaction subtasks synthesized by
