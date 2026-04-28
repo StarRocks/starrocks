@@ -571,12 +571,27 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
-    public void testCreateMvOnIcebergTableWithPartitionEvolution() {
-        // Test creating MV on Iceberg table with partition evolution should fail
-        String mvName = "iceberg_evolution_mv";
+    public void testCreateMvOnIcebergTableWithPartitionEvolution() throws Exception {
+        String unpartitionedMvName = "iceberg_evolution_unpartitioned_mv";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + unpartitionedMvName + "`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")\n" +
+                        "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                        + "`t0_date_month_identity_evolution` as a;");
+        Table unpartitionedMv = starRocksAssert.getTable("test", unpartitionedMvName);
+        Assertions.assertTrue(unpartitionedMv instanceof MaterializedView);
+        Assertions.assertTrue(((MaterializedView) unpartitionedMv).getPartitionInfo().isUnPartitioned());
+        starRocksAssert.dropMaterializedView(unpartitionedMvName);
+
+        String partitionedMvName = "iceberg_evolution_partitioned_mv";
         try {
             starRocksAssert.useDatabase("test")
-                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + partitionedMvName + "`\n" +
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "PARTITION BY date_trunc('month', ts)\n" +
                             "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
@@ -588,9 +603,7 @@ public class MaterializedViewAnalyzerTest {
                             + "`t0_date_month_identity_evolution` as a;");
             Assertions.fail("Should fail because Iceberg table has partition evolution");
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains(
-                    "Do not support create materialized view when base iceberg table"));
-            Assertions.assertTrue(e.getMessage().contains("has done partition evolution"));
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"));
         }
     }
 

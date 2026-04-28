@@ -934,6 +934,31 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<TableName, Table> collectAllConnectorTableAndViewWithViewDefinition(
+            QueryStatement queryStatement) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        collectAllConnectorTableAndViewWithViewDefinition(queryStatement, tables);
+        return tables;
+    }
+
+    private static void collectAllConnectorTableAndViewWithViewDefinition(
+            QueryStatement queryStatement, Map<TableName, Table> tables) {
+        Map<TableName, Table> tableNameTableMap = collectAllConnectorTableAndView(queryStatement);
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            Table table = entry.getValue();
+            if (table == null || table.isView()) {
+                continue;
+            }
+            tables.put(entry.getKey(), table);
+        }
+
+        Set<ViewRelation> viewRelationSet = Sets.newHashSet(collectViewRelations(queryStatement));
+        for (ViewRelation viewRelation : viewRelationSet) {
+            collectAllConnectorTableAndViewWithViewDefinition(viewRelation.getQueryStatement(), tables);
+            tables.put(viewRelation.getName(), viewRelation.getView());
+        }
+    }
+
     private static class TableAndViewCollector extends TableCollector {
         public TableAndViewCollector(Map<TableName, Table> dbs) {
             super(dbs);

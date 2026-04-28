@@ -169,52 +169,24 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
+    public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement) {
         Set<BaseTableInfo> baseTableInfos = Sets.newHashSet();
-        processBaseTables(queryStatement, baseTableInfos, withCheck);
-        return baseTableInfos;
-    }
-
-    private static void processBaseTables(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
-                                          boolean withCheck) {
-        Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
+        Map<TableName, Table> tableNameTableMap =
+                AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement);
         for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
-            TableName tableNameInfo = entry.getKey();
+            TableName tableName = entry.getKey();
             Table table = entry.getValue();
-            if (withCheck) {
-                Preconditions.checkState(table != null, "Materialized view base table is null");
-                if (!isSupportBasedOnTable(table)) {
-                    throw new SemanticException("Create/Rebuild materialized view do not support the table type: " +
-                            table.getType(), tableNameInfo.getPos());
-                }
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                    throw new SemanticException(
-                            "Create/Rebuild materialized view from inactive materialized view: " + table.getName(),
-                            tableNameInfo.getPos());
-                }
+            Preconditions.checkState(table != null, "Materialized view base table is null");
+            if (isInternalCatalog(tableName.getCatalog())) {
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+                baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
+                        table.getName(), table.getId()));
+            } else {
+                baseTableInfos.add(new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
+                        table.getName(), table.getTableIdentifier()));
             }
-
-            if (table.isView()) {
-                continue;
-            }
-
-            // Check if the table is an Iceberg table with partition evolution
-            if (table instanceof IcebergTable) {
-                IcebergTable icebergTable = (IcebergTable) table;
-                if (icebergTable.getNativeTable().specs().size() > 1) {
-                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
-                            table.getName() + " has done partition evolution", tableNameInfo.getPos());
-                }
-            }
-
-            if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
-                throw new SemanticException(
-                        "Only supports creating materialized views based on the external table " +
-                                "which created by catalog", tableNameInfo.getPos());
-            }
-            baseTableInfos.add(fromTableName(tableNameInfo, table));
         }
-        processViews(queryStatement, baseTableInfos, withCheck);
+        return baseTableInfos;
     }
 
     private static boolean isSupportBasedOnTable(Table table) {
@@ -256,28 +228,36 @@ public class MaterializedViewAnalyzer {
         return false;
     }
 
-    private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
-                                     boolean withCheck) {
-        List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
-        if (viewRelations.isEmpty()) {
-            return;
-        }
-        Set<ViewRelation> viewRelationSet = Sets.newHashSet(viewRelations);
-        for (ViewRelation viewRelation : viewRelationSet) {
-            // base tables of view
-            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos, withCheck);
+    public static void checkBaseTables(Set<BaseTableInfo> baseTableInfos, boolean allowIcebergPartitionEvolution) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table table = MvUtils.getTableChecked(baseTableInfo);
+            if (!isSupportBasedOnTable(table)) {
+                throw new SemanticException("Create/Rebuild materialized view do not support the table type: " +
+                        table.getType());
+            }
+            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                throw new SemanticException(
+                        "Create/Rebuild materialized view from inactive materialized view: " + table.getName());
+            }
 
-            // view itself is considered as base-table
-            baseTableInfos.add(fromTableName(viewRelation.getName(), viewRelation.getView()));
-        }
-    }
+            // The view itself is recorded as an MV dependency, but its underlying base tables
+            // have already been expanded and will be checked separately.
+            if (table.isView()) {
+                continue;
+            }
 
-    private static BaseTableInfo fromTableName(TableName name, Table table) {
-        if (isInternalCatalog(name.getCatalog())) {
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(name.getDb());
-            return new BaseTableInfo(database.getId(), database.getFullName(), table.getName(), table.getId());
-        } else {
-            return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
+            if (!allowIcebergPartitionEvolution && table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                if (icebergTable.getNativeTable().specs().size() > 1) {
+                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                            table.getName() + " has done partition evolution");
+                }
+            }
+            if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
+                throw new SemanticException(
+                        "Only supports creating materialized views based on the external table " +
+                                "which created by catalog");
+            }
         }
     }
 
@@ -419,7 +399,9 @@ public class MaterializedViewAnalyzer {
                 String errMsg = String.format("Can not find database:%s in %s", dbName, catalog);
                 throw new SemanticException(errMsg, statement.getTableRef().getPos());
             }
-            Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
+            boolean allowIcebergPartitionEvolution = CollectionUtils.isEmpty(statement.getPartitionByExprs());
+            Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement);
+            checkBaseTables(baseTableInfos, allowIcebergPartitionEvolution);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {

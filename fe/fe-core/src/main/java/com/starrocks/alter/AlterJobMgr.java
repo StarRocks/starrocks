@@ -247,15 +247,18 @@ public class AlterJobMgr {
             }
 
             // Skip checks to maintain eventual consistency when replay
-            List<BaseTableInfo> baseTableInfos =
-                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
+            Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement);
+            if (!isReplay) {
+                MaterializedViewAnalyzer.checkBaseTables(
+                        baseTableInfos, materializedView.getPartitionInfo().isUnPartitioned());
+            }
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = taskManager.getTask(materializedView);
             if (task == null) {
                 throw new SemanticException("Can not find running task for materialized view [%s]",
                         materializedView.getName());
             }
-            return new AlterMaterializedViewStatusContext(status, reason, baseTableInfos, task);
+            return new AlterMaterializedViewStatusContext(status, reason, Lists.newArrayList(baseTableInfos), task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));

@@ -712,8 +712,8 @@ public abstract class MVRefreshProcessor {
                 // TODO: Implement a `SnapshotTable` later which can use the copied table or transfer to the real table.
                 final Table table = tableOpt.get();
 
-                // Check if the table is an Iceberg table with partition evolution
-                if (table instanceof IcebergTable) {
+                // Non-partitioned MVs do full refresh without base partition mapping.
+                if (table instanceof IcebergTable && !mv.getPartitionInfo().isUnPartitioned()) {
                     IcebergTable icebergTable = (IcebergTable) table;
                     if (icebergTable.getNativeTable().specs().size() > 1) {
                         throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s " +
