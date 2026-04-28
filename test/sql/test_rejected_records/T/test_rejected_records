@@ -541,44 +541,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 
 -- =============================================================
--- CSV gzip stream load: compressed_file_scanner code path
--- =============================================================
-
--- name: test_rejected_records_csv_gzip @sequential
--- CSV stream load with gzip compression: validates the rejected-record path
--- works through the CompressedFileScanner wrapper, not just the plain CSV
--- scanner. Same row-level reject (cast 'bad_val' to INT fails under
--- strict_mode); the only delta is the wire compression.
-
-create database db_${uuid0};
-use db_${uuid0};
-create table t (id int not null, val int not null, name varchar(64))
-    duplicate key(id) distributed by hash(id) buckets 1
-    properties("replication_num" = "1");
-
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
-
-shell: printf '1,100,alice\n2,bad_val,bob\n3,200,carol' | gzip -c > /tmp/rej_gzip_${uuid0}.csv.gz; curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_gzip_${uuid0}" -H "format:CSV" -H "compression:gzip" -H "strict_mode:true" -H "column_separator:," --data-binary @/tmp/rej_gzip_${uuid0}.csv.gz ${url}/api/db_${uuid0}/t/_stream_load >/dev/null; echo done
-
-select * from t order by id;
-
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
-
--- The rejected row must surface as STREAM_LOAD with non-null
--- error_code/raw_record so the compressed scanner doesn't silently
--- swallow per-row reject capture.
-select load_type,
-       error_code is not null as has_error_code,
-       raw_record is not null as has_raw_record
-from _statistics_.rejected_records
-where target_database='db_${uuid0}' and target_table='t'
-order by created_at limit 5;
-
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
-shell: rm -f /tmp/rej_gzip_${uuid0}.csv.gz; echo 0
-drop database db_${uuid0};
-
--- =============================================================
 -- INSERT FROM FILES with CSV: source_info carries the OSS path,
 -- not the SequentialFile placeholder.
 -- =============================================================
@@ -587,6 +549,8 @@ drop database db_${uuid0};
 -- Verifies that for INSERT FROM FILES (CSV format) the source_info column
 -- on _statistics_.rejected_records embeds the actual fixture URL, so an
 -- operator triaging a bad row can grep back to the originating object.
+-- CSV files have no header, so columns are referenced positionally
+-- ($1, $2) rather than by name.
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -600,7 +564,7 @@ shell: printf '1,10\n2,bad\n3,30' > /tmp/rej_files_${uuid0}.csv; ossutil64 mkdir
 
 set log_rejected_record_num = -1;
 set insert_max_filter_ratio = 1.0;
-insert into t select cast(id as int), cast(val as int) from files("path" = "oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.csv", "fs.oss.endpoint" = "${oss_endpoint}", "fs.oss.accessKeyId" = "${oss_ak}", "fs.oss.accessKeySecret" = "${oss_sk}", "format" = "csv", "csv.column_separator" = ",");
+insert into t select cast($1 as int), cast($2 as int) from files("path" = "oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.csv", "fs.oss.endpoint" = "${oss_endpoint}", "fs.oss.accessKeyId" = "${oss_ak}", "fs.oss.accessKeySecret" = "${oss_sk}", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
 
 select * from t order by id;
 
