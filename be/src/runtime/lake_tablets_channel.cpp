@@ -1097,8 +1097,7 @@ bool LakeTabletsChannel::_should_enter_collect_path(int32_t sender_id) const {
     return false;
 }
 
-LakeTabletsChannel::PartitionCoordinatorSnapshot LakeTabletsChannel::_snapshot_coordinator(
-        int32_t sender_id) const {
+LakeTabletsChannel::PartitionCoordinatorSnapshot LakeTabletsChannel::_snapshot_coordinator(int32_t sender_id) const {
     PartitionCoordinatorSnapshot snap;
     std::lock_guard l(_partition_coordinator_mtx);
     snap.per_partition_mode = _enable_per_partition_coordinator;
