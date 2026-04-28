@@ -660,7 +660,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     // Set vector_range = 3.0: only rows with L2 distance <= 3.0 should pass
     // Row 1 (dist=2): pass, Row 2 (dist=3): pass, Row 3 (dist=0): pass, Row 4 (dist=48): filtered
     vector_search_opt->vector_range = 3.0;
-    vector_search_opt->result_order = 1; // ascending (L2: keep dist <= range)
+    vector_search_opt->result_order = 0; // 0 = ASC, 1 = DESC (L2 ASC: keep dist <= range)
     vector_search_opt->pq_refine_factor = 1.0;
 
     seg_opts.use_vector_index = true;

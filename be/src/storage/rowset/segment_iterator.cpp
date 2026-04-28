@@ -2366,7 +2366,9 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
             const float* dist_data = distances->get_data().data();
             size_t num = chunk->num_rows();
-            bool ascending = (_vector_index_ctx->result_order == 1);
+            // result_order: 0 = ASC, 1 = DESC (matches FE VectorSearchOptions
+            // and tenann::AnnSearcher::ResultOrder convention).
+            bool ascending = (_vector_index_ctx->result_order == 0);
             Buffer<uint8_t> selection(num);
             for (size_t i = 0; i < num; i++) {
                 selection[i] =
