@@ -50,6 +50,170 @@ if [ ! -f ${TP_DIR}/vars.sh ]; then
 fi
 . ${TP_DIR}/vars.sh
 
+<<<<<<< HEAD
+=======
+# Check args
+usage() {
+    echo "
+Usage: $0 [options...] [packages...]
+
+  Description:
+    Build thirdparty dependencies for StarRocks. If no packages are specified,
+    all packages will be built in the default order.
+
+  Optional options:
+    -j<num>                Build with <num> parallel jobs (can also use -j <num>)
+    --clean                Clean extracted source before building
+    --continue <package>   Continue building from specified package
+    -h, --help             Show this help message
+
+  Examples:
+    # Build all packages with default parallelism
+    $0
+
+    # Build all packages with 8 parallel jobs
+    $0 -j8
+
+    # Clean and rebuild everything with 16 parallel jobs
+    $0 --clean -j16
+
+    # Continue building from rocksdb (useful after build failure)
+    $0 --continue rocksdb
+
+    # Build only specific packages (in dependency order)
+    # Note: packages are built in the same order as full build to respect dependencies
+    $0 openssl curl protobuf
+
+    # Clean and build only specific packages
+    $0 --clean boost thrift
+  "
+    exit 1
+}
+
+get_all_package_sources() {
+    local archive
+    for archive in $TP_ARCHIVES
+    do
+        local source_var="${archive}_SOURCE"
+        if [[ -n "${!source_var}" ]]; then
+            echo ${!source_var}
+        fi
+    done
+}
+
+# clean function
+clean_sources() {
+    if [[ ! -d "${TP_SOURCE_DIR}" ]]; then
+        echo "Source directory ${TP_SOURCE_DIR} does not exist, nothing to clean."
+        return
+    fi
+
+    echo "Cleaning extracted source directories..."
+
+    # no packages specified, clean all sources
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        local sources_to_clean
+        sources_to_clean=$(get_all_package_sources)
+
+        echo "$sources_to_clean" | while IFS= read -r source; do
+            if [[ -n "$source" ]] && [[ -d "${TP_SOURCE_DIR}/${source}" ]]; then
+                echo "Removing ${TP_SOURCE_DIR}/${source}"
+                rm -rf "${TP_SOURCE_DIR}/${source}"
+            fi
+        done
+    else
+        # clean only specified sources
+        for package in "${packages[@]}"; do
+            # this converts package name to uppercase for matching
+            local source_var_name="${package^^}_SOURCE"
+            local source_dir="${!source_var_name}"
+
+            if [[ -n "$source_dir" ]] && [[ -d "${TP_SOURCE_DIR}/${source_dir}" ]]; then
+                echo "Removing ${TP_SOURCE_DIR}/${source_dir}"
+                rm -rf "${TP_SOURCE_DIR}/${source_dir}"
+            else
+                echo "Warning: Cannot find source directory for package '${package}'"
+            fi
+        done
+    fi
+
+    echo "Clean completed!"
+}
+
+if ! OPTS="$(getopt \
+    -n "$0" \
+    -o 'hj:' \
+    -l 'help,clean,continue:' \
+    -- "$@")"; then
+    usage
+fi
+
+eval set -- "${OPTS}"
+
+# PARALLEL precedence: -j arg (set later in the case loop) > env var > auto-detect.
+# vars.sh (sourced above) already resolves env var > auto-detect via
+# `PARALLEL=${PARALLEL:-$default_parallel}`, so do not overwrite it here.
+
+HELP=0
+CLEAN=0
+CONTINUE=0
+start_package=""
+
+while true; do
+    case "$1" in
+    -j)
+        PARALLEL="$2"
+        shift 2
+        ;;
+    -h)
+        HELP=1
+        shift
+        ;;
+    --help)
+        HELP=1
+        shift
+        ;;
+    --clean)
+        CLEAN=1
+        shift
+        ;;
+    --continue)
+        CONTINUE=1
+        start_package="${2}"
+        shift 2
+        ;;
+    --)
+        shift
+        break
+        ;;
+    *)
+        echo "Internal error"
+        exit 1
+        ;;
+    esac
+done
+
+# checking for help first, before processing other arguments
+if [[ "${HELP}" -eq 1 ]]; then
+    usage
+fi
+
+packages=("$@")
+
+if [[ "${CONTINUE}" -eq 1 ]]; then
+    if [[ -z "${start_package}" ]] || [[ "${#}" -ne 0 ]]; then
+        usage
+    fi
+fi
+
+echo "Get params:
+    PARALLEL            -- ${PARALLEL}
+    CLEAN               -- ${CLEAN}
+    PACKAGES            -- ${packages[*]}
+    CONTINUE            -- ${start_package}
+"
+
+>>>>>>> 802d82677e ([BugFix] fix the regression of thirdparty parallel build (#72245))
 cd $TP_DIR
 
 # Download thirdparties.
