@@ -14,7 +14,6 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
