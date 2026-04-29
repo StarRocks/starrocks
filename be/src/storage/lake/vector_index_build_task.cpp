@@ -14,6 +14,8 @@
 
 #include "storage/lake/vector_index_build_task.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <set>
 
@@ -210,6 +212,9 @@ Status VectorIndexBuildTask::execute(const BuildVectorIndexRequest& request, Bui
         if (!results[i].ok()) {
             LOG(WARNING) << "VectorIndexBuildTask: tablet=" << _tablet_id << " segment[" << i
                          << "] failed: " << results[i];
+            for (size_t j = i + 1; j < _work_items.size(); j++) {
+                results[j] = Status::Cancelled("vector index segment build cancelled after earlier failure");
+            }
             break; // Stop on first failure in sequential mode
         }
     }
