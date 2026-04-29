@@ -119,7 +119,7 @@ public class ConsistencyCheckerTest {
         MaterializedIndex materializedIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         Replica replica = new Replica(replicaId, backendId, visibleVersion, 1111,
                 10, 1000, Replica.ReplicaState.NORMAL, -1, visibleVersion);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, medium);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 1111, medium);
         LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
         materializedIndex.addTablet(tablet, tabletMeta, false);
 
@@ -131,7 +131,7 @@ public class ConsistencyCheckerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, null);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
         partition.getDefaultPhysicalPartition().setVisibleVersion(visibleVersion, System.currentTimeMillis());
