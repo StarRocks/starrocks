@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include <ostream>
-
 #include <fmt/format.h>
+
+#include <ostream>
 
 #include "base/utility/guard.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -392,5 +392,5 @@ inline std::ostream& operator<<(std::ostream& os, starrocks::LogicalType type) {
 
 template <>
 struct fmt::formatter<starrocks::LogicalType> : formatter<std::string_view> {
-  auto format(starrocks::LogicalType value, format_context& ctx) const -> format_context::iterator;
+    auto format(starrocks::LogicalType value, format_context& ctx) const -> format_context::iterator;
 };

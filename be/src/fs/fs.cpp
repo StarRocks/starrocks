@@ -100,7 +100,8 @@ void FileSystem::on_file_write_close(WritableFile* file) {
 
 } // namespace starrocks
 
-auto fmt::formatter<starrocks::FileSystem::OpenMode>::format(const starrocks::FileSystem::OpenMode value, format_context& ctx) const
-    -> format_context::iterator {
-  return formatter<std::underlying_type_t<starrocks::FileSystem::OpenMode>>::format(starrocks::enum_to_underlying_type(value), ctx);
+auto fmt::formatter<starrocks::FileSystem::OpenMode>::format(const starrocks::FileSystem::OpenMode value,
+                                                             format_context& ctx) const -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::FileSystem::OpenMode>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
 }

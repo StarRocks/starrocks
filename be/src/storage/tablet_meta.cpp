@@ -696,6 +696,8 @@ bool operator!=(const TabletMeta& a, const TabletMeta& b) {
 
 } // namespace starrocks
 
-auto fmt::formatter<starrocks::TabletState>::format(const starrocks::TabletState value, format_context& ctx) const -> format_context::iterator {
-  return formatter<std::underlying_type_t<starrocks::TabletState>>::format(starrocks::enum_to_underlying_type(value), ctx);
+auto fmt::formatter<starrocks::TabletState>::format(const starrocks::TabletState value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::TabletState>>::format(starrocks::enum_to_underlying_type(value),
+                                                                             ctx);
 }

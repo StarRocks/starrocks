@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include <fmt/format.h>
-
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>

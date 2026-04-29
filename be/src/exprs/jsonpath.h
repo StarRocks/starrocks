@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include <utility>
-
 #include <fmt/format.h>
+
+#include <utility>
 
 #include "exprs/function_helper.h"
 #include "gutil/casts.h"
@@ -166,5 +166,5 @@ struct JsonPath {
 
 template <>
 struct fmt::formatter<starrocks::ArraySelectorType> : formatter<std::underlying_type_t<starrocks::ArraySelectorType>> {
-	auto format(starrocks::ArraySelectorType value, format_context& ctx) const -> format_context::iterator;
+    auto format(starrocks::ArraySelectorType value, format_context& ctx) const -> format_context::iterator;
 };

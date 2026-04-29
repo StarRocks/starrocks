@@ -315,6 +315,7 @@ const std::vector<LogicalType>& sortable_types() {
 
 } // namespace starrocks
 
-auto fmt::formatter<starrocks::LogicalType>::format(const starrocks::LogicalType value, format_context& ctx) const -> format_context::iterator {
-  return formatter<std::string_view>::format(starrocks::logical_type_to_string(value), ctx);
+auto fmt::formatter<starrocks::LogicalType>::format(const starrocks::LogicalType value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::string_view>::format(starrocks::logical_type_to_string(value), ctx);
 }

@@ -354,6 +354,9 @@ RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDesc
 
 } // namespace starrocks
 
-auto fmt::formatter<starrocks::RowPositionDescriptor::Type>::format(const starrocks::RowPositionDescriptor::Type value, format_context& ctx) const -> format_context::iterator {
-  return formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>>::format(starrocks::enum_to_underlying_type(value), ctx);
+auto fmt::formatter<starrocks::RowPositionDescriptor::Type>::format(const starrocks::RowPositionDescriptor::Type value,
+                                                                    format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
 }

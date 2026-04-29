@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <list>
 #include <map>
 #include <mutex>
@@ -42,8 +44,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
-#include <fmt/format.h>
 
 #include "agent/status.h"
 #include "base/concurrency/spinlock.h"
@@ -337,5 +337,5 @@ inline bool TabletManager::LockTable::unlock(int64_t tablet_id) {
 
 template <>
 struct fmt::formatter<starrocks::TabletDropFlag> : formatter<std::underlying_type_t<starrocks::TabletDropFlag>> {
-  auto format(starrocks::TabletDropFlag value, format_context& ctx) const -> format_context::iterator;
+    auto format(starrocks::TabletDropFlag value, format_context& ctx) const -> format_context::iterator;
 };

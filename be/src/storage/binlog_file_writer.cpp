@@ -560,6 +560,8 @@ StatusOr<std::shared_ptr<BinlogFileWriter>> BinlogFileWriter::reopen(int64_t fil
 
 } // namespace starrocks
 
-auto fmt::formatter<starrocks::WriterState>::format(const starrocks::WriterState value, format_context& ctx) const -> format_context::iterator {
-  return formatter<std::underlying_type_t<starrocks::WriterState>>::format(starrocks::enum_to_underlying_type(value), ctx);
+auto fmt::formatter<starrocks::WriterState>::format(const starrocks::WriterState value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::WriterState>>::format(starrocks::enum_to_underlying_type(value),
+                                                                             ctx);
 }

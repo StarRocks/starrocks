@@ -254,5 +254,5 @@ using BinlogFileWriterPtr = std::shared_ptr<BinlogFileWriter>;
 
 template <>
 struct fmt::formatter<starrocks::WriterState> : formatter<std::underlying_type_t<starrocks::WriterState>> {
-  auto format(starrocks::WriterState value, format_context& ctx) const -> format_context::iterator;
+    auto format(starrocks::WriterState value, format_context& ctx) const -> format_context::iterator;
 };

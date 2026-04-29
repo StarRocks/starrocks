@@ -34,13 +34,13 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include <fmt/format.h>
 
 #include "base/uid_util.h"
 #include "common/logging.h"
@@ -429,5 +429,5 @@ bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
 template <>
 struct fmt::formatter<starrocks::TabletState> : formatter<std::underlying_type_t<starrocks::TabletState>> {
-  auto format(starrocks::TabletState value, format_context& ctx) const -> format_context::iterator;
+    auto format(starrocks::TabletState value, format_context& ctx) const -> format_context::iterator;
 };
