@@ -1667,8 +1667,7 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
                 // parallel subtask.
                 if (ctx->subtask_id >= 0) {
                     info.profile = ctx->stats->to_json_stats_with_subtask_metadata(
-                            ctx->subtask_id, static_cast<size_t>(ctx->subtask_input_rowsets),
-                            ctx->subtask_input_bytes);
+                            ctx->subtask_id, static_cast<size_t>(ctx->subtask_input_rowsets), ctx->subtask_input_bytes);
                 } else {
                     info.profile = ctx->stats->to_json_stats();
                 }
