@@ -180,6 +180,15 @@ public class ConsistencyChecker extends FrontendDaemon {
             List<Long> tabletIds = tabletInvertedIndex.getTabletIdsByBackendId(backendId);
             backendTabletNumReport.put(backendId, new Pair<>(0L, 0L));
 
+            // TODO: group tablets by (dbId, tableId) before this loop and process each
+            // group under a single lockTableWithIntensiveDbLock acquisition. Today we
+            // acquire/release the per-table lock once per tablet, plus one getDb +
+            // getTable lookup per tablet. With grouping, that drops to once per
+            // (dbId, tableId) group: O(tables) instead of O(tablets). For backends
+            // reporting tens of thousands of tablets clustered on far fewer tables --
+            // the typical case -- this is a 10x-100x reduction in LockManager calls.
+            // Even in the pathological 1-tablet-per-table case the cost is essentially
+            // the same, so this is strictly beneficial in realistic deployments.
             for (Long tabletId : tabletIds) {
                 scannedTabletCount++;
                 boolean isInRecycleBin = false;
@@ -204,12 +213,17 @@ public class ConsistencyChecker extends FrontendDaemon {
                     }
                 }
 
+                // Intensive path: IS on DB + READ on this one table. Each iteration
+                // looks up exactly one table (by id) plus one partition / index / tablet
+                // on that table; we never traverse db.getTables(). DROP TABLE / DROP
+                // DATABASE still take DB WRITE which conflicts with IS, so the table
+                // existence re-check below still races correctly.
+                long tableId = tabletMeta.getTableId();
                 Locker locker = new Locker();
                 try {
-                    locker.lockDatabase(db.getId(), LockType.READ);
+                    locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
 
                     // validate table
-                    long tableId = tabletMeta.getTableId();
                     if (creatingTableIds.containsKey(tableId)) {
                         continue;
                     }
@@ -281,7 +295,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                     tabletMeta.resetToBeCleanedTime();
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 }
             } // end for tabletIds
         } // end for backendIds
@@ -470,11 +484,19 @@ public class ConsistencyChecker extends FrontendDaemon {
             while ((chosenOne = dbQueue.poll()) != null) {
                 Database db = (Database) chosenOne;
                 Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
                 long startTime = System.currentTimeMillis();
                 try {
-                    // sort tables
+                    // Lock-free snapshot: idToTable is a ConcurrentHashMap, so getTables()
+                    // returns a weakly-consistent ArrayList that may miss a concurrent
+                    // create or include a concurrent drop. That is fine here - this is a
+                    // periodic heuristic, and the per-table re-fetch below is what actually
+                    // guards against walking a dropped table or DB. Holding any DB-level
+                    // lock just for this snapshot would be theatre: it is released before
+                    // the per-table walk, so the snapshot is stale immediately afterwards
+                    // regardless.
                     List<Table> tables = globalStateMgr.getLocalMetastore().getTables(db.getId());
+
+                    // sort tables
                     Queue<MetaObject> tableQueue = new PriorityQueue<>(Math.max(tables.size(), 1), COMPARATOR);
                     for (Table table : tables) {
                         // Only check the OLAP table who is in NORMAL state.
@@ -489,84 +511,23 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                     while ((chosenOne = tableQueue.poll()) != null) {
                         OlapTable table = (OlapTable) chosenOne;
-
-                        // sort partitions
-                        Queue<MetaObject> partitionQueue =
-                                    new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
-                        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-                            // check partition's replication num. if 1 replication. skip
-                            if (table.getPartitionInfo().getReplicationNum(physicalPartition.getParentId()) == (short) 1) {
-                                LOG.debug("partition[{}]'s replication num is 1. ignore", physicalPartition.getParentId());
-                                continue;
-                            }
-
-                            // check if this partition has no data
-                            if (physicalPartition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
-                                LOG.debug("partition[{}]'s version is {}. ignore", physicalPartition.getId(),
-                                            Partition.PARTITION_INIT_VERSION);
-                                continue;
-                            }
-                            partitionQueue.add(physicalPartition);
-                        }
-
-                        while ((chosenOne = partitionQueue.poll()) != null) {
-                            PhysicalPartition physicalPartition = (PhysicalPartition) chosenOne;
-
-                            // sort materializedIndices
-                            List<MaterializedIndex> visibleIndexes =
-                                        physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
-                            Queue<MetaObject> indexQueue =
-                                    new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
-                            indexQueue.addAll(visibleIndexes);
-
-                            while ((chosenOne = indexQueue.poll()) != null) {
-                                MaterializedIndex index = (MaterializedIndex) chosenOne;
-
-                                // sort tablets
-                                Queue<MetaObject> tabletQueue =
-                                        new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
-                                long startCheckTime = System.currentTimeMillis();
-                                long cooldownedTimeMs = startCheckTime - Config.consistency_check_cooldown_time_second * 1000;
-                                List<Tablet> cooldownedTablets = index.getTablets().stream()
-                                        .filter(t -> t.getLastCheckTime() < cooldownedTimeMs)
-                                        .toList();
-                                tabletQueue.addAll(cooldownedTablets);
-
-                                while ((chosenOne = tabletQueue.poll()) != null) {
-                                    LocalTablet tablet = (LocalTablet) chosenOne;
-                                    long chosenTabletId = tablet.getId();
-
-                                    if (this.jobs.containsKey(chosenTabletId)) {
-                                        continue;
-                                    }
-
-                                    // check if version has already been checked
-                                    if (physicalPartition.getVisibleVersion() == tablet.getCheckedVersion()) {
-                                        if (tablet.isConsistent()) {
-                                            LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
-                                                        chosenTabletId, tablet.getCheckedVersion(),
-                                                        physicalPartition.getVisibleVersion());
-                                        }
-                                    } else {
-                                        LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
-                                                    table.getId(), physicalPartition.getId(), index.getId(), chosenTabletId);
-
-                                        chosenTablets.add(chosenTabletId);
-                                    }
-                                } // end while tabletQueue
-                            } // end while indexQueue
-
-                            if (chosenTablets.size() >= MAX_JOB_NUM) {
+                        long tableId = table.getId();
+                        // Take per-table READ under IS so concurrent schema change /
+                        // partition mutation on other tables in the same DB can proceed.
+                        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                        try {
+                            if (chooseTabletsFromTable(globalStateMgr, db, table, chosenTablets)) {
                                 return chosenTablets;
                             }
-                        } // end while partitionQueue
+                        } finally {
+                            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                        }
                     } // end while tableQueue
                 } finally {
-                    // Since only at most `MAX_JOB_NUM` tablet are chosen, we don't need to release the db read lock
-                    // from time to time, just log the time cost here.
-                    LOG.info("choose tablets from db[{}-{}](with read lock held) took {}ms",
+                    // Since only at most `MAX_JOB_NUM` tablet are chosen, we don't need to release the per-table
+                    // read lock from time to time, just log the time cost here.
+                    LOG.info("choose tablets from db[{}-{}] took {}ms",
                                 db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
-                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             } // end while dbQueue
         } finally {
@@ -574,6 +535,101 @@ public class ConsistencyChecker extends FrontendDaemon {
         }
 
         return chosenTablets;
+    }
+
+    /**
+     * Walk one table's partitions / indices / tablets and append choosable tablet ids to
+     * {@code chosenTablets}. Caller must already hold the per-table intensive READ lock.
+     *
+     * <p>Re-fetches and re-checks the table under the lock. The pre-filter / snapshot reads
+     * happen without a lock, so in the gap between snapshot and per-table lock acquisition
+     * the table may have been dropped (DROP TABLE / DROP DATABASE take DB WRITE) or may have
+     * transitioned out of NORMAL state. Skipping dropped or non-NORMAL tables here avoids
+     * walking a concurrently-mutated structure and avoids enqueueing consistency jobs for
+     * tablets already being torn down.
+     *
+     * @return true iff {@code chosenTablets.size() >= MAX_JOB_NUM}, signalling that the
+     *         caller should stop iterating tables. Skips (drop / non-NORMAL) return false.
+     */
+    private boolean chooseTabletsFromTable(GlobalStateMgr globalStateMgr, Database db, OlapTable table,
+                                           List<Long> chosenTablets) {
+        if (globalStateMgr.getLocalMetastore().getTable(db.getId(), table.getId()) == null
+                || table.getState() != OlapTableState.NORMAL) {
+            return false;
+        }
+
+        // sort partitions
+        Queue<MetaObject> partitionQueue =
+                    new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            // check partition's replication num. if 1 replication. skip
+            if (table.getPartitionInfo().getReplicationNum(physicalPartition.getParentId()) == (short) 1) {
+                LOG.debug("partition[{}]'s replication num is 1. ignore", physicalPartition.getParentId());
+                continue;
+            }
+
+            // check if this partition has no data
+            if (physicalPartition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
+                LOG.debug("partition[{}]'s version is {}. ignore", physicalPartition.getId(),
+                            Partition.PARTITION_INIT_VERSION);
+                continue;
+            }
+            partitionQueue.add(physicalPartition);
+        }
+
+        MetaObject chosenOne;
+        while ((chosenOne = partitionQueue.poll()) != null) {
+            PhysicalPartition physicalPartition = (PhysicalPartition) chosenOne;
+
+            // sort materializedIndices
+            List<MaterializedIndex> visibleIndexes =
+                        physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+            Queue<MetaObject> indexQueue =
+                    new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
+            indexQueue.addAll(visibleIndexes);
+
+            while ((chosenOne = indexQueue.poll()) != null) {
+                MaterializedIndex index = (MaterializedIndex) chosenOne;
+
+                // sort tablets
+                Queue<MetaObject> tabletQueue =
+                        new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
+                long startCheckTime = System.currentTimeMillis();
+                long cooldownedTimeMs = startCheckTime - Config.consistency_check_cooldown_time_second * 1000;
+                List<Tablet> cooldownedTablets = index.getTablets().stream()
+                        .filter(t -> t.getLastCheckTime() < cooldownedTimeMs)
+                        .toList();
+                tabletQueue.addAll(cooldownedTablets);
+
+                while ((chosenOne = tabletQueue.poll()) != null) {
+                    LocalTablet tablet = (LocalTablet) chosenOne;
+                    long chosenTabletId = tablet.getId();
+
+                    if (this.jobs.containsKey(chosenTabletId)) {
+                        continue;
+                    }
+
+                    // check if version has already been checked
+                    if (physicalPartition.getVisibleVersion() == tablet.getCheckedVersion()) {
+                        if (tablet.isConsistent()) {
+                            LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
+                                        chosenTabletId, tablet.getCheckedVersion(),
+                                        physicalPartition.getVisibleVersion());
+                        }
+                    } else {
+                        LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
+                                    table.getId(), physicalPartition.getId(), index.getId(), chosenTabletId);
+
+                        chosenTablets.add(chosenTabletId);
+                    }
+                } // end while tabletQueue
+            } // end while indexQueue
+
+            if (chosenTablets.size() >= MAX_JOB_NUM) {
+                return true;
+            }
+        } // end while partitionQueue
+        return false;
     }
 
     public void handleFinishedConsistencyCheck(CheckConsistencyTask task, long checksum) {
