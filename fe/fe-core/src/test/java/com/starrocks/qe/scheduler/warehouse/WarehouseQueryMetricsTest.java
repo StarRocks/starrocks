@@ -17,11 +17,18 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.system.information.WarehouseQueriesSystemTable;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TGetWarehouseQueriesResponseItem;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class WarehouseQueryMetricsTest {
     @Test
@@ -52,5 +59,26 @@ public class WarehouseQueryMetricsTest {
         assertThat(thrift.getAllocate_slots()).isEqualTo("1");
         assertThat(thrift.getQueued_wait_seconds()).isEqualTo("1.0");
         assertThat(thrift.getQuery()).isEqualTo("select 1");
+    }
+
+    @Test
+    public void testToConstantOperatorsTypesMatchSchema() {
+        WarehouseQueryMetrics metrics = new WarehouseQueryMetrics(42L, "wh",
+                null, LogicalSlot.State.ALLOCATED, 1, 1, 1.5,
+                "select 1", Optional.empty());
+        List<ScalarOperator> ops = metrics.toConstantOperators();
+        List<Column> schema = new WarehouseQueriesSystemTable().getFullSchema();
+        assertThat(ops).hasSize(schema.size());
+        for (int i = 0; i < schema.size(); i++) {
+            Column col = schema.get(i);
+            ScalarOperator op = ops.get(i);
+            assertThat(op).isInstanceOf(ConstantOperator.class);
+            assertThat(op.getType().getPrimitiveType())
+                    .as("column %s at index %d", col.getName(), i)
+                    .isEqualTo(col.getType().getPrimitiveType());
+        }
+        // Spot-check key column values round-trip through the correct type
+        assertThat(((ConstantOperator) ops.get(0)).getBigint()).isEqualTo(42L);
+        assertThat(((ConstantOperator) ops.get(1)).getVarchar()).isEqualTo("wh");
     }
 }
