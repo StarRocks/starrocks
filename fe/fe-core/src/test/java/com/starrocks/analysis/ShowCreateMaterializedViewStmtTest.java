@@ -237,13 +237,46 @@ public class ShowCreateMaterializedViewStmtTest {
         Assertions.assertThrows(SemanticException.class, () -> table.getUniqueConstraints().get(0).getUniqueColumnNames(table));
     }
 
+    @Test
+    public void testAsyncIsSynonymForScheduleAndShowCreatePrefersSchedule() throws Exception {
+        final String mvName = "test_mv_async_synonym";
+        starRocksAssert.ddl("drop materialized view if exists " + mvName);
+        // ASYNC must remain accepted as a synonym.
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                " DISTRIBUTED BY HASH(`k1`) BUCKETS 3" +
+                " REFRESH ASYNC EVERY(INTERVAL 1 HOUR)" +
+                " AS SELECT k1, k2 FROM test.tbl1");
+        MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
+        List<String> ddl = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(mv, ddl, null, null, false, true);
+        Assertions.assertTrue(ddl.get(0).contains("REFRESH SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+                "SHOW CREATE should display SCHEDULE, got: " + ddl.get(0));
+        Assertions.assertFalse(ddl.get(0).contains("REFRESH ASYNC"),
+                "SHOW CREATE should not display ASYNC, got: " + ddl.get(0));
+        starRocksAssert.dropMaterializedView(mvName);
+
+        // SCHEDULE should also parse and produce the same display.
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                " DISTRIBUTED BY HASH(`k1`) BUCKETS 3" +
+                " REFRESH SCHEDULE EVERY(INTERVAL 1 HOUR)" +
+                " AS SELECT k1, k2 FROM test.tbl1");
+        mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
+        ddl.clear();
+        AstToStringBuilder.getDdlStmt(mv, ddl, null, null, false, true);
+        Assertions.assertTrue(ddl.get(0).contains("REFRESH SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+                "SHOW CREATE should display SCHEDULE, got: " + ddl.get(0));
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
     public static Stream<Arguments> genTestArguments() {
+        // Bare ASYNC (without EVERY) is the legacy form retained for backward compatibility;
+        // SCHEDULE is the preferred keyword for scheduled refresh and requires EVERY.
         List<String> refreshArgumentsList = Lists.newArrayList(
                 "REFRESH MANUAL",
                 "REFRESH DEFERRED MANUAL",
                 "REFRESH ASYNC",
-                "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)",
-                "REFRESH ASYNC START(\"1998-01-01 00:00:00\") EVERY(INTERVAL 1 HOUR)"
+                "REFRESH SCHEDULE EVERY(INTERVAL 1 HOUR)",
+                "REFRESH SCHEDULE START(\"1998-01-01 00:00:00\") EVERY(INTERVAL 1 HOUR)"
         );
         List<String> orderByList = Lists.newArrayList("", "ORDER BY (k3)");
         List<String> propertiesList = Lists.newArrayList(
