@@ -296,7 +296,8 @@ protected:
                 "is_vector_normed": "false",
                 "metric_type": "l2_distance",
                 "index_build_mode": "async",
-                "index_build_threshold": ")" + std::to_string(threshold) +
+                "index_build_threshold": ")" +
+                                 std::to_string(threshold) +
                                  R"("
             },
             "index_properties": {

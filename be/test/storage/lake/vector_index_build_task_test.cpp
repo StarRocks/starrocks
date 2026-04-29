@@ -439,8 +439,7 @@ TEST_F(VectorIndexBuildTaskTest, test_lake_service_build_vector_index_full_path)
     ASSERT_TRUE(response.has_new_built_version());
     EXPECT_EQ(2, response.new_built_version());
 
-    std::string vi_path =
-            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path)) << "deferred .vi should have been built by the RPC";
 }
 
@@ -492,7 +491,8 @@ TEST_F(VectorIndexBuildTaskTest, test_lake_service_build_vector_index_partial_fa
     EXPECT_EQ(2, response.new_built_version());
 
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kIndexId))));
-    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
+    EXPECT_FALSE(
+            fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
 }
 
 // Build with one healthy rowset (v=2) and one whose segment file is broken (v=3).
