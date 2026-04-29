@@ -62,12 +62,17 @@ protected:
         c1->set_name("vector");
         c1->set_type("ARRAY");
         c1->set_is_key(false);
-        c1->set_is_nullable(true);
+        // Vector index requires the ARRAY column itself to be non-nullable;
+        // ArrayColumnWriter DCHECKs this on the sync write path and the
+        // tenann builder down_casts to ArrayColumn (not NullableColumn).
+        c1->set_is_nullable(false);
 
         auto* child = c1->add_children_columns();
         child->set_unique_id(3);
         child->set_name("element");
         child->set_type("FLOAT");
+        // Element must be nullable: tenann reads per-element null bits to
+        // skip null vectors during build.
         child->set_is_nullable(true);
 
         // Add vector index
