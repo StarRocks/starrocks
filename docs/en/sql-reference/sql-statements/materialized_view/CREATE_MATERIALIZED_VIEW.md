@@ -407,7 +407,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
   - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
-  - `FULL`: Forces a full refresh of all data every time, regardless of whether the materialized view supports incremental or partition-level refresh.
 
 <MVWarehouse />
 
