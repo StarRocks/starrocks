@@ -341,9 +341,21 @@ public class IVMAnalyzer {
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
             String mode = properties.get(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE);
-            return MaterializedView.RefreshMode.valueOf(mode.toUpperCase());
+            MaterializedView.RefreshMode parsed;
+            try {
+                parsed = MaterializedView.RefreshMode.valueOf(mode.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException("Invalid refresh_mode: " + mode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            // AUTO is intentionally not exposed to users; the implementation is preserved
+            // internally for future revival.
+            if (parsed == MaterializedView.RefreshMode.AUTO) {
+                throw new SemanticException("Invalid refresh_mode: " + mode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            return parsed;
         } else {
-            // Default to INCREMENTAL
             return MaterializedView.RefreshMode.PCT;
         }
     }
