@@ -85,6 +85,7 @@ public class QueryDetail implements Serializable {
     private String database;
     private String sql;
     private String user;
+    private String impersonatedUser;
     private String errorMessage;
     private String explain;
     private String profile;
@@ -160,6 +161,7 @@ public class QueryDetail implements Serializable {
         queryDetail.database = this.database;
         queryDetail.sql = this.sql;
         queryDetail.user = this.user;
+        queryDetail.impersonatedUser = this.impersonatedUser;
         queryDetail.errorMessage = this.errorMessage;
         queryDetail.explain = this.explain;
         queryDetail.profile = this.profile;
@@ -290,6 +292,14 @@ public class QueryDetail implements Serializable {
 
     public String getUser() {
         return user;
+    }
+
+    public void setImpersonatedUser(String impersonatedUser) {
+        this.impersonatedUser = impersonatedUser;
+    }
+
+    public String getImpersonatedUser() {
+        return impersonatedUser;
     }
 
     public String getErrorMessage() {
