@@ -336,6 +336,9 @@ class ParserTest {
                         "select cast(x as int) from t where cast(x as bigint) > 0"},
                 {"select count(*) over (partition by x::int) from t",
                         "select count(*) over (partition by cast(x as int)) from t"},
+                {"select NULL::int", "select cast(NULL as int)"},
+                {"select (case when x>0 then 'pos' else 'neg' end)::varchar(10) from t",
+                        "select cast((case when x>0 then 'pos' else 'neg' end) as varchar(10)) from t"},
         };
         for (String[] pair : equivalentPairs) {
             QueryStatement shorthand = (QueryStatement) SqlParser.parse(pair[0], sessionVariable).get(0);
