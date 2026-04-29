@@ -4195,6 +4195,338 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_a
                                                 _tablet_manager->lcrm_location(tablet_id, "parallel_orphan.crm")));
 }
 
+// LakePersistentIndex::commit() and the size-tiered compaction strategy iterate
+// the tablet's sstable_meta in stored order and reject any out-of-order
+// max_rss_rowid as "sstables are not ordered". The merger appends sstables in
+// source-child iteration order, so projection across children can interleave
+// non-monotonically — for example, a delete-only sstable in one child has its
+// low word saturated near UINT32_MAX, and a freshly-written sstable in the
+// next child has a smaller projected high word. Without a defensive sort the
+// merged metadata would carry the disorder forward and any post-merge commit
+// or compaction would refuse to publish.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_rowid) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    // Child A contributes a tombstone-bearing sstable with high word = 20 and
+    // low word = UINT32_MAX-1, exactly the encoding PersistentIndexMemtable::erase
+    // / LakePersistentIndex::ingest_sst use for delete-only entries
+    // (storage/lake/persistent_index_memtable.cpp:110, 131,
+    //  storage/lake/lake_persistent_index.cpp:258).
+    // Child B's local sstable has high=3, low=50; with rssid_offset = 10 - 1 = 9
+    // it projects to high = 12 — well below child A's high=20. Source-iteration
+    // order would emit [child_a (20), child_b_proj (12)] in dest, which is the
+    // disorder this fix prevents.
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(10);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rowset_a = meta_a->add_rowsets();
+    rowset_a->set_id(1);
+    rowset_a->set_version(1);
+    rowset_a->set_num_rows(10);
+    rowset_a->set_data_size(100);
+    rowset_a->add_segments("seg_a.dat");
+    rowset_a->add_segment_size(100);
+    auto* sst_a_tombstone = meta_a->mutable_sstable_meta()->add_sstables();
+    sst_a_tombstone->set_filename("a_tombstone.sst");
+    sst_a_tombstone->set_filesize(256);
+    sst_a_tombstone->set_max_rss_rowid((static_cast<uint64_t>(20) << 32) | (std::numeric_limits<uint32_t>::max() - 1));
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(5);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* rowset_b = meta_b->add_rowsets();
+    rowset_b->set_id(1);
+    rowset_b->set_version(1);
+    rowset_b->set_num_rows(10);
+    rowset_b->set_data_size(100);
+    rowset_b->add_segments("seg_b.dat");
+    rowset_b->add_segment_size(100);
+    auto* sst_b_local = meta_b->mutable_sstable_meta()->add_sstables();
+    sst_b_local->set_filename("b_local.sst");
+    sst_b_local->set_filesize(128);
+    sst_b_local->set_max_rss_rowid((static_cast<uint64_t>(3) << 32) | 50);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(2, merged->sstable_meta().sstables_size());
+
+    uint64_t prev_max = 0;
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        EXPECT_LE(prev_max, sst.max_rss_rowid()) << "post-merge sstables must be in non-decreasing max_rss_rowid order";
+        prev_max = sst.max_rss_rowid();
+    }
+    EXPECT_EQ("b_local.sst", merged->sstable_meta().sstables(0).filename());
+    EXPECT_EQ("a_tombstone.sst", merged->sstable_meta().sstables(1).filename());
+}
+
+// LakePersistentIndex::commit() (lake_persistent_index.cpp:880-881) implicitly
+// converts max_rss_rowid (uint64) to int64_t and does a signed `>` comparison.
+// For an sstable whose encoded (rssid<<32|rowid) sets the high bit — for
+// example a delete-only memtable at rowset_id >= 2^31 (persistent_index_memtable.cpp
+// line 110/131 sets max_rss_rowid = (rowset_id<<32)|UINT32_MAX), or the
+// boundary case where a fresh ingest_sst lands at rssid >= 2^31 — unsigned
+// ordering is the reverse of signed ordering against any low-rssid sibling.
+// merge_sstables() must sort by the SAME signed semantics commit() uses; if
+// it sorts unsigned the merged metadata that previously satisfied commit()
+// would itself begin failing.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sort_uses_signed_comparison) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    // child_a contributes one sstable whose encoded max_rss_rowid sets bit 63
+    // — i.e. the projected high word is >= 2^31, which interprets as a negative
+    // int64 and a very large uint64. The rowset metadata itself uses small ids
+    // so that compute_rssid_offset for child_b stays within int32 range; what
+    // exercises the signed-comparison sort is the sstable's max_rss_rowid value
+    // alone (child_a is processed first, so its ctx.rssid_offset is 0 and the
+    // projected high passes through unchanged).
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(2);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rowset_a = meta_a->add_rowsets();
+    rowset_a->set_id(1);
+    rowset_a->set_version(1);
+    rowset_a->set_num_rows(10);
+    rowset_a->set_data_size(100);
+    rowset_a->add_segments("seg_a.dat");
+    rowset_a->add_segment_size(100);
+    auto* sst_a_high = meta_a->mutable_sstable_meta()->add_sstables();
+    sst_a_high->set_filename("a_high.sst");
+    sst_a_high->set_filesize(256);
+    // (rssid<<32|low) with rssid >= 2^31 sets bit 63, so as int64_t this is
+    // a large negative number — int64 less than any positive sibling. high =
+    // 2^31 still fits in uint32 (uint32 max = 2^32-1), so the projection check
+    // `new_high > uint32::max` does not trip.
+    sst_a_high->set_max_rss_rowid((static_cast<uint64_t>(1) << 63) | 100);
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(5);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* rowset_b = meta_b->add_rowsets();
+    rowset_b->set_id(1);
+    rowset_b->set_version(1);
+    rowset_b->set_num_rows(10);
+    rowset_b->set_data_size(100);
+    rowset_b->add_segments("seg_b.dat");
+    rowset_b->add_segment_size(100);
+    auto* sst_b_low = meta_b->mutable_sstable_meta()->add_sstables();
+    sst_b_low->set_filename("b_low.sst");
+    sst_b_low->set_filesize(128);
+    sst_b_low->set_max_rss_rowid((static_cast<uint64_t>(7) << 32) | 50);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(2, merged->sstable_meta().sstables_size());
+
+    // Signed-int64 non-decreasing across the merged sstables — matching the
+    // invariant LakePersistentIndex::commit() enforces.
+    int64_t prev_max = std::numeric_limits<int64_t>::min();
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        const int64_t cur = static_cast<int64_t>(sst.max_rss_rowid());
+        EXPECT_LE(prev_max, cur) << "post-merge sstables must be in non-decreasing int64 max_rss_rowid order";
+        prev_max = cur;
+    }
+    // a_high's encoded max_rss_rowid is "negative" int64, so signed sort puts
+    // it first; b_low (positive int64) comes second. A naive uint64 sort
+    // would swap them and break commit().
+    EXPECT_EQ("a_high.sst", merged->sstable_meta().sstables(0).filename());
+    EXPECT_EQ("b_low.sst", merged->sstable_meta().sstables(1).filename());
+}
+
+// Same-fileset_id sstables must remain contiguous in the merged metadata even
+// when their max_rss_rowid spans a wide range with another fileset_id's
+// max_rss_rowid falling within. A flat sort by max_rss_rowid alone (the
+// original PR #72162 behavior) would interleave them, splitting one logical
+// fileset into multiple physical filesets in LakePersistentIndex::init()'s
+// adjacent-fileset_id grouping (lake_persistent_index.cpp:132-145) and
+// breaking apply_opcompaction's contiguous-range find_if assumption
+// (lake_persistent_index.cpp:838-864). Reproduces the Bug F shape observed
+// on multi-cycle SPLIT/MERGE: a single fileset's sstables can span a wide
+// max_rss_rowid range because filesets accumulate via append() across
+// multiple memtable flushes (persistent_index_sstable_fileset.cpp:96-115).
+TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_keep_same_fileset_id_contiguous) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    // Distinct fileset_ids. F_X holds 4 sstables that span max_rss_rowid high
+    // 100..400; F_A is a single sstable with high=200 — falling between F_X's
+    // entries. A naive flat sort would emit
+    //   [F_X(100), F_A(200), F_X(250), F_X(300), F_X(400)]
+    // splitting F_X into 3 non-contiguous filesets in init(). The block-aware
+    // sort must instead keep F_X contiguous regardless of the F_A interleave.
+    PUniqueId fid_x;
+    fid_x.set_hi(0x1111111111111111ULL);
+    fid_x.set_lo(0x2222222222222222ULL);
+    PUniqueId fid_a;
+    fid_a.set_hi(0x3333333333333333ULL);
+    fid_a.set_lo(0x4444444444444444ULL);
+
+    auto add_sst = [](TabletMetadataPB* meta, const std::string& filename, uint64_t high, uint64_t low,
+                      const PUniqueId& fid) {
+        auto* sst = meta->mutable_sstable_meta()->add_sstables();
+        sst->set_filename(filename);
+        sst->set_filesize(128);
+        sst->set_max_rss_rowid((high << 32) | low);
+        sst->mutable_fileset_id()->CopyFrom(fid);
+    };
+
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(500);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rowset_a = meta_a->add_rowsets();
+    rowset_a->set_id(1);
+    rowset_a->set_version(1);
+    rowset_a->set_num_rows(10);
+    rowset_a->set_data_size(100);
+    rowset_a->add_segments("seg_a.dat");
+    rowset_a->add_segment_size(100);
+    // Child A's source-iteration order has F_X sstables already contiguous —
+    // the merge_sstables block-sort must preserve this even when projection
+    // and cross-child interleave with F_A would otherwise split them.
+    add_sst(meta_a.get(), "fx_high100.sst", 100, 0, fid_x);
+    add_sst(meta_a.get(), "fx_high250.sst", 250, 0, fid_x);
+    add_sst(meta_a.get(), "fx_high300.sst", 300, 0, fid_x);
+    add_sst(meta_a.get(), "fx_high400.sst", 400, 0, fid_x);
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(500);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* rowset_b = meta_b->add_rowsets();
+    rowset_b->set_id(2);
+    rowset_b->set_version(1);
+    rowset_b->set_num_rows(10);
+    rowset_b->set_data_size(100);
+    rowset_b->add_segments("seg_b.dat");
+    rowset_b->add_segment_size(100);
+    // Child B's lone F_A sstable falls inside F_X's max_rss_rowid range.
+    add_sst(meta_b.get(), "fa_high200.sst", 200, 0, fid_a);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(5, merged->sstable_meta().sstables_size());
+
+    // Build a list of (fileset_id_bytes, position) and verify same-id is contiguous.
+    std::vector<std::pair<std::string, int>> id_runs; // <fileset_id_bytes, run_idx>
+    int run_idx = -1;
+    std::string last_id;
+    for (int i = 0; i < merged->sstable_meta().sstables_size(); ++i) {
+        const auto& sst = merged->sstable_meta().sstables(i);
+        ASSERT_TRUE(sst.has_fileset_id());
+        const uint64_t hi = static_cast<uint64_t>(sst.fileset_id().hi());
+        const uint64_t lo = static_cast<uint64_t>(sst.fileset_id().lo());
+        std::string id_bytes(reinterpret_cast<const char*>(&hi), sizeof(uint64_t));
+        id_bytes += std::string(reinterpret_cast<const char*>(&lo), sizeof(uint64_t));
+        if (id_bytes != last_id) {
+            ++run_idx;
+            last_id = id_bytes;
+        }
+        id_runs.emplace_back(id_bytes, run_idx);
+    }
+
+    // Each fileset_id should appear in exactly one contiguous run.
+    std::map<std::string, std::set<int>> id_to_runs;
+    for (const auto& [id, run] : id_runs) {
+        id_to_runs[id].insert(run);
+    }
+    for (const auto& [id, runs] : id_to_runs) {
+        EXPECT_EQ(1u, runs.size()) << "fileset_id appears in " << runs.size()
+                                   << " non-contiguous runs in merged metadata — Bug F regression";
+    }
+
+    // Block-sort by min(max_rss_rowid) means F_X (min=100) precedes F_A (min=200).
+    EXPECT_EQ("fx_high100.sst", merged->sstable_meta().sstables(0).filename());
+    EXPECT_EQ("fx_high400.sst", merged->sstable_meta().sstables(3).filename());
+    EXPECT_EQ("fa_high200.sst", merged->sstable_meta().sstables(4).filename());
+}
+
 // Two PK parents (not cloud-native, so flush_parent_for_merge is a pass-through)
 // each carry a shared legacy standalone sstable with the same filename but
 // different `fileset_id` values (as would happen when PersistentIndexSstableFileset
