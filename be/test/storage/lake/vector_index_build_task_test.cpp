@@ -87,7 +87,7 @@ protected:
             },
             "index_properties": {
                 "efconstruction": "40",
-                "M": "16"
+                "m": "16"
             }
         })";
         idx->set_index_properties(props_json);
