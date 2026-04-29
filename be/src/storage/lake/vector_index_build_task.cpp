@@ -40,6 +40,13 @@ static constexpr int kReadBatchSize = 4096;
 VectorIndexBuildTask::VectorIndexBuildTask(TabletManager* tablet_mgr) : _tablet_mgr(tablet_mgr) {}
 
 Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
+    // Reset task state so the same instance is safe to reuse across prepare() calls.
+    _work_items.clear();
+    _rowset_versions.clear();
+    _tablet_schema.reset();
+    _built_version = 0;
+    _target_version = 0;
+
     _tablet_id = request.tablet_id();
     int64_t version = request.version();
     int batch_limit =
@@ -53,6 +60,7 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
     int64_t metadata_bv = metadata->has_vector_index_built_version() ? metadata->vector_index_built_version() : 0;
     int64_t request_bv = request.has_built_version() ? request.built_version() : 0;
     _built_version = std::max(metadata_bv, request_bv);
+    _target_version = version;
 
     LOG(INFO) << "VectorIndexBuildTask::prepare: tablet=" << _tablet_id << " version=" << version
               << " built_version=" << _built_version << " rowsets=" << metadata->rowsets_size();
@@ -175,14 +183,23 @@ int64_t VectorIndexBuildTask::compute_built_version(const std::vector<Status>& s
     //   - processed vi rowsets with all segments succeeded
     // Stop at first unprocessed vi rowset or failed vi rowset.
     int64_t watermark = _built_version;
+    bool advanced_through_all = true;
     for (const auto& info : _rowset_versions) {
         if (!info.has_vi) {
             watermark = info.version;
         } else if (info.processed && failed_versions.count(info.version) == 0) {
             watermark = info.version;
         } else {
+            advanced_through_all = false;
             break;
         }
+    }
+    // If every rowset version above _built_version was successfully advanced through
+    // (or there were none — e.g. the metadata version was bumped by an EMPTY_TXNLOG
+    // with no new rowsets), advance the watermark to the request target so FE stops
+    // re-scheduling indefinitely.
+    if (advanced_through_all && _target_version > watermark) {
+        watermark = _target_version;
     }
     return watermark;
 }

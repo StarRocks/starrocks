@@ -73,6 +73,10 @@ private:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id = 0;
     int64_t _built_version = 0;
+    // Target version from the request. Used as the watermark fallback when there is
+    // nothing to build (e.g. the metadata version was bumped by an EMPTY_TXNLOG with
+    // no new rowsets), so the watermark advances and FE stops re-scheduling.
+    int64_t _target_version = 0;
     int _omp_threads = 1;
     TabletSchemaCSPtr _tablet_schema;
 

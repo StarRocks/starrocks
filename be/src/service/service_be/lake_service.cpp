@@ -2144,7 +2144,14 @@ void LakeServiceImpl::build_vector_index(::google::protobuf::RpcController* cont
     const int effective_pool = std::max(1, budget / configured_omp);
     const int effective_omp = std::min(configured_omp, std::max(1, budget / effective_pool));
     if (thread_pool->max_threads() != effective_pool) {
-        (void)thread_pool->update_max_threads(effective_pool);
+        auto st = thread_pool->update_max_threads(effective_pool);
+        if (UNLIKELY(!st.ok())) {
+            LOG(WARNING) << "build_vector_index: failed to resize thread pool from " << thread_pool->max_threads()
+                         << " to " << effective_pool << ", tablet=" << request->tablet_id()
+                         << ", version=" << request->version() << ", error=" << st;
+            st.to_protobuf(response->mutable_status());
+            return;
+        }
     }
 
     LOG(INFO) << "build_vector_index RPC: tablet=" << request->tablet_id() << " version=" << request->version();

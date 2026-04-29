@@ -254,7 +254,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         opts.need_flat = config::enable_json_flat;
         opts.is_compaction = _opts.is_compaction;
-        opts.vector_index_build_threshold = _opts.vector_index_build_threshold;
 
         if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
             opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();
