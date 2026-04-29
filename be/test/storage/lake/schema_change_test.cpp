@@ -36,6 +36,8 @@
 #include "storage/metadata_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -2762,6 +2764,130 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_generated_column) {
         chunk->reset();
     }
     ASSERT_EQ(3, row_count);
+}
+
+// Regression for the SortedSchemaChange path: DeltaWriter must not consult the schema
+// service (which falls back to an FE RPC) because the schema-change task already holds
+// the exact target schema. The fix passes the tablet schema directly into DeltaWriter,
+// so the schema lookup -- and its FE RPC fallback -- is bypassed entirely.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_schema_rpc) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp restore([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic_int rpc_invocations = 0;
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_schema_via_rpc::test_hook",
+            [&rpc_invocations](void* arg) { rpc_invocations.fetch_add(1, std::memory_order_relaxed); });
+
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+
+    // Build an AGG_KEYS new tablet so SchemaChangeUtils::parse_request flips sc_sorting=true.
+    auto new_metadata = std::make_shared<TabletMetadata>();
+    new_metadata->set_id(next_id());
+    new_metadata->set_version(1);
+    auto new_schema = new_metadata->mutable_schema();
+    new_schema->set_id(next_id());
+    new_schema->set_num_short_key_columns(1);
+    new_schema->set_keys_type(AGG_KEYS);
+    new_schema->set_num_rows_per_row_block(65535);
+    {
+        auto c0 = new_schema->add_column();
+        c0->set_unique_id(1);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    {
+        auto c1 = new_schema->add_column();
+        c1->set_unique_id(2);
+        c1->set_name("c1");
+        c1->set_type("VARCHAR");
+        c1->set_length(20);
+        c1->set_is_key(true);
+        c1->set_is_nullable(false);
+    }
+    {
+        auto c2_sum = new_schema->add_column();
+        c2_sum->set_unique_id(9);
+        c2_sum->set_name("c2_sum");
+        c2_sum->set_type("BIGINT");
+        c2_sum->set_is_key(false);
+        c2_sum->set_is_nullable(true);
+        c2_sum->set_aggregation("SUM");
+    }
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*new_metadata));
+
+    int64_t version = 1;
+    int64_t txn_id = next_id();
+    auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
+    auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+
+    auto col_c0 = Int32Column::create();
+    auto col_c1 = BinaryColumn::create();
+    auto col_c2 = Int32Column::create();
+    auto col_c3 = Int32Column::create();
+    auto col_c4 = Int32Column::create();
+    col_c0->append_datum(Datum(1));
+    col_c1->append_datum(Datum(Slice("row0")));
+    col_c2->append_datum(Datum(100));
+    col_c3->append_datum(Datum(1000));
+    col_c4->append_datum(Datum(10));
+    VChunk chunk0({std::move(col_c0), std::move(col_c1), std::move(col_c2), std::move(col_c3), std::move(col_c4)},
+                  base_schema);
+    uint32_t indexes[1] = {0};
+
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_manager.get())
+                                               .set_tablet_id(base_tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(base_tablet_schema->id())
+                                               .set_tablet_schema(base_tablet_schema)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
+    version++;
+
+    // Drop the BE schema cache so the only way DeltaWriter could resolve the new schema is
+    // an FE RPC. With the fix, the schema is preset and the lookup is skipped, so the hook
+    // above must observe zero invocations.
+    _tablet_manager->update_metacache_limit(0);
+    _tablet_manager->prune_metacache();
+
+    auto new_tablet_id = new_metadata->id();
+    auto alter_txn_id = next_id();
+    {
+        auto t_read_schema = create_base_tablet_read_schema(next_id());
+
+        TAlterTabletReqV2 request;
+        request.base_tablet_id = base_tablet_id;
+        request.new_tablet_id = new_tablet_id;
+        request.alter_version = version;
+        request.txn_id = alter_txn_id;
+        request.__set_base_tablet_read_schema(t_read_schema);
+        request.__set_base_table_column_names({"c0", "c1", "c6", "c2", "c4"});
+        TAlterMaterializedViewParam mv_param;
+        mv_param.__set_column_name("c2_sum");
+        mv_param.__set_origin_column_name("c2");
+        request.__set_materialized_view_params({mv_param});
+
+        SchemaChangeHandler handler(_tablet_manager.get());
+        ASSERT_OK(handler.process_alter_tablet(request));
+    }
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
+
+    EXPECT_EQ(0, rpc_invocations.load(std::memory_order_relaxed))
+            << "SortedSchemaChange must not call the FE schema RPC when DeltaWriter is given a preset schema";
 }
 
 } // namespace starrocks::lake
