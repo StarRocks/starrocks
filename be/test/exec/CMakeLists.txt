@@ -162,3 +162,36 @@ target_link_libraries(starrocks_sorting_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_sorting_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(exec_sorting_core_test $<TARGET_OBJECTS:starrocks_sorting_core_test_objs>)
 target_link_libraries(exec_sorting_core_test ${SORTING_CORE_TEST_LINK_LIBS} gtest_main)
+
+set(JOIN_CORE_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    join_hash_map_test.cpp
+)
+
+set(JOIN_CORE_TEST_LINK_LIBS
+    ExecJoinCore
+    ExecSortingCore
+    ExprCore
+    SerdeCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_library(starrocks_join_core_test_objs OBJECT ${JOIN_CORE_TEST_FILES})
+target_link_libraries(starrocks_join_core_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_join_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(exec_join_core_test $<TARGET_OBJECTS:starrocks_join_core_test_objs>)
+target_link_libraries(exec_join_core_test ${JOIN_CORE_TEST_LINK_LIBS} gtest_main)

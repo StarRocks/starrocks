@@ -39,7 +39,7 @@
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_diagnostic_fwd.h"
-#include "serde/protobuf_serde.h"
+#include "serde/encode_level.h"
 #include "types/json_value.h"
 #include "types/percentile_value.h"
 
@@ -214,7 +214,7 @@ public:
         // NOTE that `serialize` and `deserialize` will store and load the size as uint32_t.
         // If you use `serialize` and `deserialize`, please make sure that the size of the column is less than 2^32.
         int64_t size = sizeof(T) * column.size();
-        if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
+        if (is_integer_encoding_enabled(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             return sizeof(uint32_t) + sizeof(uint64_t) +
                    std::max((int64_t)size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(size)));
         } else {
@@ -225,7 +225,7 @@ public:
     static uint8_t* serialize(const FixedLengthColumnBase<T>& column, uint8_t* buff, const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
-        if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
+        if (is_integer_encoding_enabled(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             // sorted 32-bit integers have a better optimize branch
             buff = encode_integers<(sizeof(T) == 4 && sorted)>(column.raw_data(), size, buff, encode_level);
         } else {
@@ -240,7 +240,7 @@ public:
         ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &size));
         auto& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
-        if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
+        if (is_integer_encoding_enabled(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             constexpr bool is_sorted_i32 = sizeof(T) == 4 && sorted;
             ASSIGN_OR_RETURN(buff, decode_integers<is_sorted_i32>(buff, end, data.data(), size));
         } else {
@@ -258,13 +258,13 @@ public:
         const auto& offsets = column.get_offset();
         int64_t res = sizeof(T) * 2;
         int64_t offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
-        if (EncodeContext::enable_encode_integer(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
+        if (is_integer_encoding_enabled(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) +
                    std::max((int64_t)offsets_size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(offsets_size)));
         } else {
             res += offsets_size;
         }
-        if (EncodeContext::enable_encode_string(encode_level) && bytes.size() >= ENCODE_SIZE_LIMIT) {
+        if (is_string_encoding_enabled(encode_level) && bytes.size() >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) + std::max((int64_t)bytes.size(), (int64_t)LZ4_compressBound(bytes.size()));
         } else {
             res += bytes.size();
@@ -283,7 +283,7 @@ public:
         } else {
             buff = write_little_endian_64(bytes_size, buff);
         }
-        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
+        if (is_string_encoding_enabled(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
             bytes_size <= LZ4_MAX_INPUT_SIZE) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
         } else {
@@ -297,7 +297,7 @@ public:
         } else {
             buff = write_little_endian_64(offsets_size, buff);
         }
-        if (EncodeContext::enable_encode_integer(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
+        if (is_integer_encoding_enabled(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4) { // only support sorted 32-bit integers
                 buff = encode_integers<true>(offsets.data(), offsets_size, buff, encode_level);
             } else {
@@ -322,7 +322,7 @@ public:
         column->get_bytes().resize(bytes_size);
 
         auto* bytes_data = column->get_bytes().data();
-        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
+        if (is_string_encoding_enabled(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
             bytes_size <= LZ4_MAX_INPUT_SIZE) {
             ASSIGN_OR_RETURN(buff, decode_string_lz4(buff, end, bytes_data, bytes_size));
         } else {
@@ -337,7 +337,7 @@ public:
         }
         raw::make_room(&column->get_offset(), offset_bytes_size / sizeof(typename BinaryColumnBase<T>::Offset));
 
-        if (EncodeContext::enable_encode_integer(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
+        if (is_integer_encoding_enabled(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
             constexpr bool is_i32 = sizeof(T) == 4;
             ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, column->get_offset().data(), offset_bytes_size));
         } else {

@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
 #include "common/statusor.h"
+#include "serde/encode_level.h"
 
 namespace starrocks {
 class ChunkPB;
@@ -60,14 +61,11 @@ public:
 
     static constexpr uint16_t STREAMVBYTE_PADDING_SIZE = STREAMVBYTE_PADDING;
 
-    static bool enable_encode_integer(const int encode_level) { return encode_level & ENCODE_INTEGER; }
+    static bool enable_encode_integer(const int encode_level) { return is_integer_encoding_enabled(encode_level); }
 
-    static bool enable_encode_string(const int encode_level) { return encode_level & ENCODE_STRING; }
+    static bool enable_encode_string(const int encode_level) { return is_string_encoding_enabled(encode_level); }
 
 private:
-    static constexpr int ENCODE_INTEGER = 2;
-    static constexpr int ENCODE_STRING = 4;
-
     // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
     void _adjust(const int col_id);
     const int _session_encode_level;

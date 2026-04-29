@@ -67,4 +67,4 @@ ADD_BE_LIB(Column
 )
 
 target_link_libraries(ChunkCore PUBLIC ColumnCore)
-target_link_libraries(Column PUBLIC ColumnCore ChunkCore)
+target_link_libraries(Column PUBLIC ColumnCore ChunkCore SerdeCore)

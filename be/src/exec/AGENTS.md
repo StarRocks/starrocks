@@ -13,8 +13,8 @@ Local guide for work under `be/src/exec`.
 ## Current Direction
 
 - Keep `Exec` as the temporary compatibility umbrella while extracted modules move out of it.
-- Treat existing targets such as `ExecCore`, `ExecSinkCore`, `SpillCore`, `ExecSchemaScannerCore`, `ExecSchemaScanners`, and `ExecSortingCore` as the model for future extractions.
-- Follow `handbook/plans/active/2026-04-28-exec-layering-rollout.md` for the active exec module roadmap.
+- Treat existing targets such as `ExecCore`, `ExecSinkCore`, `SpillCore`, `ExecSchemaScannerCore`, `ExecSchemaScanners`, `ExecSortingCore`, and `ExecJoinCore` as the model for future extractions.
+- Keep local or checkout-specific roadmap notes outside the committed guide unless they become shared repository policy.
 
 ## Validation
 

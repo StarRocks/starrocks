@@ -17,9 +17,34 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 
+ADD_BE_LIB(SerdeCore
+        column_array_serde.cpp
+        )
+
+target_link_libraries(SerdeCore PUBLIC
+        ColumnCore
+        TypesCore
+        Common
+        Base
+        Gutil
+        StarRocksGen
+        )
+
 ADD_BE_LIB(Serde
         encode_context.cpp
-        column_array_serde.cpp
         compress_strategy.cpp
         protobuf_serde.cpp
+        )
+
+target_link_libraries(Serde PUBLIC
+        SerdeCore
+        Column
+        RuntimeCore
+        ChunkCore
+        ColumnCore
+        TypesCore
+        Common
+        Base
+        Gutil
+        StarRocksGen
         )

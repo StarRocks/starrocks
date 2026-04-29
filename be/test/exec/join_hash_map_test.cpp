@@ -25,7 +25,6 @@
 #include "exec/join/join_hash_table.h"
 #include "exec/join/join_key_constructor.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -64,6 +63,7 @@ protected:
                                                   int32_t column_pos, bool nullable);
     static void add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, LogicalType column_type,
                                      bool nullable, size_t column_count = 3);
+    DescriptorTbl* create_descriptor_tbl(TDescriptorTableBuilder* table_desc_builder);
     static std::shared_ptr<RuntimeProfile> create_runtime_profile();
     std::shared_ptr<RowDescriptor> create_row_desc(TDescriptorTableBuilder* table_desc_builder);
     std::shared_ptr<RowDescriptor> create_probe_desc(TDescriptorTableBuilder* probe_desc_builder);
@@ -880,33 +880,45 @@ std::shared_ptr<RuntimeProfile> JoinHashMapTest::create_runtime_profile() {
     return profile;
 }
 
+DescriptorTbl* JoinHashMapTest::create_descriptor_tbl(TDescriptorTableBuilder* table_desc_builder) {
+    auto* tbl = _object_pool->add(new DescriptorTbl());
+    auto thrift_tbl = table_desc_builder->desc_tbl();
+
+    for (const auto& tdesc : thrift_tbl.tupleDescriptors) {
+        auto* tuple_desc = _object_pool->add(new TupleDescriptor(tdesc));
+        tbl->_tuple_desc_map[tdesc.id] = tuple_desc;
+    }
+
+    for (const auto& sdesc : thrift_tbl.slotDescriptors) {
+        auto* slot_desc = _object_pool->add(new SlotDescriptor(sdesc));
+        tbl->_slot_desc_map[sdesc.id] = slot_desc;
+        if (!slot_desc->col_name().empty()) {
+            tbl->_slot_with_column_name_map[sdesc.id] = slot_desc;
+        }
+
+        auto tuple = tbl->_tuple_desc_map.find(sdesc.parent);
+        CHECK(tuple != tbl->_tuple_desc_map.end());
+        tuple->second->add_slot(slot_desc);
+    }
+
+    return tbl;
+}
+
 std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(TDescriptorTableBuilder* table_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(_runtime_state.get(), _object_pool.get(), table_desc_builder->desc_tbl(), &tbl,
-                                config::vector_chunk_size)
-                  .ok());
-
+    auto* tbl = create_descriptor_tbl(table_desc_builder);
     return std::make_shared<RowDescriptor>(*tbl, row_tuples);
 }
 
 std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(TDescriptorTableBuilder* probe_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(_runtime_state.get(), _object_pool.get(), probe_desc_builder->desc_tbl(), &tbl,
-                                config::vector_chunk_size)
-                  .ok());
-
+    auto* tbl = create_descriptor_tbl(probe_desc_builder);
     return std::make_shared<RowDescriptor>(*tbl, row_tuples);
 }
 
 std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(TDescriptorTableBuilder* build_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{1};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(_runtime_state.get(), _object_pool.get(), build_desc_builder->desc_tbl(), &tbl,
-                                config::vector_chunk_size)
-                  .ok());
-
+    auto* tbl = create_descriptor_tbl(build_desc_builder);
     return std::make_shared<RowDescriptor>(*tbl, row_tuples);
 }
 
