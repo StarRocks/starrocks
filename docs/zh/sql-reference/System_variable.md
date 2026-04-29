@@ -1440,6 +1440,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * `SORT_NULLS_LAST`：排序后，将 NULL 值放到最后。
 * `ERROR_IF_OVERFLOW`：运算溢出时，报错而不是返回 NULL，目前仅 DECIMAL 支持这一行为。
 * `GROUP_CONCAT_LEGACY`：使用 2.5 及以前的 `group_concat` 的语法。该选项从 3.0.9，3.1.6 开始支持。
+* `STRUCT_CAST_BY_NAME`：在 STRUCT 类型之间进行类型转换时，启用基于名称的字段匹配，而非默认的基于位置的匹配。启用此模式后，源 Struct 中的字段将根据字段名称（不区分大小写）与目标 Struct 中的字段进行匹配，无论它们的声明顺序如何。源 Struct 中存在而目标 Struct 中缺失的字段将被忽略；目标 Struct 中存在而源 Struct 中缺失的字段将被填充为 NULL。此模式同时影响 FE 类型解析（UNION ALL 的通用超类型计算和可转换性检查）以及 BE 转换评估（CastStructExpr 中的运行时字段重新排序）。当对 STRUCT 列执行 UNION ALL 操作时，若各分支中字段的定义顺序不同，此模式尤为有用。
 
 不同模式之间可以独立设置，您可以单独开启某一个模式，例如：
 
