@@ -30,8 +30,10 @@ protected:
         _saved_score = config::lake_autonomous_compaction_score_threshold;
         config::enable_lake_autonomous_compaction = true;
         config::lake_autonomous_compaction_score_threshold = 1.0;
-        // start() with nullptrs is safe in the skeleton compute_score_locked path,
-        // which currently returns a constant >= threshold.
+        // start() with nullptrs: compute_score_locked short-circuits to 0.0 when
+        // tablet_mgr is null (real cached-metadata lookup is not possible), so
+        // update_tablet_async is a no-op below threshold. These tests exercise
+        // the manager's lifecycle/idempotency contracts, not real dispatch.
         LakeCompactionManager::instance()->start(nullptr, nullptr);
     }
     void TearDown() override {

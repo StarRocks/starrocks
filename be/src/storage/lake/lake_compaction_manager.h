@@ -96,11 +96,19 @@ private:
 
     void dispatch_loop();
 
-    // Compute compaction score for a tablet. Returns negative on error.
+    // Compute compaction score for a tablet from its latest cached metadata.
+    // Returns 0 when the metadata is not cached (e.g. tablet not yet hot).
     double compute_score_locked(int64_t tablet_id);
 
-    // Try to schedule one task; returns true if one was dispatched.
-    bool try_dispatch_one_locked();
+    // Try to schedule one task; returns true if one was dispatched OR a queue
+    // entry was popped (so the caller's loop should keep going). Releases _mu
+    // around the actual scheduler->compact() call.
+    bool try_dispatch_one_locked(std::unique_lock<std::mutex>& lock);
+
+    // Atomic source of synthetic txn_ids for autonomous dispatches. Negative
+    // values are reserved for autonomous so they don't collide with FE-allocated
+    // ids (which are positive); decremented on each dispatch.
+    std::atomic<int64_t> _autonomous_txn_counter{-1};
 
     bool _started = false;
     std::atomic<bool> _stopping{false};

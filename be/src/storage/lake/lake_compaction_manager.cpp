@@ -16,12 +16,16 @@
 
 #include <bvar/bvar.h>
 
+#include <google/protobuf/service.h>
+
 #include <algorithm>
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_result_manager.h"
+#include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/tablet_manager.h"
 
 namespace starrocks::lake {
@@ -82,13 +86,15 @@ void LakeCompactionManager::update_tablet_async(int64_t tablet_id) {
 }
 
 double LakeCompactionManager::compute_score_locked(int64_t tablet_id) {
-    // TODO(Phase 4 follow-up): plug in a real "latest cached metadata" path.
-    // For now we return a positive constant above the threshold so that
-    // any update_tablet_async call enqueues the tablet. The dispatch loop
-    // still respects the per-tablet and global concurrency caps; mis-priority
-    // only affects fairness, not correctness.
-    (void)tablet_id;
-    return std::max(1.0 + config::lake_autonomous_compaction_score_threshold, 1.0);
+    // Score from the latest cached metadata: rowset count is a cheap proxy that
+    // matches the SizeTieredCompactionPolicy intuition (more rowsets -> more
+    // value to compact). Returning 0 when no cache hit deliberately suppresses
+    // dispatch for cold tablets — they will be picked up the first time
+    // publish_version warms their metadata.
+    if (_tablet_mgr == nullptr) return 0.0;
+    auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
+    if (metadata == nullptr) return 0.0;
+    return static_cast<double>(metadata->rowsets_size());
 }
 
 void LakeCompactionManager::notify_task_finished(int64_t tablet_id,
@@ -113,6 +119,7 @@ void LakeCompactionManager::notify_task_finished(int64_t tablet_id,
     if (had_reservation) {
         int64_t prev = _running_total.fetch_sub(1, std::memory_order_relaxed);
         DCHECK_GT(prev, 0) << "running_total underflow";
+        g_autonomous_completed_tasks << 1;
     }
     _cv.notify_one();
 }
@@ -148,12 +155,35 @@ void LakeCompactionManager::dispatch_loop() {
         if (_stopping.load(std::memory_order_relaxed)) break;
         while (!_queue.empty() && _running_total.load(std::memory_order_relaxed) <
                                           config::lake_autonomous_compaction_max_concurrent_tasks) {
-            if (!try_dispatch_one_locked()) break;
+            if (!try_dispatch_one_locked(lock)) break;
         }
     }
 }
 
-bool LakeCompactionManager::try_dispatch_one_locked() {
+namespace {
+// Owns a synthesized CompactRequest/CompactResponse so the existing
+// CompactionScheduler can run an autonomous compaction without an RPC. The
+// scheduler invokes Run() once after CompactionTaskCallback::finish_task has
+// already called notify_task_finished + update_tablet_async (wired in
+// compaction_scheduler.cpp::finish_task when context->write_to_local_result is
+// set), so this closure only has to release the heap allocations.
+class AutonomousDispatchClosure : public ::google::protobuf::Closure {
+public:
+    AutonomousDispatchClosure(std::unique_ptr<CompactRequest> req, std::unique_ptr<CompactResponse> resp)
+            : _req(std::move(req)), _resp(std::move(resp)) {}
+
+    CompactRequest* request() { return _req.get(); }
+    CompactResponse* response() { return _resp.get(); }
+
+    void Run() override { delete this; }
+
+private:
+    std::unique_ptr<CompactRequest> _req;
+    std::unique_ptr<CompactResponse> _resp;
+};
+} // namespace
+
+bool LakeCompactionManager::try_dispatch_one_locked(std::unique_lock<std::mutex>& lock) {
     if (_queue.empty()) return false;
     TabletEntry top = _queue.top();
     int64_t tablet_id = top.tablet_id;
@@ -168,35 +198,59 @@ bool LakeCompactionManager::try_dispatch_one_locked() {
         g_autonomous_skipped_tasks << 1;
         return true; // we did make progress on the queue
     }
+    if (_tablet_mgr == nullptr || _tablet_mgr->compaction_scheduler() == nullptr) {
+        // Defensive: start() ran without a fully-initialized tablet_mgr. Drop the
+        // entry to avoid hot-looping on the same tablet; update_tablet_async is
+        // idempotent so callers will eventually re-enqueue.
+        _queue.pop();
+        _enqueued.erase(tablet_id);
+        g_autonomous_skipped_tasks << 1;
+        return true;
+    }
+
+    // Resolve the base_version under the lock so we don't race with a concurrent
+    // notify_task_finished re-evaluating priority. Cold tablets have no cached
+    // metadata; treat that as "skip" rather than dispatch with version=0.
+    auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
+    if (metadata == nullptr) {
+        _queue.pop();
+        _enqueued.erase(tablet_id);
+        g_autonomous_skipped_tasks << 1;
+        return true;
+    }
+    int64_t base_version = metadata->version();
+
     _queue.pop();
     _enqueued.erase(tablet_id);
 
     // Reserve slots before releasing the lock so a concurrent dispatch sees us.
+    // The matching decrement happens in compaction_scheduler.cpp::finish_task
+    // (via notify_task_finished) when the task completes.
     _running_per_tablet[tablet_id] = per_tablet_running + 1;
     _running_total.fetch_add(1, std::memory_order_relaxed);
 
-    // TODO(Phase 4 follow-up): actually submit the compaction task into the
-    // existing CompactionScheduler's task pool. That requires:
-    //   1. Build a CompactionTaskContext with write_to_local_result=true and
-    //      local_result_base_version=metadata.version().
-    //   2. pick_rowsets_with_limit(running_inputs ∪ pending_inputs, max_bytes).
-    //   3. Submit via CompactionScheduler::compaction_thread_pool().submit_func().
-    //   4. On completion call notify_task_finished(tablet_id, input_rowsets).
-    //
-    // The integration point is the same task path used by lake_service.cpp::compact;
-    // we just bypass the RPC layer and synthesize a CompactionTaskContext directly.
-    // Skeleton kept here so Phase 4.3 UTs can exercise queue + counters; live wiring
-    // tracked separately to keep this PR reviewable in isolation.
-    LOG(INFO) << "LakeCompactionManager dispatched tablet=" << tablet_id << " score=" << top.score
-              << " (skeleton — task submission not yet wired)";
-    g_autonomous_dispatched_tasks << 1;
+    int64_t txn_id = _autonomous_txn_counter.fetch_sub(1, std::memory_order_relaxed);
+    auto* scheduler = _tablet_mgr->compaction_scheduler();
 
-    // Eagerly release the slot so the queue keeps moving in this skeleton mode.
-    // Live integration removes this and instead releases on real task completion.
-    _running_per_tablet[tablet_id] = per_tablet_running;
-    if (_running_per_tablet[tablet_id] == 0) _running_per_tablet.erase(tablet_id);
-    _running_total.fetch_sub(1, std::memory_order_relaxed);
-    g_autonomous_completed_tasks << 1;
+    // Drop the lock for the actual scheduler->compact() call so workers that
+    // run finish_task can re-enter notify_task_finished without deadlocking.
+    lock.unlock();
+
+    auto req = std::make_unique<CompactRequest>();
+    req->add_tablet_ids(tablet_id);
+    req->set_txn_id(txn_id);
+    req->set_version(base_version);
+    req->set_write_to_local_result(true);
+    auto resp = std::make_unique<CompactResponse>();
+    auto* done = new AutonomousDispatchClosure(std::move(req), std::move(resp));
+    LOG(INFO) << "LakeCompactionManager dispatching tablet=" << tablet_id << " score=" << top.score
+              << " base_version=" << base_version << " txn=" << txn_id;
+    g_autonomous_dispatched_tasks << 1;
+    // Pass nullptr controller: CompactionScheduler::compact only touches the
+    // controller in reject_request, which itself does not dereference it.
+    scheduler->compact(/*controller=*/nullptr, done->request(), done->response(), done);
+
+    lock.lock();
     return true;
 }
 
