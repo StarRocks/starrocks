@@ -996,4 +996,450 @@ public class CompactionSchedulerTest {
         Assertions.assertDoesNotThrow(() -> method.invoke(scheduler));
         Assertions.assertEquals(1, rc.size());
     }
+
+    /**
+     * schedulePartitionPublish drives a partition through the trigger and into
+     * startPublishOnly when the partition is eligible. We force startPublishOnly to
+     * fail at the "db == null" branch so the call returns null and no job is
+     * registered, but every line up to and through startPublishOnly's first
+     * branch is now exercised. This is the workhorse test that lifts coverage
+     * for lines 176-189 + the early portion of startPublishOnly.
+     */
+    @Test
+    public void testSchedulePartitionPublishDrivesThroughStartPublishOnly() throws Exception {
+        // Set thresholds so the trigger fires.
+        int savedDelta = Config.lake_compaction_version_delta_threshold;
+        Config.lake_compaction_version_delta_threshold = 1;
+        try {
+            long dbId = 100L;
+            long tableId = 200L;
+            long partitionId = 300L;
+            PartitionIdentifier partition = new PartitionIdentifier(dbId, tableId, partitionId);
+
+            CompactionMgr compactionManager = new CompactionMgr();
+            // version=10, lastPublishVisibleVersion=0 → versionDelta=10 ≥ threshold=1 → trigger fires.
+            compactionManager.handleLoadingFinished(partition, 10L, System.currentTimeMillis(),
+                    new Quantiles(1.0, 2.0, 3.0));
+
+            // Make startPublishOnly hit the db == null branch immediately.
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public LocalMetastore getLocalMetastore() {
+                    return new LocalMetastore(globalStateMgr, null, null);
+                }
+            };
+            new MockUp<LocalMetastore>() {
+                @Mock
+                public Database getDb(long id) {
+                    return null;
+                }
+            };
+
+            CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                    globalTransactionMgr, globalStateMgr, "");
+
+            Method method = CompactionScheduler.class.getDeclaredMethod("schedulePartitionPublish");
+            method.setAccessible(true);
+            Assertions.assertDoesNotThrow(() -> method.invoke(scheduler));
+
+            // db == null path calls compactionManager.removePartition; the partition
+            // must no longer be tracked.
+            Assertions.assertNull(compactionManager.getStatistics(partition));
+        } finally {
+            Config.lake_compaction_version_delta_threshold = savedDelta;
+        }
+    }
+
+    /**
+     * startPublishOnly returns null and removes the partition when getDb returns null.
+     */
+    @Test
+    public void testStartPublishOnlyDbNotFound() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        PartitionIdentifier partitionId2 = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics stats = new PartitionStatistics(partitionId2);
+        stats.setCurrentVersion(new com.starrocks.lake.compaction.PartitionVersion(10L, System.currentTimeMillis()));
+        stats.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(stats);
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        compactionManager.handleLoadingFinished(partitionId2, 10L, System.currentTimeMillis(),
+                new Quantiles(1.0, 2.0, 3.0));
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long id) {
+                return null;
+            }
+        };
+
+        Method m = CompactionScheduler.class.getDeclaredMethod("startPublishOnly",
+                PartitionStatisticsSnapshot.class, long.class, String.class);
+        m.setAccessible(true);
+        Object result = m.invoke(scheduler, snapshot, 10L, "test");
+        Assertions.assertNull(result);
+        // db == null path also removes the partition.
+        Assertions.assertNull(compactionManager.getStatistics(partitionId2));
+    }
+
+    /**
+     * startPublishOnly aborts when getCompactionComputeResource throws ErrorReportException
+     * (warehouse not available / suspended).
+     */
+    @Test
+    public void testStartPublishOnlyWarehouseResolutionFails() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        PartitionIdentifier pid = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics stats = new PartitionStatistics(pid);
+        stats.setCurrentVersion(new com.starrocks.lake.compaction.PartitionVersion(10L, System.currentTimeMillis()));
+        stats.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(stats);
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long id) {
+                return new Database(dbId, "db");
+            }
+        };
+        new Expectations() {
+            {
+                warehouseManager.getCompactionComputeResource(tableId);
+                result = ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "test_wh");
+            }
+        };
+
+        Method m = CompactionScheduler.class.getDeclaredMethod("startPublishOnly",
+                PartitionStatisticsSnapshot.class, long.class, String.class);
+        m.setAccessible(true);
+        Object result = m.invoke(scheduler, snapshot, 10L, "test");
+        Assertions.assertNull(result);
+    }
+
+    /**
+     * startPublishOnly returns null when the table is in SCHEMA_CHANGE state. Cross-version
+     * apply with alter_metadata is unsupported; the autonomous path must defer.
+     */
+    @Test
+    public void testStartPublishOnlySkipsSchemaChange() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        PartitionIdentifier pid = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics stats = new PartitionStatistics(pid);
+        stats.setCurrentVersion(new com.starrocks.lake.compaction.PartitionVersion(10L, System.currentTimeMillis()));
+        stats.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(stats);
+
+        LakeTable table = new LakeTable();
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long id) {
+                return new Database(dbId, "db");
+            }
+            @Mock
+            public Table getTable(Long dbIdParam, Long tableIdParam) {
+                return table;
+            }
+        };
+        new Expectations() {
+            {
+                warehouseManager.getCompactionComputeResource(tableId);
+                result = WarehouseManager.DEFAULT_RESOURCE;
+                warehouseManager.getWarehouse(anyLong);
+                result = warehouse;
+            }
+        };
+
+        Method m = CompactionScheduler.class.getDeclaredMethod("startPublishOnly",
+                PartitionStatisticsSnapshot.class, long.class, String.class);
+        m.setAccessible(true);
+        Object result = m.invoke(scheduler, snapshot, 10L, "test");
+        Assertions.assertNull(result);
+    }
+
+    /**
+     * startPublishOnly returns null and removes the partition when the physical partition
+     * is no longer attached to the table (e.g. dropped concurrently).
+     */
+    @Test
+    public void testStartPublishOnlyPartitionGone() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        PartitionIdentifier pid = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics stats = new PartitionStatistics(pid);
+        stats.setCurrentVersion(new com.starrocks.lake.compaction.PartitionVersion(10L, System.currentTimeMillis()));
+        stats.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(stats);
+
+        LakeTable table = new LakeTable();
+        // table.getPhysicalPartition(...) defaults to null when none is registered.
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        compactionManager.handleLoadingFinished(pid, 10L, System.currentTimeMillis(),
+                new Quantiles(1.0, 2.0, 3.0));
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long id) {
+                return new Database(dbId, "db");
+            }
+            @Mock
+            public Table getTable(Long dbIdParam, Long tableIdParam) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long ppId) {
+                return null;
+            }
+        };
+        new Expectations() {
+            {
+                warehouseManager.getCompactionComputeResource(tableId);
+                result = WarehouseManager.DEFAULT_RESOURCE;
+                warehouseManager.getWarehouse(anyLong);
+                result = warehouse;
+            }
+        };
+
+        Method m = CompactionScheduler.class.getDeclaredMethod("startPublishOnly",
+                PartitionStatisticsSnapshot.class, long.class, String.class);
+        m.setAccessible(true);
+        Object result = m.invoke(scheduler, snapshot, 10L, "test");
+        Assertions.assertNull(result);
+        // partition gone path also removes it from the manager.
+        Assertions.assertNull(compactionManager.getStatistics(pid));
+    }
+
+    /**
+     * startPublishOnly returns null when no BE owns any tablet of the partition
+     * (collectPartitionTablets returns empty). This is the case where the partition's
+     * shards have not yet been assigned (rare but possible on cluster start).
+     */
+    @Test
+    public void testStartPublishOnlyEmptyBeToTablets() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        PartitionIdentifier pid = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics stats = new PartitionStatistics(pid);
+        stats.setCurrentVersion(new com.starrocks.lake.compaction.PartitionVersion(10L, System.currentTimeMillis()));
+        stats.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(stats);
+
+        LakeTable table = new LakeTable();
+        PhysicalPartition pp = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long id) {
+                return new Database(dbId, "db");
+            }
+            @Mock
+            public Table getTable(Long dbIdParam, Long tableIdParam) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long ppId) {
+                return pp;
+            }
+        };
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                                     ComputeResource computeResource) {
+                return new HashMap<>();
+            }
+        };
+        new Expectations() {
+            {
+                warehouseManager.getCompactionComputeResource(tableId);
+                result = WarehouseManager.DEFAULT_RESOURCE;
+                warehouseManager.getWarehouse(anyLong);
+                result = warehouse;
+            }
+        };
+
+        Method m = CompactionScheduler.class.getDeclaredMethod("startPublishOnly",
+                PartitionStatisticsSnapshot.class, long.class, String.class);
+        m.setAccessible(true);
+        Object result = m.invoke(scheduler, snapshot, 10L, "test");
+        Assertions.assertNull(result);
+    }
+
+    /**
+     * Full success path: startPublishOnly builds and registers a PUBLISH_ONLY job.
+     * This is the largest single-test coverage gain — exercises the entire happy
+     * path through createPublishOnlyTasks and sendRequest.
+     */
+    @Test
+    public void testStartPublishOnlySuccess() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        long txnId = 5000L;
+        long beId = 2001L;
+        PartitionIdentifier pid = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics stats = new PartitionStatistics(pid);
+        stats.setCurrentVersion(new com.starrocks.lake.compaction.PartitionVersion(10L, System.currentTimeMillis()));
+        stats.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(stats);
+
+        LakeTable table = new LakeTable();
+        PhysicalPartition pp = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        ComputeNode node = new ComputeNode(beId, "10.0.0.1", 9040);
+        node.setBrpcPort(9050);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long id) {
+                return new Database(dbId, "db");
+            }
+            @Mock
+            public Table getTable(Long dbIdParam, Long tableIdParam) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long ppId) {
+                return pp;
+            }
+        };
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                                     ComputeResource computeResource) {
+                Map<Long, List<Long>> m = new HashMap<>();
+                m.put(beId, Lists.newArrayList(11L, 12L));
+                return m;
+            }
+            @Mock
+            protected long beginTransaction(PartitionIdentifier partition, PhysicalPartition physicalPartition,
+                                            ComputeResource computeResource) {
+                return txnId;
+            }
+        };
+        new MockUp<CompactionTask>() {
+            @Mock
+            public void sendRequest() {
+                // no-op: avoid triggering real BRpc
+            }
+        };
+
+        new Expectations() {
+            {
+                warehouseManager.getCompactionComputeResource(tableId);
+                result = WarehouseManager.DEFAULT_RESOURCE;
+                warehouseManager.getWarehouse(anyLong);
+                result = warehouse;
+                warehouse.getName();
+                result = "wh";
+                systemInfoService.getBackendOrComputeNode(beId);
+                result = node;
+            }
+        };
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("10.0.0.1", 9050);
+                result = lakeService;
+            }
+        };
+
+        Method m = CompactionScheduler.class.getDeclaredMethod("startPublishOnly",
+                PartitionStatisticsSnapshot.class, long.class, String.class);
+        m.setAccessible(true);
+        Object result = m.invoke(scheduler, snapshot, 10L, "test");
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof CompactionJob);
+        Assertions.assertEquals(CompactionJob.JobType.PUBLISH_ONLY, ((CompactionJob) result).getJobType());
+        Assertions.assertEquals(txnId, ((CompactionJob) result).getTxnId());
+    }
 }
