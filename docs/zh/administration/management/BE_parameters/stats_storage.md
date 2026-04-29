@@ -1244,15 +1244,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
 - 引入版本：v3.5.16, v4.0.9
 
-### lake_vector_index_build_thread_count
-
-- 默认值：16
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离表异步向量索引构建任务的线程数。每个任务负责构建一个 segment 的向量索引文件（`.vi`）。可根据 CN 的 CPU/IO 能力和业务的索引构建频率进行调整。
-- 引入版本：-
-
 ### tablet_writer_open_rpc_timeout_sec
 
 - 默认值：300

@@ -98,6 +98,7 @@ CONF_mBool(lake_cache_select_in_physical_way, "true");
 
 // The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
 CONF_mInt32(lake_metadata_fetch_thread_count, "3");
+
 // Experimental internal switch: whether to enable lake capture_tablet_and_rowsets for query cache stale entries.
 // This config is temporary and may be removed after the related lake capture implementation is fixed.
 CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");

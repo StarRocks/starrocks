@@ -893,7 +893,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
 
         TabletMetadataPtr latest_metadata = nullptr;
-        std::unordered_set<std::string> retained_files;
 
         // Find metadata files that has garbage data files and delete all those files
         for (int64_t garbage_version = *versions_to_delete.rbegin(), min_v = *versions_to_delete.begin();
@@ -950,8 +949,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     for (const auto& del_file : rowset.del_files()) {
                         if (!del_file.shared() || allow_delete_shared_files) {
                             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, del_file.name())));
-                        } else {
-                            retained_files.insert(del_file.name());
                         }
                     }
                     // Delete associated .vi files using per-segment vector index metadata
@@ -961,8 +958,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
                         if (!f.shared() || allow_delete_shared_files) {
                             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
-                        } else {
-                            retained_files.insert(f.name());
                         }
                     }
                 }
@@ -972,8 +967,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                             const bool shared_file = i < dcg.shared_files_size() && dcg.shared_files(i);
                             if (!shared_file || allow_delete_shared_files) {
                                 RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, dcg.column_files(i))));
-                            } else {
-                                retained_files.insert(dcg.column_files(i));
                             }
                         }
                     }
@@ -982,8 +975,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
                         if (!sst.shared() || allow_delete_shared_files) {
                             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, sst.filename())));
-                        } else {
-                            retained_files.insert(sst.filename());
                         }
                     }
                 }
