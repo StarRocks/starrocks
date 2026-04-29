@@ -886,6 +886,36 @@ public abstract class MVTestBase extends StarRocksTestBase {
             String refreshMode,
             String partitionBy,
             Map<String, String> extraProperties) throws Exception {
+        // AUTO is rejected at the user-input boundary. Test-only bypass: substitute INCREMENTAL
+        // through the SQL path (which exercises the IVMAnalyzer the same way), then promote
+        // currentRefreshMode to AUTO. If the query is not IVM-eligible, INCREMENTAL throws;
+        // fall back to PCT, mirroring AUTO's real create-time fallback.
+        boolean wantAuto = "auto".equalsIgnoreCase(refreshMode);
+        String effectiveMode = wantAuto ? "incremental" : refreshMode;
+
+        MaterializedView mv;
+        try {
+            mv = createMaterializedViewViaSql(query, effectiveMode, partitionBy, extraProperties);
+        } catch (Exception e) {
+            if (!wantAuto) {
+                throw e;
+            }
+            mv = createMaterializedViewViaSql(query, "pct", partitionBy, extraProperties);
+        }
+        if (wantAuto && mv.getCurrentRefreshMode() == MaterializedView.RefreshMode.INCREMENTAL) {
+            mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
+            // Persisted refresh_mode property remains "incremental" so DDL regeneration during
+            // ALTER ACTIVE does not feed "auto" back through IVMAnalyzer (which now rejects it).
+            // The in-memory currentRefreshMode is what drives processor selection.
+        }
+        return mv;
+    }
+
+    private MaterializedView createMaterializedViewViaSql(
+            String query,
+            String refreshMode,
+            String partitionBy,
+            Map<String, String> extraProperties) throws Exception {
         StringBuilder ddl = new StringBuilder();
         ddl.append("CREATE MATERIALIZED VIEW `test_mv1` ");
         if (partitionBy != null) {

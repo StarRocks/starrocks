@@ -60,11 +60,11 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from incremental to auto
+        // change refresh mode from incremental to auto: rejected (AUTO is hidden from users)
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+            alterMaterializedView(alterStmt, true);
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
     }
 
@@ -94,17 +94,17 @@ public class AlterMaterializedViewTest extends MVTestBase {
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
 
-        // change refresh mode from auto to incremental
+        // alter incremental -> incremental: no-op success
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from incremental to auto
+        // alter incremental -> auto: rejected (AUTO is hidden from users)
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+            alterMaterializedView(alterStmt, true);
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
     }
 
@@ -206,6 +206,28 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
         }
+    }
+
+    @Test
+    public void testCreateMVWithAutoRefreshModeRejected() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW `auto_rejected_mv` REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\"refresh_mode\" = \"auto\") " +
+                "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        Exception ex = Assertions.assertThrows(Exception.class,
+                () -> starRocksAssert.withMaterializedView(ddl));
+        Assertions.assertTrue(ex.getMessage().contains("refresh_mode"),
+                "expected refresh_mode error, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testAlterMVRefreshModeToAutoRejected() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+
+        String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
+        alterMaterializedView(alterStmt, true);
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
     }
 
     @Test
