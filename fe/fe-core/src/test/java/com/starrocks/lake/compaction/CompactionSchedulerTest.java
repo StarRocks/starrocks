@@ -920,8 +920,15 @@ public class CompactionSchedulerTest {
                     globalTransactionMgr, globalStateMgr, "");
 
             new MockUp<GlobalStateMgr>() {
-                @Mock public boolean isLeader() { return true; }
-                @Mock public boolean isReady() { return true; }
+                @Mock
+                public boolean isLeader() {
+                    return true;
+                }
+
+                @Mock
+                public boolean isReady() {
+                    return true;
+                }
             };
             // schedulePartitionPublish must not be invoked when bundling is on.
             // We verify by ensuring runOneCycle doesn't throw. The actual

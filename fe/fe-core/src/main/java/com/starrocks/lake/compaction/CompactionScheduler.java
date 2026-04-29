@@ -133,13 +133,6 @@ public class CompactionScheduler extends Daemon {
     }
 
     /**
-     * For each partition not currently busy with a COMPACT_AND_PUBLISH job, evaluate the
-     * three autonomous-compaction trigger strategies. If any matches, build and dispatch
-     * a PUBLISH_ONLY job that asks every owning BE to drain its local CompactionResultPB
-     * cache for this partition and publish_version with force_publish=true so all tablets
-     * reach the same new_version even when some have no local results.
-     */
-    /**
      * Pure decision function for the autonomous publish trigger. Extracted so unit tests
      * can exercise every branch without spinning up FE state.
      *
@@ -168,6 +161,13 @@ public class CompactionScheduler extends Daemon {
         return null;
     }
 
+    /**
+     * For each partition not currently busy with a COMPACT_AND_PUBLISH job, evaluate the
+     * three autonomous-compaction trigger strategies. If any matches, build and dispatch
+     * a PUBLISH_ONLY job that asks every owning BE to drain its local CompactionResultPB
+     * cache for this partition and publish_version with force_publish=true so all tablets
+     * reach the same new_version even when some have no local results.
+     */
     private void schedulePartitionPublish() {
         for (PartitionIdentifier partition : compactionManager.getAllPartitions()) {
             if (runningCompactions.containsKey(partition)) {
