@@ -252,9 +252,17 @@ private:
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
                       LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
 
+    // Performs condition-based merge update using parallel chunk-level execution for segments
+    // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values
+    // are read from the freshly-ingested segment file on demand, and winning new rows are upserted
+    // into the primary index in-place here (there is no later SST ingest).
+    //
+    // PARALLELISM: compare/read phase runs per-chunk on the lake_partial_update_thread_pool;
+    // index.upsert is applied serially after the barrier because PrimaryIndex::upsert is not
+    // thread-safe.
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-                                     int32_t condition_column, const MutableColumnPtr& upsert, PrimaryIndex& index,
-                                     DeletesMap* new_deletes);
+                                     int32_t condition_column, const SegmentPKIteratorPtr& upsert,
+                                     LakePrimaryIndex& index, DeletesMap* new_deletes);
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 

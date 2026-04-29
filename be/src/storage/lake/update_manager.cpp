@@ -461,9 +461,12 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                     builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
                 }
             } else {
+                // NON-SST CONDITION MERGE PATH:
+                // When SST files are absent, new-row condition values are read from the freshly
+                // ingested segment file on demand. Compare work is parallelized per chunk; the
+                // final index.upsert is applied serially after the barrier.
                 RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
-                                                          state.upserts(local_id)->standalone_pk_column(), index,
-                                                          &new_deletes));
+                                                          state.upserts(local_id), index, &new_deletes));
             }
             if (state.auto_increment_deletes(local_id) != nullptr) {
                 RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(local_id), &new_deletes,
@@ -1172,9 +1175,126 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     return upsert->status();
 }
 
+namespace {
+
+// Per-chunk output of the parallel compare phase for _do_update_with_condition (non-SST path).
+//
+// The compare phase runs concurrently per chunk; its results are consumed serially
+// afterwards because PrimaryIndex::upsert is not thread-safe. pk_column is retained
+// so the serial merge can upsert winners without re-encoding the chunk.
+struct ChunkCondMergeResult {
+    MutableColumnPtr pk_column;
+    // Absolute row offset of this chunk within the segment (== SegmentPKIterator::current().second).
+    size_t chunk_offset = 0;
+    // Half-open intervals [begin, end) in chunk-local coordinates identifying new rows
+    // that won their condition comparison and must be upserted into the index.
+    // Any replaced old rowids are collected by index.upsert into new_deletes.
+    std::vector<std::pair<uint32_t, uint32_t>> winner_ranges;
+    // Chunk-local indices of new rows that LOST their condition comparison
+    // (old row wins); these must be deleted from the current segment.
+    std::vector<uint32_t> new_loser_local_ids;
+};
+
+} // namespace
+
+// Compare phase for one chunk in the non-SST parallel condition merge.
+// Mirrors _process_single_chunk_update_with_condition but writes into a per-chunk
+// result instead of mutating the shared index, so it is safe to run concurrently
+// and the caller can apply index.upsert serially.
+static Status process_single_chunk_update_with_condition_no_sst(
+        UpdateManager* mgr, const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
+        SegmentPKIterator* segment_pk_iterator, const std::pair<ChunkPtr, size_t>& current,
+        const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index,
+        ChunkCondMergeResult* result) {
+    TRACE_COUNTER_INCREMENT("process_condition_update_count", 1);
+    ASSIGN_OR_RETURN(result->pk_column, segment_pk_iterator->encoded_pk_column(current.first.get()));
+    const auto chunk_size = result->pk_column->size();
+    if (chunk_size == 0) {
+        return Status::OK();
+    }
+    std::vector<uint64_t> old_rowids(chunk_size);
+    RETURN_IF_ERROR(index.get(*result->pk_column, &old_rowids));
+    // Fast path: no PKs in this chunk collide with the index → every new row wins.
+    bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int64_t id) { return -1 == id; });
+    if (non_old_value) {
+        result->winner_ranges.emplace_back(0u, static_cast<uint32_t>(chunk_size));
+        return Status::OK();
+    }
+
+    std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
+    size_t num_default = 0;
+    std::vector<uint32_t> idxes;
+    RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
+    MutableColumns old_columns(1);
+    auto old_unordered_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    old_columns[0] = old_unordered_column->clone_empty();
+    RETURN_IF_ERROR(
+            mgr->get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
+    auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
+
+    // Read new-row condition values from the freshly-ingested segment; rowid in this segment
+    // equals chunk_offset + local_idx.
+    std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
+    std::vector<uint32_t> rowids;
+    rowids.reserve(chunk_size);
+    for (size_t j = 0; j < chunk_size; ++j) {
+        rowids.push_back(static_cast<uint32_t>(j + current.second));
+    }
+    new_rowids_by_rssid[rowset_id + upsert_idx] = std::move(rowids);
+    // only support condition update on single column
+    MutableColumns new_columns(1);
+    auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    new_columns[0] = new_column->clone_empty();
+    RETURN_IF_ERROR(mgr->get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
+
+    // Walk the chunk building contiguous "new wins" ranges, splitting on losers.
+    uint32_t run_begin = 0;
+    uint32_t run_step = 0;
+    for (size_t j = 0; j < old_column->size(); ++j) {
+        if (num_default > 0 && idxes[j] == 0) {
+            // plan_read_by_rssid uses idx 0 as sentinel for "no old row"; new row wins by default.
+            run_step++;
+        } else {
+            int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
+            if (r > 0) {
+                // Old wins: close the current winner run (if any) and mark this new row as loser.
+                if (run_step > 0) {
+                    result->winner_ranges.emplace_back(run_begin, run_begin + run_step);
+                }
+                result->new_loser_local_ids.push_back(static_cast<uint32_t>(j));
+                run_begin = static_cast<uint32_t>(j + 1);
+                run_step = 0;
+            } else {
+                // New wins (old <= new): extend the current run.
+                run_step++;
+            }
+        }
+    }
+    if (run_step > 0) {
+        result->winner_ranges.emplace_back(run_begin, run_begin + run_step);
+    }
+    return Status::OK();
+}
+
+// Performs condition-based merge update for the non-SST path using chunk-level parallelism.
+//
+// ALGORITHM:
+//   1. Iterate segment chunks serially; submit each chunk's compare work to the
+//      pk_index_execution thread pool (if parallelism is enabled).
+//   2. Each compare task: index.get() → read old/new condition columns → compute
+//      winner ranges and loser indices into a per-chunk result. No index writes.
+//   3. Barrier (token->wait()).
+//   4. Serial merge: for each chunk in order, index.upsert() the winner ranges and
+//      append new-loser rowids to new_deletes. The old rowids displaced by winners
+//      are collected by index.upsert via its DeletesMap out-param.
+//
+// WHY the upsert is serial: PrimaryIndex::upsert is documented [not thread-safe]; in
+// this path there is no later SST ingest, so winners must be inserted into the index
+// here, which forces the write phase to be serial.
 Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
                                                 int32_t upsert_idx, int32_t condition_column,
-                                                const MutableColumnPtr& upsert, PrimaryIndex& index,
+                                                const SegmentPKIteratorPtr& upsert, LakePrimaryIndex& index,
                                                 DeletesMap* new_deletes) {
     RETURN_ERROR_IF_FALSE(condition_column >= 0);
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_with_condition_latency_us");
@@ -1182,66 +1302,71 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
-    std::vector<uint64_t> old_rowids(upsert->size());
-    RETURN_IF_ERROR(index.get(*upsert, &old_rowids));
-    bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
-    if (!non_old_value) {
-        std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
-        size_t num_default = 0;
-        vector<uint32_t> idxes;
-        RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
-        MutableColumns old_columns(1);
-        auto old_unordered_column =
-                ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-        old_columns[0] = old_unordered_column->clone_empty();
-        RETURN_IF_ERROR(get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
-        auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-        old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
-
-        std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
-        std::vector<uint32_t> rowids;
-        rowids.reserve(upsert->size());
-        for (int j = 0; j < upsert->size(); ++j) {
-            rowids.push_back(j);
-        }
-        new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
-        // only support condition update on single column
-        MutableColumns new_columns(1);
-        auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-        new_columns[0] = new_column->clone_empty();
-        RETURN_IF_ERROR(get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
-
-        int idx_begin = 0;
-        int upsert_idx_step = 0;
-        for (int j = 0; j < old_column->size(); ++j) {
-            if (num_default > 0 && idxes[j] == 0) {
-                // plan_read_by_rssid will return idx with 0 if we have default value
-                upsert_idx_step++;
-            } else {
-                int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
-                if (r > 0) {
-                    RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upsert, idx_begin,
-                                                 idx_begin + upsert_idx_step, new_deletes));
-
-                    idx_begin = j + 1;
-                    upsert_idx_step = 0;
-
-                    // Update delete vector of current segment which is being applied
-                    (*new_deletes)[rowset_id + upsert_idx].push_back(j);
-                } else {
-                    upsert_idx_step++;
-                }
-            }
-        }
-
-        if (idx_begin < old_column->size()) {
-            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upsert, idx_begin, idx_begin + upsert_idx_step,
-                                         new_deletes));
-        }
-    } else {
-        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upsert, new_deletes));
+    std::unique_ptr<ThreadPoolToken> token;
+    if (config::enable_pk_index_parallel_execution) {
+        token = ExecEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
     }
 
+    std::mutex mutex;
+    Status status = Status::OK();
+    // Per-chunk results accumulated in iteration order; consumed after the compare barrier.
+    std::vector<std::unique_ptr<ChunkCondMergeResult>> chunk_results;
+
+    for (; !upsert->done(); upsert->next()) {
+        auto current = upsert->current();
+        chunk_results.emplace_back(std::make_unique<ChunkCondMergeResult>());
+        auto* result = chunk_results.back().get();
+        result->chunk_offset = current.second;
+
+        auto compare_func = [&, result, current]() {
+            auto st = process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx,
+                                                                        upsert.get(), current, tablet_column,
+                                                                        read_column_ids, index, result);
+            if (!st.ok()) {
+                std::lock_guard<std::mutex> lock(mutex);
+                status.update(st);
+            }
+        };
+
+        if (token) {
+            auto submit_st = token->submit_func(compare_func);
+            if (!submit_st.ok()) {
+                std::lock_guard<std::mutex> lock(mutex);
+                status.update(submit_st);
+            }
+        } else {
+            compare_func();
+            RETURN_IF_ERROR(status);
+        }
+    }
+
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_condition_update_wait_us");
+        token->wait();
+    }
+    RETURN_IF_ERROR(status);
+    RETURN_IF_ERROR(upsert->status());
+
+    // Serial merge: apply index.upsert to each chunk's winner ranges and record new-losers.
+    // rowid_start=chunk_offset ensures the index records rowids that match the segment file layout.
+    const uint32_t rssid = rowset_id + upsert_idx;
+    for (const auto& result : chunk_results) {
+        if (result->pk_column == nullptr) {
+            continue;
+        }
+        for (const auto& range : result->winner_ranges) {
+            RETURN_IF_ERROR(index.upsert(rssid, static_cast<uint32_t>(result->chunk_offset), *result->pk_column,
+                                         range.first, range.second, new_deletes));
+        }
+        if (!result->new_loser_local_ids.empty()) {
+            auto& seg_deletes = (*new_deletes)[rssid];
+            seg_deletes.reserve(seg_deletes.size() + result->new_loser_local_ids.size());
+            for (uint32_t local : result->new_loser_local_ids) {
+                seg_deletes.push_back(static_cast<uint32_t>(result->chunk_offset) + local);
+            }
+        }
+    }
     return Status::OK();
 }
 
