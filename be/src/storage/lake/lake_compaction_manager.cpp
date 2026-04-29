@@ -15,7 +15,6 @@
 #include "storage/lake/lake_compaction_manager.h"
 
 #include <bvar/bvar.h>
-
 #include <google/protobuf/service.h>
 
 #include <algorithm>
