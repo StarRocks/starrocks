@@ -164,7 +164,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
+    [ASYNC | SCHEDULE [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -250,7 +250,7 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 The refresh strategy of the asynchronous materialized view. Valid values:
 
 - `ASYNC`: Automatic refresh mode. Each time the base table data changes, the materialized view is automatically refreshed.
-- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>)`: Regular refresh mode. The materialized view is refreshed regularly at the interval defined. You can specify the interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. The default value is `10 MINUTE`. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`. If the start time is not specified, the current time is used. Example: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`.
+- `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: Regular refresh mode. The materialized view is refreshed regularly at the interval defined. You can specify the interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. The default value is `10 MINUTE`. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`. If the start time is not specified, the current time is used. Example: `SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`. The legacy form `ASYNC [START (...)] EVERY (...)` is still accepted for backward compatibility but `SHOW CREATE MATERIALIZED VIEW` always renders the scheduled form with `SCHEDULE`.
 - `MANUAL`: Manual refresh mode. The materialized view will not be refreshed unless you trigger a refresh task manually.
 
 If this parameter is not specified, the default value `MANUAL` is used.
