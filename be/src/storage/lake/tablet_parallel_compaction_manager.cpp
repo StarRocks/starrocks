@@ -1634,10 +1634,16 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
                 info.progress = 0;
             }
             info.status = Status::OK();
-            // Build profile with subtask-specific info
-            info.profile =
-                    fmt::format(R"({{"subtask_id":{},"input_rowsets":{},"input_bytes":{},"is_parallel_subtask":true}})",
-                                subtask_id, subtask_info.input_rowset_ids.size(), subtask_info.input_bytes);
+            // Build profile combining CompactionTaskStats (from the running context, when
+            // available) with subtask-specific metadata. Falling back to a default-constructed
+            // stats object keeps the JSON schema stable when the context has not yet been linked.
+            CompactionTaskStats empty_stats;
+            const CompactionTaskStats* stats_ptr = &empty_stats;
+            if (subtask_info.context != nullptr && subtask_info.context->stats) {
+                stats_ptr = subtask_info.context->stats.get();
+            }
+            info.profile = stats_ptr->to_json_stats_with_subtask_metadata(
+                    subtask_id, subtask_info.input_rowset_ids.size(), subtask_info.input_bytes);
         }
 
         // Add completed subtasks that haven't been cleaned up yet

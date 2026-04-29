@@ -63,7 +63,14 @@ struct CompactionTaskStats {
     void collect(const OlapWriterStatistics& writer_stats);
     CompactionTaskStats operator+(const CompactionTaskStats& that) const;
     CompactionTaskStats operator-(const CompactionTaskStats& that) const;
-    std::string to_json_stats();
+    std::string to_json_stats() const;
+
+    // Same JSON layout as to_json_stats(), with parallel-subtask metadata fields
+    // (subtask_id, input_rowsets, input_bytes, is_parallel_subtask) appended.
+    // Used for the PROFILE column of be_cloud_native_compactions so that both
+    // the CompactionTaskStats counters and per-subtask metadata are visible.
+    std::string to_json_stats_with_subtask_metadata(int32_t subtask_id, size_t input_rowsets,
+                                                    int64_t input_bytes) const;
 };
 
 // Context of a single tablet compaction task.
