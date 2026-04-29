@@ -179,11 +179,40 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
         return result;
     }
 
+    // Defer base-level merges when the selected level has enough non-base filesets to compact
+    // on their own. merge_base_level=true rewrites the largest tier and, on hot/oversized PK-index
+    // tablets, can take 100-300 s while holding the per-tablet PK-index lock that publish_version
+    // serializes against — producing multi-second LoadTime tails via FE publish retries. By
+    // skipping the base fileset in this iteration, we keep doing useful compaction (the non-base
+    // filesets still merge into one) while letting the base wait for a quieter moment when no
+    // non-base alternative is available. The base will still be merged eventually, just less often.
+    const int64_t min_non_base_to_defer =
+            config::pk_index_size_tiered_defer_base_merge_min_non_base_filesets;
+    bool defer_base_merge = false;
+    if (min_non_base_to_defer > 0) {
+        size_t non_base_in_level = 0;
+        bool level_includes_base = false;
+        for (size_t fileset_idx : selected_level->fileset_indexes) {
+            if (filesets[fileset_idx].fileset_id == base_level_fileset_id) {
+                level_includes_base = true;
+            } else {
+                ++non_base_in_level;
+            }
+        }
+        defer_base_merge = level_includes_base && non_base_in_level >= static_cast<size_t>(min_non_base_to_defer);
+    }
+
     // Build result: for each selected fileset, add all its sstables
     uint64_t max_max_rss_rowid = 0;
     bool merge_base_level = false;
     for (size_t fileset_idx : selected_level->fileset_indexes) {
         const FilesetInfo& fileset = filesets[fileset_idx];
+        if (defer_base_merge && fileset.fileset_id == base_level_fileset_id) {
+            // Skip the base fileset; keep merge_base_level=false so tombstones are preserved.
+            // Note: candidate filesets remain consecutive among themselves — the base is the
+            // first index and we only drop that single element.
+            continue;
+        }
         std::vector<PersistentIndexSstablePB> fileset_sstables;
 
         for (int sstable_idx : fileset.sstable_indices) {

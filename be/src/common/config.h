@@ -485,6 +485,12 @@ CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
 CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");
 CONF_mInt64(pk_index_size_tiered_max_level, "5");
+// Defer merge_base_level=true compactions when the selected size-tiered level has
+// at least this many non-base filesets — picks just the non-base filesets instead,
+// forcing merge_base_level=false. Avoids 100-300 s base rewrites on hot/oversized
+// PK-index tablets that block publish_version. Set to 0 to disable. Default 2 means
+// any selected level with >=2 non-base filesets will skip the base.
+CONF_mInt64(pk_index_size_tiered_defer_base_merge_min_non_base_filesets, "2");
 // Used to control the sampling interval size for SSTable files.
 CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
 // Controls merge condition evaluation behavior within the same transaction for primary key tables.
