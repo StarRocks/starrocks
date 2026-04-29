@@ -127,6 +127,22 @@ TEST_F(JavaNativeMethodTest, get_column_logical_type) {
         ASSERT_EQ(type, logical_type_1);
         ASSERT_EQ(type, logical_type_2);
     }
+    // ARRAY and MAP must be reachable: the recursive output path on the Java side
+    // (UDFHelper.getResultFromListArray / getResultFromMapArray) calls back into
+    // getColumnLogicalType on element/key/value columns to dispatch nested writes.
+    {
+        TypeDescriptor array_type(TYPE_ARRAY);
+        array_type.children.emplace_back(TYPE_INT);
+        auto c = ColumnHelper::create_column(array_type, true);
+        ASSERT_EQ(TYPE_ARRAY, JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c.get())));
+    }
+    {
+        TypeDescriptor map_type(TYPE_MAP);
+        map_type.children.emplace_back(TYPE_INT);
+        map_type.children.emplace_back(TYPE_VARCHAR);
+        auto c = ColumnHelper::create_column(map_type, true);
+        ASSERT_EQ(TYPE_MAP, JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c.get())));
+    }
 }
 
 // DECIMAL columns are FixedLengthColumnBase but not FixedLengthColumn, so the

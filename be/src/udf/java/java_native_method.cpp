@@ -107,6 +107,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const MapColumn& column) {
+        *_result = TYPE_MAP;
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
         if constexpr (std::is_same_v<T, uint8_t>) {
