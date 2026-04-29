@@ -1078,9 +1078,12 @@ public class ColocateTableIndex implements Writable {
             }
             badTableIds.add(tableId);
         }
-        LOG.warn("remove {} invalid tableid: {}", badTableIds.size(), badTableIds);
-        for (Long tableId : badTableIds) {
-            removeTable(tableId, null, false /* isReplay */);
+        
+        if (badTableIds.size() > 0) {
+            LOG.warn("remove {} invalid tableid: {}", badTableIds.size(), badTableIds);
+            for (Long tableId : badTableIds) {
+                removeTable(tableId, null, false /* isReplay */);
+            }
         }
     }
 
