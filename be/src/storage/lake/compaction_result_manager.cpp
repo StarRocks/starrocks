@@ -57,11 +57,13 @@ bool CompactionResultManager::parse_file_name(const std::string& name, int64_t* 
            safe_strto64(parts[2], result_id);
 }
 
-std::string CompactionResultManager::pick_root_dir() const {
-    // Round-robin by hashing pid+random would be overkill; we just pick the
-    // first usable root and rely on most BEs only having a single store path.
-    // If multi-disk balancing is needed later, add a per-tablet hash here.
-    return _root_dirs.empty() ? std::string() : _root_dirs.front();
+std::string CompactionResultManager::pick_root_dir_for_tablet(int64_t tablet_id) const {
+    // Hash by tablet_id so all results for the same tablet land on the same disk
+    // (keeps per-tablet IO localized) but different tablets are spread across
+    // disks to avoid filling disk 0 first on multi-disk BEs.
+    if (_root_dirs.empty()) return std::string();
+    size_t idx = static_cast<size_t>(tablet_id) % _root_dirs.size();
+    return _root_dirs[idx];
 }
 
 Status CompactionResultManager::scan_on_startup() {
@@ -132,6 +134,7 @@ Status CompactionResultManager::load_one_file(const std::string& path) {
     ref.base_version = result.base_version();
     ref.result_id = result.has_result_id() ? result.result_id() : 0;
     ref.file_path = path;
+    ref.bytes = static_cast<int64_t>(file_size);
     for (uint32_t rid : result.op_compaction().input_rowsets()) {
         ref.input_rowsets.push_back(rid);
     }
@@ -144,7 +147,7 @@ Status CompactionResultManager::load_one_file(const std::string& path) {
     }
     auto& next_rid = _next_result_id[result.tablet_id()];
     if (ref.result_id >= next_rid) next_rid = ref.result_id + 1;
-    _total_bytes.fetch_add(static_cast<int64_t>(file_size), std::memory_order_relaxed);
+    _total_bytes.fetch_add(ref.bytes, std::memory_order_relaxed);
     return Status::OK();
 }
 
@@ -162,7 +165,7 @@ Status CompactionResultManager::append_result(const CompactionResultPB& result) 
         return Status::ResourceBusy("local compaction result dir capacity reached");
     }
 
-    std::string root = pick_root_dir();
+    std::string root = pick_root_dir_for_tablet(result.tablet_id());
     std::string dir = join_path(root, kSubDir);
     RETURN_IF_ERROR(fs::create_directories(dir));
 
@@ -195,6 +198,7 @@ Status CompactionResultManager::append_result(const CompactionResultPB& result) 
         ref.base_version = result.base_version();
         ref.result_id = result.result_id();
         ref.file_path = final_path;
+        ref.bytes = static_cast<int64_t>(serialized.size());
         for (uint32_t rid : result.op_compaction().input_rowsets()) {
             ref.input_rowsets.push_back(rid);
         }
@@ -252,7 +256,10 @@ StatusOr<std::vector<CompactionResultPB>> CompactionResultManager::load_results(
 
 Status CompactionResultManager::delete_results(int64_t tablet_id, const std::vector<int64_t>& result_ids) {
     if (result_ids.empty()) return Status::OK();
-    std::vector<std::string> paths_to_delete;
+    // Collect (path, bytes) pairs under the lock so we can decrement _total_bytes
+    // with the cached size after the file is deleted. Avoids the get_file_size
+    // call that previously caused _total_bytes to drift up under FS flake.
+    std::vector<std::pair<std::string, int64_t>> to_delete;
     {
         std::lock_guard<std::mutex> guard(_mu);
         auto it = _tablet_results.find(tablet_id);
@@ -264,7 +271,7 @@ Status CompactionResultManager::delete_results(int64_t tablet_id, const std::vec
         remaining.reserve(vec.size());
         for (auto& ref : vec) {
             if (id_set.count(ref.result_id) > 0) {
-                paths_to_delete.push_back(ref.file_path);
+                to_delete.emplace_back(ref.file_path, ref.bytes);
                 for (uint32_t rid : ref.input_rowsets) {
                     auto pit = pending.find(rid);
                     if (pit != pending.end()) pending.erase(pit);
@@ -282,18 +289,13 @@ Status CompactionResultManager::delete_results(int64_t tablet_id, const std::vec
             _pending_inputs.erase(tablet_id);
         }
     }
-    for (const auto& p : paths_to_delete) {
-        int64_t sz = 0;
-        // Best-effort size accounting: read size before delete.
-        auto fs_or = FileSystemFactory::CreateSharedFromString(p);
-        if (fs_or.ok()) {
-            auto sz_or = (*fs_or)->get_file_size(p);
-            if (sz_or.ok()) sz = sz_or.value();
-        }
+    for (const auto& [p, sz] : to_delete) {
         auto st = fs::delete_file(p);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to delete compaction result file " << p << ": " << st;
-        } else if (sz > 0) {
+            continue;
+        }
+        if (sz > 0) {
             _total_bytes.fetch_sub(sz, std::memory_order_relaxed);
         }
     }

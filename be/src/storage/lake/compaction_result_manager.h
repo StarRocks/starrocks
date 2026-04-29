@@ -50,6 +50,10 @@ public:
         std::string file_path;
         // input_rowsets cached so pending_inputs maintenance avoids re-parsing files
         std::vector<uint32_t> input_rowsets;
+        // Persisted file size in bytes; cached at append/scan time so delete_results
+        // can decrement _total_bytes without an extra fs::get_file_size call (which
+        // could fail under filesystem flake and cause _total_bytes to drift up).
+        int64_t bytes = 0;
     };
 
     explicit CompactionResultManager(std::vector<std::string> root_dirs);
@@ -92,7 +96,7 @@ private:
     static bool parse_file_name(const std::string& name, int64_t* tablet_id, int64_t* base_version, int64_t* result_id);
 
     Status load_one_file(const std::string& path);
-    std::string pick_root_dir() const;
+    std::string pick_root_dir_for_tablet(int64_t tablet_id) const;
 
     const std::vector<std::string> _root_dirs;
     mutable std::mutex _mu;

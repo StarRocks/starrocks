@@ -392,6 +392,39 @@ TEST_F(CompactionResultManagerTest, load_results_orders_by_result_id_within_same
     EXPECT_EQ(8, loaded[2].result_id());
 }
 
+TEST_F(CompactionResultManagerTest, multi_disk_round_robin_by_tablet_id) {
+    // Two root dirs; results for different tablet_ids should split across them.
+    auto root_a = _root / "diskA";
+    auto root_b = _root / "diskB";
+    std::filesystem::create_directories(root_a);
+    std::filesystem::create_directories(root_b);
+    CompactionResultManager mgr({root_a.string(), root_b.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    // Even tablet_id -> diskA (idx 0), odd -> diskB (idx 1).
+    ASSERT_OK(mgr.append_result(make_result(/*tablet=*/2, 5, 0, {1})));
+    ASSERT_OK(mgr.append_result(make_result(/*tablet=*/3, 5, 0, {2})));
+    auto refs2 = mgr.list_results_for_tablet(2);
+    auto refs3 = mgr.list_results_for_tablet(3);
+    ASSERT_EQ(1u, refs2.size());
+    ASSERT_EQ(1u, refs3.size());
+    EXPECT_NE(std::string::npos, refs2[0].file_path.find("diskA")) << refs2[0].file_path;
+    EXPECT_NE(std::string::npos, refs3[0].file_path.find("diskB")) << refs3[0].file_path;
+}
+
+TEST_F(CompactionResultManagerTest, total_bytes_uses_cached_size_on_delete) {
+    // Verify _total_bytes is decremented from the cached ResultRef.bytes,
+    // independent of any extra fs::get_file_size call. After delete, total_bytes
+    // must be exactly 0 (assuming a single result was appended to a fresh mgr).
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    ASSERT_EQ(0, mgr.total_bytes());
+    ASSERT_OK(mgr.append_result(make_result(777, 5, 0, {1, 2})));
+    int64_t after_append = mgr.total_bytes();
+    EXPECT_GT(after_append, 0);
+    ASSERT_OK(mgr.delete_results(777, {0}));
+    EXPECT_EQ(0, mgr.total_bytes());
+}
+
 // TODO(Phase 2.3 follow-up): integration tests requiring a full Lake fixture
 // (TabletManager + UpdateManager + real TabletMetadata) — tracked separately:
 //  1. Mixed batch: 50 tablets with results + 50 without -> all 100 reach new_version,
