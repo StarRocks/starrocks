@@ -49,6 +49,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.Task;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -133,6 +134,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
@@ -2105,6 +2107,30 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             visitDataCacheSelectStatement(statement.getDataCacheSelectStmt(), context);
         } else {
             visitInsertStatement(statement.getInsertStmt(), context);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropTaskStmt(DropTaskStmt statement, ConnectContext context) {
+        String taskName = statement.getTaskName().getName();
+        Task task = context.getGlobalStateMgr().getTaskManager().getTask(taskName);
+        // If the task does not exist, defer IF EXISTS / not-found handling to
+        // DDLStmtExecutor.visitDropTaskStmt and do not leak existence here.
+        if (task == null) {
+            return null;
+        }
+        UserIdentity creator = task.getUserIdentity();
+        if (creator != null && creator.equals(context.getCurrentUserIdentity())) {
+            return null;
+        }
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
         return null;
     }

@@ -67,6 +67,8 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
@@ -77,6 +79,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -133,6 +136,7 @@ import org.xnio.StreamConnection;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -2107,6 +2111,70 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
         grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+    }
+
+    @Test
+    public void testDropTaskStmt() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        // Install a task owned by ROOT and a task owned by testUser, bypassing
+        // SUBMIT TASK so the test focuses on DROP TASK authorization only.
+        String rootTaskName = "priv_drop_task_root";
+        Task rootTask = new Task(rootTaskName);
+        rootTask.setUserIdentity(UserIdentity.ROOT);
+        taskManager.replayCreateTask(rootTask);
+
+        String testTaskName = "priv_drop_task_test";
+        Task testTask = new Task(testTaskName);
+        testTask.setUserIdentity(testUser);
+        taskManager.replayCreateTask(testTask);
+
+        try {
+            // 1) testUser cannot drop ROOT's task without OPERATE on SYSTEM.
+            StatementBase dropRootAsTest = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + rootTaskName, ctx);
+            ctxToTestUser();
+            try {
+                Authorizer.check(dropRootAsTest, ctx);
+                Assertions.fail("expected AccessDeniedException for cross-user DROP TASK");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+            }
+
+            // 2) After granting OPERATE on SYSTEM, the same DROP succeeds at auth time.
+            grantRevokeSqlAsRoot("grant OPERATE on system to test");
+            ctxToTestUser();
+            Authorizer.check(dropRootAsTest, ctx);
+            grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+
+            // 3) testUser can drop their own task without any extra privilege.
+            StatementBase dropOwnAsTest = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + testTaskName, ctx);
+            ctxToTestUser();
+            Authorizer.check(dropOwnAsTest, ctx);
+
+            // 4) IF EXISTS on a non-existent task is delegated to the executor and
+            //    must not fail at authorization time.
+            StatementBase dropMissing = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK IF EXISTS priv_drop_task_does_not_exist", ctx);
+            ctxToTestUser();
+            Authorizer.check(dropMissing, ctx);
+
+            // sanity: parsed shape
+            Assertions.assertTrue(dropOwnAsTest instanceof DropTaskStmt);
+        } finally {
+            ctxToRoot();
+            Task t1 = taskManager.getTask(rootTaskName);
+            if (t1 != null) {
+                taskManager.dropTasks(Collections.singletonList(t1.getId()));
+            }
+            Task t2 = taskManager.getTask(testTaskName);
+            if (t2 != null) {
+                taskManager.dropTasks(Collections.singletonList(t2.getId()));
+            }
+        }
     }
 
     @Test
