@@ -655,6 +655,78 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         }
     }
 
+    // The merge above appends sstables in source-child iteration order. The post-projection
+    // max_rss_rowid is what LakePersistentIndex::commit() and the size-tiered compaction
+    // strategy use to enforce the index-wide ordering invariant. If different children
+    // contributed sstables whose projected (rssid<<32|rowid) values interleave — for
+    // example, when a tombstone-bearing delete-only sstable in one child has its low
+    // word saturated near UINT32_MAX and a freshly-written sstable in the next child
+    // has a smaller projected high word — the source-order output would carry the
+    // disorder forward and any later commit/compaction on the merged tablet would
+    // refuse to publish with "sstables are not ordered". Reorder defensively here so
+    // the merged metadata always satisfies the invariant.
+    //
+    // Constraint: a single naive sort by max_rss_rowid alone breaks a separate invariant
+    // that LakePersistentIndex::init() and apply_opcompaction rely on — sstables sharing
+    // the same fileset_id must be contiguous in metadata order. Same fileset_id sstables
+    // can span a wide max_rss_rowid range (a fileset accretes via append() across
+    // multiple memtable flushes, persistent_index_sstable_fileset.cpp:96), and other
+    // fileset_ids' sstables can fall within that range. A flat sort by max_rss_rowid
+    // would interleave them, splitting one logical fileset into multiple physical
+    // filesets in init()'s grouping (which keys on adjacent fileset_id) and confusing
+    // apply_opcompaction's contiguous-range find_if (lake_persistent_index.cpp:838).
+    //
+    // Approach: bucket source-order entries into contiguous-fileset_id blocks, sort
+    // blocks by their first element's max_rss_rowid, and emit. This:
+    //   * Keeps same-fileset_id sstables together (init / apply_opcompaction invariant).
+    //   * Within a block, preserves source order — already monotonic in max_rss_rowid
+    //     per source child since the projection paths preserve relative order
+    //     (rssid_offset path adds a constant; shared_rssid path collapses to a single
+    //     mapped_rssid with low word in range order).
+    //   * Across blocks, orders by first-element max_rss_rowid — the sort key the flat
+    //     sort would have used. Cross-block monotonicity matches the original PR's
+    //     intent for cross-source ordering.
+    //
+    // Compare as `int64_t` rather than `uint64_t` to match the downstream check:
+    // LakePersistentIndex::commit() (lake_persistent_index.cpp:880-881) fetches
+    // max_rss_rowid into an `int64_t` and does a signed `>` comparison. When the
+    // encoded (rssid<<32|rowid) sets the high bit — e.g. an ingest_sst entry with
+    // rssid >= 2^31, or a delete-only sstable whose memtable max_rss_rowid was set to
+    // (rowset_id<<32|UINT32_MAX) (persistent_index_memtable.cpp:110, 131) — unsigned
+    // ordering is the reverse of signed ordering against any low-rssid sibling.
+    // Sstables without an explicit fileset_id are not part of any logical fileset
+    // group (they predate fileset_id, or are test fixtures). Treat each as its own
+    // singleton block so block-sort orders them by max_rss_rowid like the original
+    // flat sort would. When both sides have a fileset_id, only consider them in the
+    // same block if the ids match.
+    auto same_block_as_predecessor = [](const PersistentIndexSstablePB& prev, const PersistentIndexSstablePB& cur) {
+        if (!prev.has_fileset_id() || !cur.has_fileset_id()) return false;
+        return prev.fileset_id().hi() == cur.fileset_id().hi() && prev.fileset_id().lo() == cur.fileset_id().lo();
+    };
+
+    struct SstableBlock {
+        std::vector<PersistentIndexSstablePB> sstables;
+        int64_t sort_key = 0;
+    };
+    std::vector<SstableBlock> blocks;
+    blocks.reserve(dest->size());
+    for (const auto& sst : *dest) {
+        if (blocks.empty() || !same_block_as_predecessor(blocks.back().sstables.back(), sst)) {
+            blocks.emplace_back();
+            blocks.back().sort_key = static_cast<int64_t>(sst.max_rss_rowid());
+        }
+        blocks.back().sstables.push_back(sst);
+    }
+    std::stable_sort(blocks.begin(), blocks.end(),
+                     [](const SstableBlock& a, const SstableBlock& b) { return a.sort_key < b.sort_key; });
+
+    dest->Clear();
+    for (const auto& block : blocks) {
+        for (const auto& sst : block.sstables) {
+            *dest->Add() = sst;
+        }
+    }
+
     return Status::OK();
 }
 
