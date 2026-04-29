@@ -26,6 +26,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc WarehouseMetricsScanner::_s_columns[] = {
         //   name,       type,          size,     is_null
+<<<<<<< HEAD
         {"WAREHOUSE_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"WAREHOUSE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"QUEUE_PENDING_LENGTH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
@@ -40,6 +41,20 @@ SchemaScanner::ColumnDesc WarehouseMetricsScanner::_s_columns[] = {
         {"REMAIN_SLOTS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"MAX_SLOTS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+=======
+        {"WAREHOUSE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"WAREHOUSE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"QUEUE_PENDING_LENGTH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"QUEUE_RUNNING_LENGTH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"MAX_PENDING_LENGTH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"MAX_PENDING_TIME_SECOND", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EARLIEST_QUERY_WAIT_TIME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"MAX_REQUIRED_SLOTS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"SUM_REQUIRED_SLOTS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"REMAIN_SLOTS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"MAX_SLOTS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+>>>>>>> 363b123f32 ([BugFix] Be crash while query information_schema.warehouse_queries (#72019))
 };
 
 WarehouseMetricsScanner::WarehouseMetricsScanner()
@@ -89,7 +104,15 @@ Status WarehouseMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 Status WarehouseMetricsScanner::fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TGetWarehouseMetricsResponeItem& item = _response.metrics[_idx++];
-    DatumArray datum_array{Slice(item.warehouse_id),
+    // Parse WAREHOUSE_ID from thrift string to int64.
+    int64_t warehouse_id = 0;
+    try {
+        warehouse_id = std::stoll(item.warehouse_id);
+    } catch (const std::exception& e) {
+        return Status::InternalError(
+                fmt::format("invalid warehouse_id '{}' in warehouse_metrics: {}", item.warehouse_id, e.what()));
+    }
+    DatumArray datum_array{warehouse_id,
                            Slice(item.warehouse_name),
                            Slice(item.queue_pending_length),
                            Slice(item.queue_running_length),
