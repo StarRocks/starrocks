@@ -131,7 +131,7 @@ public class ConsistencyCheckerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, null);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
         partition.getDefaultPhysicalPartition().setVisibleVersion(visibleVersion, System.currentTimeMillis());
