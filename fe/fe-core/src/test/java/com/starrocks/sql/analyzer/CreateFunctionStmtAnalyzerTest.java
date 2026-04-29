@@ -97,6 +97,20 @@ public class CreateFunctionStmtAnalyzerTest {
                 createFunctionSql, 32).get(0);
     }
 
+    private CreateFunctionStmt createPyInlineStmtNoFile(String symbol) {
+        Config.enable_udf = true;
+        String createFunctionSql = String.format("CREATE FUNCTION ABC.MY_UDF_JSON_GET_NOFILE(string, string) \n"
+                + "RETURNS string \n"
+                + "type = 'Python'\n"
+                + "symbol = '%s'\n"
+                + "AS $$\n"
+                + "def a(b):\n"
+                + "   return b\n"
+                + "$$;", symbol);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+    }
+
     @Test
     public void testJUDF() {
         assertThrows(Throwable.class, () -> {
@@ -1114,5 +1128,14 @@ public class CreateFunctionStmtAnalyzerTest {
                 Config.enable_udf = false;
             }
         });
+    }
+
+    @Test
+    public void testPyInlineUDFWithoutFileProperty() {
+        CreateFunctionStmt stmt = createPyInlineStmtNoFile("a");
+        Assertions.assertNotNull(stmt.getContent(), "Inline body must be parsed into content");
+        new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+        Assertions.assertEquals("inline", stmt.getFunction().getLocation().toString(),
+                "Analyzer must auto-set location to 'inline' when file property is omitted");
     }
 }
