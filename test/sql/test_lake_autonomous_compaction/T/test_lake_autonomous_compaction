@@ -1,0 +1,173 @@
+-- name: test_lake_autonomous_compaction_basic @cloud @sequential
+-- Exercise the BE-driven autonomous compaction flow end-to-end:
+--   1. Enable enable_lake_autonomous_compaction on FE + BE
+--   2. Lower thresholds so the autonomous publish trigger fires within seconds
+--   3. Create a lake table, insert several batches to bump version
+--   4. Wait for autonomous publish to advance visible_version
+--   5. Verify data integrity (row count + ordered scan)
+--   6. Restore the configs we touched so other tests are unaffected
+create database test_lake_auto_compaction_${uuid0};
+use test_lake_auto_compaction_${uuid0};
+
+-- Turn on autonomous compaction with aggressive thresholds. The defaults
+-- (version_delta=10, max_interval_ms=1800000) would not fire in a 30s test
+-- window, so we lower both. enable_file_bundling defaults to true and
+-- causes schedulePartitionPublish to skip (the aggregate-publish RPC path
+-- is incompatible), so we turn it off here and restore on exit.
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "true");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "2");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1000");
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "false");
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE name = 'enable_lake_autonomous_compaction';
+UPDATE information_schema.be_configs SET VALUE = '1.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+
+CREATE TABLE auto_t (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+
+-- Bump version multiple times to push version_delta past the threshold.
+INSERT INTO auto_t VALUES (1, 'a');
+INSERT INTO auto_t VALUES (2, 'b');
+INSERT INTO auto_t VALUES (3, 'c');
+INSERT INTO auto_t VALUES (4, 'd');
+INSERT INTO auto_t VALUES (5, 'e');
+
+-- Sanity check before waiting for autonomous publish.
+SELECT COUNT(*) FROM auto_t;
+
+-- Wait long enough for FE's CompactionScheduler.runOneCycle() to invoke
+-- schedulePartitionPublish() (which dispatches a PUBLISH_ONLY transaction
+-- to the BE). FE runs this on a periodic loop; ~15s gives at least one
+-- cycle plus the publish round-trip.
+SELECT sleep(15);
+
+-- Data integrity must hold whether the autonomous publish ran or not. The
+-- count + ordered scan are deterministic; the table version is not (depends
+-- on how many publish rounds fit in the 15s window) so we mark it [UC].
+SELECT COUNT(*) FROM auto_t;
+SELECT * FROM auto_t ORDER BY k1;
+[UC]SELECT CURRENT_VERSION FROM information_schema.tables_config WHERE TABLE_NAME='auto_t' AND TABLE_SCHEMA='test_lake_auto_compaction_${uuid0}';
+
+-- Restore configs to defaults so subsequent tests in the same cluster are
+-- unaffected. The values here mirror config.h / Config.java defaults.
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "10");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1800000");
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_autonomous_compaction';
+UPDATE information_schema.be_configs SET VALUE = '10.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+
+DROP DATABASE test_lake_auto_compaction_${uuid0} FORCE;
+
+-- name: test_lake_autonomous_compaction_pk @cloud @sequential
+-- PK table variant: verify autonomous compaction does not corrupt PK semantics
+-- (later rowsets shadow earlier ones for the same key) when force-publish runs
+-- through OpParallelCompaction + cross-version apply.
+create database test_lake_auto_compaction_pk_${uuid0};
+use test_lake_auto_compaction_pk_${uuid0};
+
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "true");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "2");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1000");
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "false");
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE name = 'enable_lake_autonomous_compaction';
+UPDATE information_schema.be_configs SET VALUE = '1.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+
+CREATE TABLE auto_pk (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100),
+    v2 BIGINT
+)
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+
+INSERT INTO auto_pk VALUES (1, 'a', 100), (2, 'b', 200), (3, 'c', 300);
+INSERT INTO auto_pk VALUES (4, 'd', 400), (5, 'e', 500);
+-- Same keys with newer values: PK should keep the latest after compaction.
+INSERT INTO auto_pk VALUES (1, 'a_v2', 110), (2, 'b_v2', 220);
+INSERT INTO auto_pk VALUES (3, 'c_v2', 330);
+INSERT INTO auto_pk VALUES (6, 'f', 600);
+
+SELECT COUNT(*) FROM auto_pk;
+SELECT sleep(15);
+
+-- Distinct keys = 6; latest values for keys 1-3 should win.
+SELECT COUNT(*) FROM auto_pk;
+SELECT * FROM auto_pk ORDER BY k1;
+
+-- Restore.
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "10");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1800000");
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_autonomous_compaction';
+UPDATE information_schema.be_configs SET VALUE = '10.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+
+DROP DATABASE test_lake_auto_compaction_pk_${uuid0} FORCE;
+
+-- name: test_lake_autonomous_compaction_disabled @cloud @sequential
+-- Negative case: with the master switch off, the autonomous compaction code
+-- path must be a complete no-op. version_delta thresholds become irrelevant
+-- and FE's schedulePartitionPublish must not dispatch any PUBLISH_ONLY job.
+create database test_lake_auto_compaction_off_${uuid0};
+use test_lake_auto_compaction_off_${uuid0};
+
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_autonomous_compaction';
+
+CREATE TABLE off_t (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+
+INSERT INTO off_t VALUES (1, 'a');
+INSERT INTO off_t VALUES (2, 'b');
+INSERT INTO off_t VALUES (3, 'c');
+
+SELECT sleep(5);
+SELECT COUNT(*) FROM off_t;
+SELECT * FROM off_t ORDER BY k1;
+
+DROP DATABASE test_lake_auto_compaction_off_${uuid0} FORCE;
+
+-- name: test_lake_autonomous_compaction_bundling_skip @cloud @sequential
+-- Bundling-conflict guard: when both enable_lake_autonomous_compaction AND
+-- enable_file_bundling are on, FE must log a warning and skip the autonomous
+-- publish path (its RPC path is incompatible with aggregate_publish_version).
+-- The visible behavior is the same as "disabled": no PUBLISH_ONLY jobs. We
+-- only assert data integrity since the skip is a log-only side effect.
+create database test_lake_auto_compaction_bundle_${uuid0};
+use test_lake_auto_compaction_bundle_${uuid0};
+
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "true");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "2");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1000");
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+
+CREATE TABLE bundle_t (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+
+INSERT INTO bundle_t VALUES (1, 'a');
+INSERT INTO bundle_t VALUES (2, 'b');
+INSERT INTO bundle_t VALUES (3, 'c');
+
+SELECT sleep(8);
+SELECT COUNT(*) FROM bundle_t;
+SELECT * FROM bundle_t ORDER BY k1;
+
+-- Restore.
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "10");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1800000");
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "false");
+
+DROP DATABASE test_lake_auto_compaction_bundle_${uuid0} FORCE;

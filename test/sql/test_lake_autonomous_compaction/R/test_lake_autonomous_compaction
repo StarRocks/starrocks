@@ -1,0 +1,295 @@
+-- name: test_lake_autonomous_compaction_basic @cloud @sequential
+create database test_lake_auto_compaction_${uuid0};
+-- result:
+-- !result
+use test_lake_auto_compaction_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "true");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "2");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1000");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "false");
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE name = 'enable_lake_autonomous_compaction';
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+-- result:
+-- !result
+CREATE TABLE auto_t (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO auto_t VALUES (1, 'a');
+-- result:
+-- !result
+INSERT INTO auto_t VALUES (2, 'b');
+-- result:
+-- !result
+INSERT INTO auto_t VALUES (3, 'c');
+-- result:
+-- !result
+INSERT INTO auto_t VALUES (4, 'd');
+-- result:
+-- !result
+INSERT INTO auto_t VALUES (5, 'e');
+-- result:
+-- !result
+SELECT COUNT(*) FROM auto_t;
+-- result:
+5
+-- !result
+SELECT sleep(15);
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM auto_t;
+-- result:
+5
+-- !result
+SELECT * FROM auto_t ORDER BY k1;
+-- result:
+1	a
+2	b
+3	c
+4	d
+5	e
+-- !result
+[UC]SELECT CURRENT_VERSION FROM information_schema.tables_config WHERE TABLE_NAME='auto_t' AND TABLE_SCHEMA='test_lake_auto_compaction_${uuid0}';
+--
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "10");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1800000");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_autonomous_compaction';
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '10.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+-- result:
+-- !result
+DROP DATABASE test_lake_auto_compaction_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_lake_autonomous_compaction_pk @cloud @sequential
+create database test_lake_auto_compaction_pk_${uuid0};
+-- result:
+-- !result
+use test_lake_auto_compaction_pk_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "true");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "2");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1000");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "false");
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE name = 'enable_lake_autonomous_compaction';
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+-- result:
+-- !result
+CREATE TABLE auto_pk (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100),
+    v2 BIGINT
+)
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO auto_pk VALUES (1, 'a', 100), (2, 'b', 200), (3, 'c', 300);
+-- result:
+-- !result
+INSERT INTO auto_pk VALUES (4, 'd', 400), (5, 'e', 500);
+-- result:
+-- !result
+INSERT INTO auto_pk VALUES (1, 'a_v2', 110), (2, 'b_v2', 220);
+-- result:
+-- !result
+INSERT INTO auto_pk VALUES (3, 'c_v2', 330);
+-- result:
+-- !result
+INSERT INTO auto_pk VALUES (6, 'f', 600);
+-- result:
+-- !result
+SELECT COUNT(*) FROM auto_pk;
+-- result:
+6
+-- !result
+SELECT sleep(15);
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM auto_pk;
+-- result:
+6
+-- !result
+SELECT * FROM auto_pk ORDER BY k1;
+-- result:
+1	a_v2	110
+2	b_v2	220
+3	c_v2	330
+4	d	400
+5	e	500
+6	f	600
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "10");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1800000");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_autonomous_compaction';
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '10.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
+-- result:
+-- !result
+DROP DATABASE test_lake_auto_compaction_pk_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_lake_autonomous_compaction_disabled @cloud @sequential
+create database test_lake_auto_compaction_off_${uuid0};
+-- result:
+-- !result
+use test_lake_auto_compaction_off_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_autonomous_compaction';
+-- result:
+-- !result
+CREATE TABLE off_t (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO off_t VALUES (1, 'a');
+-- result:
+-- !result
+INSERT INTO off_t VALUES (2, 'b');
+-- result:
+-- !result
+INSERT INTO off_t VALUES (3, 'c');
+-- result:
+-- !result
+SELECT sleep(5);
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM off_t;
+-- result:
+3
+-- !result
+SELECT * FROM off_t ORDER BY k1;
+-- result:
+1	a
+2	b
+3	c
+-- !result
+DROP DATABASE test_lake_auto_compaction_off_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_lake_autonomous_compaction_bundling_skip @cloud @sequential
+create database test_lake_auto_compaction_bundle_${uuid0};
+-- result:
+-- !result
+use test_lake_auto_compaction_bundle_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "true");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "2");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1000");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+-- result:
+-- !result
+CREATE TABLE bundle_t (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO bundle_t VALUES (1, 'a');
+-- result:
+-- !result
+INSERT INTO bundle_t VALUES (2, 'b');
+-- result:
+-- !result
+INSERT INTO bundle_t VALUES (3, 'c');
+-- result:
+-- !result
+SELECT sleep(8);
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM bundle_t;
+-- result:
+3
+-- !result
+SELECT * FROM bundle_t ORDER BY k1;
+-- result:
+1	a
+2	b
+3	c
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "10");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1800000");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "false");
+-- result:
+-- !result
+DROP DATABASE test_lake_auto_compaction_bundle_${uuid0} FORCE;
+-- result:
+-- !result
