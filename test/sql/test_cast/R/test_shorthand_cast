@@ -1,0 +1,52 @@
+-- name: test_shorthand_cast_basic
+select '123'::int;
+-- result:
+123
+-- !result
+select 'abc'::int;
+-- result:
+None
+-- !result
+select 1.5::int;
+-- result:
+1
+-- !result
+select 100::string;
+-- result:
+100
+-- !result
+select 100::varchar(10);
+-- result:
+100
+-- !result
+-- name: test_shorthand_cast_chained
+select '5'::int::string;
+-- result:
+5
+-- !result
+select '3.14'::decimal(10,2)::string;
+-- result:
+3.14
+-- !result
+-- name: test_shorthand_cast_precedence
+select 1 + 2::int;
+-- result:
+3
+-- !result
+select 10 - 3::int;
+-- result:
+7
+-- !result
+select -1::int;
+-- result:
+-1
+-- !result
+-- name: test_shorthand_cast_complex_types
+select '[1,2,3]'::array<int>;
+-- result:
+[1,2,3]
+-- !result
+select cast('{"a":1}' as json)::string;
+-- result:
+{"a": 1}
+-- !result
