@@ -14,15 +14,16 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include "common/status.h"
 
 namespace starrocks {
-class TCloudConfiguration;
-class DownloadUtil {
+struct FSOptions;
+class udf_downloader {
 public:
-    static Status download(const std::string& url, const std::string& target_file, const std::string& expected_checksum,
-                           const TCloudConfiguration& cloud_configuration);
+    Status do_download(std::string& localPath, const std::string& remotePath, const std::string& md5sum,
+                       const FSOptions& options);
 };
 } // namespace starrocks

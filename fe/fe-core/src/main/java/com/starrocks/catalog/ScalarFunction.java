@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunction;
@@ -147,7 +148,8 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType) {
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType,
+            CloudConfiguration cloudConfiguration) {
         ScalarFunction fn = new ScalarFunction(name, args, returnType, isVariadic);
         fn.setBinaryType(binaryType);
         fn.setUserVisible(true);
@@ -156,6 +158,7 @@ public class ScalarFunction extends Function {
         fn.closeFnSymbol = closeFnSymbol;
         fn.setIsolationType(isolationType);
         fn.setLocation(new HdfsURI(objectFile));
+        fn.setCloudConfiguration(cloudConfiguration);
         return fn;
     }
 
@@ -163,9 +166,10 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol,
+            CloudConfiguration cloudConfiguration) {
         return createUdf(name, args, returnType, isVariadic, binaryType, objectFile,
-                symbol, prepareFnSymbol, closeFnSymbol, true);
+                symbol, prepareFnSymbol, closeFnSymbol, true, cloudConfiguration);
     }
 
     /**

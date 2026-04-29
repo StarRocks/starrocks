@@ -126,7 +126,8 @@ static Status build_udaf_unique_context(std::shared_ptr<JavaUDAFSharedContext> u
 }
 
 Status init_udaf_context(int64_t id, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context, bool use_cache, bool* cache_hit_out) {
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration, bool use_cache,
+                         bool* cache_hit_out) {
     RETURN_IF_ERROR(detect_java_runtime());
 
     int num_args = context->get_num_args();
@@ -145,7 +146,8 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
                                                   ASSIGN_OR_RETURN(auto ctx,
                                                                    build_udaf_shared_context(libpath, symbol));
                                                   return std::any(std::move(ctx));
-                                              }));
+                                              },
+                                              cloud_configuration));
         if (cache_hit_out != nullptr) {
             *cache_hit_out = result.first;
         }
@@ -155,7 +157,8 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
 
     // Cache disabled: build without caching (download JAR via get_libpath first)
     std::string libpath;
-    RETURN_IF_ERROR(func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath));
+    RETURN_IF_ERROR(
+            func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
     ASSIGN_OR_RETURN(auto shared_ctx, build_udaf_shared_context(libpath, symbol));
     return build_udaf_unique_context(std::move(shared_ctx), context);
 }
