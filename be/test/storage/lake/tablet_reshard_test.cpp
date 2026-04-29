@@ -23,7 +23,6 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "fs/fs.h"
-
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "storage/chunk_helper.h"

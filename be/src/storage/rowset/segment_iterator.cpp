@@ -25,7 +25,6 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
-
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
