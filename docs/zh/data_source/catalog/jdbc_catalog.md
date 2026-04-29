@@ -217,6 +217,14 @@ DROP Catalog jdbc0;
    SELECT * FROM <table_name>;
    ```
 
+## 使用原生 SQL 查询 JDBC 数据
+
+自 v4.1 起，StarRocks 支持通过 [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) 表函数，使用数据库原生 `SELECT` 语句查询 JDBC 数据。
+
+当源数据库需要执行无法通过单张外部表查询表达的 SQL 时，例如源端 Join、预先过滤的子查询或特定数据库方言的 SQL 语法，可以使用 `native_query`。StarRocks 会将透传查询结果作为普通关系暴露出来，您可以继续在 StarRocks 侧执行过滤、Join、聚合和投影。
+
+有关语法、限制和示例，参见 [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md)。
+
 ## 常见问题
 
 系统返回 "Malformed database URL, failed to parse the main URL sections" 报错应该如何处理？

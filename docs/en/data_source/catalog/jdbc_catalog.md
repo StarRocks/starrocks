@@ -216,6 +216,14 @@ DROP Catalog jdbc0;
    SELECT * FROM <table_name>;
    ```
 
+## Query JDBC data with native SQL
+
+From v4.1 onwards, StarRocks supports querying JDBC data with database-native `SELECT` statements by using the [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) table function.
+
+`native_query` is useful when the source database must run SQL that cannot be expressed as a single external table query, such as source-side joins, pre-filtered subqueries, or vendor-specific SQL syntax. StarRocks exposes the pass-through query result as a normal relation, so you can continue to apply StarRocks-side filters, joins, aggregations, and projections.
+
+For syntax, limitations, and examples, see [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md).
+
 ## FAQ
 
 What do I do if an error suggesting "Malformed database URL, failed to parse the main URL sections" is thrown?

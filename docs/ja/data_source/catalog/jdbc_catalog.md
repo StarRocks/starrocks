@@ -216,6 +216,14 @@ DROP Catalog jdbc0;
    SELECT * FROM <table_name>;
    ```
 
+## ネイティブ SQL で JDBC データをクエリする
+
+v4.1 以降、StarRocks は [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) テーブル関数を使用して、データベースネイティブの `SELECT` 文で JDBC データをクエリできます。
+
+ソースデータベース側の Join、事前にフィルタリングしたサブクエリ、またはベンダー固有の SQL 構文など、単一の external table クエリでは表現できない SQL をソースデータベースで実行する必要がある場合に `native_query` を使用できます。StarRocks はパススルークエリの結果を通常のリレーションとして公開するため、StarRocks 側でさらにフィルター、Join、集計、射影を適用できます。
+
+構文、制限事項、例については、[`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) を参照してください。
+
 ## FAQ
 
 「Malformed database URL, failed to parse the main URL sections」というエラーが発生した場合はどうすればよいですか？
