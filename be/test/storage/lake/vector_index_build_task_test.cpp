@@ -461,7 +461,8 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
 
     // v=2's .vi was actually built; v=3's was not.
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kIndexId))));
-    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
+    EXPECT_FALSE(
+            fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
 }
 
 // Persist segment_size and segment_encryption_metas on the rowset and verify they
@@ -480,8 +481,8 @@ TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryptio
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(_next_rowset_id++);
     rowset->add_segments(seg_name);
-    rowset->add_segment_size(2048);             // exercises has_segment_size branch
-    rowset->add_segment_encryption_metas("");   // exercises has_encryption_meta branch (empty meta is fine)
+    rowset->add_segment_size(2048);           // exercises has_segment_size branch
+    rowset->add_segment_encryption_metas(""); // exercises has_encryption_meta branch (empty meta is fine)
     rowset->set_num_rows(10);
     rowset->set_version(2);
     auto* seg_meta = rowset->add_segment_metas();
@@ -496,8 +497,7 @@ TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryptio
     ASSERT_OK(task.execute(request, &response));
     ASSERT_EQ(response.new_built_version(), 2);
 
-    std::string vi_path =
-            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
 }
 
