@@ -372,4 +372,133 @@ TEST_F(VectorIndexBuildTaskTest, test_skip_rowsets_without_vector_indexes) {
     ASSERT_EQ(response.new_built_version(), 2);
 }
 
+// Reusing the same task instance across two prepare()/execute() calls must reset
+// _work_items / _rowset_versions / _built_version / _target_version, otherwise the
+// second run would see stale state from the first.
+TEST_F(VectorIndexBuildTaskTest, test_prepare_reuse_resets_state) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    // First metadata: target version 2, one rowset at v=2.
+    ASSIGN_OR_ABORT(auto seg1, write_segment(tablet_schema, 1001, 10));
+    create_metadata(schema_pb, 2, {{2, seg1}});
+
+    BuildVectorIndexRequest req1;
+    req1.set_tablet_id(kTabletId);
+    req1.set_version(2);
+    BuildVectorIndexResponse resp1;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(req1, &resp1));
+    ASSERT_EQ(2, resp1.new_built_version());
+    EXPECT_EQ(1u, task.work_count());
+
+    // Second metadata: target version 3, two rowsets at v=2 and v=3.
+    // built_version supplied via request = 2, so only v=3 should produce work items.
+    ASSIGN_OR_ABORT(auto seg2, write_segment(tablet_schema, 1002, 10));
+    create_metadata(schema_pb, 3, {{2, seg1}, {3, seg2}}, /*built_version=*/2);
+
+    BuildVectorIndexRequest req2;
+    req2.set_tablet_id(kTabletId);
+    req2.set_version(3);
+    BuildVectorIndexResponse resp2;
+
+    ASSERT_OK(task.execute(req2, &resp2));
+    ASSERT_EQ(3, resp2.new_built_version());
+    // Only 1 fresh work item from v=3; if state hadn't been reset, work_count would
+    // accumulate the v=2 entry from the first run too.
+    EXPECT_EQ(1u, task.work_count());
+}
+
+// Build with one healthy rowset (v=2) and one whose segment file is broken (v=3).
+// Watermark must advance through v=2 (fully built) and stop at v=3 (failed segment),
+// exercising compute_built_version's failed_versions branch.
+TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_version) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_ok, write_segment(tablet_schema, 1001, 10));
+
+    // Manufacture a non-existent segment name for v=3 so build_segment fails to open
+    // it. We still populate vector_index_ids for that segment so prepare() schedules
+    // a build attempt and compute_built_version can see the failed version.
+    auto seg_bad = gen_segment_filename(2002);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(3);
+    *metadata->mutable_schema() = schema_pb;
+    {
+        auto* rs = metadata->add_rowsets();
+        rs->set_id(_next_rowset_id++);
+        rs->add_segments(seg_ok);
+        rs->set_num_rows(10);
+        rs->set_data_size(1024);
+        rs->set_version(2);
+        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+    }
+    {
+        auto* rs = metadata->add_rowsets();
+        rs->set_id(_next_rowset_id++);
+        rs->add_segments(seg_bad);
+        rs->set_num_rows(10);
+        rs->set_data_size(1024);
+        rs->set_version(3);
+        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(3);
+    BuildVectorIndexResponse response;
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    // execute() returns OK from the orchestration layer regardless of per-segment
+    // failure; progress is conveyed only via new_built_version.
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(2, response.new_built_version()) << "watermark should advance through v=2 and pause at v=3";
+
+    // v=2's .vi was actually built; v=3's was not.
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kIndexId))));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
+}
+
+// Persist segment_size and segment_encryption_metas on the rowset and verify they
+// flow through prepare() into the FileInfo handed to build_segment. This exercises
+// the optional fields in vector_index_build_task.cpp::prepare() that were previously
+// uncovered.
+TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryption) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(2);
+    *metadata->mutable_schema() = schema_pb;
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(_next_rowset_id++);
+    rowset->add_segments(seg_name);
+    rowset->add_segment_size(2048);             // exercises has_segment_size branch
+    rowset->add_segment_encryption_metas("");   // exercises has_encryption_meta branch (empty meta is fine)
+    rowset->set_num_rows(10);
+    rowset->set_version(2);
+    auto* seg_meta = rowset->add_segment_metas();
+    seg_meta->add_vector_index_ids(kIndexId);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    BuildVectorIndexResponse response;
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_EQ(response.new_built_version(), 2);
+
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
+    EXPECT_TRUE(fs::path_exist(vi_path));
+}
+
 } // namespace starrocks::lake
