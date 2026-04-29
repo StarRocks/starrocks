@@ -285,14 +285,19 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
-    // create writer
+    // Pass the new tablet schema directly so DeltaWriter does not consult TableSchemaService.
+    // The schema-service lookup is keyed by (db_id, table_id, schema_id) and falls back to an
+    // FE RPC; without catalog ids on the alter task the RPC goes out with zeros and FE replies
+    // "Table not exist". The schema-change task already holds the exact schema, so we sidestep
+    // the lookup entirely.
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_manager)
                                           .set_tablet_id(_new_tablet.id())
                                           .set_txn_id(_txn_id)
                                           .set_max_buffer_size(_max_buffer_size)
                                           .set_mem_tracker(CurrentThread::mem_tracker())
-                                          .set_schema_id(_new_tablet_schema->id()) // TODO: pass tablet schema directly
+                                          .set_schema_id(_new_tablet_schema->id())
+                                          .set_tablet_schema(_new_tablet_schema)
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
