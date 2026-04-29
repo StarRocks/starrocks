@@ -172,7 +172,7 @@ set(JOIN_CORE_TEST_LINK_LIBS
     ExecJoinCore
     ExecSortingCore
     ExprCore
-    Serde
+    SerdeCore
     RuntimeCore
     ChunkCore
     ColumnCore
