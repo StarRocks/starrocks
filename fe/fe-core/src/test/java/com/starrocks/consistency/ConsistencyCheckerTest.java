@@ -85,6 +85,14 @@ public class ConsistencyCheckerTest {
                 globalStateMgr.getLocalMetastore().getTables(dbId);
                 result = database.getTables();
                 minTimes = 0;
+
+                // chooseTabletsFromTable re-fetches the table under the per-table lock to
+                // detect tables dropped after the snapshot. The RESTORE-state branch
+                // pre-filters before the helper is invoked, so this mock is permissive
+                // (minTimes = 0) and shared across both assertions in this test.
+                globalStateMgr.getLocalMetastore().getTable(dbId, tableId);
+                result = table;
+                minTimes = 0;
             }
         };
 
@@ -92,6 +100,73 @@ public class ConsistencyCheckerTest {
 
         // set table state to RESTORE, we will make sure checker will not choose its tablets.
         table.setState(OlapTable.OlapTableState.RESTORE);
+        Assertions.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
+    }
+
+    @Test
+    public void testChooseTabletsSkipsAlreadyCheckedTablet(@Mocked GlobalStateMgr globalStateMgr) {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tabletId = 5L;
+        long replicaId = 6L;
+        long backendId = 7L;
+        long physicalPartitionId = 8L;
+        long visibleVersion = 2L;
+        TStorageMedium medium = TStorageMedium.HDD;
+
+        MaterializedIndex materializedIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        Replica replica = new Replica(replicaId, backendId, visibleVersion, 1111,
+                10, 1000, Replica.ReplicaState.NORMAL, -1, visibleVersion);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, medium);
+        LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
+        materializedIndex.addTablet(tablet, tabletMeta, false);
+
+        // Pre-mark the tablet as already verified at the current visible version. This is the
+        // state replayFinishConsistencyCheck would have left the tablet in after a successful
+        // earlier run, and the checker should skip it on the next pass.
+        tablet.setCheckedVersion(visibleVersion);
+        tablet.setIsConsistent(true);
+
+        PartitionInfo partitionInfo = new PartitionInfo();
+        DataProperty dataProperty = new DataProperty(medium);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, null);
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(visibleVersion, System.currentTimeMillis());
+        OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
+                distributionInfo);
+        table.addPartition(partition);
+        Database database = new Database(dbId, "database");
+        database.registerTableUnlocked(table);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getDbIds();
+                result = Lists.newArrayList(dbId);
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = database;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTables(dbId);
+                result = database.getTables();
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTable(dbId, tableId);
+                result = table;
+                minTimes = 0;
+            }
+        };
+
+        // Tablet has already been verified at visibleVersion and is consistent; the checker
+        // must not pick it for a redundant re-check.
         Assertions.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
     }
 
