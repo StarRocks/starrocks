@@ -38,6 +38,7 @@
 #include <butil/endpoint.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/concurrency/stopwatch.hpp"
 #include "common/config_ingest_fwd.h"
@@ -264,12 +265,13 @@ void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PT
 }
 
 void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                 PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+                                 PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                                 std::shared_ptr<const PTabletWriterAddSegmentRequest> owned_request) {
     ClosureGuard closure_guard(done);
     UniqueId load_id(request->id());
     auto channel = _find_load_channel(load_id);
     if (channel != nullptr) {
-        channel->add_segment(cntl, request, response, done);
+        channel->add_segment(cntl, request, response, done, std::move(owned_request));
         closure_guard.release();
     } else {
         _fail_rpc_request(load_id, response->mutable_status());

@@ -35,6 +35,7 @@
 #include "runtime/load_channel.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/compression/block_compression.h"
 #include "base/container/lru_cache.h"
@@ -279,7 +280,8 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                              PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+                              PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                              std::shared_ptr<const PTabletWriterAddSegmentRequest> owned_request) {
     ClosureGuard closure_guard(done);
     _num_segment++;
     TabletsChannelKey key(request->id(), request->sink_id(), request->index_id());
@@ -298,7 +300,7 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
         return;
     }
 
-    local_tablets_channel->add_segment(cntl, request, response, done);
+    local_tablets_channel->add_segment(cntl, request, response, done, std::move(owned_request));
     closure_guard.release();
 }
 

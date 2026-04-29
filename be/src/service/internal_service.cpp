@@ -525,6 +525,15 @@ void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::Rp
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_segment_via_http(google::protobuf::RpcController* controller,
+                                                                     const PHttpRequest* request,
+                                                                     PTabletWriterAddSegmentResult* response,
+                                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                        const PTabletWriterCancelRequest* request,
                                                        PTabletWriterCancelResult* response,

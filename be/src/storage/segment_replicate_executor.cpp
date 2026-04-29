@@ -14,12 +14,14 @@
 
 #include "storage/segment_replicate_executor.h"
 
+#include <butil/iobuf.h>
 #include <fmt/format.h>
 
 #include <memory>
 #include <utility>
 
 #include "base/container/raw_container.h"
+#include "base/utility/defer_op.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_compaction_fwd.h"
@@ -33,6 +35,27 @@
 #include "storage/delta_writer.h"
 
 namespace starrocks {
+
+namespace {
+// 2GB - 1KB, make sure data + request <2GB
+constexpr size_t kSegmentReplicateRpcHttpMinSize = (1ULL << 31) - (1ULL << 10);
+
+Status serialize_segment_request_to_iobuf(const PTabletWriterAddSegmentRequest& request, const butil::IOBuf& data,
+                                          butil::IOBuf* iobuf) {
+    butil::IOBuf proto_iobuf;
+    butil::IOBufAsZeroCopyOutputStream wrapper(&proto_iobuf);
+    if (UNLIKELY(!request.SerializeToZeroCopyStream(&wrapper))) {
+        return Status::InternalError("failed to serialize tablet writer add segment request");
+    }
+
+    const size_t proto_iobuf_size = proto_iobuf.size();
+    iobuf->append(&proto_iobuf_size, sizeof(proto_iobuf_size));
+    iobuf->append(proto_iobuf);
+    iobuf->append(data);
+    return Status::OK();
+}
+
+} // namespace
 
 class SegmentReplicateTask final : public Runnable {
 public:
@@ -128,7 +151,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
 
     // 3. send segment sync request
-    _send_request(segment, data, eos);
+    RETURN_IF_ERROR(_send_request(segment, data, eos));
 
     // 4. wait if eos=true
     if (eos || _mem_tracker->any_limit_exceeded()) {
@@ -142,7 +165,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     return get_status();
 }
 
-void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, bool eos) {
+Status ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, bool eos) {
     PTabletWriterAddSegmentRequest request;
     request.set_allocated_id(const_cast<starrocks::PUniqueId*>(&_opt->load_id));
     request.set_tablet_id(_opt->tablet_id);
@@ -155,14 +178,46 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
             << " segment_id=" << (segment == nullptr ? -1 : segment->segment_id()) << " eos=" << eos
             << " txn_id=" << _opt->txn_id << " index_id=" << _opt->index_id << " sink_id=" << _opt->sink_id;
 
+    if (segment != nullptr) {
+        request.set_allocated_segment(segment);
+    }
+    DeferOp release_request_fields([&]() {
+        request.release_id();
+        if (segment != nullptr) {
+            request.release_segment();
+        }
+    });
+
+    const bool use_http = (request.ByteSizeLong() + data.size() + sizeof(size_t)) > kSegmentReplicateRpcHttpMinSize;
+    std::shared_ptr<PInternalService_RecoverableStub> http_stub;
+    butil::IOBuf http_attachment;
+    if (use_http) {
+        TNetworkAddress brpc_addr;
+        brpc_addr.hostname = _host;
+        brpc_addr.port = _port;
+        auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
+        if (!res.ok()) {
+            return res.status();
+        }
+        http_stub = res.value();
+        if (http_stub == nullptr) {
+            return Status::InternalError(fmt::format("failed to get http brpc stub for {}:{}", _host, _port));
+        }
+        RETURN_IF_ERROR(serialize_segment_request_to_iobuf(request, data, &http_attachment));
+    }
+
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
     set_ignore_overcrowded_for_load(_closure->cntl);
 
-    if (segment != nullptr) {
-        request.set_allocated_segment(segment);
-        _closure->cntl.request_attachment().append(data);
+    if (use_http) {
+        _closure->cntl.http_request().set_content_type("application/proto");
+        _closure->cntl.request_attachment().append(http_attachment);
+    } else {
+        if (segment != nullptr) {
+            _closure->cntl.request_attachment().append(data);
+        }
     }
     _closure->request_size = _closure->cntl.request_attachment().size();
 
@@ -171,12 +226,14 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 
     FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_segment,
                                TABLET_WRITER_ADD_SEGMENT_FP_ACTION(_host, _closure, request));
-    _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
-
-    request.release_id();
-    if (segment != nullptr) {
-        request.release_segment();
+    if (use_http) {
+        http_stub->tablet_writer_add_segment_via_http(&_closure->cntl, nullptr, &_closure->result, _closure);
+        VLOG(2) << "ReplicateChannel::_send_request() issue a http rpc, request size = "
+                << _closure->cntl.request_attachment().size();
+    } else {
+        _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
     }
+    return Status::OK();
 }
 
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,

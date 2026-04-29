@@ -78,6 +78,10 @@ public:
                                    const PTabletWriterAddSegmentRequest* request,
                                    PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
 
+    void tablet_writer_add_segment_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                                            PTabletWriterAddSegmentResult* response,
+                                            google::protobuf::Closure* done) override;
+
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 
