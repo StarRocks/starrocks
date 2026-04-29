@@ -420,20 +420,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
-    public void testFullRefreshWithScanOperator() throws Exception {
-        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-    }
-
-    @Test
-    public void testFullRefreshWithTableFunctionOperator() throws Exception {
-        String query = "SELECT id, unnest FROM `iceberg0`.`unpartitioned_db`.`t0` as a, unnest(split(data, ','));";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-    }
-
-    @Test
     public void testAutoRefreshWithScanOperator() throws Exception {
         String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
@@ -446,13 +432,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             String query = "SELECT * from emps;";
             createMaterializedViewWithRefreshMode(query, "incremental");
         });
-    }
-
-    @Test
-    public void testFullRefreshWithOlapScanOperator() throws Exception {
-        String query = "SELECT * from emps;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
     }
 
     @Test

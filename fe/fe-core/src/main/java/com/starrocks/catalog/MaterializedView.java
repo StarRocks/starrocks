@@ -198,10 +198,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
          */
         PCT,
         /**
-         * FULL: Full refresh mode, refresh all partitions of the materialized view.
-         */
-        FULL,
-        /**
          * INCREMENTAL: Incremental refresh mode, only refresh the incremental changed rows since the last refresh.
          */
         INCREMENTAL;
@@ -216,10 +212,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public boolean isIncremental() {
             return this == INCREMENTAL;
-        }
-
-        public boolean isFull() {
-            return this == FULL;
         }
 
         public boolean isIncrementalOrAuto() {
