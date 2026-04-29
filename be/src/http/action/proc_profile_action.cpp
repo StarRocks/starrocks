@@ -15,6 +15,8 @@
 #include "http/action/proc_profile_action.h"
 
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,7 @@ namespace starrocks {
 const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_LIST = "list";
+const static std::string ACTION_SAVE = "save";
 
 void ProcProfileAction::handle(HttpRequest* req) {
     VLOG_ROW << req->debug_string();
@@ -43,6 +46,12 @@ void ProcProfileAction::handle(HttpRequest* req) {
     if (req->method() == HttpMethod::GET) {
         if (action == ACTION_LIST) {
             _handle_list(req);
+        } else {
+            _handle_error(req, strings::Substitute("Not support action: '$0'", action));
+        }
+    } else if (req->method() == HttpMethod::POST) {
+        if (action == ACTION_SAVE) {
+            _handle_save(req);
         } else {
             _handle_error(req, strings::Substitute("Not support action: '$0'", action));
         }
@@ -127,6 +136,70 @@ void ProcProfileAction::_handle_list(HttpRequest* req) {
     }
 
     root.AddMember("profiles", profiles, allocator);
+
+    rapidjson::StringBuffer strbuf;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+    root.Accept(writer);
+    req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
+    HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
+}
+
+void ProcProfileAction::_handle_save(HttpRequest* req) {
+    rapidjson::Document root;
+    root.SetObject();
+    rapidjson::Document::AllocatorType& allocator = root.GetAllocator();
+
+    // Parse parameters
+    const std::string& filename = req->param("filename");
+    std::string profile_data = req->get_request_body();
+
+    if (filename.empty()) {
+        root.AddMember("status", rapidjson::Value("error", allocator), allocator);
+        root.AddMember("message", rapidjson::Value("Missing filename", allocator), allocator);
+        rapidjson::StringBuffer strbuf;
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+        root.Accept(writer);
+        req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
+        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, strbuf.GetString());
+        return;
+    }
+
+    // Validate filename to prevent directory traversal
+    if (filename.find("..") != std::string::npos || filename.find("/") != std::string::npos) {
+        root.AddMember("status", rapidjson::Value("error", allocator), allocator);
+        root.AddMember("message", rapidjson::Value("Invalid filename", allocator), allocator);
+        rapidjson::StringBuffer strbuf;
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+        root.Accept(writer);
+        req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
+        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, strbuf.GetString());
+        return;
+    }
+
+    try {
+        std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
+        std::filesystem::path dir_path(profile_log_dir);
+        if (!std::filesystem::exists(dir_path)) {
+            std::filesystem::create_directories(dir_path);
+        }
+
+        std::string output_path = profile_log_dir + "/" + filename;
+        std::ofstream out_file(output_path, std::ios::out | std::ios::binary);
+        if (out_file.is_open()) {
+            // Write binary data (profile_data may contain binary gzip data)
+            out_file.write(profile_data.data(), profile_data.size());
+            out_file.close();
+            root.AddMember("status", rapidjson::Value("success", allocator), allocator);
+            root.AddMember("message", rapidjson::Value("Profile saved successfully", allocator), allocator);
+        } else {
+            root.AddMember("status", rapidjson::Value("error", allocator), allocator);
+            root.AddMember("message", rapidjson::Value("Failed to open file for writing", allocator), allocator);
+        }
+    } catch (const std::exception& e) {
+        LOG(WARNING) << "Failed to save profile: " << e.what();
+        root.AddMember("status", rapidjson::Value("error", allocator), allocator);
+        root.AddMember("message", rapidjson::Value(strings::Substitute("Failed to save profile: $0", e.what()).c_str(), allocator), allocator);
+    }
 
     rapidjson::StringBuffer strbuf;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
