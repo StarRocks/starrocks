@@ -389,6 +389,60 @@ This topic introduces the following types of FE configurations:
 - Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
 - Introduced in: v3.5.2
 
+### `enable_lake_autonomous_compaction`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for the BE-driven autonomous compaction flow. When enabled, FE periodically issues PUBLISH_ONLY transactions per partition that ask each owning BE to drain locally-cached compaction results and bump every tablet to the next visible version (using `force_publish=true` so tablets without local results take the empty-compaction path). When disabled, behavior is identical to the existing partition-level scheduling.
+- Introduced in: v3.6.0
+
+### `lake_compaction_version_delta_threshold`
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Triggers an autonomous PUBLISH_ONLY transaction when a partition's `version - last_publish_version` reaches this value. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
+### `lake_compaction_high_score_threshold`
+
+- Default: 50.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: When the partition's last compaction score is strictly greater than this threshold, the smaller delta `lake_compaction_min_version_delta_for_high_score` is enough to trigger a PUBLISH_ONLY transaction. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
+### `lake_compaction_min_version_delta_for_high_score`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The reduced version-delta threshold used in conjunction with `lake_compaction_high_score_threshold` for high-score partitions. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
+### `lake_compaction_max_interval_ms`
+
+- Default: 1800000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Safety-net interval. If `lake_compaction_max_interval_ms` has elapsed since the partition's last successful PUBLISH_ONLY (and a previous publish has already happened), the next round dispatches a publish even when neither version-delta nor high-score thresholds were met. The check is intentionally skipped until the first publish completes so the trigger does not burst on every partition the moment the feature is enabled. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
+### `lake_compaction_publish_timeout_seconds`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: RPC timeout for the autonomous-compaction `COLLECT_AND_PUBLISH` request from FE to BE. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
 ### `lake_compaction_disable_ids`
 
 - Default: ""

@@ -82,6 +82,51 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+### enable_lake_autonomous_compaction
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：BE 侧自治 compaction 调度器的总开关。`false` 时 BE 行为不变，所有 compaction 仍由 FE 通过已有的 `compact()` RPC 发起；`true` 时 BE 的 `LakeCompactionManager` 启动事件驱动的 dispatch 循环，自行挑选高分 tablet 执行 compaction 并把结果落本地为 `CompactionResultPB` 文件，等待 FE 后续以 `COLLECT_AND_PUBLISH` 汇总为一个 OpParallelCompaction 事务发表。需与 FE 侧 `enable_lake_autonomous_compaction = true` 同时开启。
+- 引入版本：v3.6.0
+
+### lake_autonomous_compaction_max_concurrent_tasks
+
+- 默认值：32
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单 BE 同时进行的自治 compaction 任务总数上限。dispatch 循环在 `running_tasks` 达到该值时停止从队列出队。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本：v3.6.0
+
+### lake_autonomous_compaction_max_tasks_per_tablet
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个 tablet 同时进行的自治 compaction 任务上限。命中后该 tablet 暂从队列移除，待已有任务完成后再重新评估入队。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本：v3.6.0
+
+### lake_autonomous_compaction_score_threshold
+
+- 默认值：10.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：tablet 进入自治调度队列所需的最低 compaction score。较低值会让更多低分 tablet 进入队列；较高值则减少调度频率但允许部分 tablet 累积更多 rowset。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本：v3.6.0
+
+### lake_autonomous_compaction_local_result_dir_max_bytes
+
+- 默认值：1073741824
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：BE 上所有 store path 合计的 `CompactionResultPB` 文件磁盘占用硬上限，达到后 `append_result` 直接返回 `ResourceBusy`，暂停新的自治 compaction 直到下一次 `COLLECT_AND_PUBLISH` 把本地结果排空。默认 1 GiB。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本：v3.6.0
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
