@@ -36,6 +36,7 @@
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
@@ -100,6 +101,14 @@ public:
 private:
     int _offset = 0;
     cctz::time_zone _ctz;
+};
+
+class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
+public:
+    FixedLenByteArrayToUUIDConverter() = default;
+    ~FixedLenByteArrayToUUIDConverter() override = default;
+
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int64ToDateTimeConverter final : public ColumnConverter {
@@ -357,6 +366,69 @@ private:
     int32_t _type_length = 0;
 };
 
+// UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
+// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+static constexpr int kUUIDByteLength = 16;
+static constexpr int kUUIDStringLength = 36;
+
+Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst) {
+    auto* src_nullable = ColumnHelper::as_raw_column<NullableColumn>(src);
+    auto* dst_nullable = down_cast<NullableColumn*>(dst);
+    auto* src_col = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable->data_column());
+    auto* dst_col = ColumnHelper::as_raw_column<BinaryColumn>(dst_nullable->data_column_raw_ptr());
+
+    const auto& src_null = src_nullable->null_column()->get_data();
+    auto& dst_null = dst_nullable->null_column_raw_ptr()->get_data();
+
+    size_t n = src_col->size();
+    dst_null.resize(n);
+    memcpy(dst_null.data(), src_null.data(), n);
+
+    static constexpr char HEX[] = "0123456789abcdef";
+    char buf[kUUIDStringLength];
+
+    for (size_t i = 0; i < n; i++) {
+        if (src_null[i]) {
+            dst_col->append_default();
+            continue;
+        }
+        Slice s = src_col->get_slice(i);
+        if (UNLIKELY(s.size != kUUIDByteLength)) {
+            return Status::Corruption(strings::Substitute(
+                    "parquet UUID column has unexpected byte length $0, expected $1", s.size, kUUIDByteLength));
+        }
+        const auto* bytes = reinterpret_cast<const uint8_t*>(s.data);
+        int pos = 0;
+        for (int j = 0; j < 4; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 4; j < 6; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 6; j < 8; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 8; j < 10; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 10; j < kUUIDByteLength; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        dst_col->append(Slice(buf, kUUIDStringLength));
+    }
+    dst_nullable->set_has_null(src_nullable->has_null());
+    return Status::OK();
+}
+
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
                                                 std::unique_ptr<ColumnConverter>* converter) {
@@ -486,7 +558,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
         int32_t type_length = field.type_length;
-        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
+        bool is_uuid = schema_element.__isset.logicalType && schema_element.logicalType.__isset.UUID;
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
+            col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
         switch (col_type) {
@@ -505,6 +579,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         case LogicalType::TYPE_DECIMAL128:
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale,
                                                                                      type_length);
+            break;
+        case LogicalType::TYPE_VARCHAR:
+        case LogicalType::TYPE_CHAR:
+            if (is_uuid) {
+                need_convert = true;
+                *converter = std::make_unique<FixedLenByteArrayToUUIDConverter>();
+            }
             break;
         default:
             break;
