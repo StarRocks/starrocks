@@ -16,6 +16,9 @@
 
 #include <fmt/format.h>
 
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
 #include <unordered_map>
 
 #include "column/chunk.h"
@@ -37,6 +40,9 @@
 namespace starrocks::lake {
 
 namespace {
+// async/sync is a table-level setting (every vector index on a given schema shares the
+// same index_build_mode). Returning bool from "any vector index has async mode" is
+// equivalent to "the table is in async mode" for this purpose.
 bool has_async_vector_index(const TabletSchemaCSPtr& schema) {
     for (uint32_t i = 0; i < schema->num_columns(); ++i) {
         const auto& column = schema->column(i);
@@ -77,7 +83,19 @@ uint32_t get_vector_index_build_threshold(const TabletSchemaCSPtr& schema) {
         const auto& props = it->second.common_properties();
         auto threshold_it = props.find("index_build_threshold");
         if (threshold_it != props.end()) {
-            return static_cast<uint32_t>(std::atoi(threshold_it->second.c_str()));
+            // Use a checked parse: atoi() silently treats malformed strings as 0 and would
+            // wrap a negative int into a huge uint32_t after the cast, neither of which is
+            // a sensible build threshold. Fall back to the config default on parse failure
+            // or out-of-range values.
+            char* end = nullptr;
+            errno = 0;
+            unsigned long parsed = std::strtoul(threshold_it->second.c_str(), &end, 10);
+            if (errno == 0 && end != threshold_it->second.c_str() && *end == '\0' &&
+                parsed <= std::numeric_limits<uint32_t>::max()) {
+                return static_cast<uint32_t>(parsed);
+            }
+            LOG(WARNING) << "ignoring invalid index_build_threshold='" << threshold_it->second
+                         << "', falling back to config_vector_index_default_build_threshold";
         }
     }
     return config::config_vector_index_default_build_threshold;

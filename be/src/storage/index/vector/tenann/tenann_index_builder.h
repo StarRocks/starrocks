@@ -20,6 +20,7 @@
 
 #include "fs/fs.h"
 #include "storage/index/vector/vector_index_builder.h"
+#include "storage/index/vector/vector_index_file_writer.h"
 #include "storage/tablet_schema.h"
 #include "tenann/builder/index_builder.h"
 
@@ -36,14 +37,14 @@ public:
               _file_writer(nullptr) {}
 
     TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
-                            bool is_element_nullable, int omp_threads, class tenann::IndexFileWriter* file_writer)
+                            bool is_element_nullable, int omp_threads, VectorIndexFileWriter* file_writer)
             : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
               _is_element_nullable(is_element_nullable),
               _omp_threads(omp_threads),
               _file_writer(file_writer) {}
 
     // proxy should not clean index builder resource
-    ~TenAnnIndexBuilderProxy() override { close(); };
+    ~TenAnnIndexBuilderProxy() override { (void)close(); };
 
     Status init() override;
 
@@ -51,7 +52,7 @@ public:
 
     Status flush() override;
 
-    void close() const override;
+    Status close() const override;
 
 private:
     std::shared_ptr<tenann::IndexBuilder> _index_builder = nullptr;
@@ -63,7 +64,7 @@ private:
 
     const bool _is_element_nullable;
     const int _omp_threads;
-    tenann::IndexFileWriter* _file_writer = nullptr;
+    VectorIndexFileWriter* _file_writer = nullptr;
 };
 
 } // namespace starrocks

@@ -194,10 +194,7 @@ int64_t VectorIndexBuildTask::compute_built_version(const std::vector<Status>& s
             break;
         }
     }
-    // If every rowset version above _built_version was successfully advanced through
-    // (or there were none — e.g. the metadata version was bumped by an EMPTY_TXNLOG
-    // with no new rowsets), advance the watermark to the request target so FE stops
-    // re-scheduling indefinitely.
+
     if (advanced_through_all && _target_version > watermark) {
         watermark = _target_version;
     }
@@ -211,11 +208,17 @@ Status VectorIndexBuildTask::execute(const BuildVectorIndexRequest& request, Bui
     for (size_t i = 0; i < _work_items.size(); i++) {
         results[i] = build_one_segment(i);
         if (!results[i].ok()) {
-            LOG(WARNING) << "VectorIndexBuildTask: tablet=" << _tablet_id << " segment build failed: " << results[i];
+            LOG(WARNING) << "VectorIndexBuildTask: tablet=" << _tablet_id << " segment[" << i
+                         << "] failed: " << results[i];
             break; // Stop on first failure in sequential mode
         }
     }
 
+    // compute_built_version advances through fully-built rowsets and stops at the first
+    // rowset version that had a failed segment, so the watermark reflects exactly how
+    // far this run got even on partial failure. The Status here only reflects whether
+    // the task itself ran; FE infers per-segment failure from new_built_version not
+    // reaching its target version and reschedules.
     response->set_new_built_version(compute_built_version(results));
     return Status::OK();
 }
@@ -317,7 +320,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
         }
 
         RETURN_IF_ERROR(builder->flush());
-        builder->close();
+        RETURN_IF_ERROR(builder->close());
     }
 
     return Status::OK();

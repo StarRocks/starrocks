@@ -107,7 +107,7 @@ protected:
 
         SegmentWriterOptions opts;
         opts.is_compaction = false;
-        // defer_vector_index_build = true: we simulate async mode (no .vi generation)
+        // defer_vector_index_build = true: simulate async mode (no .vi generation)
         opts.defer_vector_index_build = true;
 
         // Fill vector_index_file_paths so metadata is populated

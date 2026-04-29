@@ -163,7 +163,7 @@ Status TenAnnIndexBuilderProxy::flush() {
     return Status::OK();
 }
 
-void TenAnnIndexBuilderProxy::close() const {
+Status TenAnnIndexBuilderProxy::close() const {
     if (_index_builder && !_index_builder->is_closed()) {
         _index_builder->Close();
     }
@@ -173,7 +173,9 @@ void TenAnnIndexBuilderProxy::close() const {
     // is idempotent, so the destructor path can safely re-enter.
     if (_file_writer) {
         _file_writer->Close();
+        return _file_writer->status();
     }
+    return Status::OK();
 }
 
 } // namespace starrocks

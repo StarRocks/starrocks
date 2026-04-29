@@ -110,17 +110,7 @@ Status VectorIndexWriter::finish(uint64_t* index_size) {
         if (_index_builder.get() != nullptr) {
             // flush with index
             RETURN_IF_ERROR(_index_builder->flush());
-            // Close the builder to finalize the underlying file.
-            // S3 objects are only visible/readable after close().
-            _index_builder->close();
-#ifdef WITH_TENANN
-            // Surface any error from the bridged WritableFile: tenann's IndexFileWriter
-            // interface is void, so failures during flush/close would otherwise be dropped
-            // silently and leave an incomplete/missing object on remote storage.
-            if (_file_writer_holder != nullptr) {
-                RETURN_IF_ERROR(_file_writer_holder->status());
-            }
-#endif
+            RETURN_IF_ERROR(_index_builder->close());
         } else {
             // Threshold not met: skip file generation entirely. Readers fall back
             // to brute-force scan via NotFound; vacuum won't see any vector_index_id
@@ -130,8 +120,8 @@ Status VectorIndexWriter::finish(uint64_t* index_size) {
             return Status::OK();
         }
         if (index_size) {
-            ASSIGN_OR_RETURN(auto file_ptr, fs::new_random_access_file(_vector_index_file_path))
-            ASSIGN_OR_RETURN(auto index_file_size, file_ptr->get_size())
+            ASSIGN_OR_RETURN(auto file_ptr, fs::new_random_access_file(_vector_index_file_path));
+            ASSIGN_OR_RETURN(auto index_file_size, file_ptr->get_size());
             *index_size += index_file_size;
         }
     }
@@ -149,7 +139,7 @@ uint64_t VectorIndexWriter::estimate_buffer_size() const {
 
 Status VectorIndexWriter::_prepare_index_builder() {
     ASSIGN_OR_RETURN(auto index_builder_type,
-                     VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index))
+                     VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index));
     const int omp_threads = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
 #ifdef WITH_TENANN
     // Create VectorIndexFileWriter to support remote FS (S3/HDFS) in shared-data mode.

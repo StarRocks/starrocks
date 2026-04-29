@@ -2206,11 +2206,17 @@ void LakeServiceImpl::build_vector_index(::google::protobuf::RpcController* cont
         latch.wait();
     }
 
+    int failed_count = 0;
+    for (const auto& st : segment_results) {
+        if (!st.ok()) {
+            failed_count++;
+        }
+    }
     int64_t new_built_version = build_task.compute_built_version(segment_results);
     response->set_new_built_version(new_built_version);
+    LOG(INFO) << "build_vector_index: tablet=" << request->tablet_id() << " new_built_version=" << new_built_version
+              << " segments_built=" << (work_count - failed_count) << " segments_failed=" << failed_count;
     Status::OK().to_protobuf(response->mutable_status());
-    LOG(INFO) << "build_vector_index completed: tablet=" << request->tablet_id()
-              << " new_built_version=" << new_built_version << " segments_built=" << work_count;
 }
 
 } // namespace starrocks

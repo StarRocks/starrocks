@@ -407,13 +407,16 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
             _has_vector_index_written = true;
         } else if (!_has_vector_index_written &&
-                   _tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR) &&
-                   !_opts.defer_vector_index_build) {
-            // Only mark NONE when not deferring. For async mode, leave unset so the read path
-            // will attempt to find .vi files (built later) and fall back gracefully if missing.
-            // Guard with !_has_vector_index_written so a subsequent non-producing column
-            // never downgrades a STANDALONE setting from a previous column.
-            _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_NONE);
+                   _tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR)) {
+            // No .vi was produced inline. In async mode, the deferred build task will
+            // produce one later iff this segment has enough rows and isn't a bundle
+            // (bundle segments don't carry .vi). Mark STANDALONE in that case so the
+            // read path looks for the .vi when it lands; otherwise mark NONE so
+            // readers fall back to brute-force scan instead of waiting forever.
+            const bool will_build_async = _opts.defer_vector_index_build && !_opts.skip_vector_index &&
+                                          _num_rows >= _opts.vector_index_build_threshold;
+            _footer.set_vector_index_storage_type(will_build_async ? VECTOR_INDEX_STORAGE_STANDALONE
+                                                                   : VECTOR_INDEX_STORAGE_NONE);
         }
 
         // check global dict valid
