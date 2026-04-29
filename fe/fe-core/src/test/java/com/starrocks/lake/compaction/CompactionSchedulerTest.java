@@ -1442,4 +1442,71 @@ public class CompactionSchedulerTest {
         Assertions.assertEquals(CompactionJob.JobType.PUBLISH_ONLY, ((CompactionJob) result).getJobType());
         Assertions.assertEquals(txnId, ((CompactionJob) result).getTxnId());
     }
+
+    /**
+     * schedulePartitionPublish: a partition whose tableId is in disabledIds must
+     * be skipped via the disabledIds.contains() branch (line 177). Use the
+     * scheduler's own disable string at construction time so the runtime
+     * Set<Long> matches what's checked at iteration time.
+     */
+    @Test
+    public void testSchedulePartitionPublishSkipsDisabledTable() throws Exception {
+        long dbId = 100L;
+        long tableId = 7777L;
+        long partitionId = 300L;
+        PartitionIdentifier partition = new PartitionIdentifier(dbId, tableId, partitionId);
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        compactionManager.handleLoadingFinished(partition, 10L, System.currentTimeMillis(),
+                new Quantiles(1.0, 2.0, 3.0));
+        // Construct the scheduler with disableIdsStr so disabledIds includes this tableId.
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, String.valueOf(tableId));
+
+        Method method = CompactionScheduler.class.getDeclaredMethod("schedulePartitionPublish");
+        method.setAccessible(true);
+        Assertions.assertDoesNotThrow(() -> method.invoke(scheduler));
+
+        // The partition is still tracked because schedulePartitionPublish only
+        // skipped it; nothing called removePartition.
+        Assertions.assertNotNull(compactionManager.getStatistics(partition));
+    }
+
+    /**
+     * schedulePartitionPublish: when evaluatePublishTrigger returns null (none of
+     * the trigger strategies match), the partition must be skipped via the
+     * "if (reason == null) continue;" branch (line 189). Drives version_delta=0.
+     */
+    @Test
+    public void testSchedulePartitionPublishSkipsWhenNoTrigger() throws Exception {
+        int savedDelta = Config.lake_compaction_version_delta_threshold;
+        long savedInterval = Config.lake_compaction_max_interval_ms;
+        Config.lake_compaction_version_delta_threshold = 1000;
+        Config.lake_compaction_max_interval_ms = Long.MAX_VALUE / 2;
+        try {
+            long dbId = 100L;
+            long tableId = 200L;
+            long partitionId = 300L;
+            PartitionIdentifier partition = new PartitionIdentifier(dbId, tableId, partitionId);
+
+            CompactionMgr compactionManager = new CompactionMgr();
+            // versionDelta = currentVersion - lastPublishVisibleVersion = 1 - 0 = 1
+            // 1 < threshold=1000; high-score not triggered (score=1.0 < default 50);
+            // max-interval skipped (lastPublishTimeMs == 0). reason == null.
+            compactionManager.handleLoadingFinished(partition, 1L, System.currentTimeMillis(),
+                    new Quantiles(1.0, 2.0, 3.0));
+            CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                    globalTransactionMgr, globalStateMgr, "");
+
+            Method method = CompactionScheduler.class.getDeclaredMethod("schedulePartitionPublish");
+            method.setAccessible(true);
+            Assertions.assertDoesNotThrow(() -> method.invoke(scheduler));
+
+            // Partition still tracked — no startPublishOnly was attempted.
+            Assertions.assertNotNull(compactionManager.getStatistics(partition));
+        } finally {
+            Config.lake_compaction_version_delta_threshold = savedDelta;
+            Config.lake_compaction_max_interval_ms = savedInterval;
+        }
+    }
 }
