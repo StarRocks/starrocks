@@ -278,7 +278,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
 
         MaterializedView.RefreshMode finalCurrentRefreshMode = currentRefreshMode;
-        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)) {
+        // Trigger applier when either the persisted property or the in-memory current mode
+        // would change. Comparing only the persisted string would miss cases where the two
+        // are out of sync (e.g. mode promoted internally without rewriting the property).
+        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)
+                || materializedView.getCurrentRefreshMode() != finalCurrentRefreshMode) {
             appliers.add(() -> {
                 tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
                 tableProperty.setMvRefreshMode(mvRefreshMode);
