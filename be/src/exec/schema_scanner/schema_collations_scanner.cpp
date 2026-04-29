@@ -14,7 +14,7 @@
 
 #include "exec/schema_scanner/schema_collations_scanner.h"
 
-#include "exec/schema_scanner/schema_helper.h"
+#include "exec/schema_scanner/schema_column_filler.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
