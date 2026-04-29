@@ -234,6 +234,31 @@ private:
     // partition.
     void _record_coordinator_claims(const PTabletWriterOpenRequest& params);
 
+    // Snapshot of `_partition_coordinator` for the close-path collect step.
+    // Should be built post-wait, when every sender's eos has been processed and
+    // all incremental_open claims are recorded.
+    struct PartitionCoordinatorSnapshot {
+        bool per_partition_mode = false;
+        std::unordered_set<int64_t> my_partitions;
+        std::unordered_set<int64_t> all_claimed_partitions;
+        int32_t min_coord_sender_id = std::numeric_limits<int32_t>::max();
+    };
+
+    // Coarse pre-wait gate: returns true iff this sender should enter the
+    // wait/collect path on its eos.
+    //   - legacy mode: only sender 0 enters.
+    //   - per-partition mode: only senders that currently own at least one
+    //     partition enter. Sender X's own incremental_open claims to this BE
+    //     are guaranteed to be in the map by eos time (NodeChannel orders X's
+    //     RPCs), and other senders' updates can only add new partitions or
+    //     lower existing sids — never raise an sid to X. So "no entry with
+    //     sid == X" is a sticky-false signal: X can never become coordinator
+    //     for any partition and can skip wait+collect entirely.
+    bool _should_enter_collect_path(int32_t sender_id) const;
+
+    // Snapshot the coordinator map under `_partition_coordinator_mtx`.
+    PartitionCoordinatorSnapshot _snapshot_coordinator(int32_t sender_id) const;
+
     // write access to the delta writers map
     inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
         return _delta_writers_impl.mutable_delta_writers();
@@ -686,44 +711,54 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     // combined_txn_log collection dispatch. See `_enable_per_partition_coordinator`
     // field comment for the two modes and their invariants.
+    //
+    // Note on snapshot timing: the elected coordinator must be decided AFTER
+    // `_txn_log_collector.wait()` returns, NOT before it. `notify()` only fires
+    // when close_channel becomes true, i.e. every sender's eos has been
+    // processed. Each NodeChannel guarantees in-order processing of its own
+    // RPCs (incremental_open precedes add_chunk precedes eos), so by the time
+    // every sender's eos is processed, every sender's incremental_open claims
+    // are recorded in `_partition_coordinator`. Cross-sender RPC processing
+    // is *not* ordered (different brpc workers, different connections), so a
+    // pre-wait snapshot can miss late-arriving incremental_open claims from
+    // other senders and incorrectly classify their partitions as orphan.
     if (_finish_mode == lake::kDontWriteTxnLog && request.eos() &&
         response->status().status_code() == TStatusCode::OK) {
         const int32_t sender_id = request.sender_id();
 
-        bool per_partition_mode;
-        std::unordered_set<int64_t> my_partitions;
-        std::unordered_set<int64_t> all_claimed_partitions;
-        int32_t min_coord_sender_id = std::numeric_limits<int32_t>::max();
-        {
-            std::lock_guard l(_partition_coordinator_mtx);
-            per_partition_mode = _enable_per_partition_coordinator;
-            if (per_partition_mode) {
-                for (auto& [pid, sid] : _partition_coordinator) {
-                    all_claimed_partitions.insert(pid);
-                    if (sid == sender_id) my_partitions.insert(pid);
-                    min_coord_sender_id = std::min(min_coord_sender_id, sid);
-                }
-            }
-        }
-
-        // Should this sender collect anything on this eos?
-        //   - New mode: only if elected coordinator of at least one partition.
-        //   - Legacy mode: only sender 0.
-        const bool should_collect = per_partition_mode ? !my_partitions.empty() : (sender_id == 0);
-
-        if (should_collect) {
-            if (per_partition_mode) {
-                StarRocksMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
-            } else {
-                StarRocksMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
-            }
+        if (_should_enter_collect_path(sender_id)) {
             rolk.unlock();
-            auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+            int64_t t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+            // Clamp to non-negative: a budget already exhausted means no wait,
+            // and we report the timeout immediately rather than feeding a
+            // negative value to ConditionVariable::wait_for.
+            if (t < 0) t = 0;
             auto ok = _txn_log_collector.wait(t);
             auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
-            if (st.ok()) {
+
+            // Post-wait snapshot: coordinator map is now final (every sender's
+            // eos has been processed by the channel, which means every
+            // sender's prior incremental_open claims have been recorded).
+            const auto snap = _snapshot_coordinator(sender_id);
+            const bool i_collect = snap.per_partition_mode ? !snap.my_partitions.empty() : (sender_id == 0);
+
+            if (!st.ok()) {
+                // Coordinators (or sender 0 in legacy) report the timeout. In
+                // per-partition mode multiple coordinators may call this in
+                // parallel, but `WriteContext::update_status` is first-wins
+                // (it no-ops once the response status is already non-OK), so
+                // the response carries a single error.
+                if (i_collect) {
+                    context->update_status(st);
+                }
+            } else if (i_collect) {
+                if (snap.per_partition_mode) {
+                    StarRocksMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
+                } else {
+                    StarRocksMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
+                }
                 auto all_logs = _txn_log_collector.logs();
-                if (per_partition_mode) {
+                if (snap.per_partition_mode) {
                     // Filter: collect only the partitions this sender coordinates.
                     // Other partitions are returned by their coordinators' eos.
                     // Any log whose partition is entirely unclaimed (orphan) is
@@ -737,9 +772,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     int64_t orphan_count = 0;
                     for (auto& log : all_logs) {
                         const int64_t pid = log->partition_id();
-                        if (my_partitions.count(pid) > 0) {
+                        if (snap.my_partitions.count(pid) > 0) {
                             my_logs.emplace_back(std::move(log));
-                        } else if (all_claimed_partitions.count(pid) == 0 && sender_id == min_coord_sender_id) {
+                        } else if (snap.all_claimed_partitions.count(pid) == 0 &&
+                                   sender_id == snap.min_coord_sender_id) {
                             ++orphan_count;
                             LOG(ERROR) << "combined_txn_log: orphan log for partition " << pid << " on txn " << _txn_id
                                        << " — no sender claimed this partition via "
@@ -757,9 +793,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     // Legacy path: sender 0 takes every log.
                     context->add_txn_logs(all_logs);
                 }
-            } else {
-                context->update_status(st);
             }
+            // else: woke up but post-snap shows I'm not the coordinator;
+            // silently return — another sender will collect.
         }
     }
 }
@@ -1048,6 +1084,31 @@ void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenReque
             _partition_coordinator[pid] = sender_id;
         }
     }
+}
+
+bool LakeTabletsChannel::_should_enter_collect_path(int32_t sender_id) const {
+    std::lock_guard l(_partition_coordinator_mtx);
+    if (!_enable_per_partition_coordinator) {
+        return sender_id == 0;
+    }
+    for (const auto& [_, sid] : _partition_coordinator) {
+        if (sid == sender_id) return true;
+    }
+    return false;
+}
+
+LakeTabletsChannel::PartitionCoordinatorSnapshot LakeTabletsChannel::_snapshot_coordinator(int32_t sender_id) const {
+    PartitionCoordinatorSnapshot snap;
+    std::lock_guard l(_partition_coordinator_mtx);
+    snap.per_partition_mode = _enable_per_partition_coordinator;
+    if (snap.per_partition_mode) {
+        for (const auto& [pid, sid] : _partition_coordinator) {
+            snap.all_claimed_partitions.insert(pid);
+            if (sid == sender_id) snap.my_partitions.insert(pid);
+            snap.min_coord_sender_id = std::min(snap.min_coord_sender_id, sid);
+        }
+    }
+    return snap;
 }
 
 void LakeTabletsChannel::update_profile() {
