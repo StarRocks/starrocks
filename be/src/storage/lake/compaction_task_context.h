@@ -126,6 +126,11 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     int32_t subtask_id = -1; // -1 means not a parallel compaction subtask
     // Number of subtasks in this compaction (1 for normal compaction, >1 for parallel compaction)
     int32_t subtask_count = 1;
+    // Snapshot of the parallel-subtask input footprint, copied from SubtaskInfo at execution
+    // start so that the PROFILE column of be_cloud_native_compactions can keep reporting it
+    // after the subtask leaves running_subtasks.
+    int64_t subtask_input_rowsets = 0;
+    int64_t subtask_input_bytes = 0;
     // Flag to indicate this is a merged context from parallel compaction.
     // When true, cleanup_tablet should be called in remove_states after RPC response is sent.
     bool is_parallel_merged = false;
