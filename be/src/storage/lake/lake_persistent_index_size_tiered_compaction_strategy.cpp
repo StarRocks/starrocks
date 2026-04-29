@@ -186,8 +186,7 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
     // skipping the base fileset in this iteration, we keep doing useful compaction (the non-base
     // filesets still merge into one) while letting the base wait for a quieter moment when no
     // non-base alternative is available. The base will still be merged eventually, just less often.
-    const int64_t min_non_base_to_defer =
-            config::pk_index_size_tiered_defer_base_merge_min_non_base_filesets;
+    const int64_t min_non_base_to_defer = config::pk_index_size_tiered_defer_base_merge_min_non_base_filesets;
     bool defer_base_merge = false;
     if (min_non_base_to_defer > 0) {
         size_t non_base_in_level = 0;
