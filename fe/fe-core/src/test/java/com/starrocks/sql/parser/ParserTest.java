@@ -191,6 +191,27 @@ class ParserTest {
     }
 
     @Test
+    void testVariantAsIdentifier() {
+        // VARIANT was added as a baseType keyword; it must remain usable as an identifier
+        // (bare and backticked) — e.g. as a column name or struct field name.
+        SessionVariable sessionVariable = new SessionVariable();
+        List<String> sqls = Lists.newArrayList(
+                "select variant from t",
+                "select `variant` from t",
+                "select t.variant from t",
+                "select t.`variant` from t",
+                "select cast(c as struct<variant int, other varchar(10)>) from t",
+                "select cast(c as struct<`variant` int, other varchar(10)>) from t");
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should succeed: " + sql + " errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
     void testParseLargeDecimal() {
         String sql = "select cast(1 as decimal(85,0))";
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
