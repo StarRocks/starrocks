@@ -38,6 +38,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -1248,6 +1249,73 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     for (auto&& t : bthreads) {
         bthread_join(t, nullptr);
     }
+}
+
+// Bundle-format segments let multiple rowsets point at the same physical file at disjoint
+// byte ranges. Keying the segment cache on path alone would return the first-loaded slice to
+// every later caller, silently replacing their data. The key must include the bundle offset.
+TEST_F(LakeTabletManagerTest, segment_cache_key_distinguishes_bundle_slices) {
+    FileInfo plain{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice0{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice1{.path = "oss://bucket/data/abc.dat"};
+    slice0.bundle_file_offset = 0;
+    slice1.bundle_file_offset = 10704;
+
+    const auto plain_key = plain.cache_key();
+    const auto slice0_key = slice0.cache_key();
+    const auto slice1_key = slice1.cache_key();
+
+    // offset absent or zero collapses to the legacy path-only key so the cache layout for
+    // non-bundled segments is unchanged.
+    EXPECT_EQ(plain.path, plain_key);
+    EXPECT_EQ(plain_key, slice0_key);
+
+    // A non-zero bundle offset must fork off its own key; otherwise slice1 would collide with
+    // slice0 and receive slice0's Segment on cache hit.
+    EXPECT_NE(plain_key, slice1_key);
+    EXPECT_THAT(slice1_key, testing::HasSubstr("#10704"));
+}
+
+TEST_F(LakeTabletManagerTest, load_segment_returns_distinct_slices_for_same_path) {
+    // Construct a real file that encodes two back-to-back segments (a common shape produced
+    // by cross-boundary UPSERTs written through BundleWritableFile). We cannot call the full
+    // load_segment+open() path here without a SegmentWriter scaffold — Segment::open parses the
+    // bundle slice's footer — so the cheapest correctness check is that load_segment routes
+    // two different bundle offsets to distinct metacache entries. That is the specific
+    // invariant the cache-key fix protects.
+    const std::string path = _location_provider->segment_location(1, "segment_slice_test.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
+    const std::string payload_a(1024, 'A');
+    const std::string payload_b(2048, 'B');
+    {
+        WritableFileOptions opts;
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(opts, path));
+        ASSERT_OK(of->append(payload_a));
+        ASSERT_OK(of->append(payload_b));
+        ASSERT_OK(of->close());
+    }
+
+    FileInfo info_a{.path = path};
+    info_a.size = payload_a.size();
+    info_a.bundle_file_offset = 0;
+
+    FileInfo info_b{.path = path};
+    info_b.size = payload_b.size();
+    info_b.bundle_file_offset = static_cast<int64_t>(payload_a.size());
+
+    const auto key_a = info_a.cache_key();
+    const auto key_b = info_b.cache_key();
+    ASSERT_NE(key_a, key_b);
+
+    // Seed the metacache with a marker for key_a, prove a lookup by key_b does NOT find it.
+    // This mirrors the failure mode pre-fix: lookup by path-only would collide.
+    auto marker = std::make_shared<Segment>(fs, info_a, /*segment_id*/ 0, nullptr, _tablet_manager);
+    auto cached = _tablet_manager->metacache()->cache_segment_if_absent(key_a, marker);
+    ASSERT_NE(cached, nullptr);
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_a).get(), marker.get());
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_b), nullptr);
+
+    ASSERT_OK(fs->delete_file(path));
 }
 
 #ifdef USE_STAROS
