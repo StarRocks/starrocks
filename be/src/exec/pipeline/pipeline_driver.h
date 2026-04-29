@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
@@ -45,6 +46,10 @@ class MultilaneOperator;
 using MultilaneOperatorRawPtr = MultilaneOperator*;
 using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
 } // namespace query_cache
+
+namespace spill {
+class OperatorMemoryResourceManager;
+} // namespace spill
 
 namespace pipeline {
 
@@ -213,25 +218,9 @@ public:
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   Pipeline* pipeline, int32_t driver_id)
-            : _observer(this),
-              _operators(operators),
-              _query_ctx(query_ctx),
-              _fragment_ctx(fragment_ctx),
-              _pipeline(pipeline),
-              _source_node_id(operators[0]->get_plan_node_id()),
-              _driver_id(driver_id) {
-        _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
-        for (auto& op : _operators) {
-            _operator_stages[op->get_id()] = OperatorStage::INIT;
-        }
+                   Pipeline* pipeline, int32_t driver_id);
 
-        _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
-    }
-
-    PipelineDriver(const PipelineDriver& driver)
-            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
-                             driver._driver_id) {}
+    PipelineDriver(const PipelineDriver& driver);
 
     virtual ~PipelineDriver() noexcept;
     void check_operator_close_states(const std::string& func_name);
@@ -541,14 +530,7 @@ public:
     bool local_prepare_is_done() const { return _local_prepare_is_done; }
 
 protected:
-    PipelineDriver()
-            : _observer(this),
-              _operators(),
-              _query_ctx(nullptr),
-              _fragment_ctx(nullptr),
-              _pipeline(nullptr),
-              _source_node_id(0),
-              _driver_id(0) {}
+    PipelineDriver();
 
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT_NS = 100'000'000L;
@@ -563,11 +545,15 @@ protected:
     Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
     Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
     Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
-    Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_closed(size_t operator_idx, OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
-    void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
-    void _try_to_release_buffer(RuntimeState* state, OperatorPtr& op);
+    Status _prepare_operator_mem_resource_manager(size_t operator_idx, RuntimeState* state);
+    spill::OperatorMemoryResourceManager* _operator_mem_resource_manager(size_t operator_idx);
+
+    void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, size_t operator_idx, OperatorPtr& op,
+                              const ChunkPtr& chunk);
+    void _try_to_release_buffer(RuntimeState* state, size_t operator_idx, OperatorPtr& op);
 
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
@@ -583,6 +569,8 @@ protected:
 
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;
+    // Keep this before _operators so driver teardown destroys operators first, then their managers.
+    std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
@@ -630,7 +618,7 @@ protected:
 
     std::atomic<bool> _is_operator_cancelled{false};
 
-    std::unique_ptr<PipelineTimerTask> _global_rf_timer;
+    std::shared_ptr<PipelineTimerTask> _global_rf_timer;
 
     std::atomic<bool> _local_prepare_is_done{false};
 

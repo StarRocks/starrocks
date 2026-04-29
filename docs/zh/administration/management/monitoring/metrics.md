@@ -1248,6 +1248,26 @@ starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
 - 单位：个
 - 描述：当前运行的查询计划 Fragment 数量。
 
+### plan_advisor_guide_applied_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 在查询优化阶段成功应用的 guide 总数。每当某个 guide 成功改写一个计划节点时，该指标加 1。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+### plan_advisor_guide_generated_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 成功生成并写入当前 FE 本地缓存的 guide 总数。只有分析结果非空且作为新的缓存项写入时才会累加。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+### plan_advisor_optimization_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：Plan Advisor 累计节省的查询执行耗时（毫秒）。当一个使用了缓存 guide 的查询执行时间短于生成该 guide 的原始查询时，节省的时间会累加到该指标。
+
 ### page_cache_lookup_count
 
 - 单位：个

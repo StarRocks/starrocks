@@ -403,7 +403,8 @@ public class CreateFunctionAnalyzer {
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
                 .symbolName(mainClass.getCanonicalName())
-                .cloudConfiguration(cloudConfiguration);
+                .cloudConfiguration(cloudConfiguration)
+                .setIsolationType(!"shared".equalsIgnoreCase(isolation));
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;
@@ -458,6 +459,10 @@ public class CreateFunctionAnalyzer {
                     .put(PrimitiveType.BIGINT, Long.class)
                     .put(PrimitiveType.CHAR, String.class)
                     .put(PrimitiveType.VARCHAR, String.class)
+                    .put(PrimitiveType.DECIMAL32, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL64, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL128, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL256, java.math.BigDecimal.class)
                     .build();
     private static final Class<?> JAVA_ARRAY_CLASS_TYPE = List.class;
     private static final Class<?> JAVA_MAP_CLASS_TYPE = Map.class;
@@ -634,50 +639,74 @@ public class CreateFunctionAnalyzer {
         }
 
         private void checkScalarUdfType(Method method, Type expType, Class<?> ptype, String pname) {
-            if (!(expType instanceof ScalarType)) {
-                if (expType.isArrayType()) {
-                    if (!ptype.equals(JAVA_ARRAY_CLASS_TYPE)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
-                                        clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
-                                        JAVA_ARRAY_CLASS_TYPE.getCanonicalName()));
-                    }
-                    ArrayType arrayType = (ArrayType) expType;
-                    if (PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(arrayType.getItemType().getPrimitiveType())) {
-                        return;
-                    }
+            if (expType instanceof ScalarType) {
+                ScalarType scalarType = (ScalarType) expType;
+                Class<?> cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
+                if (cls == null) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            String.format("UDF class '%s' method '%s' does not support type '%s'",
+                                    clazz.getCanonicalName(), method.getName(), scalarType));
                 }
+                if (!cls.equals(ptype)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                    clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                    cls.getCanonicalName()));
+                }
+                return;
+            }
 
-                if (expType.isMapType()) {
-                    MapType mapType = (MapType) expType;
-                    if (!ptype.equals(JAVA_MAP_CLASS_TYPE)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
-                                        clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
-                                        JAVA_ARRAY_CLASS_TYPE.getCanonicalName()));
-                    }
-                    if (PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(mapType.getKeyType().getPrimitiveType())
-                            && PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(mapType.getValueType().getPrimitiveType())) {
-                        return;
-                    }
+            if (expType.isArrayType()) {
+                if (!ptype.equals(JAVA_ARRAY_CLASS_TYPE)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                    clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                    JAVA_ARRAY_CLASS_TYPE.getCanonicalName()));
                 }
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' does not support non-scalar type '%s'",
-                                clazz.getCanonicalName(), method.getName(), expType));
+                ArrayType arrayType = (ArrayType) expType;
+                if (!isSupportedScalarUdfType(arrayType.getItemType())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            String.format("UDF class '%s' method '%s' does not support type '%s'",
+                                    clazz.getCanonicalName(), method.getName(), expType));
+                }
+                return;
             }
-            ScalarType scalarType = (ScalarType) expType;
-            Class<?> cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
-            if (cls == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' does not support type '%s'",
-                                clazz.getCanonicalName(), method.getName(), scalarType));
+
+            if (expType.isMapType()) {
+                if (!ptype.equals(JAVA_MAP_CLASS_TYPE)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                    clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                    JAVA_MAP_CLASS_TYPE.getCanonicalName()));
+                }
+                MapType mapType = (MapType) expType;
+                if (!isSupportedScalarUdfType(mapType.getKeyType())
+                        || !isSupportedScalarUdfType(mapType.getValueType())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            String.format("UDF class '%s' method '%s' does not support type '%s'",
+                                    clazz.getCanonicalName(), method.getName(), expType));
+                }
+                return;
             }
-            if (!cls.equals(ptype)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
-                                clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
-                                cls.getCanonicalName()));
+
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    String.format("UDF class '%s' method '%s' does not support non-scalar type '%s'",
+                            clazz.getCanonicalName(), method.getName(), expType));
+        }
+
+        private static boolean isSupportedScalarUdfType(Type type) {
+            if (type instanceof ScalarType) {
+                return PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(type.getPrimitiveType());
             }
+            if (type.isArrayType()) {
+                return isSupportedScalarUdfType(((ArrayType) type).getItemType());
+            }
+            if (type.isMapType()) {
+                MapType mapType = (MapType) type;
+                return isSupportedScalarUdfType(mapType.getKeyType())
+                        && isSupportedScalarUdfType(mapType.getValueType());
+            }
+            return false;
         }
 
         /**

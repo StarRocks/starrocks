@@ -32,9 +32,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -530,8 +532,10 @@ public class SplitTabletJob extends TabletReshardJob {
             txnInfo.gtid = gtid;
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
+            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
-                    computeResource, null, useAggregatePublish);
+                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
+            VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
 
             return tabletRange;
         } catch (Exception e) {

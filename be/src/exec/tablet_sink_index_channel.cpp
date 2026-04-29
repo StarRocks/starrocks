@@ -16,30 +16,33 @@
 
 #include <utility>
 
+#include "base/compression/compression_utils.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/brpc_helper.h"
+#include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
 #include "common/utils.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/compression_utils.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -200,6 +203,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
         request.mutable_lake_tablet_params()->set_enable_data_file_bundling(_parent->_enable_data_file_bundling);
         request.mutable_lake_tablet_params()->set_is_multi_statements_txn(_parent->_is_multi_statements_txn);
+        // Transaction-level switch, controlled by FE. When true, the target CN
+        // elects one coordinator per partition for combined_txn_log collection
+        // (claim set derived from per-tablet partition_id in this request). When
+        // false/unset, the legacy "sender_id == 0 collects all" rule is used.
+        request.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(
+                _parent->_enable_lake_per_partition_coordinator_txn_log);
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
@@ -416,12 +425,14 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     // try compress the ChunkPB data
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_ts_profile->compress_timer);
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
-                                                      &_compression_scratch));
+                                                      &_compression_scratch, compression_options));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -432,7 +443,7 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, compression_options));
             _compression_scratch.resize(compressed_slice.size);
         }
 

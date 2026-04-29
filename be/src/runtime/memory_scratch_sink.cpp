@@ -39,6 +39,7 @@
 
 #include <sstream>
 
+#include "column/chunk.h"
 #include "common/logging.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"

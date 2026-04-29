@@ -23,6 +23,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -30,6 +31,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "types/datum.h"
+#include "types/decimalv3.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
@@ -73,6 +76,30 @@ public:
         }
 
         return Status::NotSupported("unsupported UDF type");
+    }
+
+    // DECIMAL element columns (e.g. ARRAY<DECIMAL>) cannot reuse the primitive-int helpers
+    // above: those produce Integer[] / Long[] arrays, not BigDecimal[]. Route them through
+    // the DECIMAL-aware Java helper, taking precision/scale from the column itself.
+    template <typename T>
+    Status do_visit(const DecimalV3Column<T>& column) {
+        LogicalType logical_type = TYPE_UNKNOWN;
+        if constexpr (std::is_same_v<T, int32_t>) {
+            logical_type = TYPE_DECIMAL32;
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            logical_type = TYPE_DECIMAL64;
+        } else if constexpr (std::is_same_v<T, int128_t>) {
+            logical_type = TYPE_DECIMAL128;
+        } else if constexpr (std::is_same_v<T, int256_t>) {
+            logical_type = TYPE_DECIMAL256;
+        } else {
+            return Status::NotSupported("unsupported decimal column width");
+        }
+        const auto container = column.immutable_data();
+        auto data_buf = std::make_unique<DirectByteBuffer>((void*)container.data(), container.size() * sizeof(T));
+        ASSIGN_OR_RETURN(_result, _helper.create_boxed_decimal_array(logical_type, column.scale(), column.size(),
+                                                                     handle(_nulls_buffer), handle(data_buf)));
+        return Status::OK();
     }
 
     template <typename T>
@@ -171,6 +198,69 @@ jvalue cast_to_jvalue(RunTimeCppType<TYPE> data_value, JVMFunctionHelper& helper
         return {.l = APPLY_FUNC};                                                              \
     }
 
+// Build a java.math.BigDecimal jobject for row `row_num` of a DECIMAL column. Unified helper
+// used by both the single-value path (cast_to_jvalue) and the batch const-column path.
+static jobject decimal_cell_to_bigdecimal(const TypeDescriptor& td, const Column* col, int row_num,
+                                          JVMFunctionHelper& helper) {
+    switch (td.type) {
+    case TYPE_DECIMAL32: {
+        auto* spec = down_cast<const RunTimeColumnType<TYPE_DECIMAL32>*>(col);
+        return helper.newBigDecimal(static_cast<int64_t>(spec->immutable_data()[row_num]), td.scale);
+    }
+    case TYPE_DECIMAL64: {
+        auto* spec = down_cast<const RunTimeColumnType<TYPE_DECIMAL64>*>(col);
+        return helper.newBigDecimal(spec->immutable_data()[row_num], td.scale);
+    }
+    case TYPE_DECIMAL128: {
+        auto* spec = down_cast<const RunTimeColumnType<TYPE_DECIMAL128>*>(col);
+        return helper.newBigDecimal(
+                DecimalV3Cast::to_string<int128_t>(spec->immutable_data()[row_num], td.precision, td.scale));
+    }
+    case TYPE_DECIMAL256: {
+        auto* spec = down_cast<const RunTimeColumnType<TYPE_DECIMAL256>*>(col);
+        return helper.newBigDecimal(
+                DecimalV3Cast::to_string<int256_t>(spec->immutable_data()[row_num], td.precision, td.scale));
+    }
+    default:
+        DCHECK(false) << "unsupported decimal type: " << td.type;
+        return nullptr;
+    }
+}
+
+// Parse a BigDecimal's string form into a native DECIMAL column using the column's
+// declared precision/scale. On overflow: error if `error_if_overflow`, else append NULL.
+static Status append_decimal_string_to_column(const TypeDescriptor& td, const std::string& str, Column* col,
+                                              bool error_if_overflow) {
+    Datum datum;
+    bool err = false;
+#define APPEND_DECIMAL_CASE(LOGICAL_TYPE, CPP_TYPE)                                                     \
+    case LOGICAL_TYPE: {                                                                                \
+        CPP_TYPE v{};                                                                                   \
+        err = DecimalV3Cast::from_string<CPP_TYPE>(&v, td.precision, td.scale, str.data(), str.size()); \
+        datum = Datum(v);                                                                               \
+        break;                                                                                          \
+    }
+    switch (td.type) {
+        APPEND_DECIMAL_CASE(TYPE_DECIMAL32, int32_t)
+        APPEND_DECIMAL_CASE(TYPE_DECIMAL64, int64_t)
+        APPEND_DECIMAL_CASE(TYPE_DECIMAL128, int128_t)
+        APPEND_DECIMAL_CASE(TYPE_DECIMAL256, int256_t)
+    default:
+        return Status::NotSupported(fmt::format("unsupported decimal type: {}", td.type));
+    }
+#undef APPEND_DECIMAL_CASE
+    if (err) {
+        if (error_if_overflow) {
+            return Status::InvalidArgument(
+                    fmt::format("Cannot parse '{}' into DECIMAL({},{})", str, td.precision, td.scale));
+        }
+        col->append_nulls(1);
+        return Status::OK();
+    }
+    col->append_datum(datum);
+    return Status::OK();
+}
+
 DEFINE_CAST_TO_JVALUE(TYPE_BOOLEAN, helper.newBoolean(data_value));
 DEFINE_CAST_TO_JVALUE(TYPE_TINYINT, helper.newByte(data_value));
 DEFINE_CAST_TO_JVALUE(TYPE_SMALLINT, helper.newShort(data_value));
@@ -243,6 +333,13 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         v.l = helper.newString(slice.get_data(), slice.get_size());
         break;
     }
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256: {
+        v.l = decimal_cell_to_bigdecimal(type_desc, col, row_num, helper);
+        break;
+    }
     case TYPE_ARRAY: {
         auto spec_col = down_cast<const ArrayColumn*>(col);
         auto [offset, size] = spec_col->get_element_offset_size(row_num);
@@ -297,20 +394,45 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
     return v;
 }
 
-void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val) {
-    DCHECK(method_type_desc.is_box);
+// Translate a JNI-side ArithmeticException raised by UDFHelper.unscaledLong /
+// UDFHelper.unscaledLEBytes into either a non-OK Status (REPORT_ERROR) or a NULL row
+// (OUTPUT_NULL). Always clears the pending exception so the JVM is left in a clean state.
+static Status handle_decimal_overflow(JNIEnv* env, const TypeDescriptor& td, Column* col, int row_num,
+                                      bool error_if_overflow) {
+    if (!env->ExceptionCheck()) {
+        return Status::OK();
+    }
+    if (error_if_overflow) {
+        auto& helper = JVMFunctionHelper::getInstance();
+        std::string msg;
+        if (jthrowable jthr = env->ExceptionOccurred(); jthr != nullptr) {
+            msg = helper.dumpExceptionString(jthr);
+            env->DeleteLocalRef(jthr);
+        }
+        env->ExceptionClear();
+        return Status::InvalidArgument(fmt::format("DECIMAL({},{}) overflow: {}", td.precision, td.scale, msg));
+    }
+    env->ExceptionClear();
+    if (col->is_nullable()) {
+        down_cast<NullableColumn*>(col)->set_null(row_num);
+    }
+    return Status::OK();
+}
+
+Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, int row_num, jvalue val,
+                     bool error_if_overflow) {
+    DCHECK(is_box);
     auto& helper = JVMFunctionHelper::getInstance();
     Column* data_col = col;
-    if (col->is_nullable() && method_type_desc.type != LogicalType::TYPE_VARCHAR &&
-        method_type_desc.type != LogicalType::TYPE_CHAR) {
+    if (col->is_nullable() && type_desc.type != LogicalType::TYPE_VARCHAR && type_desc.type != LogicalType::TYPE_CHAR) {
         auto* nullable_column = down_cast<NullableColumn*>(col);
         if (val.l == nullptr) {
             nullable_column->set_null(row_num);
-            return;
+            return Status::OK();
         }
         data_col = nullable_column->data_column_raw_ptr();
     }
-    switch (method_type_desc.type) {
+    switch (type_desc.type) {
 #define ASSIGN_BOX_TYPE(NAME, TYPE)                                                \
     case NAME: {                                                                   \
         auto data = helper.val##TYPE(val.l);                                       \
@@ -334,13 +456,58 @@ void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_n
         }
         break;
     }
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64: {
+        // DECIMAL32/64: ask Java for the unscaled value as a long. If the helper raised
+        // an ArithmeticException (precision overflow or value > long range), translate it
+        // — `unscaled` and the data column slot must not be touched in that branch.
+        auto* env = helper.getEnv();
+        jlong unscaled = helper.unscaled_long(val.l, type_desc.precision, type_desc.scale);
+        if (env->ExceptionCheck()) {
+            return handle_decimal_overflow(env, type_desc, col, row_num, error_if_overflow);
+        }
+        if (type_desc.type == TYPE_DECIMAL32) {
+            down_cast<RunTimeColumnType<TYPE_DECIMAL32>*>(data_col)->get_data()[row_num] =
+                    static_cast<int32_t>(unscaled);
+        } else {
+            down_cast<RunTimeColumnType<TYPE_DECIMAL64>*>(data_col)->get_data()[row_num] =
+                    static_cast<int64_t>(unscaled);
+        }
+        break;
+    }
+    case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256: {
+        // DECIMAL128/256: ask Java for sign-extended little-endian bytes; copy directly into
+        // the int128/int256 cell at row_num. Same overflow short-circuit as the narrow path
+        // — `bytes` is null when the helper threw, so we must not fall through to
+        // GetByteArrayRegion.
+        auto* env = helper.getEnv();
+        const int byte_width = (type_desc.type == TYPE_DECIMAL128) ? 16 : 32;
+        jbyteArray bytes = helper.unscaled_le_bytes(val.l, type_desc.precision, type_desc.scale, byte_width);
+        if (env->ExceptionCheck()) {
+            return handle_decimal_overflow(env, type_desc, col, row_num, error_if_overflow);
+        }
+        DCHECK(bytes != nullptr);
+        LOCAL_REF_GUARD(bytes);
+        if (type_desc.type == TYPE_DECIMAL128) {
+            int128_t v;
+            env->GetByteArrayRegion(bytes, 0, 16, reinterpret_cast<jbyte*>(&v));
+            down_cast<RunTimeColumnType<TYPE_DECIMAL128>*>(data_col)->get_data()[row_num] = v;
+        } else {
+            int256_t v;
+            env->GetByteArrayRegion(bytes, 0, 32, reinterpret_cast<jbyte*>(&v));
+            down_cast<RunTimeColumnType<TYPE_DECIMAL256>*>(data_col)->get_data()[row_num] = v;
+        }
+        break;
+    }
     default:
         DCHECK(false);
         break;
     }
+    return Status::OK();
 }
 
-Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val) {
+Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val, bool error_if_overflow) {
     auto& helper = JVMFunctionHelper::getInstance();
     if (col->is_nullable() && val.l == nullptr) {
         col->append_nulls(1);
@@ -379,6 +546,14 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
             std::string buffer;
             auto slice = helper.sliceVal((jstring)val.l, &buffer);
             col->append_datum(Datum(slice));
+            break;
+        }
+        case TYPE_DECIMAL32:
+        case TYPE_DECIMAL64:
+        case TYPE_DECIMAL128:
+        case TYPE_DECIMAL256: {
+            RETURN_IF_ERROR(
+                    append_decimal_string_to_column(type_desc, helper.to_string(val.l), col, error_if_overflow));
             break;
         }
         case TYPE_ARRAY: {
@@ -432,7 +607,7 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
         }
         default:
             DCHECK(false) << "unsupport UDF TYPE" << type_desc.type;
-            return Status::NotSupported(fmt::format("unsupport UDF TYPE:{}", type_desc.type));
+            return Status::NotSupported(fmt::format("unsupport UDF TYPE:{}", static_cast<int>(type_desc.type)));
         }
     }
     return Status::OK();
@@ -473,6 +648,18 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val) {
         }
         break;
     }
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256: {
+        if (!env->IsInstanceOf(val, helper.big_decimal_class())) {
+            auto clazz = env->GetObjectClass(val);
+            LOCAL_REF_GUARD(clazz);
+            return Status::InternalError(
+                    fmt::format("Type not matched, expect java.math.BigDecimal, but got {}", helper.to_string(clazz)));
+        }
+        break;
+    }
     case TYPE_ARRAY: {
         if (!env->IsInstanceOf(val, helper.list_meta().list_class->clazz())) {
             auto clazz = env->GetObjectClass(val);
@@ -480,14 +667,16 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val) {
             return Status::InternalError(
                     fmt::format("Type not matched, expect List, but got {}", helper.to_string(clazz)));
         }
+        break;
     }
     case TYPE_MAP: {
         if (!env->IsInstanceOf(val, helper.map_meta().map_class->clazz())) {
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
             return Status::InternalError(
-                    fmt::format("Type not matched, expect List, but got {}", helper.to_string(clazz)));
+                    fmt::format("Type not matched, expect Map, but got {}", helper.to_string(clazz)));
         }
+        break;
     }
     default:
         DCHECK(false) << "unsupport UDF TYPE" << type_desc.type;
@@ -533,22 +722,75 @@ jobject JavaDataTypeConverter::convert_to_states_with_filter(FunctionContext* ct
     return arr;
 }
 
+// Wrap a DECIMAL column's raw storage as a DirectByteBuffer over `count` contiguous
+// unscaled integers of the expected cpp width.
+template <LogicalType TYPE>
+static std::unique_ptr<DirectByteBuffer> wrap_decimal_data(const Column* data_column) {
+    const auto* spec = down_cast<const RunTimeColumnType<TYPE>*>(data_column);
+    const auto container = spec->immutable_data();
+    using CppType = RunTimeCppType<TYPE>;
+    return std::make_unique<DirectByteBuffer>((void*)container.data(), container.size() * sizeof(CppType));
+}
+
+// Build a BigDecimal[] for a DECIMAL* input column by handing the raw unscaled-integer buffer
+// (and null buffer, if any) to the Java helper together with the column scale.
+static StatusOr<jobject> build_decimal_boxed_array(const TypeDescriptor& type_desc, const Column* column,
+                                                   int num_rows) {
+    auto& helper = JVMFunctionHelper::getInstance();
+
+    const Column* data_column = column;
+    std::unique_ptr<DirectByteBuffer> null_buf;
+    if (column->is_nullable()) {
+        const auto* nullable_column = down_cast<const NullableColumn*>(column);
+        const auto null_data = nullable_column->null_column_raw_ptr()->immutable_data();
+        null_buf = std::make_unique<DirectByteBuffer>((void*)null_data.data(), null_data.size() * sizeof(uint8_t));
+        data_column = nullable_column->data_column().get();
+    }
+
+    std::unique_ptr<DirectByteBuffer> data_buf;
+    switch (type_desc.type) {
+    case TYPE_DECIMAL32:
+        data_buf = wrap_decimal_data<TYPE_DECIMAL32>(data_column);
+        break;
+    case TYPE_DECIMAL64:
+        data_buf = wrap_decimal_data<TYPE_DECIMAL64>(data_column);
+        break;
+    case TYPE_DECIMAL128:
+        data_buf = wrap_decimal_data<TYPE_DECIMAL128>(data_column);
+        break;
+    case TYPE_DECIMAL256:
+        // int256_t layout is {uint128_t low; int128_t high;}, giving 32 little-endian bytes.
+        static_assert(sizeof(RunTimeCppType<TYPE_DECIMAL256>) == 32, "int256_t must be 32 bytes for DECIMAL256 layout");
+        data_buf = wrap_decimal_data<TYPE_DECIMAL256>(data_column);
+        break;
+    default:
+        return Status::NotSupported(fmt::format("unsupported decimal type: {}", type_desc.type));
+    }
+
+    jobject null_handle = null_buf ? null_buf->handle() : nullptr;
+    return helper.create_boxed_decimal_array(type_desc.type, type_desc.scale, num_rows, null_handle,
+                                             data_buf->handle());
+}
+
 Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const Column** columns, int num_cols,
                                                      int num_rows, std::vector<jobject>* res) {
-    std::vector<DirectByteBuffer> buffers;
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
     for (int i = 0; i < num_cols; ++i) {
         jobject arg = nullptr;
+        const TypeDescriptor& arg_type = *ctx->get_arg_type(i);
+        const bool is_decimal = is_decimalv3_field_type(arg_type.type);
         if (columns[i]->only_null() ||
             (columns[i]->is_nullable() && down_cast<const NullableColumn*>(columns[i])->null_count() == num_rows)) {
             arg = helper.create_array(num_rows);
         } else if (columns[i]->is_constant()) {
             auto* data_column = down_cast<const ConstColumn*>(columns[i])->data_column_raw_ptr();
             data_column->as_mutable_raw_ptr()->resize(1);
-            ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(*ctx->get_arg_type(i), true, data_column, 0));
+            ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(arg_type, true, data_column, 0));
             arg = helper.create_object_array(jval.l, num_rows);
             env->DeleteLocalRef(jval.l);
+        } else if (is_decimal) {
+            ASSIGN_OR_RETURN(arg, build_decimal_boxed_array(arg_type, columns[i], num_rows));
         } else {
             JavaArrayConverter converter(helper);
             RETURN_IF_ERROR(columns[i]->accept(&converter));

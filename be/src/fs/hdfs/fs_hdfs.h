@@ -35,4 +35,13 @@ struct HdfsReadMetricsKey {
 
 std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options);
 
+namespace fs {
+
+struct FileSystemProvider;
+
+FileSystemProvider new_hdfs_fallback_file_system_provider(int priority = -100);
+FileSystemProvider new_hdfs_file_system_provider(int priority = 1000);
+
+} // namespace fs
+
 } // namespace starrocks

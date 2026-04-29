@@ -30,7 +30,7 @@ Status WaitSourceOperator::prepare(RuntimeState* state) {
     _wait_context->observable->attach_source_observer(state, observer());
     if (state->enable_event_scheduler()) {
         auto fragment_ctx = state->fragment_ctx();
-        auto timer = std::make_unique<RFScanWaitTimeout>();
+        auto timer = std::make_shared<RFScanWaitTimeout>();
         timer->add_observer(state, observer());
         _wait_timer_task = std::move(timer);
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
@@ -79,7 +79,7 @@ Status WaitSinkOperator::prepare(RuntimeState* state) {
         // driver when the block timeout elapses, so that need_input() gets re-evaluated and the
         // driver resumes rather than hanging until query timeout.
         auto fragment_ctx = state->fragment_ctx();
-        auto timer = std::make_unique<RFScanWaitTimeout>();
+        auto timer = std::make_shared<RFScanWaitTimeout>();
         timer->add_observer(state, observer());
         _wait_timer_task = std::move(timer);
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());

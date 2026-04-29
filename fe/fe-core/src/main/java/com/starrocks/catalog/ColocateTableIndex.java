@@ -480,6 +480,16 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    public boolean isRangeColocateGroup(GroupId groupId) {
+        readLock();
+        try {
+            ColocateGroupSchema schema = group2Schema.get(groupId);
+            return schema != null && schema.isRangeColocate();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public boolean isGroupExist(GroupId groupId) {
         readLock();
         try {

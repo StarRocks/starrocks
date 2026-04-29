@@ -18,6 +18,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -398,6 +399,28 @@ public class WarehouseManager implements Writable {
 
     public ComputeResource getCompactionComputeResource(long tableId) {
         return DEFAULT_RESOURCE;
+    }
+
+    public ComputeResource getVectorIndexBuildComputeResource(long tableId) {
+        // Route async vector index build work to the warehouse named by
+        // lake_vector_index_build_warehouse so users can isolate it from query
+        // workload. Fall back to the default resource if the configured
+        // warehouse is unset, missing, or unavailable — building on the
+        // default warehouse is always preferable to dropping the build.
+        String warehouseName = Config.lake_vector_index_build_warehouse;
+        if (warehouseName == null || warehouseName.isEmpty()
+                || warehouseName.equalsIgnoreCase(DEFAULT_WAREHOUSE_NAME)) {
+            return DEFAULT_RESOURCE;
+        }
+        Warehouse wh = getWarehouseAllowNull(warehouseName);
+        if (wh == null) {
+            return DEFAULT_RESOURCE;
+        }
+        try {
+            return acquireComputeResource(CRAcquireContext.of(wh.getId()));
+        } catch (Exception e) {
+            return DEFAULT_RESOURCE;
+        }
     }
 
     public Warehouse getBackgroundWarehouse() {

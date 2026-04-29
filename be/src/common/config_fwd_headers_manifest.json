@@ -194,6 +194,7 @@
         "split_exchanger_buffer_chunk_num",
         "two_level_memory_threshold",
         "enable_pipeline_driver_parallel_prepare",
+        "enable_lock_free_scan_task_queue",
         "fetch_max_buffer_chunk_num",
         "max_batch_num_per_fetch_operator",
         "max_lookup_batch_request",
@@ -242,6 +243,8 @@
         "pipeline_scan_thread_pool_thread_num",
         "pipeline_sink_io_thread_pool_queue_size",
         "pipeline_sink_io_thread_pool_thread_num",
+        "lake_partial_update_thread_pool_max_threads",
+        "lake_partial_update_thread_pool_queue_size",
         "pk_index_memtable_flush_threadpool_max_threads",
         "pk_index_memtable_flush_threadpool_size",
         "pk_index_parallel_execution_threadpool_max_threads",
@@ -686,6 +689,7 @@
         "lake_pk_compaction_min_input_segments",
         "enable_light_pk_compaction_publish",
         "enable_lake_compaction_use_partial_segments",
+        "enable_lake_compaction_range_split",
         "lake_compaction_chunk_size"
       ]
     },
@@ -766,6 +770,7 @@
     {
       "path": "be/src/common/config_rowset_fwd.h",
       "configs": [
+        "segment_sort_key_sample_row_interval",
         "enable_transparent_data_encryption",
         "default_num_rows_per_column_file_block",
         "data_page_size",

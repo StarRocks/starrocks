@@ -144,6 +144,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.leader.TabletCollector;
@@ -199,6 +200,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -382,6 +384,7 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
+    private boolean deployerListenerRegistered = false;
 
     private HAProtocol haProtocol = null;
 
@@ -479,6 +482,9 @@ public class GlobalStateMgr {
 
     // For LakeTable
     private final CompactionMgr compactionMgr;
+
+    // For async vector index build
+    private VectorIndexBuildScheduler vectorIndexBuildScheduler;
 
     // For compaction forbidden policy
     private final CompactionControlScheduler compactionControlScheduler;
@@ -641,6 +647,10 @@ public class GlobalStateMgr {
 
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
+    }
+
+    public VectorIndexBuildScheduler getVectorIndexBuildScheduler() {
+        return vectorIndexBuildScheduler;
     }
 
     public CompactionControlScheduler getCompactionControlScheduler() {
@@ -809,6 +819,7 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
             this.fullVacuumDaemon = new FullVacuumDaemon();
+            this.vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -1605,6 +1616,8 @@ public class GlobalStateMgr {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
             fullVacuumDaemon.start();
+
+            vectorIndexBuildScheduler.start();
         }
 
         if (Config.enable_safe_mode) {
@@ -1628,6 +1641,42 @@ public class GlobalStateMgr {
 
         if (RunMode.isSharedDataMode()) {
             tabletReshardJobMgr.start();
+        }
+    }
+
+    /**
+     * Symmetric counterpart to {@link #startLeaderOnlyDaemonThreads()}. Stops the leader-only
+     * daemons that have been migrated to {@link com.starrocks.common.util.LeaderDaemon}, in reverse
+     * start order, so leader-session state is released promptly during demotion and the FE
+     * singletons become reusable when this node is re-elected.
+     *
+     * TODO: migrate the remaining {@code Daemon}-based leader tasks and add them here.
+     */
+    void stopLeaderOnlyDaemonThreads() {
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        // Reverse of startLeaderOnlyDaemonThreads(): stop downstream consumers first so that
+        // upstream producers (heartbeat) can wind down without piling work on a draining sink.
+        try {
+            reportHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop reportHandler failed", t);
+        }
+        try {
+            publishVersionDaemon.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop publishVersionDaemon failed", t);
+        }
+        if (!RunMode.isSharedDataMode()) {
+            try {
+                tabletScheduler.stopGracefully(timeoutMs);
+            } catch (Throwable t) {
+                LOG.warn("stop tabletScheduler failed", t);
+            }
+        }
+        try {
+            heartbeatMgr.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop heartbeatMgr failed", t);
         }
     }
 
@@ -1661,6 +1710,12 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
             StarMgrServer.getCurrentState().startCheckpointWorker();
+        }
+        // Register listeners that need a fully-constructed GlobalStateMgr (e.g. classes whose
+        // own static initializer transitively touches MetricRepo / getCurrentState()).
+        if (!deployerListenerRegistered) {
+            Deployer.registerConfigListener(configRefreshDaemon);
+            deployerListenerRegistered = true;
         }
         configRefreshDaemon.start();
 
@@ -1701,6 +1756,13 @@ public class GlobalStateMgr {
         if (!isDefaultWarehouseCreated) {
             // A brand-new cluster was up for the first time, the follower/observer node initializes its default warehouse here.
             initDefaultWarehouse();
+        }
+
+        // If this node was serving as LEADER, cleanly stop leader-only daemons before taking on
+        // the new role. Runs after the admission fence is closed by the demotion orchestrator so
+        // no new leader-side work can enter while cleanup is in flight.
+        if (feType == FrontendNodeType.LEADER) {
+            stopLeaderOnlyDaemonThreads();
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER

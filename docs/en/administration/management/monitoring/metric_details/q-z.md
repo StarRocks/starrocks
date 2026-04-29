@@ -66,6 +66,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total number of scanned rows.
 
+## `query_spill_trigger_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spillable operator instances that triggered at least one spill, broken down by storage backend (`local`, `remote`). Incremented once per operator instance at the first flush callback.
+
+## `query_spill_bytes_write_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes written by spillable operators to spill storage, broken down by storage backend (`local`, `remote`).
+
+## `query_spill_bytes_read_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes read back from spill storage during restore, broken down by storage backend.
+
+## `query_spill_blocks_write_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks allocated for writing, broken down by storage backend. Useful for estimating IO count scale on the write path.
+
+## `query_spill_blocks_read_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks opened for reading, broken down by storage backend. Useful for estimating IO count scale on the read path.
+
+## `query_spill_write_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in write-side spill IO (block append and flush), broken down by storage backend. Useful for tracking write-side spill performance.
+
+## `query_spill_read_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in read-side spill IO (block reads during restore), broken down by storage backend. Useful for tracking read-side spill performance.
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `resource_group_bigquery_count`
@@ -203,6 +245,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of small file caches.
 
+## `spill_disk_bytes_used`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
+
 ## `snmp`
 
 - Unit: -
@@ -268,6 +316,72 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_flat_json_access_hit_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access hits observed during scan. Aggregated from the per-scan `flat_json_hits` and `merge_json_hits` statistics.
+
+## `starrocks_be_flat_json_access_miss_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access misses observed during scan. Aggregated from the per-scan `dynamic_json_hits` statistics (paths not materialized as flat columns).
+
+## `starrocks_be_flat_json_cast_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent casting flat JSON sub-column values during scan.
+
+## `starrocks_be_flat_json_compaction_schema_change_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of times `HyperJsonTransformer` is re-initialized for compaction input with a different flat JSON schema than the previous input. A high rate indicates schema churn across segments being compacted.
+
+## `starrocks_be_flat_json_compaction_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of compaction invocations that flatten JSON columns via `FlatJsonColumnCompactor`.
+
+## `starrocks_be_flat_json_flatten_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent flattening JSON values during scan.
+
+## `starrocks_be_flat_json_merge_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent merging flat JSON sub-columns back to full JSON during scan.
+
+## `starrocks_be_flat_json_paths_discovered_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths discovered by `JsonPathDeriver` during flat JSON segment writes.
+
+## `starrocks_be_flat_json_paths_extracted_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths materialized as sub-columns by `FlatJsonColumnWriter` (includes the synthetic null/remain columns).
+
+## `starrocks_be_flat_json_segment_write_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of segment writes that invoke flat JSON column extraction.
+
+## `starrocks_be_flat_json_write_rows_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 

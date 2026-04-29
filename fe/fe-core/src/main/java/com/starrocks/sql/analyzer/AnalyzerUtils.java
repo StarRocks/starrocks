@@ -807,6 +807,25 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static void prohibitTimeTravelQuery(StatementBase statementBase, String operation) {
+        for (TableRelation tableRelation : collectTableRelations(statementBase)) {
+            if (tableRelation.getQueryPeriod() == null && Strings.isNullOrEmpty(tableRelation.getQueryPeriodString())) {
+                continue;
+            }
+
+            String tableName = tableRelation.getResolveTableName() != null
+                    ? tableRelation.getResolveTableName().toSql()
+                    : tableRelation.getName().toSql();
+            String queryPeriod = Strings.nullToEmpty(tableRelation.getQueryPeriodString()).trim();
+            if (queryPeriod.isEmpty()) {
+                throw new SemanticException("Do not support %s with time travel clause on table %s",
+                        operation, tableName);
+            }
+            throw new SemanticException("Do not support %s with time travel clause `%s` on table %s",
+                    operation, queryPeriod, tableName);
+        }
+    }
+
     public static List<ViewRelation> collectViewRelations(StatementBase statementBase) {
         List<ViewRelation> viewRelations = Lists.newArrayList();
         new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);

@@ -61,8 +61,8 @@ public:
 
     int64_t cpu_weight() const;
 
-    int64_t vruntime_ns() const { return _vruntime_ns; }
-    int64_t runtime_ns() const { return _vruntime_ns * cpu_weight(); }
+    int64_t vruntime_ns() const { return _vruntime_ns.load(std::memory_order_acquire); }
+    int64_t runtime_ns() const { return _vruntime_ns.load(std::memory_order_acquire) * cpu_weight(); }
 
     /// Return the growth runtime in the range [last, curr].
     /// For example:
@@ -72,11 +72,13 @@ public:
     ///     mark_last_runtime_ns();           // Move last to curr.
     int64_t growth_runtime_ns() const { return _curr_unadjusted_runtime_ns - _last_unadjusted_runtime_ns; }
     /// Update curr runtime to the latest runtime.
-    void mark_curr_runtime_ns() { _curr_unadjusted_runtime_ns = _unadjusted_runtime_ns; }
+    void mark_curr_runtime_ns() {
+        _curr_unadjusted_runtime_ns = _unadjusted_runtime_ns.load(std::memory_order_relaxed);
+    }
     /// Update last runtime to the curr runtime.
     void mark_last_runtime_ns() { _last_unadjusted_runtime_ns = _curr_unadjusted_runtime_ns; }
 
-    int64_t unadjusted_runtime_ns() const { return _unadjusted_runtime_ns; }
+    int64_t unadjusted_runtime_ns() const { return _unadjusted_runtime_ns.load(std::memory_order_acquire); }
 
     void incr_runtime_ns(int64_t runtime_ns);
     void adjust_runtime_ns(int64_t runtime_ns);
@@ -87,9 +89,9 @@ private:
     std::unique_ptr<Q> _my_queue; // The queue owned by this group.
     Q* _in_queue = nullptr;       // The queue on which this entity is queued.
 
-    int64_t _vruntime_ns = 0;
+    std::atomic<int64_t> _vruntime_ns{0};
 
-    int64_t _unadjusted_runtime_ns = 0;
+    std::atomic<int64_t> _unadjusted_runtime_ns{0};
     int64_t _curr_unadjusted_runtime_ns = 0;
     int64_t _last_unadjusted_runtime_ns = 0;
 };

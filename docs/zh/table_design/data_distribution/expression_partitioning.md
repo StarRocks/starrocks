@@ -389,7 +389,7 @@ BETWEEN '2024-01-01' AND '2024-03-31';
 
 ## 限制
 
-- 从 v3.1.0 开始，StarRocks 的存算分离模式支持[时间函数表达式](#partitioning-based-on-a-simple-time-function-expression)。从 v3.1.1 开始，StarRocks 的共享数据模式进一步支持[列表达式](#partitioning-based-on-the-column-expression-since-v31)。
+- 从 v3.1.0 开始，StarRocks 的存算分离模式支持[时间函数表达式](#partitioning-based-on-a-simple-time-function-expression)。从 v3.1.1 开始，StarRocks 的存算分离模式进一步支持[列表达式](#partitioning-based-on-the-column-expression-since-v31)。
 - 目前，不支持使用 CTAS 创建配置了表达式分区的表。
 - 目前，不支持使用 Spark Load 向使用表达式分区的表加载数据。
 - 当使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 语句删除通过列表达式创建的分区时，分区中的数据将直接删除且无法恢复。

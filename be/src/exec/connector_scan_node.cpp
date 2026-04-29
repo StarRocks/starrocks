@@ -20,6 +20,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/thread/threadpool.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
@@ -160,7 +161,7 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
                                         _estimated_scan_row_bytes * runtime_state()->chunk_size());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 

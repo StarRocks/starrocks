@@ -29,6 +29,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
@@ -42,6 +44,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -1152,6 +1155,142 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(700_000L, isNullStat.getHistogram().getMCV().get("0"));
     }
 
+
+    @Test
+    public void testArrayMapWithDependentLambda() {
+        // GIVEN
+        final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
+        final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
+
+        final var condition = new BinaryPredicateOperator(BinaryType.EQ, lambdaArg, ConstantOperator.createNull(IntegerType.INT));
+        final var nullConst = ConstantOperator.createNull(IntegerType.INT);
+
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.INT, Lists.newArrayList(condition, lambdaArg, nullConst));
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), ifOp, IntegerType.INT);
+
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(10_000) //
+                .addColumnStatistic(arrayCol, ColumnStatistic.builder() //
+                        .setMinValue(Double.NEGATIVE_INFINITY) //
+                        .setMaxValue(Double.POSITIVE_INFINITY) //
+                        .setNullsFraction(0.1) //
+                        .setAverageRowSize(16) //
+                        .setDistinctValuesCount(50) //
+                        .setCollectionSize(5) //
+                        .build())
+                .build();
+
+        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
+                Lists.newArrayList(lambda, arrayCol));
+
+        // WHEN
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(arrayMap, stats);
+
+        // THEN
+        Assertions.assertNotNull(exprStats);
+        Assertions.assertFalse(exprStats.isUnknown());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, exprStats.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, exprStats.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.1, exprStats.getNullsFraction(), 0.001);
+        Assertions.assertEquals(50, exprStats.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(16.0, exprStats.getAverageRowSize(), 0.001);
+    }
+
+    @Test
+    public void testArrayMapWithIndependentLambda() {
+        // GIVEN
+        final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
+        final var otherCol = new ColumnRefOperator(2, IntegerType.INT, "other", true);
+        // Lambda argument 'x' is a separate ColumnRefOperator with isLambdaArgument=true.
+        final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
+
+        var addOp = new CallOperator(FunctionSet.ADD, IntegerType.INT,
+                Lists.newArrayList(otherCol, new ConstantOperator(1, IntegerType.INT)));
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), addOp, IntegerType.INT);
+
+        final var stats = Statistics.builder()
+                .setOutputRowCount(10_000) //
+                .addColumnStatistic(arrayCol, ColumnStatistic.builder() //
+                        .setMinValue(Double.NEGATIVE_INFINITY) //
+                        .setMaxValue(Double.POSITIVE_INFINITY) //
+                        .setNullsFraction(0.1) //
+                        .setAverageRowSize(16) //
+                        .setDistinctValuesCount(50) //
+                        .setCollectionSize(5) //
+                        .build())
+                .addColumnStatistic(otherCol, ColumnStatistic.builder() //
+                        .setMinValue(2000) //
+                        .setMaxValue(3000) //
+                        .setNullsFraction(0.5) //
+                        .setAverageRowSize(16) //
+                        .setDistinctValuesCount(2) //
+                        .build())
+                .build();
+
+
+        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
+                Lists.newArrayList(lambda, arrayCol));
+        // WHEN
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(arrayMap, stats);
+
+        // THEN
+        Assertions.assertNotNull(exprStats);
+        Assertions.assertFalse(exprStats.isUnknown());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, exprStats.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, exprStats.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.1, exprStats.getNullsFraction(), 0.001);
+        // Even though the lambda body has NDV=2, array_map produces arrays, and different input
+        // array structures (lengths/NULLs) yield distinct output arrays, so NDV ≥ input array NDV.
+        Assertions.assertEquals(50, exprStats.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(16, exprStats.getAverageRowSize(), 0.001);
+    }
+
+    @Test
+    public void testArrayMapWithCaseWhenAndLambdaArgNotInStats() {
+        // GIVEN
+        final var idCol = new ColumnRefOperator(3, IntegerType.INT, "ID", true);
+        final var arrayTestCol = new ColumnRefOperator(4, ArrayType.ARRAY_INT, "ARRAY_TEST", true);
+        final var lambdaArgX = new ColumnRefOperator(5, IntegerType.INT, "x", true, true);
+
+        final var isNotNullPredicate = new IsNullPredicateOperator(true, idCol);
+        final var caseWhen = new CaseWhenOperator(IntegerType.INT, null, null,
+                Lists.newArrayList(isNotNullPredicate, lambdaArgX));
+
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArgX), caseWhen, IntegerType.INT);
+
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(10_000)
+                .addColumnStatistic(idCol, ColumnStatistic.builder()
+                        .setMinValue(1)
+                        .setMaxValue(1000)
+                        .setNullsFraction(0.05)
+                        .setAverageRowSize(4)
+                        .setDistinctValuesCount(500)
+                        .build())
+                .addColumnStatistic(arrayTestCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0.1)
+                        .setAverageRowSize(16)
+                        .setDistinctValuesCount(50)
+                        .setCollectionSize(5)
+                        .build())
+                .build();
+
+        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
+                Lists.newArrayList(lambda, arrayTestCol));
+
+        // WHEN
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(arrayMap, stats);
+
+        // THEN
+        Assertions.assertNotNull(exprStats);
+        Assertions.assertFalse(exprStats.isUnknown());
+        Assertions.assertEquals(0.1, exprStats.getNullsFraction(), 0.001);
+        Assertions.assertEquals(16, exprStats.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(5, exprStats.getCollectionSize(), 0.001);
+    }
+
     @Test
     public void testIsNotNullPredicateStatisticsWithNulls() {
         // GIVEN
@@ -1180,6 +1319,134 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNotNull(isNotNullStat.getHistogram());
         Assertions.assertEquals(700_000L, isNotNullStat.getHistogram().getMCV().get("1"));
         Assertions.assertEquals(300_000L, isNotNullStat.getHistogram().getMCV().get("0"));
+    }
+
+    @Test
+    public void testIfWithIsNullPredicateHasCorrectNdv() {
+        // GIVEN
+        // CASE WHEN `NONNULL` IS NULL THEN 1 ELSE 0 END
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "NONNULL", true);
+
+        final var colStat = ColumnStatistic.builder() //
+                .setDistinctValuesCount(1_000_237) //
+                .setNullsFraction(0) //
+                .setAverageRowSize(8) //
+                .build();
+
+        final var statistics = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+
+        final var isNull = new IsNullPredicateOperator(false, col);
+        final var then = ConstantOperator.createInt(1);
+        final var elseClause = ConstantOperator.createInt(0);
+
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.TINYINT, Lists.newArrayList(isNull, then, elseClause));
+
+        // WHEN
+        final var ifStat = ExpressionStatisticCalculator.calculate(ifOp, statistics);
+
+        // THEN
+        Assertions.assertFalse(ifStat.isUnknown());
+        Assertions.assertEquals(1, ifStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, ifStat.getMinValue(), 0.001);
+        Assertions.assertEquals(0, ifStat.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testIfIsNullMcvPropagation() {
+        // GIVEN
+        Function<Double, Statistics> makeStats = nullFrac -> {
+            final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+            final var colStat = ColumnStatistic.builder() //
+                    .setDistinctValuesCount(1_000_000) //
+                    .setNullsFraction(nullFrac) //
+                    .setAverageRowSize(8) //
+                    .build();
+            return Statistics.builder() //
+                    .setOutputRowCount(1_000_000) //
+                    .addColumnStatistic(col, colStat) //
+                    .build();
+        };
+
+        Function<Statistics, ColumnStatistic> calcIfStat = stats -> {
+            final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+            final var isNull = new IsNullPredicateOperator(false, col);
+            final var then = ConstantOperator.createTinyInt((byte) 1);
+            final var elseConst = ConstantOperator.createTinyInt((byte) 0);
+            final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.TINYINT, Lists.newArrayList(isNull, then, elseConst));
+            return ExpressionStatisticCalculator.calculate(ifOp, stats);
+        };
+
+        // WHEN
+        // nullsFraction = 0.0
+        var stat = calcIfStat.apply(makeStats.apply(0.0));
+
+        // THEN
+        Assertions.assertNotNull(stat.getHistogram());
+        var mcv = stat.getHistogram().getMCV();
+        Assertions.assertFalse(mcv.containsKey("1"));
+        Assertions.assertEquals(1_000_000L, mcv.get("0"));
+
+        // WHEN
+        // nullsFraction = 0.3
+        stat = calcIfStat.apply(makeStats.apply(0.3));
+        // THEN
+        Assertions.assertNotNull(stat.getHistogram());
+        mcv = stat.getHistogram().getMCV();
+        Assertions.assertEquals(300_000L, mcv.get("1"));
+        Assertions.assertEquals(700_000L, mcv.get("0"));
+
+        // WHEN
+        // nullsFraction = 1.0
+        stat = calcIfStat.apply(makeStats.apply(1.0));
+        // THEN
+        Assertions.assertNotNull(stat.getHistogram());
+        mcv = stat.getHistogram().getMCV();
+        Assertions.assertEquals(1_000_000L, mcv.get("1"));
+        Assertions.assertFalse(mcv.containsKey("0"));
+    }
+
+    @Test
+    public void testIfNullFractionWeightedByConditionDistribution() {
+        // GIVEN
+        // IF(col IS NULL, nullable_expr, non_nullable_expr)
+        // col has 0% nulls, so IS NULL is always false => only ELSE branch is taken.
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "COL", true);
+
+        final var colStat = ColumnStatistic.builder() //
+                .setDistinctValuesCount(500) //
+                .setNullsFraction(0.0) //
+                .setAverageRowSize(8) //
+                .build();
+
+        final var statistics = Statistics.builder() //
+                .setOutputRowCount(10_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+
+        final var isNull = new IsNullPredicateOperator(false, col);
+        final var thenClause = ConstantOperator.createNull(IntegerType.INT);
+        final var elseClause = ConstantOperator.createInt(42);
+
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.INT,
+                Lists.newArrayList(isNull, thenClause, elseClause));
+
+        // WHEN
+        final var ifStat = ExpressionStatisticCalculator.calculate(ifOp, statistics);
+
+        // THEN
+        // Condition is always false (0% nulls), so only ELSE branch is reachable.
+        // NDV, min/max, and nullsFraction should collapse to the ELSE branch only.
+        Assertions.assertFalse(ifStat.isUnknown());
+        Assertions.assertEquals(0.0, ifStat.getNullsFraction(), 0.001);
+        Assertions.assertEquals(1, ifStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(42, ifStat.getMinValue(), 0.001);
+        Assertions.assertEquals(42, ifStat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(ifStat.getHistogram());
+        Assertions.assertNotNull(ifStat.getHistogram().getMCV());
+        Assertions.assertTrue(ifStat.getHistogram().getMCV().containsKey("42"));
     }
 }
 

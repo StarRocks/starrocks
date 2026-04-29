@@ -132,7 +132,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return normal.listPartitionNames(databaseName, tableName, requestContext);
     }
 
@@ -150,6 +151,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
         }
 
         return metadata.getTable(context, dbName, tblName);
+    }
+
+    @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return normal.getTableFromQuery(context, dbName, query);
     }
 
     @Override
@@ -226,7 +232,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
-                                             ConnectorMetadatRequestContext requestContext) {
+                                             ConnectorMetadataRequestContext requestContext) {
         return normal.getPartitions(table, partitionNames, requestContext);
     }
 

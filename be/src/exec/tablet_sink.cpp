@@ -40,6 +40,7 @@
 #include <utility>
 
 #include "agent/utils.h"
+#include "base/compression/compression_utils.h"
 #include "base/simd/simd.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -65,14 +66,15 @@
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
+#include "runtime/starrocks_metrics.h"
 #include "serde/protobuf_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/compression_utils.h"
 #include "util/stack_util.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -111,6 +113,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _write_txn_log = table_sink.write_txn_log;
     _enable_data_file_bundling = table_sink.enable_data_file_bundling;
     _is_multi_statements_txn = table_sink.is_multi_statements_txn;
+    _enable_lake_per_partition_coordinator_txn_log = table_sink.enable_lake_per_partition_coordinator_txn_log;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;

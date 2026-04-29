@@ -59,9 +59,12 @@ void PipelineObserver::_do_update(int event) {
     }
 
     if (driver->is_in_blocked()) {
-        // In PRECONDITION state, has_output need_input may return false. In this case,
-        // we need to schedule the driver to INPUT_EMPTY/OUTPUT_FULL state.
-        bool pipeline_block = driver->driver_state() != DriverState::INPUT_EMPTY ||
+        // When the driver is blocked for a reason other than INPUT_EMPTY / OUTPUT_FULL
+        // (e.g. PRECONDITION_BLOCK), source->has_output() / sink->need_input() may
+        // return false while the driver still needs to be rescheduled. In that case
+        // we try_schedule directly; for INPUT_EMPTY / OUTPUT_FULL we dispatch to the
+        // event-specific handlers below.
+        bool pipeline_block = driver->driver_state() != DriverState::INPUT_EMPTY &&
                               driver->driver_state() != DriverState::OUTPUT_FULL;
         if (pipeline_block || _is_cancel_changed(event)) {
             driver->fragment_ctx()->event_scheduler()->try_schedule(driver);

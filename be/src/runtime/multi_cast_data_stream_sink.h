@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "runtime/data_stream_sender.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

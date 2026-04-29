@@ -204,7 +204,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private boolean enableGlobalLateMaterialization = false;
     private List<Expr> partitionConjuncts = Lists.newArrayList();
 
-
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
@@ -1133,12 +1132,18 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
             }
 
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                msg.lake_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
             if (enableGlobalLateMaterialization) {
                 msg.lake_scan_node.setEnable_global_late_materialization(true);
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
             msg.lake_scan_node.setSchema_key(getSchemaKey());
+
+            msg.lake_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =

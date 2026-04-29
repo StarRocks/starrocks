@@ -20,7 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
@@ -38,6 +38,7 @@ import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
@@ -126,7 +127,7 @@ public class CachingIcebergCatalogTest {
 
         Assertions.assertFalse(nativeTable.spec().isUnpartitioned());
         {
-            ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+            ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
             SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
             sv.setEnableConnectorAsyncListPartitions(true);
             requestContext.setQueryMVRewrite(true);
@@ -134,7 +135,7 @@ public class CachingIcebergCatalogTest {
             Assertions.assertNull(res);
         }
         {
-            ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+            ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
             SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
             sv.setEnableConnectorAsyncListPartitions(false);
             requestContext.setQueryMVRewrite(true);
@@ -877,6 +878,76 @@ public class CachingIcebergCatalogTest {
         } finally {
             es.shutdownNow();
             System.out.println("===== test reload async end =====");
+        }
+    }
+
+    @Test
+    public void testLoadLargePartitionSetTriggersDiagnosticLog(@Mocked IcebergCatalog delegate,
+                                                               @Mocked IcebergCatalogProperties props,
+                                                               @Mocked ConnectContext ctx) throws Exception {
+        // Build a partition map exceeding PARTITION_LOAD_LOG_THRESHOLD (10000) so the diagnostic
+        // INFO branch in the partition cache loader is exercised.
+        Map<String, Partition> bigPartitions = new HashMap<>();
+        for (int i = 0; i <= 10000; i++) {
+            bigPartitions.put("p" + i, new Partition(0L, 0L));
+        }
+
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Mockito.when(spec.fields()).thenReturn(java.util.Collections.emptyList());
+        Mockito.when(spec.isUnpartitioned()).thenReturn(false);
+
+        BaseTable nativeTable = (BaseTable) createBaseTableWithManifests(1, 0, spec);
+        TableMetadata meta = nativeTable.operations().current();
+        Mockito.when(meta.specsById()).thenReturn(Map.of(0, spec));
+
+        Snapshot currentSnap = meta.currentSnapshot();
+        Map<String, String> summary = new HashMap<>();
+        summary.put(SnapshotSummary.TOTAL_DATA_FILES_PROP, "5");
+        summary.put(SnapshotSummary.TOTAL_DELETE_FILES_PROP, "0");
+        Mockito.when(currentSnap.snapshotId()).thenReturn(42L);
+        Mockito.when(currentSnap.summary()).thenReturn(summary);
+
+        new Expectations() {
+            {
+                props.isEnableIcebergMetadataCache();
+                result = true;
+                props.getIcebergMetaCacheTtlSec();
+                result = 60L;
+                props.isEnableIcebergTableCache();
+                result = true;
+                props.getIcebergTableCacheMemoryUsageRatio();
+                result = 1.0;
+                props.getIcebergDataFileCacheMemoryUsageRatio();
+                result = 0.0;
+                props.getIcebergDeleteFileCacheMemoryUsageRatio();
+                result = 0.0;
+
+                delegate.getTable((ConnectContext) any, "db", "t");
+                result = nativeTable;
+                minTimes = 0;
+
+                delegate.getPartitions((IcebergTable) any, -1L, null);
+                result = bigPartitions;
+                minTimes = 1;
+            }
+        };
+
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        try {
+            CachingIcebergCatalog catalog = new CachingIcebergCatalog("c0", delegate, props, es);
+            IcebergTable icebergTable = IcebergTable.builder()
+                    .setSrTableName("t")
+                    .setCatalogDBName("db")
+                    .setCatalogTableName("t")
+                    .setNativeTable(nativeTable)
+                    .build();
+
+            // snapshotId == -1 forces the loader to fall back to nativeTable.currentSnapshot()
+            // for the logged snapshot id and summary.
+            Map<String, Partition> result = catalog.getPartitions(icebergTable, -1L, null);
+            Assertions.assertEquals(10001, result.size());
+        } finally {
+            es.shutdownNow();
         }
     }
 }

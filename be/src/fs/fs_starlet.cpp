@@ -34,6 +34,9 @@
 #include "base/utility/defer_op.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/encrypt_file.h"
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+#include "fs/fs_registry.h"
+#endif
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
 #include "io/core/input_stream.h"
@@ -643,6 +646,47 @@ private:
 std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
 }
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_starlet_registry;
+
+bool match_starlet_shared(std::string_view uri) {
+    return is_starlet_uri(uri);
+}
+
+bool match_starlet_unique(std::string_view uri, const FSOptions&) {
+    return is_starlet_uri(uri);
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_starlet_shared(std::string_view) {
+    if (tls_fs_starlet_registry == nullptr) {
+        tls_fs_starlet_registry.reset(new_fs_starlet().release());
+    }
+    return tls_fs_starlet_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_starlet_unique(std::string_view, const FSOptions&) {
+    return new_fs_starlet();
+}
+
+} // namespace
+
+FileSystemProvider new_starlet_file_system_provider(int priority) {
+    return {
+            .id = "starlet",
+            .priority = priority,
+            .match_shared = match_starlet_shared,
+            .create_shared = create_starlet_shared,
+            .match_unique = match_starlet_unique,
+            .create_unique = create_starlet_unique,
+    };
+}
+
+} // namespace fs
+#endif // defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 
 // Deleter for LRU cache entries
 static void shard_fs_cache_deleter(const CacheKey& /*key*/, void* value) {

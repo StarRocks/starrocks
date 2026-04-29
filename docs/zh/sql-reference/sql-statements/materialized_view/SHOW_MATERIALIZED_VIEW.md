@@ -48,6 +48,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | name                       | 物化视图名称。                                               |
 | refresh_type               | 物化视图的更新方式，包括 ROLLUP、MANUAL、ASYNC、INCREMENTAL。   |
 | is_active                  | 物化视图状态是否为 active。有效值：`true` 和 `false`。          |
+| inactive_reason            | 物化视图失效的原因。                                          |
 | partition_type             | 物化视图的分区类型，包括 RANGE 和 UNPARTITIONED。|
 | task_id                    | 物化视图的刷新任务 ID。                                       |
 | task_name                  | 物化视图的刷新任务名称。                                       |
@@ -55,15 +56,21 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | last_refresh_finished_time | 物化视图上一次刷新结束时间。                                    |
 | last_refresh_duration      | 物化视图上一次刷新耗时（单位秒）。                               |
 | last_refresh_state         | 物化视图上一次刷新的状态，包括 PENDING、RUNNING、FAILED、SUCCESS。 |
-| last_refresh_force_refresh | 物化视图上一次刷新是否为强制（FORCE）刷新。                      ｜
-| last_refresh_start_partition | 上一次刷新开始的物化视图分区。                                ｜
-| last_refresh_end_partition | 上一次刷新结束的物化视图分区。                                  ｜
-| last_refresh_base_refresh_partitions | 上一次刷新基表更新的分区。                            ｜
-| last_refresh_mv_refresh_partitions | 上一次刷新物化视图刷新的分区。                          ｜
+| last_refresh_force_refresh | 物化视图上一次刷新是否为强制（FORCE）刷新。                      |
+| last_refresh_start_partition | 上一次刷新开始的物化视图分区。                                |
+| last_refresh_end_partition | 上一次刷新结束的物化视图分区。                                  |
+| last_refresh_base_refresh_partitions | 上一次刷新基表更新的分区。                            |
+| last_refresh_mv_refresh_partitions | 上一次刷新物化视图刷新的分区。                          |
 | last_refresh_error_code    | 物化视图上一次刷新失败的 ErrorCode（如果物化视图状态不为 active）。 |
 | last_refresh_error_message | 物化视图上一次刷新失败的 ErrorMessage（如果物化视图状态不为 active）。 |
 | rows                       | 物化视图中数据行数。                                           |
 | text                       | 创建物化视图的查询语句。                                        |
+| extra_message              | 最近一次刷新任务的额外信息。                                    |
+| query_rewrite_status       | 物化视图的查询改写状态。                                        |
+| creator                    | 最近一次刷新任务的创建者。                                      |
+| last_refresh_process_time  | 最近一次刷新任务的处理开始时间。                                |
+| last_refresh_job_id        | 最近一次刷新任务的作业 ID。                                     |
+| last_refresh_time          | 物化视图已反映基表更新的最新时间。                              |
 
 ## 示例
 

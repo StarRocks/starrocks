@@ -16,6 +16,7 @@
 
 #include <atomic>
 
+#include "base/compression/block_compression.h"
 #include "base/string/faststring.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -26,7 +27,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
-#include "util/compression/block_compression.h"
 #include "util/logging.h"
 
 namespace starrocks {

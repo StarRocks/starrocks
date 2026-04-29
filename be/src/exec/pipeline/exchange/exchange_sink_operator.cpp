@@ -21,6 +21,9 @@
 #include <random>
 #include <utility>
 
+#include "base/compression/block_compression.h"
+#include "base/compression/compression_utils.h"
+#include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/system/backend_options.h"
@@ -39,8 +42,6 @@
 #include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/block_compression.h"
-#include "util/compression/compression_utils.h"
 #include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks::pipeline {
@@ -767,12 +768,14 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
 
     if (use_compression && _compress_codec != nullptr && serialized_size > 0) {
         ScopedTimer<MonotonicStopWatch> _timer(_compress_timer);
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, serialized_size, nullptr,
-                                                      &_compression_scratch));
+                                                      &_compression_scratch, compression_options));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(serialized_size);
 
@@ -783,7 +786,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, compression_options));
             _compression_scratch.resize(compressed_slice.size);
         }
         if (_compress_strategy) {

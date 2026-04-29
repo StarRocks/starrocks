@@ -713,12 +713,159 @@ public class CreateFunctionStmtAnalyzerTest {
         }
     }
 
+    // DECIMAL / BigDecimal UDF test classes
+
+    private static class DecimalScalarEval {
+        public java.math.BigDecimal evaluate(java.math.BigDecimal a, java.math.BigDecimal b) {
+            if (a == null || b == null) {
+                return null;
+            }
+            return a.add(b);
+        }
+    }
+
+    private static class DecimalScalarMismatchEval {
+        // Wrong Java type: SQL declares DECIMAL but Java uses String.
+        public String evaluate(String a) {
+            return a;
+        }
+    }
+
+    public static class DecimalAggEval {
+        public static class State {
+            public int serializeLength() {
+                return 0;
+            }
+        }
+
+        public State create() {
+            return new State();
+        }
+
+        public void destroy(State state) {
+        }
+
+        public final void update(State state, java.math.BigDecimal v) {
+        }
+
+        public void serialize(State state, java.nio.ByteBuffer buff) {
+        }
+
+        public void merge(State state, java.nio.ByteBuffer buffer) {
+        }
+
+        public java.math.BigDecimal finalize(State state) {
+            return null;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDecimal() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(DecimalScalarEval.class);
+
+            String sql = "CREATE FUNCTION ABC.dec_add(DECIMAL(10, 2), DECIMAL(10, 2)) \n"
+                    + "RETURNS DECIMAL(11, 2) \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDecimal256() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(DecimalScalarEval.class);
+
+            String sql = "CREATE FUNCTION ABC.dec256_add(DECIMAL(76, 10), DECIMAL(76, 10)) \n"
+                    + "RETURNS DECIMAL(76, 10) \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDecimalTypeMismatch() {
+        // Declaring DECIMAL but providing a Java method that takes String should be rejected.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(DecimalScalarMismatchEval.class);
+
+                String sql = "CREATE FUNCTION ABC.bad_dec(DECIMAL(10, 2)) \n"
+                        + "RETURNS DECIMAL(10, 2) \n"
+                        + "properties (\n"
+                        + "    \"symbol\" = \"symbol\",\n"
+                        + "    \"type\" = \"StarrocksJar\",\n"
+                        + "    \"file\" = \"http://localhost:8080/\"\n"
+                        + ");";
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJUDAFDecimal() {
+        try {
+            Config.enable_udf = true;
+            new MockUp<CreateFunctionAnalyzer>() {
+                @Mock
+                public String computeMd5(CreateFunctionStmt stmt) {
+                    return "0xff";
+                }
+            };
+            new MockUp<UDFInternalClassLoader>() {
+                @Mock
+                public final Class<?> loadClass(String name, boolean resolve)
+                        throws ClassNotFoundException {
+                    if (name.contains("$")) {
+                        return DecimalAggEval.State.class;
+                    }
+                    return DecimalAggEval.class;
+                }
+            };
+
+            String sql = "CREATE AGGREGATE FUNCTION ABC.dec_sum(DECIMAL(18, 4)) \n"
+                    + "RETURNS DECIMAL(38, 4) \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
     @Test
     public void testVarargsUDTF() {
         try {
             Config.enable_udf = true;
             mockClazz(VarargsTableFunctionEval.class);
-            
+
             String createFunctionSql = "CREATE TABLE FUNCTION ABC.process_varargs(string, ...) \n"
                     + "RETURNS array<string> \n"
                     + "properties (\n"
@@ -726,7 +873,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     + "    \"type\" = \"StarrocksJar\",\n"
                     + "    \"file\" = \"http://localhost:8080/\"\n"
                     + ");";
-            
+
             CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                     createFunctionSql, 32).get(0);
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
@@ -735,5 +882,237 @@ public class CreateFunctionStmtAnalyzerTest {
         } finally {
             Config.enable_udf = false;
         }
+    }
+
+    // Java type erasure means nested generics (e.g. List<List<Integer>>) collapse to the raw
+    // List/Map at reflection time, so the UDF's evaluate signature only carries List/Map. The
+    // FE validates the SQL-side nested shape; runtime conversion is driven by the SQL signature.
+    private static class NestedArrayEval {
+        public List<?> evaluate(List<?> a) {
+            return a;
+        }
+    }
+
+    private static class NestedMapEval {
+        public Map<?, ?> evaluate(Map<?, ?> a) {
+            return a;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFNestedArrayOfArray() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(NestedArrayEval.class);
+            String sql = buildFunction("array<array<int>>", "array<array<int>>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFNestedArrayOfMap() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(NestedArrayEval.class);
+            String sql = buildFunction("array<map<int,string>>", "array<map<int,string>>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFNestedMapWithArrayValue() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(NestedMapEval.class);
+            String sql = buildFunction("map<int,array<string>>", "map<int,array<string>>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDeeplyNestedArray() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(NestedArrayEval.class);
+            String sql = buildFunction("array<array<array<int>>>", "array<array<array<int>>>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFNestedTypeMismatch() {
+        // Nested SQL type still requires Java raw List/Map: passing a String parameter must fail.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NormalEval.class);
+                String sql = buildFunction("array<array<int>>", "array<array<int>>, string");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    // The negative cases below exercise each error branch of checkScalarUdfType so
+    // every "does not support type" / "type does not match" / "non-scalar type" path
+    // is covered, plus the recursive `return false` in isSupportedScalarUdfType.
+
+    @Test
+    public void testJScalarUDFUnsupportedScalarReturnType() {
+        // SQL return type is JSON, which has no entry in PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE,
+        // so checkScalarUdfType hits the `cls == null` branch on the ScalarType arm.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NormalEval.class);
+                String sql = buildFunction("json", "string, string");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJScalarUDFUnsupportedScalarArgType() {
+        // SQL arg type LARGEINT (BIGINT-mapped Java is Long, but PrimitiveType.LARGEINT
+        // is NOT in PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE) — the ScalarType branch raises
+        // "does not support type".
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NormalEval.class);
+                String sql = buildFunction("string", "largeint, string");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJScalarUDFArrayUnsupportedItem() {
+        // array<json>: ArrayType branch passes the List Java-type check, then
+        // isSupportedScalarUdfType recurses into JSON and returns false — the
+        // "does not support type 'array<...>'" branch fires.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NestedArrayEval.class);
+                String sql = buildFunction("string", "array<json>");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJScalarUDFMapWithNonMapJava() {
+        // SQL map<int,int> declared but Java parameter is String, not Map: the
+        // MapType branch raises "type does not match Map".
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NormalEval.class);
+                String sql = buildFunction("string", "map<int,int>, string");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJScalarUDFMapUnsupportedKey() {
+        // map<largeint,int>: Java type is Map (passes), but the key recurses to
+        // LARGEINT — it parses as a base type for map keys yet has no entry in
+        // PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE, so isSupportedScalarUdfType returns
+        // false and the MapType branch raises "does not support type 'map<...>'".
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NestedMapEval.class);
+                String sql = buildFunction("string", "map<largeint,int>");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJScalarUDFMapUnsupportedValue() {
+        // map<int,json>: same recursive failure on the value side. JSON is allowed
+        // as a map value (just not as a key) so this still reaches the analyzer.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NestedMapEval.class);
+                String sql = buildFunction("string", "map<int,json>");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJScalarUDFTopLevelStruct() {
+        // STRUCT is not ScalarType / ArrayType / MapType — checkScalarUdfType
+        // falls through to the catch-all "does not support non-scalar type" report.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NormalEval.class);
+                String sql = buildFunction("string", "struct<a int>, string");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJScalarUDFArrayOfStruct() {
+        // array<struct<...>>: ArrayType branch recurses to the struct child, which is
+        // neither scalar nor array nor map, so isSupportedScalarUdfType drops through
+        // to its trailing `return false` — the only path that exercises that line.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NestedArrayEval.class);
+                String sql = buildFunction("string", "array<struct<a int>>");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
     }
 }

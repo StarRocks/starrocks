@@ -14,10 +14,9 @@
 
 #pragma once
 
-#include <atomic>
-#include <condition_variable>
 #include <cstdint>
-#include <mutex>
+#include <latch>
+#include <memory>
 
 #include "common/status.h"
 
@@ -42,35 +41,32 @@ private:
     TaskId _tid{};
 };
 
-class PipelineTimerTask {
+class PipelineTimerTask : public std::enable_shared_from_this<PipelineTimerTask> {
 public:
     virtual ~PipelineTimerTask() = default;
 
     void doRun() {
+        auto self = shared_from_this();
         Run();
-        _finished.store(true, std::memory_order_seq_cst);
-        if (_has_consumer.load(std::memory_order_acquire)) {
-            _cv.notify_one();
-        }
+        _latch.count_down();
     }
 
-    // only call when unschedule == 1
-    void waitUtilFinished();
     void unschedule(PipelineTimer* timer);
 
     void set_tid(TaskId tid) { _tid = tid; }
     TaskId tid() const { return _tid; }
+
+private:
+    // only call when unschedule == 1
+    void waitUtilFinished();
 
 protected:
     // implement interface
     virtual void Run() = 0;
 
 protected:
-    std::atomic<bool> _finished{};
-    std::atomic<bool> _has_consumer{};
+    std::latch _latch{1};
     TaskId _tid{};
-    std::mutex _mutex;
-    std::condition_variable _cv;
 };
 
 class PipelineTimer {

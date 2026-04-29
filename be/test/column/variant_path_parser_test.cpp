@@ -359,4 +359,71 @@ TEST_F(VariantPathTest, SeekViewRootReturnsWholeValue) {
     EXPECT_EQ(R"({"k":"v","n":123})", json.value());
 }
 
+TEST_F(VariantPathTest, SegmentEquality) {
+    auto p1 = VariantPathParser::parse_shredded_path(std::string_view("foo.bar"));
+    auto p2 = VariantPathParser::parse_shredded_path(std::string_view("foo.bar"));
+    auto p3 = VariantPathParser::parse_shredded_path(std::string_view("foo.baz"));
+    ASSERT_TRUE(p1.ok());
+    ASSERT_TRUE(p2.ok());
+    ASSERT_TRUE(p3.ok());
+
+    // Same key segments are equal.
+    EXPECT_EQ(p1->segments[0], p2->segments[0]);
+    EXPECT_EQ(p1->segments[1], p2->segments[1]);
+    // Different key segments are not equal.
+    EXPECT_NE(p1->segments[1], p3->segments[1]);
+    // Segment from different positions with same key are equal.
+    EXPECT_EQ(p1->segments[0], p3->segments[0]);
+}
+
+TEST_F(VariantPathTest, IsStrictPrefixOf) {
+    auto a = VariantPathParser::parse_shredded_path(std::string_view("a"));
+    auto ab = VariantPathParser::parse_shredded_path(std::string_view("a.b"));
+    auto abc = VariantPathParser::parse_shredded_path(std::string_view("a.b.c"));
+    auto xy = VariantPathParser::parse_shredded_path(std::string_view("x.y"));
+    ASSERT_TRUE(a.ok() && ab.ok() && abc.ok() && xy.ok());
+
+    // Strict prefix: "a" < "a.b" < "a.b.c"
+    EXPECT_TRUE(a->is_strict_prefix_of(*ab));
+    EXPECT_TRUE(a->is_strict_prefix_of(*abc));
+    EXPECT_TRUE(ab->is_strict_prefix_of(*abc));
+
+    // Equal paths are not strict prefixes.
+    EXPECT_FALSE(ab->is_strict_prefix_of(*ab));
+    EXPECT_FALSE(abc->is_strict_prefix_of(*abc));
+
+    // Longer path cannot be a prefix of a shorter one.
+    EXPECT_FALSE(abc->is_strict_prefix_of(*ab));
+    EXPECT_FALSE(ab->is_strict_prefix_of(*a));
+
+    // Unrelated paths are not prefixes of each other.
+    EXPECT_FALSE(ab->is_strict_prefix_of(*xy));
+    EXPECT_FALSE(xy->is_strict_prefix_of(*ab));
+}
+
+TEST_F(VariantPathTest, IsAncestorOrSame) {
+    auto a = VariantPathParser::parse_shredded_path(std::string_view("a"));
+    auto ab = VariantPathParser::parse_shredded_path(std::string_view("a.b"));
+    auto abc = VariantPathParser::parse_shredded_path(std::string_view("a.b.c"));
+    auto xy = VariantPathParser::parse_shredded_path(std::string_view("x.y"));
+    ASSERT_TRUE(a.ok() && ab.ok() && abc.ok() && xy.ok());
+
+    // Ancestor-or-same: equal paths.
+    EXPECT_TRUE(ab->is_ancestor_or_same(*ab));
+    EXPECT_TRUE(abc->is_ancestor_or_same(*abc));
+
+    // Ancestor-or-same: strict prefix.
+    EXPECT_TRUE(a->is_ancestor_or_same(*ab));
+    EXPECT_TRUE(a->is_ancestor_or_same(*abc));
+    EXPECT_TRUE(ab->is_ancestor_or_same(*abc));
+
+    // Not an ancestor: longer path is not an ancestor of a shorter one.
+    EXPECT_FALSE(abc->is_ancestor_or_same(*ab));
+    EXPECT_FALSE(ab->is_ancestor_or_same(*a));
+
+    // Unrelated paths.
+    EXPECT_FALSE(ab->is_ancestor_or_same(*xy));
+    EXPECT_FALSE(xy->is_ancestor_or_same(*ab));
+}
+
 } // namespace starrocks

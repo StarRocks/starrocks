@@ -31,6 +31,6 @@ CONF_mBool(enable_vector_index_block_cache, "true");
 CONF_mInt32(config_vector_index_build_concurrency, "8");
 
 // default not to build the empty index
-CONF_mInt32(config_vector_index_default_build_threshold, "100");
+CONF_mInt32(config_vector_index_default_build_threshold, "10000");
 
 } // namespace starrocks::config

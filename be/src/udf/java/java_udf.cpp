@@ -108,14 +108,14 @@ static JNINativeMethod java_native_methods[] = {
 };
 #pragma GCC diagnostic pop
 
-JavaUDAFContext* get_java_udaf_context(FunctionContext* ctx) {
+JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx) {
     if (ctx == nullptr) {
         return nullptr;
     }
-    return reinterpret_cast<JavaUDAFContext*>(ctx->get_function_state(FunctionContext::THREAD_LOCAL));
+    return reinterpret_cast<JavaUDAFUniqueContext*>(ctx->get_function_state(FunctionContext::THREAD_LOCAL));
 }
 
-void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFContext> udaf_ctx) {
+void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx) {
     DCHECK(ctx != nullptr);
     DCHECK(udaf_ctx != nullptr);
     auto* old_ctx = get_java_udaf_context(ctx);
@@ -178,11 +178,17 @@ void JVMFunctionHelper::_init() {
     _string_class = JNI_FIND_CLASS("java/lang/String");
     _jarrays_class = JNI_FIND_CLASS("java/util/Arrays");
     _exception_util_class = JNI_FIND_CLASS("org/apache/commons/lang3/exception/ExceptionUtils");
+    _big_decimal_class = JNI_FIND_CLASS("java/math/BigDecimal");
 
     CHECK(_object_class);
     CHECK(_string_class);
     CHECK(_jarrays_class);
     CHECK(_exception_util_class);
+    CHECK(_big_decimal_class);
+    _big_decimal_ctor_string = _env->GetMethodID(_big_decimal_class, "<init>", "(Ljava/lang/String;)V");
+    CHECK(_big_decimal_ctor_string);
+    _big_decimal_value_of_ll = _env->GetStaticMethodID(_big_decimal_class, "valueOf", "(JI)Ljava/math/BigDecimal;");
+    CHECK(_big_decimal_value_of_ll);
 
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
     ADD_NUMBERIC_CLASS(byte, Byte, B);
@@ -219,6 +225,11 @@ void JVMFunctionHelper::_init() {
     DCHECK_EQ(res, 0);
 
     INIT_HELPER_METHOD(_create_boxed_array, "createBoxedArray", "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
+    INIT_HELPER_METHOD(_create_boxed_decimal_array, "createBoxedDecimalArray",
+                       "(IIILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
+    INIT_HELPER_METHOD(_get_decimal_boxed_result, "getDecimalResultFromBoxedArray", "(IIIILjava/lang/Object;JZ)V");
+    INIT_HELPER_METHOD(_bd_unscaled_long, "unscaledLong", "(Ljava/math/BigDecimal;II)J");
+    INIT_HELPER_METHOD(_bd_unscaled_le_bytes, "unscaledLEBytes", "(Ljava/math/BigDecimal;III)[B");
     INIT_HELPER_METHOD(_batch_update, "batchUpdate", BATCH_UPDATE_SIGNATURE);
     INIT_HELPER_METHOD(_batch_call, "batchCall", BATCH_CALL_SIGNATURE);
     INIT_HELPER_METHOD(_batch_call_no_args, "batchCall", BATCH_CALL_NO_ARGS_SIGNATURE);
@@ -406,6 +417,14 @@ jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nulla
     return res;
 }
 
+StatusOr<jobject> JVMFunctionHelper::create_boxed_decimal_array(int type, int scale, int num_rows, jobject null_buff,
+                                                                jobject data_buff) {
+    jobject res = _env->CallStaticObjectMethod(_udf_helper_class, _create_boxed_decimal_array, type, num_rows, scale,
+                                               null_buff, data_buff);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(_env, "create_boxed_decimal_array");
+    return res;
+}
+
 jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
     jobjectArray res_arr = _env->NewObjectArray(num_rows, _object_array_class, o);
     RETURN_IF_JNI_EXCEPTION(_env, "create_object_array: NewObjectArray failed", nullptr);
@@ -502,6 +521,15 @@ Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, job
     return Status::OK();
 }
 
+Status JVMFunctionHelper::get_decimal_result_from_boxed_array(int type, int precision, int scale, Column* col,
+                                                              jobject jcolumn, int rows, bool error_if_overflow) {
+    col->resize(rows);
+    _env->CallStaticVoidMethod(_udf_helper_class, _get_decimal_boxed_result, type, precision, scale, rows, jcolumn,
+                               reinterpret_cast<int64_t>(col), static_cast<jboolean>(error_if_overflow));
+    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
+    return Status::OK();
+}
+
 // convert UDAF ctx to jobject
 jobject JVMFunctionHelper::convert_handle_to_jobject(FunctionContext* ctx, int state) {
     auto* udaf_ctx = get_java_udaf_context(ctx);
@@ -547,6 +575,35 @@ jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     jobject nstr = _env->NewObject(_string_class, _string_construct_with_bytes, bytesArr, _utf8_charsets);
     RETURN_IF_JNI_EXCEPTION(_env, "newString: NewObject failed", nullptr);
     return nstr;
+}
+
+jobject JVMFunctionHelper::newBigDecimal(const std::string& s) {
+    jobject jstr = newString(s.data(), s.size());
+    if (jstr == nullptr) {
+        return nullptr;
+    }
+    LOCAL_REF_GUARD(jstr);
+    jobject bd = _env->NewObject(_big_decimal_class, _big_decimal_ctor_string, jstr);
+    RETURN_IF_JNI_EXCEPTION(_env, "newBigDecimal: NewObject failed", nullptr);
+    return bd;
+}
+
+jobject JVMFunctionHelper::newBigDecimal(int64_t unscaled, int scale) {
+    jobject bd = _env->CallStaticObjectMethod(_big_decimal_class, _big_decimal_value_of_ll,
+                                              static_cast<jlong>(unscaled), static_cast<jint>(scale));
+    RETURN_IF_JNI_EXCEPTION(_env, "newBigDecimal(long, int): CallStatic failed", nullptr);
+    return bd;
+}
+
+jlong JVMFunctionHelper::unscaled_long(jobject big_decimal, int precision, int scale) {
+    return _env->CallStaticLongMethod(_udf_helper_class, _bd_unscaled_long, big_decimal, static_cast<jint>(precision),
+                                      static_cast<jint>(scale));
+}
+
+jbyteArray JVMFunctionHelper::unscaled_le_bytes(jobject big_decimal, int precision, int scale, int byte_width) {
+    return (jbyteArray)_env->CallStaticObjectMethod(_udf_helper_class, _bd_unscaled_le_bytes, big_decimal,
+                                                    static_cast<jint>(precision), static_cast<jint>(scale),
+                                                    static_cast<jint>(byte_width));
 }
 
 Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
@@ -1042,6 +1099,11 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 desc->emplace_back(MethodTypeDescriptor{TYPE_ARRAY, true});
             } else if (type == "java/util/Map") {
                 desc->emplace_back(MethodTypeDescriptor{TYPE_MAP, true});
+            } else if (type == "java/math/BigDecimal") {
+                // Structural placeholder only: `.type` is not dispatched on at runtime for
+                // BigDecimal params. The actual DECIMAL precision/scale is resolved from
+                // ctx->get_arg_type() / ctx->get_return_type() at the call site.
+                desc->emplace_back(MethodTypeDescriptor{TYPE_DECIMAL128, true});
             }
             continue;
         }
@@ -1073,7 +1135,7 @@ JavaUDFContext::~JavaUDFContext() = default;
 
 int UDAFFunction::create() {
     auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
-    jmethodID create = _ctx->create->get_method_id();
+    jmethodID create = _ctx->ctx->create->get_method_id();
     auto obj = env->CallObjectMethod(_udaf_handle, create);
     LOCAL_REF_GUARD(obj);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
@@ -1084,7 +1146,7 @@ void UDAFFunction::destroy(int state) {
     auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
-    jmethodID destory = _ctx->destory->get_method_id();
+    jmethodID destory = _ctx->ctx->destory->get_method_id();
     // call destroy
     env->CallVoidMethod(_udaf_handle, destory, obj);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
@@ -1096,7 +1158,7 @@ jvalue UDAFFunction::finalize(int state) {
     JNIEnv* env = helper.getEnv();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
-    jmethodID finalize = _ctx->finalize->get_method_id();
+    jmethodID finalize = _ctx->ctx->finalize->get_method_id();
     jvalue res;
     res.l = env->CallObjectMethod(_udaf_handle, finalize, obj);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
@@ -1113,7 +1175,7 @@ void AggBatchCallStub::batch_update_single(int num_rows, jobject state, jobject*
     }
     auto* env = JVMFunctionHelper::getInstance().getEnv();
     env->CallStaticVoidMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()), jni_inputs);
-    CHECK_UDF_CALL_EXCEPTION(env, this->_ctx);
+    CHECK_UDF_CALL_EXCEPTION(env, _ctx);
 }
 
 StatusOr<jobject> BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input, int cols) {
@@ -1156,7 +1218,7 @@ StatusOr<size_t> JavaListStub::size() {
 
 void UDAFFunction::update(jvalue* val) {
     auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
-    jmethodID update = _ctx->update->get_method_id();
+    jmethodID update = _ctx->ctx->update->get_method_id();
     env->CallVoidMethodA(_udaf_handle, update, val);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
 }
@@ -1165,7 +1227,7 @@ void UDAFFunction::merge(int state, jobject buffer) {
     auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
-    jmethodID merge = _ctx->merge->get_method_id();
+    jmethodID merge = _ctx->ctx->merge->get_method_id();
     env->CallVoidMethod(_udaf_handle, merge, obj, buffer);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
 }
@@ -1174,7 +1236,7 @@ void UDAFFunction::serialize(int state, jobject buffer) {
     auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
-    jmethodID serialize = _ctx->serialize->get_method_id();
+    jmethodID serialize = _ctx->ctx->serialize->get_method_id();
     env->CallVoidMethod(_udaf_handle, serialize, obj, buffer);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
 }
@@ -1183,7 +1245,7 @@ int UDAFFunction::serialize_size(int state) {
     auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
-    jmethodID serialize_size = _ctx->serialize_size->get_method_id();
+    jmethodID serialize_size = _ctx->ctx->serialize_size->get_method_id();
     int sz = env->CallIntMethod(obj, serialize_size);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
     return sz;
@@ -1193,7 +1255,7 @@ void UDAFFunction::reset(int state) {
     auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
-    jmethodID reset = _ctx->reset->get_method_id();
+    jmethodID reset = _ctx->ctx->reset->get_method_id();
     env->CallVoidMethod(_udaf_handle, reset, obj);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
 }
@@ -1204,7 +1266,7 @@ jobject UDAFFunction::window_update_batch(int state, int peer_group_start, int p
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
 
-    jmethodID window_update = _ctx->window_update->get_method_id();
+    jmethodID window_update = _ctx->ctx->window_update->get_method_id();
     jvalue jvalues[5 + col_sz];
     jvalues[0].l = obj;
     jvalues[1].j = peer_group_start;

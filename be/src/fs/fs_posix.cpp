@@ -35,17 +35,20 @@
 #include "fs/encrypt_file.h"
 #include "fs/fd_cache.h"
 #include "fs/fs.h"
+#include "fs/fs_posix.h"
+#include "fs/fs_registry.h"
+#include "fs/fs_scheme.h"
 #include "gutil/gscoped_ptr.h"
 #include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
-#include "io/fd_input_stream.h"
-#include "io/io_profiler.h"
+#include "io/core/fd_input_stream.h"
+#include "io/core/io_instrumentation.h"
 
 #ifdef USE_STAROS
-#include "fslib/metric_key.h"
-#include "metrics/metrics.h"
+#include <fslib/metric_key.h>
+#include <metrics/metrics.h>
 #endif
 
 #ifdef USE_STAROS
@@ -230,7 +233,7 @@ public:
         s_sr_posix_write_iosize.Observe(bytes_written);
 #endif
 #ifndef __APPLE__
-        IOProfiler::add_write(bytes_written, watch.elapsed_time());
+        io::IOInstrumentation::record_write(bytes_written, watch.elapsed_time());
 #endif
         return Status::OK();
     }
@@ -321,7 +324,7 @@ public:
             RETURN_IF_ERROR(do_sync(_fd, _filename));
         }
 #ifndef __APPLE__
-        IOProfiler::add_sync(watch.elapsed_time());
+        io::IOInstrumentation::record_sync(watch.elapsed_time());
 #endif
         return Status::OK();
     }
@@ -700,5 +703,44 @@ FileSystem* FileSystem::Default() {
 std::unique_ptr<FileSystem> new_fs_posix() {
     return std::make_unique<PosixFileSystem>();
 }
+
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_posix_registry;
+
+bool match_posix_shared(std::string_view uri) {
+    return is_posix_uri(uri);
+}
+
+bool match_posix_unique(std::string_view uri, const FSOptions&) {
+    return is_posix_uri(uri);
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_posix_shared(std::string_view) {
+    if (tls_fs_posix_registry == nullptr) {
+        tls_fs_posix_registry = std::make_shared<PosixFileSystem>();
+    }
+    return tls_fs_posix_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_posix_unique(std::string_view, const FSOptions&) {
+    return new_fs_posix();
+}
+
+} // namespace
+
+FileSystemProvider new_posix_file_system_provider(int priority) {
+    return {
+            .id = "posix",
+            .priority = priority,
+            .match_shared = match_posix_shared,
+            .create_shared = create_posix_shared,
+            .match_unique = match_posix_unique,
+            .create_unique = create_posix_unique,
+    };
+}
+
+} // namespace fs
 
 } // end namespace starrocks

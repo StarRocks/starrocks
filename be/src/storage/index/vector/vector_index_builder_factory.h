@@ -23,11 +23,16 @@
 
 namespace starrocks {
 
+class VectorIndexFileWriter;
+
 class VectorIndexBuilderFactory {
 public:
+    // file_writer: optional, for remote FS (S3/HDFS) in shared-data mode. In non-TenANN
+    // builds VectorIndexFileWriter is a stub and the argument is ignored.
     static StatusOr<std::unique_ptr<VectorIndexBuilder>> create_index_builder(
             const std::shared_ptr<TabletIndex>& tablet_index, const std::string& segment_index_path,
-            const IndexBuilderType index_builder_type, const bool is_element_nullable);
+            const IndexBuilderType index_builder_type, const bool is_element_nullable,
+            [[maybe_unused]] VectorIndexFileWriter* file_writer = nullptr);
 
     static StatusOr<IndexBuilderType> get_index_builder_type_from_config(
             const std::shared_ptr<TabletIndex>& _tablet_index) {

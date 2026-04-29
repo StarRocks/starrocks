@@ -16,6 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "exec/pipeline/assert_num_rows_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -63,8 +64,8 @@ StatusOr<pipeline::OpFactories> AssertNumRowsNode::decompose_to_pipeline(pipelin
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operator_before_assert_num_rows_source.back().get(), context,
-                                           rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, operator_before_assert_num_rows_source.back().get(), context,
+                                               rc_rf_probe_collector);
     if (limit() != -1) {
         operator_before_assert_num_rows_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

@@ -62,6 +62,11 @@ public class SplittingTablet implements ReshardingTablet {
     }
 
     @Override
+    public long getFirstNewTabletId() {
+        return newTabletIds.get(0);
+    }
+
+    @Override
     public List<Long> getOldTabletIds() {
         return List.of(oldTabletId);
     }

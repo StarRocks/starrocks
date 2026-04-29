@@ -430,9 +430,9 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
     _pipeline_timer = timer;
-    _timeout_task = new CheckFragmentTimeout(this);
+    _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
     timespec tm = butil::seconds_from_now(runtime_state()->query_ctx()->get_query_expire_seconds());
-    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task, tm));
+    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task.get(), tm));
     return Status::OK();
 }
 
@@ -442,14 +442,14 @@ void FragmentContext::clear_pipeline_timer() {
             for (auto& [ignore, task] : _rf_timeout_tasks) {
                 if (task) {
                     task->unschedule(_pipeline_timer);
-                    SAFE_DELETE(task);
+                    task.reset();
                 }
             }
             _rf_timeout_tasks.clear();
         }
         if (_timeout_task) {
             _timeout_task->unschedule(_pipeline_timer);
-            SAFE_DELETE(_timeout_task);
+            _timeout_task.reset();
         }
     }
 }
@@ -583,21 +583,22 @@ void FragmentContext::init_event_scheduler() {
 void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t timeout) {
     RFScanWaitTimeout* task;
     if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
-        task = down_cast<RFScanWaitTimeout*>(iter->second);
+        task = down_cast<RFScanWaitTimeout*>(iter->second.get());
     } else {
-        task = new RFScanWaitTimeout();
-        _rf_timeout_tasks.emplace(timeout, task);
+        auto timeoutTask = std::make_shared<RFScanWaitTimeout>();
+        task = timeoutTask.get();
+        _rf_timeout_tasks.emplace(timeout, timeoutTask);
     }
     task->add_observer(_runtime_state.get(), observer);
 }
 
 Status FragmentContext::submit_all_timer() {
     timespec tm = butil::microseconds_to_timespec(butil::gettimeofday_us());
-    for (auto [delta_ns, task] : _rf_timeout_tasks) {
+    for (const auto& [delta_ns, task] : _rf_timeout_tasks) {
         timespec abstime = tm;
         abstime.tv_nsec += delta_ns;
         butil::timespec_normalize(&abstime);
-        RETURN_IF_ERROR(_pipeline_timer->schedule(task, abstime));
+        RETURN_IF_ERROR(_pipeline_timer->schedule(task.get(), abstime));
     }
     return Status::OK();
 }

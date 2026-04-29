@@ -46,7 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -54,10 +54,12 @@ import com.starrocks.lake.PartitionPublishVersionData;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -91,7 +93,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class PublishVersionDaemon extends FrontendDaemon {
+public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
@@ -108,6 +110,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
     // result and modify transaction state on FE
     private ThreadPoolExecutor taskExecutor;
     private ThreadPoolExecutor deleteTxnLogExecutor;
+    // Guards ConfigRefreshDaemon listener registration. Executors are recreated on every
+    // leader activation (after onStopped() nulls them), but listeners must be registered
+    // only once per daemon instance — otherwise each demote/re-elect cycle leaks a listener.
+    private boolean taskExecutorListenerRegistered;
+    private boolean deleteTxnLogExecutorListenerRegistered;
 
     @VisibleForTesting
     protected Set<Long> publishingTransactionIds;
@@ -120,7 +127,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         MetricRepo.COUNTER_PUBLISH_VERSION_DAEMON_LOOP.increase(1L);
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
@@ -235,9 +242,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // allow core thread timeout as well
             taskExecutor.allowCoreThreadTimeOut(true);
 
-            // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
-                    .registerListener(() -> this.adjustTaskExecutor());
+            // register ThreadPool config change listener only once per daemon instance.
+            if (!taskExecutorListenerRegistered) {
+                GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
+                        .registerListener(() -> this.adjustTaskExecutor());
+                taskExecutorListenerRegistered = true;
+            }
         }
         return taskExecutor;
     }
@@ -250,14 +260,17 @@ public class PublishVersionDaemon extends FrontendDaemon {
             deleteTxnLogExecutor = ThreadPoolManager.newDaemonCacheThreadPool(numThreads,
                     "lake-publish-delete-txnLog", true);
 
-            // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
-                int newMaxThreads = Config.lake_publish_delete_txnlog_max_threads;
-                if (deleteTxnLogExecutor != null && newMaxThreads > 0
-                        && deleteTxnLogExecutor.getMaximumPoolSize() != newMaxThreads) {
-                    deleteTxnLogExecutor.setMaximumPoolSize(Config.lake_publish_delete_txnlog_max_threads);
-                }
-            });
+            // register ThreadPool config change listener only once per daemon instance.
+            if (!deleteTxnLogExecutorListenerRegistered) {
+                GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+                    int newMaxThreads = Config.lake_publish_delete_txnlog_max_threads;
+                    if (deleteTxnLogExecutor != null && newMaxThreads > 0
+                            && deleteTxnLogExecutor.getMaximumPoolSize() != newMaxThreads) {
+                        deleteTxnLogExecutor.setMaximumPoolSize(Config.lake_publish_delete_txnlog_max_threads);
+                    }
+                });
+                deleteTxnLogExecutorListenerRegistered = true;
+            }
         }
         return deleteTxnLogExecutor;
     }
@@ -684,15 +697,17 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+                List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            computeResource, null);
+                            computeResource, null, vectorIndexBuildInfos);
                 } else {
-                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion, 
-                            compactionScores, nodeToTablets, computeResource, null);
+                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
+                            compactionScores, nodeToTablets, computeResource, null, vectorIndexBuildInfos);
                 }
 
+                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
@@ -1075,9 +1090,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 // Used to collect statistics when the partition is first imported
                 Map<Long, Long> tabletRowNums = new HashMap<>();
+                List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        computeResource, tabletRowNums, useAggregatePublish);
+                        computeResource, tabletRowNums, useAggregatePublish, vectorIndexBuildInfos);
 
+                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
                 if (!tabletRowNums.isEmpty()) {
@@ -1097,6 +1114,32 @@ public class PublishVersionDaemon extends FrontendDaemon {
             LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                     txnId, e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Drop in-flight publish executors and the publishing-txn dedup sets.
+     * BE-side PublishVersionTask is idempotent (BE returns success when the requested
+     * version is already visible), so dropping in-flight tasks is safe - the new leader
+     * will resubmit publish from {@code GlobalTransactionMgr.getReadyToPublishTransactions}.
+     */
+    @Override
+    protected void onStopped() {
+        ThreadPoolExecutor t = taskExecutor;
+        if (t != null) {
+            t.shutdownNow();
+            taskExecutor = null;
+        }
+        ThreadPoolExecutor d = deleteTxnLogExecutor;
+        if (d != null) {
+            d.shutdownNow();
+            deleteTxnLogExecutor = null;
+        }
+        if (publishingTransactionIds != null) {
+            publishingTransactionIds.clear();
+        }
+        if (publishingLakeTransactionsBatchTableId != null) {
+            publishingLakeTransactionsBatchTableId.clear();
         }
     }
 

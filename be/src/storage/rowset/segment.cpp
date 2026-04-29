@@ -282,6 +282,8 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
+    _skip_vector_index =
+            footer.has_vector_index_storage_type() && footer.vector_index_storage_type() == VECTOR_INDEX_STORAGE_NONE;
     return Status::OK();
 }
 

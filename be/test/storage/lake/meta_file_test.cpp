@@ -666,6 +666,58 @@ TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
 }
 
+// Verify that trim_partial_compaction_last_input_rowset also trims segment_metas
+// so that vacuum won't delete .vi files still referenced by the output rowset.
+TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset_with_vi) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(9);
+    metadata->set_version(10);
+
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(22);
+    // Output rowset contains: aaa.dat (reused), new_seg.dat (new compacted), ddd.dat (reused)
+    op_compaction.mutable_output_rowset()->add_segments("aaa.dat");
+    op_compaction.mutable_output_rowset()->add_segments("new_seg.dat");
+    op_compaction.mutable_output_rowset()->add_segments("ddd.dat");
+
+    // Last input rowset has segments: [aaa.dat, bbb.dat, ccc.dat, ddd.dat]
+    // where aaa.dat and ddd.dat are reused in output (uncompacted), bbb.dat and ccc.dat are consumed
+    RowsetMetadataPB last_input_rowset;
+    last_input_rowset.set_id(22);
+    last_input_rowset.add_segments("aaa.dat");
+    last_input_rowset.add_segments("bbb.dat");
+    last_input_rowset.add_segments("ccc.dat");
+    last_input_rowset.add_segments("ddd.dat");
+
+    // All segments have vector index tracking via segment_metas
+    auto* meta_aaa = last_input_rowset.add_segment_metas();
+    meta_aaa->add_vector_index_ids(100);
+    auto* meta_bbb = last_input_rowset.add_segment_metas();
+    meta_bbb->add_vector_index_ids(100);
+    meta_bbb->add_vector_index_ids(200);
+    auto* meta_ccc = last_input_rowset.add_segment_metas();
+    meta_ccc->add_vector_index_ids(100);
+    auto* meta_ddd = last_input_rowset.add_segment_metas();
+    meta_ddd->add_vector_index_ids(100);
+
+    EXPECT_EQ(last_input_rowset.segments_size(), 4);
+    EXPECT_EQ(last_input_rowset.segment_metas_size(), 4);
+
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset);
+
+    // After trim: only consumed segments (bbb.dat, ccc.dat) should remain
+    EXPECT_EQ(last_input_rowset.segments_size(), 2);
+    EXPECT_EQ(last_input_rowset.segments(0), "bbb.dat");
+    EXPECT_EQ(last_input_rowset.segments(1), "ccc.dat");
+
+    // segment_metas should also be trimmed: aaa.dat and ddd.dat entries removed
+    EXPECT_EQ(last_input_rowset.segment_metas_size(), 2);
+
+    // Verify the index IDs are preserved correctly
+    EXPECT_EQ(last_input_rowset.segment_metas(0).vector_index_ids_size(), 2); // bbb.dat
+    EXPECT_EQ(last_input_rowset.segment_metas(1).vector_index_ids_size(), 1); // ccc.dat
+}
+
 TEST_F(MetaFileTest, test_error_state) {
     // generate metadata
     const int64_t tablet_id = 10001;

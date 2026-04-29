@@ -79,6 +79,24 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testPlanAdvisorMetricsExposure() {
+        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
+        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
+        MetricRepo.COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL.increase(3L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("plan_advisor_guide_generated_total"));
+        Assertions.assertTrue(output.contains("plan_advisor_guide_applied_total"));
+        Assertions.assertTrue(output.contains("plan_advisor_optimization_duration_ms_total"));
+        Assertions.assertTrue(output.contains("operator_type=\"join\""));
+        Assertions.assertTrue(output.contains("operator_type=\"agg\""));
+    }
+
+    @Test
     public void testLeaderAwarenessMetric() {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
 

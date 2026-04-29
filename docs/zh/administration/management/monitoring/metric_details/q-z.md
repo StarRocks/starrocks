@@ -8,10 +8,10 @@ description: "Alphabetical q - z"
 
 :::note
 
-物化视图和共享数据集群的指标在相应章节中详细介绍：
+物化视图和存算分离集群的指标在相应章节中详细介绍：
 
 - [异步物化视图指标](../metrics-materialized_view.md)
-- [共享数据仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
+- [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
 有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
 
@@ -65,6 +65,48 @@ description: "Alphabetical q - z"
 
 - 单位：计数
 - 描述：扫描的总行数。
+
+## `query_spill_trigger_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端（`local`、`remote`）细分的、触发过至少一次落盘的 spillable 算子实例数量。每个算子实例首次执行 flush 回调时累加一次。
+
+## `query_spill_bytes_write_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、spillable 算子累计写入溢出存储的有效负载字节数。
+
+## `query_spill_bytes_read_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段从溢出存储累计读回的有效负载字节数。
+
+## `query_spill_blocks_write_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、为写入分配的溢出 block 数量。用于估算写路径的 IO 次数规模。
+
+## `query_spill_blocks_read_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、打开用于读取的溢出 block 数量。用于估算读路径的 IO 次数规模。
+
+## `query_spill_write_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、写侧溢出 IO（block append 与 flush）累计耗时。用于跟踪写盘性能。
+
+## `query_spill_read_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段读侧溢出 IO（block 读取）累计耗时。用于跟踪读盘性能。
 
 ## `readable_blocks_total (Deprecated)`
 
@@ -203,6 +245,12 @@ description: "Alphabetical q - z"
 - 单位: 计数
 - 描述: 小文件缓存的数量。
 
+## `spill_disk_bytes_used`
+
+- 单位: 字节
+- 标签: `storage_type`
+- 描述: 所有溢出存储目录当前已占用的磁盘字节数。`storage_type=local` 汇总 BE 溢出 `DirManager` 管理的每个目录中正在使用的字节数。`storage_type=remote` 为对称保留，当前始终为 0，因为远端溢出存储由单独的查询实例各自管理，没有全局的聚合数据。
+
 ## `snmp`
 
 - 单位: -
@@ -268,6 +316,72 @@ description: "Alphabetical q - z"
 
 - 单位: 计数
 - 描述: 读取的有效行数（不包括格式无效的行）。标签: `file_format`, `scan_type`。
+
+## `starrocks_be_flat_json_access_hit_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 扫描时 flat JSON 子列访问命中次数的累计值。汇总自单次扫描的 `flat_json_hits` 与 `merge_json_hits` 统计。
+
+## `starrocks_be_flat_json_access_miss_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 扫描时 flat JSON 子列访问未命中次数的累计值。汇总自单次扫描的 `dynamic_json_hits` 统计（未被物化为 flat 子列的路径）。
+
+## `starrocks_be_flat_json_cast_duration_ns_total`
+
+- 单位: 纳秒
+- 类型: 累积值
+- 描述: 扫描时对 flat JSON 子列值进行类型转换的累计耗时。
+
+## `starrocks_be_flat_json_compaction_schema_change_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 在 compaction 过程中 `HyperJsonTransformer` 因输入 flat JSON schema 与上一段不同而重新初始化的次数。数值偏高表示参与 compaction 的 segment 间 schema 抖动。
+
+## `starrocks_be_flat_json_compaction_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: `FlatJsonColumnCompactor` 执行 JSON 列扁平化的 compaction 调用次数。
+
+## `starrocks_be_flat_json_flatten_duration_ns_total`
+
+- 单位: 纳秒
+- 类型: 累积值
+- 描述: 扫描时 JSON 扁平化的累计耗时。
+
+## `starrocks_be_flat_json_merge_duration_ns_total`
+
+- 单位: 纳秒
+- 类型: 累积值
+- 描述: 扫描时将 flat JSON 子列合并回完整 JSON 的累计耗时。
+
+## `starrocks_be_flat_json_paths_discovered_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 在 flat JSON 段写入过程中 `JsonPathDeriver` 探测到的 JSON 路径总数。
+
+## `starrocks_be_flat_json_paths_extracted_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: `FlatJsonColumnWriter` 物化为子列的 JSON 路径总数（含附加的 null/remain 列）。
+
+## `starrocks_be_flat_json_segment_write_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 触发 flat JSON 列抽取的 segment 写入次数。
+
+## `starrocks_be_flat_json_write_rows_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 进入 `FlatJsonColumnWriter` 的行数（在 `append()` 处统计，实际扁平化之前）。
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -392,13 +506,13 @@ description: "Alphabetical q - z"
 
 - 单位：毫秒
 - 类型：瞬时
-- 描述：表示特定仓库下最后一次查询或加载的结束时间。对于无共享集群，此项仅监控默认仓库。
+- 描述：表示特定仓库下最后一次查询或加载的结束时间。对于存算一体集群，此项仅监控默认仓库。
 
 ## `starrocks_fe_memory_usage`
 
 - 单位：字节或计数
 - 类型：瞬时
-- 描述：表示特定仓库下各种模块的内存统计信息。对于无共享集群，此项仅监控默认仓库。
+- 描述：表示特定仓库下各种模块的内存统计信息。对于存算一体集群，此项仅监控默认仓库。
 
 ## `starrocks_fe_meta_log_count`
 
@@ -598,19 +712,19 @@ description: "Alphabetical q - z"
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示特定仓库下正在运行的BACKUP任务数量。对于无共享集群，此项仅监控默认仓库。对于共享数据集群，此值始终为 `0`。
+- 描述：表示特定仓库下正在运行的BACKUP任务数量。对于存算一体集群，此项仅监控默认仓库。对于存算分离集群，此值始终为 `0`。
 
 ## `starrocks_fe_unfinished_query`
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示特定仓库下当前正在运行的查询数量。对于无共享集群，此项仅监控默认仓库。
+- 描述：表示特定仓库下当前正在运行的查询数量。对于存算一体集群，此项仅监控默认仓库。
 
 ## `starrocks_fe_unfinished_restore_job`
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示特定仓库下正在运行的RESTORE任务数量。对于无共享集群，此项仅监控默认仓库。对于共享数据集群，此值始终为 `0`。
+- 描述：表示特定仓库下正在运行的RESTORE任务数量。对于存算一体集群，此项仅监控默认仓库。对于存算分离集群，此值始终为 `0`。
 
 ## `storage_page_cache_mem_bytes`
 

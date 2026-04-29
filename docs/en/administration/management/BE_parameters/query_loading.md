@@ -475,6 +475,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
 
+### enable_lock_free_scan_task_queue
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether `ScanExecutor` uses `LockFreeWorkGroupScanTaskQueue` for OLAP scan and connector scan task scheduling. When enabled, scan tasks are scheduled through a lock-free per-workgroup queue plus a workgroup-level coordinator, which reduces contention compared with the legacy mutex-based `WorkGroupScanTaskQueue`. Set this item to `false` to fall back to the legacy scan task queue implementation during troubleshooting or rollback.
+- Introduced in: v4.1.0
+
 ### pk_index_parallel_get_threadpool_size
 
 - Default: 1048576

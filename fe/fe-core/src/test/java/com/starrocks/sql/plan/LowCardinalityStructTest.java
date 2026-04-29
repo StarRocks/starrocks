@@ -593,4 +593,24 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "array_agg[([9: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>>, true]); args: INT,INT;" +
                 " result: ARRAY<INT>; args nullable: true; result nullable: true]\n"), plan);
     }
+
+    @Test
+    public void testPartialEncoding() throws Exception {
+        String sql = """
+                select array_agg(VARCHAR_COL order by VARCHAR_COL2), array_agg(INTEGER_COL order by VARCHAR_COL2)
+                from T JOIN T2 ON (KEY_COL = KEY_COL2)
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  9:Decode\n" +
+                "  |  <dict id 13> : <string id 9>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  8:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: array_agg[([13: array_agg, struct<`col1` array<int(11)>, " +
+                "`col2` array<varchar(25)>>, true]); args: INT,VARCHAR; result: ARRAY<INT>; args nullable: true;" +
+                " result nullable: true], " +
+                "array_agg[([10: array_agg, struct<`col1` array<int(11)>, `col2` array<varchar(25)>>, true]); " +
+                "args: INT,VARCHAR; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
 }

@@ -55,7 +55,7 @@
         <guava.version>32.0.1-jre</guava.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
-        <jetty.version>9.4.57.v20241219</jetty.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
         <parquet.version>1.15.2</parquet.version>
         <airlift.version>2.0.3</airlift.version>
         <avro.version>1.12.0</avro.version>
@@ -255,6 +255,12 @@
                         <groupId>io.netty</groupId>
                         <artifactId>netty-handler</artifactId>
                     </exclusion>
+                    <!-- https://github.com/StarRocks/starrocks/issues/71898 -->
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -281,6 +287,11 @@
                     <exclusion>
                         <groupId>org.apache.hadoop</groupId>
                         <artifactId>hadoop-common</artifactId>
+                    </exclusion>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -358,12 +369,26 @@
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-azure</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-azure-datalake</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>

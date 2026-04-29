@@ -114,6 +114,16 @@ public:
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumnPtr& upsert,
                                    std::vector<uint64_t>* rss_rowids, bool need_lock);
 
+    // Batch query rss_rowids for multiple update segments using parallel PK index reads.
+    // SegmentPKIterators are created and consumed one at a time to avoid memory spike
+    // from eagerly initializing all iterators upfront. Each iterator uses lazy_load to
+    // read PKs chunk-by-chunk, and each chunk is queried in parallel via thread pool.
+    // Acquires the index cache entry once for all segments.
+    Status batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
+                                             std::vector<SegmentPKIteratorPtr>& pk_iters,
+                                             std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                             bool need_lock);
+
     // get column data by rssid and rowids
     Status get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,
                              bool with_default, const std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
@@ -190,6 +200,23 @@ public:
     void remove_primary_index_cache(IndexEntry* index_entry);
 
     void unload_and_remove_primary_index(int64_t tablet_id);
+
+    // For a cloud-native PK tablet, flush its cached PK-index memtable into
+    // sstables on shared storage, then return a new metadata snapshot whose
+    // sstable_meta covers all live data of the tablet's rowsets at
+    // metadata->version(). Non-PK or non-cloud-native tablets pass through:
+    // the input |metadata| is returned unchanged.
+    //
+    // Used by tablet split/merge paths to establish the reshard invariant
+    // that every input tablet's sstable_meta covers all inherited rowsets'
+    // live data before any metadata-level restructuring.
+    //
+    // Locking mirrors PrimaryKeyTxnLogApplier: shard-level shared lock +
+    // per-index write_guard via prepare_primary_index. Assumes FE's mutual
+    // exclusion between publish_resharding_tablet and publish_version, so
+    // the cached _data_version cannot advance past metadata->version()
+    // during this call.
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata);
 
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
