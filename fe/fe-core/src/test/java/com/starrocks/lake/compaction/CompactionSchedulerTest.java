@@ -840,6 +840,10 @@ public class CompactionSchedulerTest {
                 result = node1;
                 systemInfoService.getBackendOrComputeNode(2002L);
                 result = node2;
+            }
+        };
+        new Expectations() {
+            {
                 BrpcProxy.getLakeService("10.0.0.1", 9050);
                 result = lakeService;
                 BrpcProxy.getLakeService("10.0.0.2", 9050);
