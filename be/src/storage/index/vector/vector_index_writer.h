@@ -63,7 +63,10 @@ public:
 private:
     std::shared_ptr<TabletIndex> _tablet_index;
     std::string _vector_index_file_path;
-
+    // Declared before _index_builder: TenAnnIndexBuilderProxy stores a raw pointer to this
+    // VectorIndexFileWriter. Members are destroyed in reverse declaration order, so the
+    // proxy's destructor (which calls close() -> _file_writer->Close()) must run BEFORE
+    // _file_writer_holder is freed, otherwise we get a use-after-free on teardown.
     std::unique_ptr<VectorIndexFileWriter> _file_writer_holder;
     std::unique_ptr<VectorIndexBuilder> _index_builder;
 

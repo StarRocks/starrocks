@@ -197,14 +197,20 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                     GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
                                                                    _opts.segment_file_mark.rowset_id, _segment_id,
                                                                    opts.tablet_index.at(GIN).index_id()));
-        } else if (opts.need_vector_index && !_opts.skip_vector_index) {
+        } else if (opts.need_vector_index) {
             int64_t index_id = opts.tablet_index.at(IndexType::VECTOR).index_id();
+            // Shared-data mode: tablet writer pre-populates vector_index_file_paths with
+            // location-provider-resolved paths. Shared-nothing mode: the map is empty and
+            // we fall back to the IndexDescriptor-based path.
             auto it = _opts.vector_index_file_paths.find(index_id);
-            if (it == _opts.vector_index_file_paths.end()) {
-                return Status::InternalError("vector_index_file_paths must be populated for vector index, index_id=" +
-                                             std::to_string(index_id));
+            if (it != _opts.vector_index_file_paths.end()) {
+                opts.standalone_index_file_paths.emplace(IndexType::VECTOR, it->second);
+            } else {
+                opts.standalone_index_file_paths.emplace(
+                        IndexType::VECTOR, IndexDescriptor::vector_index_file_path(
+                                                   _opts.segment_file_mark.rowset_path_prefix,
+                                                   _opts.segment_file_mark.rowset_id, _segment_id, index_id));
             }
-            opts.standalone_index_file_paths.emplace(IndexType::VECTOR, it->second);
         }
 
         if (column.type() == LogicalType::TYPE_ARRAY) {

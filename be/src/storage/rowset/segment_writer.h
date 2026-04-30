@@ -82,7 +82,11 @@ struct SegmentWriterOptions {
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
     SegmentFileMark segment_file_mark;
-    std::map<int64_t, std::string> vector_index_file_paths; // index_id -> full path
+    // Full paths (including location scheme) for vector index files, keyed by index_id.
+    // Populated by the tablet writer for shared-data mode where the location provider
+    // resolves object-storage paths; in shared-nothing mode this map is empty and the
+    // segment writer falls back to IndexDescriptor-based path construction.
+    std::map<int64_t, std::string> vector_index_file_paths;
     std::string encryption_meta;
     bool is_compaction = false;
     bool skip_vector_index = false;

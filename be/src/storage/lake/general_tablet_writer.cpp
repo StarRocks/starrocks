@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <unordered_map>
+
 #include "column/chunk.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -27,11 +29,50 @@
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
+
+namespace {
+// For each column with a vector index, resolve a full segment-level path for the
+// upcoming .vi file and stash it in |opts.vector_index_file_paths|. The SegmentWriter
+// picks these up to direct tenann's writer at object storage.
+//
+// Errors from schema lookups are surfaced; silently skipping them would leave the
+// map empty and make SegmentWriter fall back to the IndexDescriptor-based path,
+// which in shared-data mode is not reachable via the location provider.
+Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tablet_id, std::string_view segment_name,
+                                    TabletManager* tablet_mgr, LocationProvider* location_provider, FileSystem* fs,
+                                    SegmentWriterOptions& opts) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        RETURN_IF_ERROR(schema->get_indexes_for_column(column.unique_id(), &tablet_index));
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            return Status::InternalError(
+                    fmt::format("schema reports VECTOR index on column uid={} but get_indexes_for_column returned none",
+                                column.unique_id()));
+        }
+        int64_t index_id = it->second.index_id();
+        std::string vi_name = gen_vector_index_filename(segment_name, index_id);
+        std::string full_path;
+        if (location_provider && fs) {
+            full_path = location_provider->segment_location(tablet_id, vi_name);
+        } else {
+            full_path = tablet_mgr->segment_location(tablet_id, vi_name);
+        }
+        opts.vector_index_file_paths[index_id] = std::move(full_path);
+    }
+    return Status::OK();
+}
+} // namespace
 
 void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer) {
     if (segment_writer == nullptr) {
@@ -188,33 +229,6 @@ uint32_t get_vector_index_build_threshold(const TabletSchemaCSPtr& schema) {
     return config::config_vector_index_default_build_threshold;
 }
 
-void fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tablet_id, std::string_view segment_name,
-                                  TabletManager* tablet_mgr, LocationProvider* location_provider, FileSystem* fs,
-                                  SegmentWriterOptions& opts) {
-    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
-        const auto& column = schema->column(i);
-        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
-            continue;
-        }
-        std::unordered_map<IndexType, TabletIndex> tablet_index;
-        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
-            continue;
-        }
-        auto it = tablet_index.find(IndexType::VECTOR);
-        if (it == tablet_index.end()) {
-            continue;
-        }
-        int64_t index_id = it->second.index_id();
-        std::string vi_name = gen_vector_index_filename(segment_name, index_id);
-        std::string full_path;
-        if (location_provider && fs) {
-            full_path = location_provider->segment_location(tablet_id, vi_name);
-        } else {
-            full_path = tablet_mgr->segment_location(tablet_id, vi_name);
-        }
-        opts.vector_index_file_paths[index_id] = std::move(full_path);
-    }
-}
 } // namespace
 
 Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
@@ -232,7 +246,8 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
 
     opts.global_dicts = _global_dicts;
 
-    fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
+    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                 _fs.get(), opts));
     opts.defer_vector_index_build = has_async_vector_index(_schema);
 
     WritableFileOptions wopts;
@@ -261,9 +276,11 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
         opts.skip_vector_index = true;
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
-        fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
+        RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                     _fs.get(), opts));
     }
-
+    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                 _fs.get(), opts));
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -538,7 +555,8 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         opts.flat_json_config->update(metadata->flat_json_config());
     }
 
-    fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
+    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                 _fs.get(), opts));
     opts.defer_vector_index_build = has_async_vector_index(_schema);
 
     WritableFileOptions wopts;
@@ -553,6 +571,10 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     } else {
         ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
     }
+
+    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                 _fs.get(), opts));
+
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;

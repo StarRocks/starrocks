@@ -55,13 +55,13 @@ Status TenAnnIndexBuilderProxy::init() {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
         _index_builder->index_writer()->SetIndexCache(tenann::IndexCache::GetGlobalInstance());
-        if (_is_element_nullable) {
-            _index_builder->EnableCustomRowId();
-        }
         // Use tenann file writer for remote FS (S3/HDFS) in shared-data mode
         if (_file_writer != nullptr) {
             _index_builder->index_writer()->SetFileWriter(
                     std::shared_ptr<tenann::IndexFileWriter>(_file_writer, [](tenann::IndexFileWriter*) {}));
+        }
+        if (_is_element_nullable) {
+            _index_builder->EnableCustomRowId();
         }
         _index_builder->Open(_index_path);
 
@@ -122,7 +122,8 @@ void TenAnnIndexBuilderProxy::close() const {
     }
     // TenANN's IndexBuilder::Close() does NOT call IndexFileWriter::Close().
     // For S3, objects are only visible after close(), so we must explicitly
-    // close the file writer to finalize the upload.
+    // close the file writer to finalize the upload. VectorIndexFileWriter::Close()
+    // is idempotent, so the destructor path can safely re-enter.
     if (_file_writer) {
         _file_writer->Close();
     }

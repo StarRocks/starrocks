@@ -23,6 +23,8 @@
 
 namespace starrocks {
 
+class VectorIndexFileWriter;
+
 class VectorIndexBuilderFactory {
 public:
     // omp_threads: number of OpenMP threads passed down to the TenANN builder.
