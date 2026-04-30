@@ -47,7 +47,8 @@ StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_p
                                                              const std::vector<SeekRange>& ranges,
                                                              const LakeIOOptions& lake_io_opts);
 StatusOr<std::vector<std::optional<Range<>>>> get_segment_rowid_ranges_by_seek_ranges(
-        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges, const LakeIOOptions& lake_io_opts);
+        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
+        const LakeIOOptions& lake_io_opts);
 StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(const std::shared_ptr<Segment>& segment,
                                                                        const SeekRange& range,
                                                                        const LakeIOOptions& lake_io_opts);

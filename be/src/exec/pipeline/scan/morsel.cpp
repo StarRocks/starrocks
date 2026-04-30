@@ -1111,7 +1111,8 @@ StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::_issue_pending_child_locked() 
         }
 
         const auto& rowset = candidate.prepared_read_state->rowsets[candidate.rowset_index];
-        const auto& segment = candidate.prepared_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
+        const auto& segment =
+                candidate.prepared_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
         const auto& prepared_segment =
                 candidate.prepared_read_state->rowset_prepared_states[candidate.rowset_index][candidate.segment_index];
         if (rowset == nullptr || segment == nullptr || prepared_segment == nullptr) {
@@ -1182,7 +1183,8 @@ StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::_issue_pending_child_locked() 
 
 void LakeAdaptiveSplitMorselQueue::_maybe_register_pending_candidate(const MorselPtr& morsel) {
     auto* scan_morsel = dynamic_cast<ScanMorsel*>(morsel.get());
-    auto* split_context = dynamic_cast<LakeSplitContext*>(scan_morsel == nullptr ? nullptr : scan_morsel->get_split_context());
+    auto* split_context =
+            dynamic_cast<LakeSplitContext*>(scan_morsel == nullptr ? nullptr : scan_morsel->get_split_context());
     if (scan_morsel == nullptr || split_context == nullptr ||
         split_context->task_type != LakeSplitContext::TaskType::SEGMENT_PREPARE ||
         split_context->rowid_range == nullptr || split_context->prepared_read_state == nullptr ||

@@ -958,7 +958,8 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         observe_adaptive_split_task(split_context, local_rowid_range);
         _params.rowid_range_option = std::move(local_rowid_range);
         _params.short_key_ranges_option.reset();
-    } else if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
+    } else if (split_context != nullptr &&
+               split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
         observe_adaptive_split_task(split_context, _params.rowid_range_option);
     }
 
@@ -1574,9 +1575,8 @@ void LakeDataSource::observe_adaptive_split_task(const pipeline::LakeSplitContex
         return;
     }
 
-    if (_lake_adaptive_last_segment_valid &&
-        (_lake_adaptive_last_rowset_index != split_context->rowset_index ||
-         _lake_adaptive_last_segment_index != split_context->segment_index)) {
+    if (_lake_adaptive_last_segment_valid && (_lake_adaptive_last_rowset_index != split_context->rowset_index ||
+                                              _lake_adaptive_last_segment_index != split_context->segment_index)) {
         COUNTER_UPDATE(_lake_adaptive_segment_switch_counter, 1);
     }
     _lake_adaptive_last_segment_valid = true;
