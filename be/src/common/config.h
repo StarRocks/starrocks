@@ -1339,6 +1339,17 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Skip compaction when the size-tiered selector picks a level whose total score
+// is below this threshold AND has no overlapping segments AND no deletes.
+//
+// Score formula (per rowset): io_count * 1MB / read_bytes  (sum across rowsets in level)
+// - Many small/overlapped rowsets => high score => compact (useful work)
+// - Few large non-overlapped rowsets => low score => skip (would just rewrite base)
+//
+// Default 0.0 preserves legacy behavior. Tune up (e.g., 0.5) on large PK tables to
+// suppress sparse mid-tier base merges that re-write GBs of data with low file-count
+// reduction. Levels containing overlapped rowsets or deletes always compact regardless.
+CONF_mDouble(lake_pk_compaction_min_level_score, "0.0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.

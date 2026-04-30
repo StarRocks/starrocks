@@ -205,6 +205,42 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         return rowset_indexes;
     }
 
+    // 2b. Skip the picked level if its compaction score is too low to justify the
+    // rewrite cost AND it has no overlapping segments AND no deletes.
+    //
+    // Background: size-tiered selection always returns the highest-score level, even
+    // when no level genuinely needs compaction. On large PK tablets this manifests as
+    // pathological "sparse mid-tier base merges": a level with only a few large
+    // non-overlapped rowsets (e.g., 4 x 700MB on a 13GB tablet) has very low score
+    // (~0.006) but still gets picked because L0 was already drained by prior cumulative
+    // compactions, leaving this mid-tier as the only candidate. Each such pick rewrites
+    // GBs of data with negligible file-count reduction, dominating write amplification.
+    //
+    // Levels that contain overlapped (multi-segment) rowsets are always allowed to
+    // compact since their inherent IO overhead can only be reduced by compaction.
+    // Levels containing deletes are also allowed, since delete vectors must eventually
+    // be applied/cleaned up via compaction.
+    if (pick_level_ptr->score < config::lake_pk_compaction_min_level_score) {
+        bool has_overlap = false;
+        bool has_deletes = false;
+        auto rs_copy = pick_level_ptr->rowsets;
+        while (!rs_copy.empty()) {
+            const auto& r = rs_copy.top();
+            if (r.multi_segment_with_overlapped()) has_overlap = true;
+            if (r.delete_bytes() > 0) has_deletes = true;
+            if (has_overlap && has_deletes) break;
+            rs_copy.pop();
+        }
+        if (!has_overlap && !has_deletes) {
+            VLOG(2) << strings::Substitute(
+                    "lake PK compaction skipped: tablet=$0 level_score=$1 < threshold=$2 "
+                    "(rowsets=$3, no overlap, no deletes — likely sparse mid-tier)",
+                    tablet_metadata->id(), pick_level_ptr->score, config::lake_pk_compaction_min_level_score,
+                    pick_level_ptr->rowsets.size());
+            return rowset_indexes; // empty -> no compaction this round
+        }
+    }
+
     // 3. pick input rowsets from level
     size_t cur_compaction_result_bytes = 0;
     bool reach_max_input_per_compaction = false;

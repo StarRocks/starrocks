@@ -159,6 +159,18 @@ CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 
+// Skip compaction when the size-tiered selector picks a level whose total score
+// is below this threshold AND has no overlapping segments AND no deletes.
+//
+// Score formula (per rowset): io_count * 1MB / read_bytes  (sum across rowsets in level)
+// - Many small/overlapped rowsets => high score => compact (useful work)
+// - Few large non-overlapped rowsets => low score => skip (would just rewrite base)
+//
+// Default 0.0 preserves legacy behavior. Tune up (e.g., 0.5) on large PK tables to
+// suppress sparse mid-tier base merges that re-write GBs of data with low file-count
+// reduction. Levels containing overlapped rowsets or deletes always compact regardless.
+CONF_mDouble(lake_pk_compaction_min_level_score, "0.0");
+
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
