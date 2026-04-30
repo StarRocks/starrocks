@@ -17,11 +17,178 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <numeric>
+#include <random>
+
 namespace starrocks::lake {
 
 using namespace tablet_reshard_helper;
 
 class TabletReshardHelperTest : public ::testing::Test {};
+
+namespace {
+
+int64_t sum_of(const std::vector<int64_t>& v) {
+    return std::accumulate(v.begin(), v.end(), int64_t{0});
+}
+
+} // namespace
+
+// -----------------------------------------------------------------------------
+// Proportional anchor helpers. allocate_proportionally and
+// cap_and_redistribute_dels back the per-rowset anchor pass in
+// tablet_splitter (split_tablet → get_tablet_split_ranges → apply_rowset_anchor)
+// so re-splits preserve `Σ children == parent` exactly. End-to-end conservation
+// under split is covered by LakeTabletReshardTest in tablet_reshard_test.cpp.
+// -----------------------------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_basic_conservation) {
+    std::vector<int64_t> out(3, 0);
+    allocate_proportionally(/*total=*/12, /*weights=*/{1, 2, 3}, &out);
+    EXPECT_EQ(12, sum_of(out));
+    EXPECT_EQ((std::vector<int64_t>{2, 4, 6}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_largest_remainder) {
+    // total=10, weights=[1,1,1] → base=3 each, leftover=1 → first index gets +1.
+    std::vector<int64_t> out(3, 0);
+    allocate_proportionally(/*total=*/10, /*weights=*/{1, 1, 1}, &out);
+    EXPECT_EQ(10, sum_of(out));
+    EXPECT_EQ((std::vector<int64_t>{4, 3, 3}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_tiebreak_deterministic) {
+    // Equal weights and tied remainders fall to the lowest indices. Run twice
+    // and compare to confirm reproducibility.
+    std::vector<int64_t> a(5, 0), b(5, 0);
+    allocate_proportionally(7, {1, 1, 1, 1, 1}, &a);
+    allocate_proportionally(7, {1, 1, 1, 1, 1}, &b);
+    EXPECT_EQ(7, sum_of(a));
+    EXPECT_EQ((std::vector<int64_t>{2, 2, 1, 1, 1}), a);
+    EXPECT_EQ(a, b);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_zero_total) {
+    std::vector<int64_t> out(4, 99);
+    allocate_proportionally(0, {3, 5, 7, 9}, &out);
+    EXPECT_EQ((std::vector<int64_t>{0, 0, 0, 0}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_zero_weights_uniform_fallback) {
+    std::vector<int64_t> out(3, 0);
+    allocate_proportionally(10, {0, 0, 0}, &out);
+    EXPECT_EQ(10, sum_of(out));
+    // floor(10/3)=3 each, remainder 1 → first index gets +1.
+    EXPECT_EQ((std::vector<int64_t>{4, 3, 3}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_overflow_safe_at_extreme_scale) {
+    // total * weight overflows int64 without __int128 (1e10 * 1e10 = 1e20).
+    constexpr int64_t kTotal = 10'000'000'000LL;
+    std::vector<int64_t> weights{kTotal, kTotal};
+    std::vector<int64_t> out(2, 0);
+    allocate_proportionally(kTotal, weights, &out);
+    EXPECT_EQ(kTotal, sum_of(out));
+    EXPECT_EQ(kTotal / 2, out[0]);
+    EXPECT_EQ(kTotal / 2, out[1]);
+}
+
+// Regression: when Σ weights overflows int64_t (each weight ≈ INT64_MAX/2 + 1,
+// sum > INT64_MAX), the largest-remainder routine must keep remainders in
+// __int128 — truncating to int64_t there would corrupt the tie-break order.
+// Hare-Niemeyer for two equal weights and an even total still gives an even
+// split; the test asserts both Σ conservation and the deterministic
+// per-bucket value.
+TEST_F(TabletReshardHelperTest, allocate_proportionally_handles_sum_weights_above_int64_max) {
+    constexpr int64_t kHalfPlus = (std::numeric_limits<int64_t>::max() / 2) + 1;
+    // 2 * kHalfPlus exceeds INT64_MAX (overflows in int64), but sum_w stays
+    // safe in __int128.
+    std::vector<int64_t> weights{kHalfPlus, kHalfPlus};
+    std::vector<int64_t> out(2, 0);
+    allocate_proportionally(/*total=*/100, weights, &out);
+    EXPECT_EQ(100, sum_of(out));
+    EXPECT_EQ(50, out[0]);
+    EXPECT_EQ(50, out[1]);
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_no_overflow_is_no_op) {
+    std::vector<int64_t> dels{2, 3, 1};
+    cap_and_redistribute_dels(/*rows=*/{10, 10, 10}, &dels);
+    EXPECT_EQ((std::vector<int64_t>{2, 3, 1}), dels);
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_basic_overflow) {
+    // dels[0] over-allocated by 5; redistribute to bucket 2 which has the
+    // largest headroom. Σ preserved at 20.
+    std::vector<int64_t> dels{15, 5, 0};
+    cap_and_redistribute_dels(/*rows=*/{10, 10, 10}, &dels);
+    EXPECT_EQ(20, sum_of(dels));
+    EXPECT_EQ(10, dels[0]);
+    // Bucket 1 has headroom 5, bucket 2 has 10 — headroom desc puts 2 ahead of 1
+    // (10 > 5). So overflow=5 goes to bucket 2 first.
+    EXPECT_EQ(5, dels[1]);
+    EXPECT_EQ(5, dels[2]);
+    for (size_t i = 0; i < dels.size(); ++i) {
+        EXPECT_LE(dels[i], 10);
+    }
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_skewed_headrooms_break_by_index) {
+    // Σ pre-cap dels = 20, Σ rows = 25 (feasible). After cap dels[0] from 10
+    // to 5, overflow=5; headroom=[0,5,5] → buckets 1 and 2 tie, index-asc
+    // tie-break sends overflow to bucket 1 first.
+    std::vector<int64_t> dels{10, 5, 5}; // pre-cap, Σ=20
+    cap_and_redistribute_dels(/*rows=*/{5, 10, 10}, &dels);
+    EXPECT_EQ(20, sum_of(dels));
+    EXPECT_EQ(5, dels[0]);
+    EXPECT_EQ(10, dels[1]); // takes the full overflow=5 (tie-break by index)
+    EXPECT_EQ(5, dels[2]);
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_invalid_parent_input_capped_to_rows_sum) {
+    // Σ pre-cap dels (30) > Σ rows (15). Best-effort contract: per-bucket cap
+    // honored, Σ dels post equals Σ rows (= 15).
+    std::vector<int64_t> dels{20, 5, 5};
+    cap_and_redistribute_dels(/*rows=*/{5, 5, 5}, &dels);
+    EXPECT_EQ(15, sum_of(dels));
+    for (size_t i = 0; i < 3; ++i) {
+        EXPECT_LE(dels[i], 5);
+    }
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_fuzz_conservation_and_cap) {
+    // 1000 random trials with feasible inputs (Σ dels ≤ Σ rows). Helper must
+    // preserve Σ exactly and respect per-bucket cap.
+    std::mt19937_64 rng(42);
+    for (int trial = 0; trial < 1000; ++trial) {
+        const int n = 1 + (rng() % 8);
+        std::vector<int64_t> rows(n, 0);
+        std::vector<int64_t> dels(n, 0);
+        int64_t total_rows = 0;
+        for (int i = 0; i < n; ++i) {
+            rows[i] = static_cast<int64_t>(rng() % 1'000'000);
+            total_rows += rows[i];
+        }
+        // Pick parent.dels in [0, total_rows]; distribute it arbitrarily across
+        // buckets (may individually exceed rows[i]).
+        const int64_t parent_dels = total_rows == 0 ? 0 : static_cast<int64_t>(rng() % (total_rows + 1));
+        int64_t remaining = parent_dels;
+        for (int i = 0; i < n - 1 && remaining > 0; ++i) {
+            const int64_t take = static_cast<int64_t>(rng() % (remaining + 1));
+            dels[i] = take;
+            remaining -= take;
+        }
+        if (n > 0) dels[n - 1] = remaining;
+
+        cap_and_redistribute_dels(rows, &dels);
+        EXPECT_EQ(parent_dels, sum_of(dels)) << "trial=" << trial;
+        for (int i = 0; i < n; ++i) {
+            EXPECT_LE(dels[i], rows[i]) << "trial=" << trial << " bucket=" << i;
+            EXPECT_GE(dels[i], 0) << "trial=" << trial << " bucket=" << i;
+        }
+    }
+}
 
 // Verify that set_all_data_files_shared(TxnLogPB*) marks all SST-related fields
 // as shared=true, including the ssts fields in OpWrite and OpCompaction that were

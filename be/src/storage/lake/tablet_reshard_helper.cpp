@@ -15,11 +15,131 @@
 #include "storage/lake/tablet_reshard_helper.h"
 
 #include <algorithm>
+#include <numeric>
 
+#include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
+
+void allocate_proportionally(int64_t total, const std::vector<int64_t>& weights, std::vector<int64_t>* out) {
+    DCHECK(out != nullptr);
+    DCHECK_GE(total, 0);
+    DCHECK_EQ(weights.size(), out->size());
+    DCHECK(!weights.empty());
+    for (auto w : weights) DCHECK_GE(w, 0);
+
+    const size_t n = weights.size();
+
+    if (total == 0) {
+        std::fill(out->begin(), out->end(), 0);
+        return;
+    }
+
+    __int128 sum_w = 0;
+    for (auto w : weights) sum_w += static_cast<__int128>(w);
+
+    // All-zero weights with non-zero total: deterministic uniform fallback.
+    // Allocate floor(total/N) to each, +1 to the lowest indices to absorb the
+    // remainder. Preserves Σ exactly without stranding any of the total.
+    if (sum_w == 0) {
+        const int64_t base = total / static_cast<int64_t>(n);
+        const int64_t leftover = total - base * static_cast<int64_t>(n);
+        for (size_t i = 0; i < n; ++i) {
+            (*out)[i] = base + (static_cast<int64_t>(i) < leftover ? 1 : 0);
+        }
+        return;
+    }
+
+    // Largest-remainder method. base[i] = floor(total * w[i] / sum_w);
+    // remainder[i] = (total * w[i]) mod sum_w. The total minus Σ base[i]
+    // is the leftover (always in [0, n)) and is distributed +1 each to the
+    // entries with the largest fractional remainders, breaking ties by
+    // ascending index for determinism.
+    //
+    // remainder is stored as __int128 because rem can be in [0, sum_w) and
+    // sum_w may itself exceed INT64_MAX when there are many large weights;
+    // truncating to int64_t there would corrupt the largest-remainder ordering.
+    // numerator and base also stay in __int128: numerator = total * weights[i]
+    // ≤ INT64_MAX * INT64_MAX ≈ 8.5e37, well within __int128's ~1.7e38 limit.
+    std::vector<__int128> remainders(n, 0);
+    int64_t sum_base = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (weights[i] == 0) {
+            (*out)[i] = 0;
+            remainders[i] = 0;
+            continue;
+        }
+        const __int128 numerator = static_cast<__int128>(total) * static_cast<__int128>(weights[i]);
+        const __int128 base = numerator / sum_w;
+        const __int128 rem = numerator - base * sum_w;
+        (*out)[i] = static_cast<int64_t>(base);
+        remainders[i] = rem;
+        sum_base += static_cast<int64_t>(base);
+    }
+    int64_t leftover = total - sum_base;
+
+    if (leftover > 0) {
+        std::vector<size_t> order(n);
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            if (remainders[a] != remainders[b]) return remainders[a] > remainders[b];
+            return a < b;
+        });
+        for (size_t k = 0; k < n && leftover > 0; ++k, --leftover) {
+            (*out)[order[k]]++;
+        }
+    }
+
+#ifndef NDEBUG
+    int64_t actual_sum = 0;
+    for (auto v : *out) actual_sum += v;
+    DCHECK_EQ(actual_sum, total);
+#endif
+}
+
+void cap_and_redistribute_dels(const std::vector<int64_t>& rows, std::vector<int64_t>* dels) {
+    DCHECK(dels != nullptr);
+    DCHECK_EQ(rows.size(), dels->size());
+    for (auto r : rows) DCHECK_GE(r, 0);
+    for (auto d : *dels) DCHECK_GE(d, 0);
+
+    const size_t n = rows.size();
+
+    // Cap each (*dels)[i] to rows[i]; accumulate the over-cap mass as overflow.
+    int64_t overflow = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if ((*dels)[i] > rows[i]) {
+            overflow += (*dels)[i] - rows[i];
+            (*dels)[i] = rows[i];
+        }
+    }
+    if (overflow == 0) return;
+
+    // Redistribute overflow to buckets with headroom, ordered by
+    // (headroom desc, index asc) for deterministic output.
+    std::vector<size_t> order(n);
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        const int64_t ha = rows[a] - (*dels)[a];
+        const int64_t hb = rows[b] - (*dels)[b];
+        if (ha != hb) return ha > hb;
+        return a < b;
+    });
+    for (size_t idx : order) {
+        if (overflow <= 0) break;
+        const int64_t headroom = rows[idx] - (*dels)[idx];
+        if (headroom <= 0) break; // remaining are zero-headroom under desc sort
+        const int64_t take = std::min(headroom, overflow);
+        (*dels)[idx] += take;
+        overflow -= take;
+    }
+    // overflow > 0 here only if the input violated the feasibility precondition
+    // (Σ pre-cap dels > Σ rows). The post-condition becomes Σ dels == Σ rows
+    // (the maximum feasible) with per-bucket cap honored, matching the
+    // best-effort contract in tablet_reshard_helper.h.
+}
 
 void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata) {
     auto* shared_segments = rowset_metadata->mutable_shared_segments();
