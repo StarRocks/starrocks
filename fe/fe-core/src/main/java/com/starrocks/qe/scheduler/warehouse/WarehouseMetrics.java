@@ -99,7 +99,7 @@ public class WarehouseMetrics {
 
     public List<ScalarOperator> toConstantOperators() {
         List<ScalarOperator> result = Lists.newArrayList();
-        result.add(ConstantOperator.createVarchar(String.valueOf(warehouseId)));
+        result.add(ConstantOperator.createBigint(warehouseId));
         result.add(ConstantOperator.createVarchar(warehouseName));
         result.add(ConstantOperator.createVarchar(String.valueOf(queuePendingLength)));
         result.add(ConstantOperator.createVarchar(String.valueOf(queueRunningLength)));
