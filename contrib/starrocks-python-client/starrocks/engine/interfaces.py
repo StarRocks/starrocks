@@ -145,7 +145,10 @@ class ReflectedMVState(ReflectedViewState):
 
 
 @add_cached_str_clause
-@dataclasses.dataclass
+# eq=False keeps the default identity-based __hash__ from object, so SQLAlchemy
+# can use these objects inside its reflection cache keys (issue #70733). The
+# dataclasses also mutate self in __str__, which rules out frozen=True.
+@dataclasses.dataclass(eq=False)
 class ReflectedRefreshInfo:
     """Stores structured reflection information about a materialized view's refresh scheme."""
     moment: Optional[str] = None
@@ -217,7 +220,7 @@ class ReflectedCKInfo(TypedDict):
 
 
 @add_cached_str_clause
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
+@dataclasses.dataclass(eq=False, **dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedTableKeyInfo:
     """
     Stores structed reflection information about a table' key/type.
@@ -243,7 +246,7 @@ class ReflectedTableKeyInfo:
 
 
 @add_cached_str_clause
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
+@dataclasses.dataclass(eq=False, **dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedPartitionInfo:
     """
     Stores structured reflection information about a table's partitioning scheme.
@@ -272,7 +275,7 @@ class ReflectedPartitionInfo:
 
 
 @add_cached_str_clause
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
+@dataclasses.dataclass(eq=False, **dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedDistributionInfo:
     """Stores reflection information about a view."""
     type: Union[str, None]
