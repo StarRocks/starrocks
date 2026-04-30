@@ -49,7 +49,9 @@ class Operator {
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
-             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access = nullptr);
+             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
+             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work

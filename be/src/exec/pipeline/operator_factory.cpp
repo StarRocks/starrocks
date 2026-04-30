@@ -30,6 +30,10 @@
 
 namespace starrocks::pipeline {
 
+Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
+                   int32_t driver_sequence)
+        : Operator(factory, id, std::move(name), plan_node_id, is_subordinate, driver_sequence, factory) {}
+
 OperatorFactory::OperatorFactory(int32_t id, std::string name, int32_t plan_node_id)
         : _id(id), _name(std::move(name)), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);
