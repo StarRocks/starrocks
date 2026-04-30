@@ -89,6 +89,13 @@ public:
 
     virtual bool is_encrypted() const { return false; };
 
+    // Cache key for the page hosted at `stream_offset` bytes within this stream. The default
+    // encodes (filename, stream_offset). Streams whose `filename()` is shared with other streams
+    // (e.g. BundleSeekableInputStream slices of one physical file) must override to fold their
+    // disambiguator into the key, so callers never need to know whether the underlying stream
+    // is a slice.
+    virtual std::string page_cache_key(int64_t stream_offset) const;
+
 protected:
     std::string _filename = "";
 };
@@ -144,6 +151,11 @@ public:
     bool is_encrypted() const override { return _impl->is_encrypted(); };
 
     Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
+
+    // Intentionally do NOT forward page_cache_key to _impl. Wrappers like RandomAccessFile carry
+    // the path on themselves (overriding filename() but leaving _impl's _filename empty), so
+    // delegating would lose the name and return a key like (empty, offset). Inheriting the base
+    // default makes virtual filename() dispatch back to this wrapper and pick up the right name.
 
 private:
     SeekableInputStream* _impl;
