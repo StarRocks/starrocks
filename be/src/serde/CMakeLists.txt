@@ -28,6 +28,7 @@ target_link_libraries(SerdeCore PUBLIC
         Base
         Gutil
         StarRocksGen
+        streamvbyte
         )
 
 ADD_BE_LIB(Serde
