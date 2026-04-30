@@ -160,7 +160,7 @@ DROP MATERIALIZED VIEW test_mv1;
 --
 -- Partition-level DELETE triggers Iceberg metadata-delete; the PCT
 -- refresh that follows produces only partition drops (no INSERT),
--- so MVPCTBasedRefreshProcessor returns SKIPPED before
+-- so MVPCTRefreshProcessor returns SKIPPED before
 -- updateVersionMeta runs and TVR is NOT committed. Step 3's INSERT
 -- therefore still sees the stale anchor and must fall back to PCT
 -- again (but this PCT has INSERT work, so TVR finally commits).

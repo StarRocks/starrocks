@@ -19,7 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -105,7 +105,7 @@ public class MVTaskRunProcessorTest extends MVTestBase {
     }
 
     /**
-     * Test that MVPCTBasedRefreshProcessor correctly records plan builder message in tracer.
+     * Test that MVPCTRefreshProcessor correctly records plan builder message in tracer.
      * This tests the fix that records plan builder message in the tracer for better debugging.
      */
     @Test
@@ -154,7 +154,7 @@ public class MVTaskRunProcessorTest extends MVTestBase {
     }
 
     /**
-     * Test that MVPCTBasedRefreshProcessor correctly updates task run status definition.
+     * Test that MVPCTRefreshProcessor correctly updates task run status definition.
      */
     @Test
     public void testTaskRunStatusDefinitionUpdate() throws Exception {
@@ -195,7 +195,7 @@ public class MVTaskRunProcessorTest extends MVTestBase {
     }
 
     /**
-     * Test the getRetryTimes method in MVPCTBasedRefreshProcessor.
+     * Test the getRetryTimes method in MVPCTRefreshProcessor.
      */
     @Test
     public void testGetRetryTimes() throws Exception {
@@ -230,8 +230,8 @@ public class MVTaskRunProcessorTest extends MVTestBase {
         taskRunContext.setProperties(testProperties);
         mvTaskRunProcessor.prepare(taskRunContext);
 
-        MVPCTBasedRefreshProcessor processor = 
-                (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        MVPCTRefreshProcessor processor =
+                (MVPCTRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
         Assertions.assertNotNull(processor);
 
         // Test getRetryTimes with different contexts

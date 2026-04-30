@@ -52,7 +52,7 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -420,7 +420,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         return getMVTaskRunProcessor(taskRun);
     }
 
-    protected MVPCTBasedRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
+    protected MVPCTRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
         TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
         return getPartitionBasedRefreshProcessor(taskRun);
     }
@@ -447,7 +447,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
                 QueryMaterializationContext.QueryCacheStats.class);
     }
 
-    protected Map<Table, Set<String>> getRefTableRefreshedPartitions(MVPCTBasedRefreshProcessor processor) {
+    protected Map<Table, Set<String>> getRefTableRefreshedPartitions(MVPCTRefreshProcessor processor) {
         PCellSortedSet set = PCellSortedSet.of(Set.of(PCellWithName.of("p20220101", new PCellNone())));
         Map<BaseTableSnapshotInfo, PCellSortedSet> baseTables = processor.getPCTRefTableRefreshPartitions(set);
         Assertions.assertEquals(2, baseTables.size());
@@ -672,7 +672,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
             Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvTaskRunContext = processor.getMvContext();
             ExecPlan execPlan = mvTaskRunContext.getExecPlan();
             Assertions.assertTrue(execPlan != null);
@@ -687,10 +687,10 @@ public abstract class MVTestBase extends StarRocksTestBase {
         return (MVTaskRunProcessor) taskRun.getProcessor();
     }
 
-    public static MVPCTBasedRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
+    public static MVPCTRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
         Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
         MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
-        return (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        return (MVPCTRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
     }
 
     protected void withMVQuery(String mvQuery,

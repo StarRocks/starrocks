@@ -62,7 +62,7 @@ import java.util.Map;
  * in {@link RuleSet#IVM_DELTA_REWRITE_RULES}.</p>
  *
  * <p>Version info for Iceberg tables is already set on scan operators by
- * {@code MVIVMBasedRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer},
+ * {@code MVIVMRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer},
  * so no additional version binding is needed here.</p>
  */
 public class IvmRewriter {

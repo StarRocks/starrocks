@@ -43,7 +43,7 @@ import java.util.Optional;
  * <p>Pattern: {@code LogicalDeltaOperator -> LogicalIcebergScanOperator}
  *
  * <p>The scan operator's {@code tvrVersionRange} (a {@link TvrTableDelta}) carries the from/to snapshot IDs,
- * set by {@code MVIVMBasedRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer}.
+ * set by {@code MVIVMRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer}.
  * This rule reads that same data source as {@code TvrTableScanRule}.
  *
  * <p>For append-only Iceberg tables, {@code __ACTION__} is a constant {@code 0} (INSERT = UPSERT).
