@@ -372,9 +372,10 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
     timer.start();
     // Fast-path dispatch for ADD/DROP INDEX (lake-only). FE classifies these
     // ahead of time and sets only_add_index / only_drop_index in the request.
-    // If the BE-side validation rejects (e.g. unsupported index column / type),
-    // do_process_add_index_only falls back to the regular schema-change path
-    // by calling do_process_alter_tablet from within itself.
+    // BE-side validation failures here propagate as errors (NOT fallback to
+    // do_process_alter_tablet) — the fast-path request shape (same tablet
+    // for base/new, no schema diff) is incompatible with the legacy rewrite
+    // path and would silently double the row count.
     //
     // Guard against buggy callers setting both ADD and DROP flags on the
     // same request. FE never does this, but silently preferring add over
@@ -630,18 +631,25 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 // the FE catalog schema) into TabletIndexPB (column unique IDs, BE-side),
 // and delegates per-segment IDG construction to AddIndexSchemaChange.
 //
-// On validation failure (e.g. column not found, unsupported index type for
-// this phase), falls back to do_process_alter_tablet so the alter still
-// completes via the regular rewrite path. This is defence-in-depth: FE's
-// SchemaChangeIndexFastPathClassifier should already have filtered out
-// ineligible alters before setting only_add_index=true.
+// On any failure, the error is propagated back to FE rather than retried
+// via do_process_alter_tablet: the fast-path request carries
+// base_tablet_id == new_tablet_id and no schema diff, so the legacy
+// rewrite path would re-process the tablet against itself and double the
+// row count. FE's SchemaChangeIndexFastPathClassifier already filters out
+// ineligible alters before setting only_add_index=true, so genuine
+// failures here represent real BE-side errors that should cancel the
+// alter, not silently land in an unsupported fallback shape.
 Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
     AgentMetrics::instance()->lake_add_index_requests_total.increment(1);
     if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
-        LOG(WARNING) << "ADD INDEX fast path called with empty indexes_to_add; "
-                     << "falling back to regular schema change. tablet=" << request.new_tablet_id;
+        // The fast-path request shape (base_tablet_id == new_tablet_id, no
+        // tablet_schema diff) is incompatible with the legacy rewrite path:
+        // delegating here would self-targeted "rewrite" the tablet and
+        // append duplicate rowsets. FE's classifier guarantees this branch
+        // is unreachable in practice, so fail loudly instead of falling
+        // back.
         AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
-        return do_process_alter_tablet(request);
+        return Status::InvalidArgument("ADD INDEX fast path called with empty indexes_to_add");
     }
     if (!request.__isset.txn_id) {
         AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
@@ -685,9 +693,13 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
         for (const auto& col_name : tix.columns) {
             auto ordinal = new_schema->field_index(col_name);
             if (ordinal >= new_schema->num_columns()) {
-                LOG(WARNING) << "ADD INDEX fast path: column " << col_name << " not found in new schema; "
-                             << "falling back to regular schema change. tablet=" << request.new_tablet_id;
-                return do_process_alter_tablet(request);
+                // See note above: do not fall back to do_process_alter_tablet
+                // — the request shape would cause the legacy path to
+                // re-write the tablet against itself and duplicate rows.
+                AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+                return Status::InternalError(
+                        strings::Substitute("ADD INDEX fast path: column $0 not found in new schema. tablet=$1",
+                                            col_name, request.new_tablet_id));
             }
             pb.add_col_unique_id(new_schema->column(ordinal).unique_id());
         }
@@ -704,13 +716,16 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
                             alter_version);
     auto run_st = sc.run(op_add_index);
     if (!run_st.ok()) {
-        // Any build failure (e.g. unsupported index type for this phase)
-        // falls back to the regular schema-change path. The partially
-        // written .idx files become orphans under the txn abort branch.
-        LOG(WARNING) << "ADD INDEX fast path failed: " << run_st << "; falling back to regular schema change. "
-                     << "tablet=" << request.new_tablet_id;
+        // Do NOT fall back to do_process_alter_tablet here. The fast-path
+        // request has base_tablet_id == new_tablet_id and no schema diff;
+        // the legacy rewrite path would treat that as self-targeted alter
+        // and append duplicate rowsets, doubling the visible row count.
+        // Surface the error so FE cancels the alter; partially written
+        // .idx files have already been cleaned up by the run() failure
+        // branch (cleanup_written_idx_files()).
+        LOG(WARNING) << "ADD INDEX fast path failed: " << run_st << " tablet=" << request.new_tablet_id;
         AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
-        return do_process_alter_tablet(request);
+        return run_st;
     }
 
     LOG(INFO) << "ADD INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id

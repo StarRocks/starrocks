@@ -2897,8 +2897,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
 //
 // The ADD INDEX fast path validates incoming TAlterTabletReqV2 before
 // touching tablet_manager. These tests probe the validation paths
-// (missing txn_id, missing index_type, missing columns, both flags set)
-// and the legacy-path fallback when indexes_to_add is empty.
+// (missing txn_id, missing index_type, missing columns, both flags set,
+// empty indexes_to_add). All validation failures must surface as errors:
+// the fast-path request shape is incompatible with the legacy rewrite
+// path (same tablet for base/new, no schema diff), and falling back
+// would silently double the row count.
 
 class SchemaChangeAddIndexOnlyTest : public ::testing::Test {
 public:
@@ -2943,10 +2946,12 @@ TEST_F(SchemaChangeAddIndexOnlyTest, missing_txn_id_returns_invalid_argument) {
     EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
 }
 
-TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_falls_back_to_legacy) {
-    // Empty list triggers fallback to do_process_alter_tablet, which fails
-    // because no real tablet exists. We assert it is NOT InvalidArgument
-    // (proving the validation branch *did not* short-circuit) and not OK.
+TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_returns_invalid_argument) {
+    // Empty indexes_to_add must surface as InvalidArgument and NOT fall
+    // back to do_process_alter_tablet — the fast-path request has
+    // base_tablet_id == new_tablet_id with no schema diff, and the legacy
+    // rewrite path treats that as self-targeted alter, appending duplicate
+    // rowsets and doubling the row count.
     TAlterTabletReqV2 request;
     request.__set_new_tablet_id(5002);
     request.__set_base_tablet_id(5000);
@@ -2957,7 +2962,7 @@ TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_falls_back_to_legacy) 
     SchemaChangeHandler handler(_tablet_manager.get());
     Status st = handler.process_alter_tablet(request);
     ASSERT_FALSE(st.ok());
-    EXPECT_FALSE(st.is_invalid_argument()) << st.to_string();
+    EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
 }
 
 TEST_F(SchemaChangeAddIndexOnlyTest, index_without_type_rejected) {

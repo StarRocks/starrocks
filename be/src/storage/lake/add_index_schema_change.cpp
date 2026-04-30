@@ -478,8 +478,20 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_opts, type_info, &bf_writer));
 
     ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(column, /*path=*/nullptr));
+
+    // Mirror build_bitmap_for_column: bundled rowsets pack multiple logical
+    // segments into one physical file, so the RandomAccessFile must honor
+    // FileInfo.bundle_file_offset (via _with_bundling) — otherwise reads
+    // start at byte 0 of the bundle and column data is decoded against the
+    // wrong page header, surfacing as "Bad page: checksum mismatch".
+    // Encryption_info must likewise be propagated from the already-opened
+    // Segment so transparent decryption works end-to-end.
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(segment->file_name()));
-    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(segment->file_info()));
+    RandomAccessFileOptions raf_opts;
+    if (auto enc = segment->encryption_info(); enc) {
+        raf_opts.encryption_info = *enc;
+    }
+    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file_with_bundling(raf_opts, segment->file_info()));
 
     OlapReaderStatistics stats;
     ColumnIteratorOptions col_iter_opts;
