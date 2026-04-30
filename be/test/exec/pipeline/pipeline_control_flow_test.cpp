@@ -22,6 +22,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -572,6 +573,66 @@ TEST(OperatorRuntimeAccessTest, test_operator_precondition_ready_uses_runtime_ac
     EXPECT_EQ(factory.local_filters[0], op->runtime_in_filters()[0]);
     EXPECT_EQ(factory.instance_filters[0], op->runtime_in_filters()[1]);
     EXPECT_EQ(factory.instance_filters[1], op->runtime_in_filters()[2]);
+}
+
+TEST(OperatorExecStatsSnapshotTest, test_default_operator_snapshot) {
+    TestNormalOperatorFactory factory(1, 10, std::make_shared<Counter>());
+    RuntimeState state;
+    auto op = factory.create(1, 0);
+
+    ASSERT_OK(op->prepare_local_state(&state));
+    COUNTER_UPDATE(op->_push_row_num_counter, 5);
+    COUNTER_UPDATE(op->_pull_row_num_counter, 3);
+    op->_init_conjuct_counters();
+    COUNTER_UPDATE(op->_conjuncts_input_counter, 11);
+    COUNTER_UPDATE(op->_conjuncts_output_counter, 7);
+    op->_init_rf_counters(true);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_input_counter, 13);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_output_counter, 9);
+
+    auto snapshot = op->exec_stats_snapshot();
+
+    EXPECT_TRUE(snapshot.valid);
+    EXPECT_TRUE(snapshot.require_registered_plan_node);
+    EXPECT_EQ(10, snapshot.plan_node_id);
+    EXPECT_TRUE(snapshot.update_push_rows);
+    EXPECT_TRUE(snapshot.update_pull_rows);
+    EXPECT_FALSE(snapshot.force_set_pull_rows);
+    EXPECT_EQ(5, snapshot.push_rows);
+    EXPECT_EQ(3, snapshot.pull_rows);
+    EXPECT_TRUE(snapshot.update_pred_filter_rows);
+    EXPECT_EQ(4, snapshot.pred_filter_rows);
+    EXPECT_TRUE(snapshot.update_rf_filter_rows);
+    EXPECT_EQ(4, snapshot.rf_filter_rows);
+}
+
+TEST(OperatorExecStatsSnapshotTest, test_limit_snapshot_force_sets_pull_rows) {
+    LimitOperatorFactory factory(1, 20, 100);
+    RuntimeState state;
+    auto op = factory.create(1, 0);
+
+    ASSERT_OK(op->prepare_local_state(&state));
+    COUNTER_UPDATE(op->_pull_row_num_counter, 6);
+    op->_init_conjuct_counters();
+    COUNTER_UPDATE(op->_conjuncts_input_counter, 10);
+    COUNTER_UPDATE(op->_conjuncts_output_counter, 4);
+    op->_init_rf_counters(true);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_input_counter, 8);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_output_counter, 3);
+
+    auto snapshot = op->exec_stats_snapshot();
+
+    EXPECT_TRUE(snapshot.valid);
+    EXPECT_FALSE(snapshot.require_registered_plan_node);
+    EXPECT_EQ(20, snapshot.plan_node_id);
+    EXPECT_FALSE(snapshot.update_push_rows);
+    EXPECT_TRUE(snapshot.update_pull_rows);
+    EXPECT_TRUE(snapshot.force_set_pull_rows);
+    EXPECT_EQ(6, snapshot.pull_rows);
+    EXPECT_TRUE(snapshot.update_pred_filter_rows);
+    EXPECT_EQ(6, snapshot.pred_filter_rows);
+    EXPECT_TRUE(snapshot.update_rf_filter_rows);
+    EXPECT_EQ(5, snapshot.rf_filter_rows);
 }
 
 TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
