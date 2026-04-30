@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.fs.HdfsUtil;
 import mockit.Mock;
 import mockit.MockUp;
@@ -37,13 +38,19 @@ public class StorageVolumeAccessCheckerTest {
         String svType = "S3";
         List<String> locations = Arrays.asList("s3://bucket/path1", "s3://bucket/path2");
         Map<String, String> params = new HashMap<>();
-        params.put("AWS_S3_REGION", "us-east-1");
-        params.put("AWS_S3_ENDPOINT", "https://s3.us-east-1.amazonaws.com");
+        params.put(CloudConfigurationConstants.AWS_S3_REGION, "us-east-1");
+        params.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, "https://s3.us-east-1.amazonaws.com");
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
-                return true;
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
+                // success: no exception
+            }
+
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                // success: no exception
             }
         };
 
@@ -58,11 +65,12 @@ public class StorageVolumeAccessCheckerTest {
         String svType = "S3";
         List<String> locations = Collections.singletonList("s3://bucket/path");
         Map<String, String> params = new HashMap<>();
-        params.put("AWS_S3_REGION", "us-east-1");
+        params.put(CloudConfigurationConstants.AWS_S3_REGION, "us-east-1");
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 throw new StarRocksException("Access denied");
             }
         };
@@ -86,11 +94,12 @@ public class StorageVolumeAccessCheckerTest {
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 // Create nested exception chain
                 Exception rootCause = new RuntimeException("Connection refused");
                 Exception middle = new RuntimeException("Network error", rootCause);
-                throw new StarRocksException("Failed to check path", middle);
+                throw new StarRocksException("Failed to write temp check file", middle);
             }
         };
 
@@ -110,7 +119,8 @@ public class StorageVolumeAccessCheckerTest {
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 // Exception with null message
                 throw new StarRocksException((String) null);
             }
@@ -132,16 +142,16 @@ public class StorageVolumeAccessCheckerTest {
         List<String> locations = Arrays.asList("s3://bucket/path1", "s3://bucket/path2");
         Map<String, String> params = new HashMap<>();
 
-        AtomicInteger checkCount = new AtomicInteger(0);
+        AtomicInteger writeCount = new AtomicInteger(0);
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
-                checkCount.incrementAndGet();
-                if (path.equals("s3://bucket/path1")) {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
+                writeCount.incrementAndGet();
+                if (destFilePath.startsWith("s3://bucket/path1/")) {
                     throw new StarRocksException("First path not accessible");
                 }
-                return true;
             }
         };
 
@@ -149,7 +159,7 @@ public class StorageVolumeAccessCheckerTest {
                 () -> StorageVolumeAccessChecker.check(svName, svType, locations, params));
 
         Assertions.assertTrue(ex.getMessage().contains("First path not accessible"));
-        Assertions.assertEquals(1, checkCount.get()); // Should stop at first failure
+        Assertions.assertEquals(1, writeCount.get()); // Should stop at first failure
     }
 
     @Test
@@ -159,16 +169,21 @@ public class StorageVolumeAccessCheckerTest {
         List<String> locations = Arrays.asList("s3://bucket/path1", "s3://bucket/path2");
         Map<String, String> params = new HashMap<>();
 
-        AtomicInteger checkCount = new AtomicInteger(0);
+        AtomicInteger writeCount = new AtomicInteger(0);
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
-                checkCount.incrementAndGet();
-                if (path.equals("s3://bucket/path2")) {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
+                writeCount.incrementAndGet();
+                if (destFilePath.startsWith("s3://bucket/path2/")) {
                     throw new StarRocksException("Second path not accessible");
                 }
-                return true;
+            }
+
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                // success
             }
         };
 
@@ -176,7 +191,7 @@ public class StorageVolumeAccessCheckerTest {
                 () -> StorageVolumeAccessChecker.check(svName, svType, locations, params));
 
         Assertions.assertTrue(ex.getMessage().contains("Second path not accessible"));
-        Assertions.assertEquals(2, checkCount.get()); // First passed, second failed
+        Assertions.assertEquals(2, writeCount.get()); // First passed, second failed
     }
 
     @Test
@@ -201,10 +216,15 @@ public class StorageVolumeAccessCheckerTest {
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 // Try to modify the passed properties
                 properties.put("modified", "true");
-                return true;
+            }
+
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                // success
             }
         };
 
@@ -226,7 +246,8 @@ public class StorageVolumeAccessCheckerTest {
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 throw new StarRocksException(errorMsg);
             }
         };
@@ -252,7 +273,8 @@ public class StorageVolumeAccessCheckerTest {
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 // Create a deeply nested exception chain
                 Throwable level4 = new RuntimeException("Root cause: Invalid credentials");
                 Throwable level3 = new RuntimeException("Authentication failed", level4);
@@ -278,7 +300,8 @@ public class StorageVolumeAccessCheckerTest {
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 // Exception with message but no cause
                 throw new StarRocksException("Simple error message");
             }
@@ -299,7 +322,8 @@ public class StorageVolumeAccessCheckerTest {
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
                 // Exception with null message and null cause
                 throw new StarRocksException((Throwable) null);
             }
@@ -313,28 +337,68 @@ public class StorageVolumeAccessCheckerTest {
     }
 
     /**
-     * When checkPathExist returns false (path doesn't exist but credentials/network are valid),
-     * the precheck should still pass — accessibility check, not existence check.
+     * Verifies that a deletePath failure during cleanup does not cause the overall check to fail.
+     * Cleanup of the temp file is best-effort.
      */
     @Test
-    public void testCheckSuccessWhenPathDoesNotExist() {
+    public void testDeleteFailureIsNonFatal() {
         String svName = "test_sv";
         String svType = "S3";
-        List<String> locations = Collections.singletonList("s3://bucket/nonexistent-path");
+        List<String> locations = Collections.singletonList("s3://bucket/path");
         Map<String, String> params = new HashMap<>();
-        params.put("AWS_S3_REGION", "us-east-1");
 
         new MockUp<HdfsUtil>() {
             @Mock
-            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
-                // Path doesn't exist but credentials/network are valid
-                return false;
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
+                // write succeeds
+            }
+
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                // cleanup fails, but should not surface to the caller
+                throw new StarRocksException("delete failed");
             }
         };
 
-        // Should not throw: we check accessibility (credentials + network), not path existence.
-        // A storage volume may legitimately point to a path that doesn't exist yet.
+        // Delete failure must not fail the overall accessibility check
         Assertions.assertDoesNotThrow(() ->
                 StorageVolumeAccessChecker.check(svName, svType, locations, params));
+    }
+
+    /**
+     * Verifies that the temp file is written inside the given location (trailing slash normalised).
+     */
+    @Test
+    public void testTempFileWrittenInsideLocation() {
+        String svName = "test_sv";
+        String svType = "S3";
+        String location = "s3://bucket/prefix"; // no trailing slash
+        List<String> locations = Collections.singletonList(location);
+        Map<String, String> params = new HashMap<>();
+
+        AtomicInteger writeCount = new AtomicInteger(0);
+
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
+                writeCount.incrementAndGet();
+                // The temp path must be a child of the normalised location
+                Assertions.assertTrue(destFilePath.startsWith(location + "/"),
+                        "Temp file must be written inside the location");
+                Assertions.assertTrue(destFilePath.contains(".starrocks_sv_access_check_"),
+                        "Temp file must use the expected naming prefix");
+            }
+
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                // success
+            }
+        };
+
+        Assertions.assertDoesNotThrow(() ->
+                StorageVolumeAccessChecker.check(svName, svType, locations, params));
+        Assertions.assertEquals(1, writeCount.get());
     }
 }
