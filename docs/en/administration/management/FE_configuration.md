@@ -5658,6 +5658,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable prefixes with materialized view names in logs for better debug.
 - Introduced in: v3.4.0
 
+##### enable_table_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to export table-level metrics in FE. When disabled, FE will skip exporting table metrics (such as table scan/load counters and table size metrics), but still records the counters in memory.
+- Introduced in: -
 
 ##### enable_mv_post_image_reload_cache
 
