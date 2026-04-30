@@ -44,6 +44,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
@@ -86,6 +87,23 @@ bool can_use_split_context_prepared_state(const pipeline::LakeSplitContext* spli
         return false;
     }
     return !split_context->prepared_read_state->disable_segment_prepared_state.load(std::memory_order_acquire);
+}
+
+int64_t count_rowid_range_rows(const RowidRangeOptionPtr& rowid_range) {
+    if (rowid_range == nullptr) {
+        return 0;
+    }
+    int64_t total_rows = 0;
+    for (const auto& [rowset_id, segment_ranges] : rowid_range->rowid_range_per_segment_per_rowset) {
+        (void)rowset_id;
+        for (const auto& [segment_id, split] : segment_ranges) {
+            (void)segment_id;
+            if (split.row_id_range != nullptr) {
+                total_rows += static_cast<int64_t>(split.row_id_range->span_size());
+            }
+        }
+    }
+    return total_rows;
 }
 
 } // namespace
@@ -331,7 +349,8 @@ bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel
     }
 
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
-    if (split_context == nullptr || split_context->rowid_range == nullptr || split_context->short_key_range != nullptr) {
+    if (split_context == nullptr || split_context->rowid_range == nullptr ||
+        split_context->short_key_range != nullptr) {
         return false;
     }
 
@@ -696,6 +715,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
                                            config::lake_cache_select_in_physical_way;
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
+    _params.enable_lake_adaptive_split_morsel_queue = _provider->use_lake_adaptive_split_morsel_queue();
 
     if (thrift_lake_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_lake_scan_node.enable_prune_column_after_index_filter;
@@ -820,15 +840,15 @@ bool LakeDataSource::can_reuse_current_morsel(const pipeline::ScanMorsel& morsel
 }
 
 bool LakeDataSource::has_reuse_blocker() const {
-    const bool enable_cache_select = _runtime_state != nullptr &&
-                                     _runtime_state->query_options().__isset.enable_cache_select &&
-                                     _runtime_state->query_options().enable_cache_select &&
-                                     config::lake_cache_select_in_physical_way;
+    const bool enable_cache_select =
+            _runtime_state != nullptr && _runtime_state->query_options().__isset.enable_cache_select &&
+            _runtime_state->query_options().enable_cache_select && config::lake_cache_select_in_physical_way;
     return enable_cache_select;
 }
 
 bool LakeDataSource::can_fast_reopen_current_morsel() const {
-    if (!config::enable_lake_scan_child_morsel_fast_reopen || _reader == nullptr || !enable_local_child_morsel_reuse()) {
+    if (!config::enable_lake_scan_child_morsel_fast_reopen || _reader == nullptr ||
+        !enable_local_child_morsel_reuse()) {
         return false;
     }
 
@@ -836,7 +856,8 @@ bool LakeDataSource::can_fast_reopen_current_morsel() const {
     if (split_context == nullptr || split_context->task_type != pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
         return false;
     }
-    if (!_provider->could_split_physically() || split_context->rowid_range == nullptr || split_context->short_key_range != nullptr) {
+    if (!_provider->could_split_physically() || split_context->rowid_range == nullptr ||
+        split_context->short_key_range != nullptr) {
         return false;
     }
     return true;
@@ -857,10 +878,20 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     _params.prepared_target_rowset_index = -1;
     _params.prepared_target_segment_index = -1;
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
-    const bool can_reuse_prepared_state = !_ignore_split_context_prepared_state_once && split_context != nullptr &&
-                                          can_use_split_context_prepared_state(split_context) &&
-                                          enable_local_child_prepared_state_reuse();
+    const bool has_prepared_state_candidate = split_context != nullptr &&
+                                              split_context->prepared_read_state != nullptr &&
+                                              split_context->prepared_segment_state != nullptr;
+    if (has_prepared_state_candidate) {
+        COUNTER_UPDATE(_lake_prepared_state_candidate_counter, 1);
+        if (!enable_local_child_prepared_state_reuse()) {
+            COUNTER_UPDATE(_lake_prepared_state_reject_disabled_counter, 1);
+        }
+    }
+    bool can_reuse_prepared_state = !_ignore_split_context_prepared_state_once && split_context != nullptr &&
+                                    can_use_split_context_prepared_state(split_context) &&
+                                    enable_local_child_prepared_state_reuse();
     if (can_reuse_prepared_state && split_context->prepared_read_state != nullptr) {
+        COUNTER_UPDATE(_lake_prepared_state_reuse_hit_counter, 1);
         _prepared_read_state = split_context->prepared_read_state;
     } else if (split_context != nullptr) {
         _prepared_read_state.reset();
@@ -871,10 +902,12 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         } else {
             _params.short_key_ranges_option = split_context->short_key_range;
         }
-        if (can_reuse_prepared_state && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
+        if (can_reuse_prepared_state &&
+            split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT &&
             split_context->prepared_read_state != nullptr && split_context->prepared_segment_state != nullptr) {
             _params.prepared_target_rowset_index = static_cast<int64_t>(split_context->rowset_index);
             _params.prepared_target_segment_index = static_cast<int64_t>(split_context->segment_index);
+            COUNTER_UPDATE(_lake_prepared_state_targeted_read_counter, 1);
         }
     }
 
@@ -922,8 +955,11 @@ Status LakeDataSource::open_reader_for_current_morsel() {
             _prepare_only_mode = true;
             return Status::OK();
         }
+        observe_adaptive_split_task(split_context, local_rowid_range);
         _params.rowid_range_option = std::move(local_rowid_range);
         _params.short_key_ranges_option.reset();
+    } else if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
+        observe_adaptive_split_task(split_context, _params.rowid_range_option);
     }
 
     RETURN_IF_ERROR(_reader->open(_params));
@@ -939,10 +975,19 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
     refresh_glm_context();
 
     const auto* split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
-    const bool can_reuse_prepared_state = !_ignore_split_context_prepared_state_once &&
-                                          can_use_split_context_prepared_state(split_context) &&
-                                          enable_local_child_prepared_state_reuse();
+    const bool has_prepared_state_candidate =
+            split_context->prepared_read_state != nullptr && split_context->prepared_segment_state != nullptr;
+    if (has_prepared_state_candidate) {
+        COUNTER_UPDATE(_lake_prepared_state_candidate_counter, 1);
+        if (!enable_local_child_prepared_state_reuse()) {
+            COUNTER_UPDATE(_lake_prepared_state_reject_disabled_counter, 1);
+        }
+    }
+    bool can_reuse_prepared_state = !_ignore_split_context_prepared_state_once &&
+                                    can_use_split_context_prepared_state(split_context) &&
+                                    enable_local_child_prepared_state_reuse();
     if (can_reuse_prepared_state && split_context->prepared_read_state != nullptr) {
+        COUNTER_UPDATE(_lake_prepared_state_reuse_hit_counter, 1);
         _prepared_read_state = split_context->prepared_read_state;
     } else {
         _prepared_read_state.reset();
@@ -959,7 +1004,9 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
         split_context->prepared_segment_state != nullptr) {
         _params.prepared_target_rowset_index = static_cast<int64_t>(split_context->rowset_index);
         _params.prepared_target_segment_index = static_cast<int64_t>(split_context->segment_index);
+        COUNTER_UPDATE(_lake_prepared_state_targeted_read_counter, 1);
     }
+    observe_adaptive_split_task(split_context, _params.rowid_range_option);
 
     refresh_reuse_signature();
     _reader->set_prepared_read_state(_prepared_read_state);
@@ -1353,6 +1400,31 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_COUNTER(_runtime_profile, "LakeScanLateRuntimeFilterReinitVersionChanged", TUnit::UNIT);
     _late_rf_reinit_filter_set_changed_counter =
             ADD_COUNTER(_runtime_profile, "LakeScanLateRuntimeFilterReinitFilterSetChanged", TUnit::UNIT);
+    _lake_prepared_state_candidate_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateReuseCandidates", TUnit::UNIT);
+    _lake_prepared_state_reuse_hit_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateReuseHits", TUnit::UNIT);
+    _lake_prepared_state_reject_disabled_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateReuseRejectDisabled", TUnit::UNIT);
+    _lake_prepared_state_reject_adaptive_pending_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateReuseRejectAdaptivePending", TUnit::UNIT);
+    _lake_prepared_state_targeted_read_counter =
+            ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateTargetedReads", TUnit::UNIT);
+    _lake_adaptive_seed_local_tasks_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedLocalTasks", TUnit::UNIT);
+    _lake_adaptive_seed_local_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedLocalRows", TUnit::UNIT);
+    _lake_adaptive_pending_tasks_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingTasks", TUnit::UNIT);
+    _lake_adaptive_pending_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingRows", TUnit::UNIT);
+    _lake_adaptive_pending_opened_prepared_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingOpenedPrepared", TUnit::UNIT);
+    _lake_adaptive_pending_opened_unprepared_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingOpenedUnprepared", TUnit::UNIT);
+    _lake_adaptive_pending_opened_prepared_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingOpenedPreparedRows", TUnit::UNIT);
+    _lake_adaptive_pending_opened_unprepared_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingOpenedUnpreparedRows", TUnit::UNIT);
+    _lake_adaptive_refined_tasks_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveRefinedTasks", TUnit::UNIT);
+    _lake_adaptive_refined_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveRefinedRows", TUnit::UNIT);
+    _lake_adaptive_segment_switch_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSegmentSwitches", TUnit::UNIT);
 
     _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
 
@@ -1466,6 +1538,50 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+}
+
+void LakeDataSource::observe_adaptive_split_task(const pipeline::LakeSplitContext* split_context,
+                                                 const RowidRangeOptionPtr& rowid_range) {
+    if (split_context == nullptr ||
+        split_context->adaptive_task_source == pipeline::LakeSplitContext::AdaptiveTaskSource::NONE) {
+        return;
+    }
+
+    const int64_t rows = count_rowid_range_rows(rowid_range);
+    switch (split_context->adaptive_task_source) {
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::SEED_LOCAL:
+        COUNTER_UPDATE(_lake_adaptive_seed_local_tasks_counter, 1);
+        COUNTER_UPDATE(_lake_adaptive_seed_local_rows_counter, rows);
+        break;
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE:
+        COUNTER_UPDATE(_lake_adaptive_pending_tasks_counter, 1);
+        COUNTER_UPDATE(_lake_adaptive_pending_rows_counter, rows);
+        if (split_context->prepared_segment_state != nullptr &&
+            split_context->prepared_segment_state->lifecycle.load(std::memory_order_acquire) ==
+                    static_cast<uint32_t>(lake::PreparedSegmentReadState::Lifecycle::PREPARED)) {
+            COUNTER_UPDATE(_lake_adaptive_pending_opened_prepared_counter, 1);
+            COUNTER_UPDATE(_lake_adaptive_pending_opened_prepared_rows_counter, rows);
+        } else {
+            COUNTER_UPDATE(_lake_adaptive_pending_opened_unprepared_counter, 1);
+            COUNTER_UPDATE(_lake_adaptive_pending_opened_unprepared_rows_counter, rows);
+        }
+        break;
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::REFINED_CHILD:
+        COUNTER_UPDATE(_lake_adaptive_refined_tasks_counter, 1);
+        COUNTER_UPDATE(_lake_adaptive_refined_rows_counter, rows);
+        break;
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::NONE:
+        return;
+    }
+
+    if (_lake_adaptive_last_segment_valid &&
+        (_lake_adaptive_last_rowset_index != split_context->rowset_index ||
+         _lake_adaptive_last_segment_index != split_context->segment_index)) {
+        COUNTER_UPDATE(_lake_adaptive_segment_switch_counter, 1);
+    }
+    _lake_adaptive_last_segment_valid = true;
+    _lake_adaptive_last_rowset_index = split_context->rowset_index;
+    _lake_adaptive_last_segment_index = split_context->segment_index;
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -1740,6 +1856,36 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         if (_could_split) {
             ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(scan_ranges));
         }
+    }
+
+    _use_lake_adaptive_split_morsel_queue =
+            _could_split && _could_split_physically && config::enable_lake_adaptive_split_morsel_queue;
+    if (_use_lake_adaptive_split_morsel_queue) {
+        pipeline::Morsels morsels;
+        bool has_more_morsel = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+                                                 &has_more_morsel);
+        if (partition_order_hint().has_value()) {
+            bool asc = partition_order_hint().value();
+            std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
+                auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
+                auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+                return asc ? l_partition_id < r_partition_id : l_partition_id > r_partition_id;
+            });
+        }
+        if (output_chunk_by_bucket()) {
+            std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+                return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                       down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+            });
+        }
+        auto morsel_queue = std::make_unique<pipeline::LakeAdaptiveSplitMorselQueue>(
+                std::move(morsels), has_more_morsel, splitted_scan_rows);
+        if (lake_scan_parallelism > 0) {
+            morsel_queue->set_max_degree_of_parallelism(static_cast<size_t>(lake_scan_parallelism));
+        }
+        morsel_queue->set_has_more_from_split(true);
+        return morsel_queue;
     }
 
     ASSIGN_OR_RETURN(auto morsel_queue,

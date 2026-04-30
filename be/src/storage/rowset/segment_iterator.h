@@ -39,6 +39,9 @@ Status reset_raw_segment_iterator(const ChunkIteratorPtr& iter, const SegmentRea
 StatusOr<SparseRange<>> new_segment_iterator_for_execution_pruning(const std::shared_ptr<Segment>& segment,
                                                                    const Schema& schema,
                                                                    const SegmentReadOptions& options);
+StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
+                                                                 const Schema& schema,
+                                                                 const SegmentReadOptions& options);
 
 StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
                                                              const std::vector<SeekRange>& ranges,

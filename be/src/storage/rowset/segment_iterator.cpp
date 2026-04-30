@@ -139,6 +139,9 @@ protected:
     friend StatusOr<SparseRange<>> new_segment_iterator_for_execution_pruning(const std::shared_ptr<Segment>& segment,
                                                                               const Schema& schema,
                                                                               const SegmentReadOptions& options);
+    friend StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
+                                                                            const Schema& schema,
+                                                                            const SegmentReadOptions& options);
 
 private:
     struct ScanContext {
@@ -341,7 +344,7 @@ private:
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
-    StatusOr<SparseRange<>> _get_execution_pruned_row_ranges();
+    StatusOr<SparseRange<>> _get_execution_pruned_row_ranges(bool include_page_level_filters);
 
     Status _apply_tablet_range();
     Status _apply_shared_execution_pruned_range();
@@ -1057,7 +1060,7 @@ Status SegmentIterator::_reset_for_reuse() {
     return Status::OK();
 }
 
-StatusOr<SparseRange<>> SegmentIterator::_get_execution_pruned_row_ranges() {
+StatusOr<SparseRange<>> SegmentIterator::_get_execution_pruned_row_ranges(bool include_page_level_filters) {
     if (!_get_del_vec_st.ok()) {
         return _get_del_vec_st;
     }
@@ -1085,8 +1088,10 @@ StatusOr<SparseRange<>> SegmentIterator::_get_execution_pruned_row_ranges() {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     RETURN_IF_ERROR(_apply_bitmap_index());
-    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-    RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    if (include_page_level_filters) {
+        RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+        RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    }
     RETURN_IF_ERROR(_apply_inverted_index());
     if (apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
@@ -3904,7 +3909,16 @@ StatusOr<SparseRange<>> new_segment_iterator_for_execution_pruning(const std::sh
     auto seg_iter = new_raw_segment_iterator(segment, schema, options);
     auto* iter = dynamic_cast<SegmentIterator*>(seg_iter.get());
     DCHECK(iter != nullptr);
-    return iter->_get_execution_pruned_row_ranges();
+    return iter->_get_execution_pruned_row_ranges(true);
+}
+
+StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
+                                                                 const Schema& schema,
+                                                                 const SegmentReadOptions& options) {
+    auto seg_iter = new_raw_segment_iterator(segment, schema, options);
+    auto* iter = dynamic_cast<SegmentIterator*>(seg_iter.get());
+    DCHECK(iter != nullptr);
+    return iter->_get_execution_pruned_row_ranges(false);
 }
 
 Status reset_raw_segment_iterator(const ChunkIteratorPtr& iter, const SegmentReadOptions& options) {

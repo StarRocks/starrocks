@@ -75,6 +75,10 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 // Disable this to fall back to the generic physical split path for A/B comparison.
 CONF_mBool(enable_lake_index_pruned_physical_split, "true");
 
+// Whether Lake physical split generates child morsels on demand from the morsel queue. Disable this to use the
+// previous eager prepared split path.
+CONF_mBool(enable_lake_adaptive_split_morsel_queue, "true");
+
 // Whether physical split siblings on the same slot reuse the same Lake chunk source and reader shell after the
 // top-level prepared split path has already been chosen. This is a secondary implementation-detail switch and does
 // not participate in the planner's prepared-vs-baseline path selection.

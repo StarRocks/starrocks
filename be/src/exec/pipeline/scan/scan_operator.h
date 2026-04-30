@@ -168,7 +168,8 @@ protected:
     virtual NewMorselPickupSlotRank _rank_new_morsel_pickup_slot(int chunk_source_index) const {
         return NewMorselPickupSlotRank::kNormal;
     }
-    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) {
+    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                              ChunkSourcePtr chunk_source) {
         if (chunk_source != nullptr) {
             chunk_source->close(state);
         }
@@ -285,6 +286,22 @@ protected:
     RuntimeProfile::Counter* _lake_child_reuse_attempt_counter = nullptr;
     RuntimeProfile::Counter* _lake_child_reuse_hit_counter = nullptr;
     RuntimeProfile::Counter* _lake_child_reuse_miss_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_has_output_queue_ready_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_has_output_queue_not_ready_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_has_output_queue_empty_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_has_output_running_all_io_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_has_output_buffer_full_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_trigger_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_trigger_running_all_io_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_trigger_unplug_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_trigger_reach_limit_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_trigger_morsel_not_ready_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_trigger_scheduled_slots_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_enter_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_not_ready_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_try_get_null_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_got_morsel_counter = nullptr;
+    RuntimeProfile::Counter* _scan_pickup_lane_busy_counter = nullptr;
 
     int64_t _op_pull_chunks = 0;
     int64_t _op_pull_rows = 0;

@@ -127,6 +127,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     auto should_attach_ticket_checker =
             (dynamic_cast<ScanOperator*>(source_op) != nullptr) && _morsel_queue != nullptr &&
             _morsel_queue->could_attch_ticket_checker() &&
+            (_morsel_queue->type() != pipeline::MorselQueue::Type::LAKE_ADAPTIVE_SPLIT) &&
             (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
 
     if (should_attach_ticket_checker) {

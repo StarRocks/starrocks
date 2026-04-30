@@ -97,6 +97,7 @@ struct TabletReaderParams {
 
     int64_t splitted_scan_rows = 0;
     int64_t scan_dop = 0;
+    bool enable_lake_adaptive_split_morsel_queue = false;
     TScanRange* scan_range = nullptr;
     int32_t plan_node_id;
     int64_t prepared_target_rowset_index = -1;

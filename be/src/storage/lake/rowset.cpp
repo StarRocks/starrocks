@@ -499,9 +499,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
         if (prepared_segment_read_states != nullptr) {
             auto& pruning_state = (*prepared_segment_read_states)[i];
             if (pruning_state != nullptr) {
-                seg_options.cached_seek_range_rowid_bounds = &pruning_state->seek_range_rowid_bounds;
-                seg_options.cached_tablet_range_rowid = &pruning_state->tablet_range_rowid_range;
-                if (options.rowid_range_option != nullptr) {
+                if (pruning_state->seek_range_rowid_bounds_ready.load(std::memory_order_acquire)) {
+                    seg_options.cached_seek_range_rowid_bounds = &pruning_state->seek_range_rowid_bounds;
+                }
+                if (pruning_state->tablet_range_rowid_range_ready.load(std::memory_order_acquire)) {
+                    seg_options.cached_tablet_range_rowid = &pruning_state->tablet_range_rowid_range;
+                }
+                if (options.rowid_range_option != nullptr &&
+                    pruning_state->lifecycle.load(std::memory_order_acquire) ==
+                            static_cast<uint32_t>(PreparedSegmentReadState::Lifecycle::PREPARED)) {
                     seg_options.shared_execution_pruned_scan_range = pruning_state->execution_pruned_range;
                 }
             }

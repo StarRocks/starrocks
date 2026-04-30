@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -145,7 +147,15 @@ struct LakeSplitContext : public ScanSplitContext {
         SEGMENT_PREPARE,
     };
 
+    enum class AdaptiveTaskSource : uint8_t {
+        NONE,
+        SEED_LOCAL,
+        PENDING_COARSE,
+        REFINED_CHILD,
+    };
+
     TaskType task_type = TaskType::PHYSICAL_SPLIT;
+    AdaptiveTaskSource adaptive_task_source = AdaptiveTaskSource::NONE;
     // physical split
     RowidRangeOptionPtr rowid_range;
     // logical split
@@ -154,6 +164,12 @@ struct LakeSplitContext : public ScanSplitContext {
     lake::PreparedSegmentReadStatePtr prepared_segment_state = nullptr;
     size_t rowset_index = 0;
     size_t segment_index = 0;
+};
+
+struct LakeAdaptiveSplitContext : public LakeSplitContext {
+    bool adaptive_root_initializer = false;
+    bool adaptive_refine_current_range = false;
+    std::vector<SparseRange<>> adaptive_initial_scan_ranges;
 };
 
 using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
@@ -300,11 +316,13 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more_scan_ranges(bool v) override;
+    Status mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
 
 private:
     MorselQueuePtr _queue;
     const int _size;
+    std::atomic<int64_t> _remaining_split_source_morsels{0};
 };
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
@@ -378,6 +396,7 @@ public:
         SPLIT,
         LOGICAL_SPLIT,
         PHYSICAL_SPLIT,
+        LAKE_ADAPTIVE_SPLIT,
         BUCKET_SEQUENCE,
     };
     MorselQueue() = default;
@@ -680,6 +699,50 @@ private:
     std::mutex _mutex;
     query_cache::TicketCheckerPtr _ticket_checker;
     size_t _degree_of_parallelism;
+};
+
+class LakeAdaptiveSplitMorselQueue final : public MorselQueue {
+public:
+    explicit LakeAdaptiveSplitMorselQueue(Morsels&& morsels, bool has_more, int64_t splitted_scan_rows)
+            : _splitted_scan_rows(std::max<int64_t>(1, splitted_scan_rows)) {
+        (void)append_morsels(std::move(morsels));
+        _num_morsels = _size = _queue.size();
+        _has_more_scan_ranges = has_more;
+    }
+
+    bool empty() const override { return _size.load(std::memory_order_relaxed) == 0; }
+    StatusOr<MorselPtr> try_get() override;
+    void unget(MorselPtr&& morsel) override;
+    std::string name() const override { return "lake_adaptive_split_morsel_queue"; }
+    Status append_morsels(Morsels&& morsels) override;
+    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
+    bool could_attch_ticket_checker() const override { return true; }
+    Type type() const override { return LAKE_ADAPTIVE_SPLIT; }
+    void set_max_degree_of_parallelism(size_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
+
+private:
+    struct PendingCandidate {
+        int32_t plan_node_id = 0;
+        TScanRange scan_range;
+        lake::PreparedTabletReadStatePtr prepared_read_state;
+        size_t rowset_index = 0;
+        size_t segment_index = 0;
+    };
+
+    StatusOr<MorselPtr> _issue_pending_child_locked();
+    void _maybe_register_pending_candidate(const MorselPtr& morsel);
+    void _enter_ticket(ScanMorsel* morsel);
+
+    std::atomic<int64_t> _size = 0;
+    std::deque<MorselPtr> _queue;
+    std::deque<PendingCandidate> _pending_candidates;
+    std::mutex _mutex;
+    query_cache::TicketCheckerPtr _ticket_checker;
+    size_t _degree_of_parallelism = 1;
+    int64_t _splitted_scan_rows = 1;
 };
 
 MorselQueuePtr create_empty_morsel_queue();

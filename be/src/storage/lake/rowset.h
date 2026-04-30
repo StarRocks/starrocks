@@ -58,6 +58,17 @@ struct PreparedSegmentReadState {
 
     std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_bounds;
     std::optional<Range<rowid_t>> tablet_range_rowid_range;
+    std::atomic<bool> seek_range_rowid_bounds_ready{false};
+    std::atomic<bool> tablet_range_rowid_range_ready{false};
+
+    // Adaptive queue shared issue state. Protected by |adaptive_issue_lock|.
+    std::mutex adaptive_issue_lock;
+    SparseRange<> adaptive_coarse_scan_range;
+    SparseRangeIterator<> adaptive_coarse_scan_range_iter;
+    SparseRange<> adaptive_issued_coarse_ranges;
+    bool adaptive_coarse_scan_range_ready = false;
+    bool adaptive_pending_issue_closed = false;
+    bool adaptive_first_issued_split = true;
 
     size_t final_pruned_rows = 0;
     size_t estimated_fanout = 0;

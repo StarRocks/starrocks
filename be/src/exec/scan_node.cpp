@@ -174,6 +174,8 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         auto morsel_queue_type = morsel_queue->type();
         bool is_fixed_or_dynamic_morsel_queue = (morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
                                                  morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
+        bool is_dynamic_split_morsel_queue = is_fixed_or_dynamic_morsel_queue ||
+                                             morsel_queue_type == pipeline::MorselQueue::Type::LAKE_ADAPTIVE_SPLIT;
 
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
         // for DLA, always use SharedMorselQueueFactory
@@ -188,7 +190,9 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                                             /*could_local_shuffle*/ true,
                                                                             enable_random_append_split_morsel);
         } else {
-            morsel_queue->set_has_more_from_split(false);
+            if (!is_dynamic_split_morsel_queue) {
+                morsel_queue->set_has_more_from_split(false);
+            }
             if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
                 scan_dop = pipeline_dop;
             }

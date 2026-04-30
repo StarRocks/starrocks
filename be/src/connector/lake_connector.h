@@ -128,6 +128,8 @@ private:
     Status open_reader_for_current_morsel();
     Status fast_reopen_reader_for_current_morsel();
     Status reinit_reader_for_current_morsel_with_runtime_filters();
+    void observe_adaptive_split_task(const pipeline::LakeSplitContext* split_context,
+                                     const RowidRangeOptionPtr& rowid_range);
     void release_reader(RuntimeState* state);
     void refresh_reuse_signature();
     void refresh_runtime_filter_versions();
@@ -295,6 +297,25 @@ private:
     RuntimeProfile::Counter* _late_rf_reinit_new_arrival_counter = nullptr;
     RuntimeProfile::Counter* _late_rf_reinit_version_changed_counter = nullptr;
     RuntimeProfile::Counter* _late_rf_reinit_filter_set_changed_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_state_candidate_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_state_reuse_hit_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_state_reject_disabled_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_state_reject_adaptive_pending_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_state_targeted_read_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_seed_local_tasks_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_seed_local_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_tasks_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_opened_prepared_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_opened_unprepared_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_opened_prepared_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_opened_unprepared_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_refined_tasks_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_refined_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_segment_switch_counter = nullptr;
+    bool _lake_adaptive_last_segment_valid = false;
+    size_t _lake_adaptive_last_rowset_index = 0;
+    size_t _lake_adaptive_last_segment_index = 0;
 };
 
 // ================================
@@ -349,6 +370,8 @@ public:
 
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
 
+    bool use_lake_adaptive_split_morsel_queue() const { return _use_lake_adaptive_split_morsel_queue; }
+
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
@@ -358,6 +381,7 @@ protected:
 
     bool _could_split = false;
     bool _could_split_physically = false;
+    bool _use_lake_adaptive_split_morsel_queue = false;
     int64_t splitted_scan_rows = 0;
 
 private:

@@ -93,6 +93,30 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
     _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
     _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
+    _scan_pickup_has_output_queue_ready_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupHasOutputQueueReady", TUnit::UNIT);
+    _scan_pickup_has_output_queue_not_ready_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupHasOutputQueueNotReady", TUnit::UNIT);
+    _scan_pickup_has_output_queue_empty_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupHasOutputQueueEmpty", TUnit::UNIT);
+    _scan_pickup_has_output_running_all_io_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupHasOutputRunningAllIo", TUnit::UNIT);
+    _scan_pickup_has_output_buffer_full_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupHasOutputBufferFull", TUnit::UNIT);
+    _scan_pickup_trigger_counter = ADD_COUNTER(_unique_metrics, "ScanPickupTrigger", TUnit::UNIT);
+    _scan_pickup_trigger_running_all_io_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupTriggerRunningAllIo", TUnit::UNIT);
+    _scan_pickup_trigger_unplug_counter = ADD_COUNTER(_unique_metrics, "ScanPickupTriggerUnplug", TUnit::UNIT);
+    _scan_pickup_trigger_reach_limit_counter = ADD_COUNTER(_unique_metrics, "ScanPickupTriggerReachLimit", TUnit::UNIT);
+    _scan_pickup_trigger_morsel_not_ready_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupTriggerMorselNotReady", TUnit::UNIT);
+    _scan_pickup_trigger_scheduled_slots_counter =
+            ADD_COUNTER(_unique_metrics, "ScanPickupTriggerScheduledSlots", TUnit::UNIT);
+    _scan_pickup_enter_counter = ADD_COUNTER(_unique_metrics, "ScanPickupEnter", TUnit::UNIT);
+    _scan_pickup_not_ready_counter = ADD_COUNTER(_unique_metrics, "ScanPickupNotReady", TUnit::UNIT);
+    _scan_pickup_try_get_null_counter = ADD_COUNTER(_unique_metrics, "ScanPickupTryGetNull", TUnit::UNIT);
+    _scan_pickup_got_morsel_counter = ADD_COUNTER(_unique_metrics, "ScanPickupGotMorsel", TUnit::UNIT);
+    _scan_pickup_lane_busy_counter = ADD_COUNTER(_unique_metrics, "ScanPickupLaneBusy", TUnit::UNIT);
 
     if (_scan_node->is_enable_topn_filter_back_pressure()) {
         if (auto* runtime_filters = runtime_bloom_filters(); runtime_filters != nullptr) {
@@ -197,10 +221,12 @@ bool ScanOperator::has_output() const {
     DCHECK(!_unpluging);
     bool buffer_full = is_buffer_full();
     if (buffer_full) {
+        COUNTER_UPDATE(_scan_pickup_has_output_buffer_full_counter, 1);
         return chunk_number > 0;
     }
 
     if (is_running_all_io_tasks()) {
+        COUNTER_UPDATE(_scan_pickup_has_output_running_all_io_counter, 1);
         return false;
     }
 
@@ -209,8 +235,12 @@ bool ScanOperator::has_output() const {
         std::shared_lock guard(_task_mutex);
         auto status_or_is_ready = _morsel_queue->ready_for_next();
         if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+            COUNTER_UPDATE(_scan_pickup_has_output_queue_ready_counter, 1);
             return true;
         }
+        COUNTER_UPDATE(_scan_pickup_has_output_queue_not_ready_counter, 1);
+    } else {
+        COUNTER_UPDATE(_scan_pickup_has_output_queue_empty_counter, 1);
     }
 
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
@@ -337,14 +367,17 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
     return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
 }
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
+    COUNTER_UPDATE(_scan_pickup_trigger_counter, 1);
     // to sure to put it here for updating state.
     // because we want to update state based on raw data.
     int total_cnt = available_pickup_morsel_count();
 
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
+        COUNTER_UPDATE(_scan_pickup_trigger_running_all_io_counter, 1);
         return Status::OK();
     }
     if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {
+        COUNTER_UPDATE(_scan_pickup_trigger_unplug_counter, 1);
         return Status::OK();
     }
     // Avoid uneven distribution when io tasks execute very fast, so we start
@@ -359,6 +392,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         // check if we can return earlier.
         for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
             if (!_is_io_task_running[i] && _chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+                COUNTER_UPDATE(_scan_pickup_trigger_reach_limit_counter, 1);
                 return Status::OK();
             }
         }
@@ -402,10 +436,13 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // pick up new chunk source.
     ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
     if (size > 0 && morsel_ready) {
+        COUNTER_UPDATE(_scan_pickup_trigger_scheduled_slots_counter, size);
         for (int i = 0; i < size; i++) {
             int idx = to_sched[i];
             RETURN_IF_ERROR(_pickup_morsel(state, idx));
         }
+    } else if (size > 0) {
+        COUNTER_UPDATE(_scan_pickup_trigger_morsel_not_ready_counter, 1);
     }
 
     _peak_io_tasks_counter->set(_num_running_io_tasks);
@@ -565,6 +602,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
+    COUNTER_UPDATE(_scan_pickup_enter_counter, 1);
     _close_chunk_source(state, chunk_source_index);
 
     // NOTE: attach an active source before really creating it, to avoid the race condition
@@ -578,7 +616,10 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     // if current morsel not ready for get next. we should wait current bucket finish. just return directly
     ASSIGN_OR_RETURN(auto ready, _morsel_queue->ready_for_next());
-    RETURN_IF(!ready, Status::OK());
+    if (!ready) {
+        COUNTER_UPDATE(_scan_pickup_not_ready_counter, 1);
+        return Status::OK();
+    }
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
 
@@ -587,6 +628,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             auto [lane_owner, version] = morsel->get_lane_owner_and_version();
             auto acquire_result = _lane_arbiter->try_acquire_lane(lane_owner);
             if (acquire_result == query_cache::AR_BUSY) {
+                COUNTER_UPDATE(_scan_pickup_lane_busy_counter, 1);
                 _morsel_queue->unget(std::move(morsel));
                 return Status::OK();
             } else if (acquire_result == query_cache::AR_PROBE) {
@@ -622,6 +664,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     }
 
     if (morsel != nullptr) {
+        COUNTER_UPDATE(_scan_pickup_got_morsel_counter, 1);
         COUNTER_UPDATE(_morsels_counter, 1);
         const bool lake_child_reuse_candidate = _is_lake_child_reuse_candidate(*morsel);
         if (lake_child_reuse_candidate && _lake_child_reuse_candidate_counter != nullptr) {
@@ -649,16 +692,12 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 }();
                 if (can_reuse) {
                     Status status;
-                    {
-                        status = reusable_lookup.reusable_chunk_source->reset_morsel(state, std::move(morsel));
-                    }
+                    { status = reusable_lookup.reusable_chunk_source->reset_morsel(state, std::move(morsel)); }
                     if (!status.ok()) {
                         if (lake_child_reuse_candidate && _lake_child_reuse_miss_counter != nullptr) {
                             COUNTER_UPDATE(_lake_child_reuse_miss_counter, 1);
                         }
-                        {
-                            reusable_lookup.reusable_chunk_source->close(state);
-                        }
+                        { reusable_lookup.reusable_chunk_source->close(state); }
                         static_cast<void>(set_finishing(state));
                         return status;
                     }
@@ -670,9 +709,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     if (lake_child_reuse_candidate && _lake_child_reuse_miss_counter != nullptr) {
                         COUNTER_UPDATE(_lake_child_reuse_miss_counter, 1);
                     }
-                    {
-                        reusable_lookup.reusable_chunk_source->close(state);
-                    }
+                    { reusable_lookup.reusable_chunk_source->close(state); }
                 }
             } else if (lake_child_reuse_candidate) {
                 if (reusable_lookup.found_candidate) {
@@ -685,13 +722,9 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             }
 
             if (_chunk_sources[chunk_source_index] == nullptr) {
-                {
-                    _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
-                }
+                { _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index); }
                 Status status;
-                {
-                    status = _chunk_sources[chunk_source_index]->prepare(state);
-                }
+                { status = _chunk_sources[chunk_source_index]->prepare(state); }
                 if (!status.ok()) {
                     _chunk_sources[chunk_source_index] = nullptr;
                     static_cast<void>(set_finishing(state));
@@ -702,6 +735,8 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
         need_detach = false;
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
+    } else {
+        COUNTER_UPDATE(_scan_pickup_try_get_null_counter, 1);
     }
 
     return Status::OK();

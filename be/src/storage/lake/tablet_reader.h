@@ -131,6 +131,7 @@ private:
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* rs_opts);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
     Status _build_prepared_physical_split_tasks(const TabletReaderParams& read_params, size_t segment_count);
+    Status _build_lake_adaptive_split_seed_tasks(const TabletReaderParams& read_params, size_t segment_count);
     Status _prepare_segment_split_task(const TabletReaderParams& read_params,
                                        const pipeline::LakeSplitContext* split_context,
                                        RowidRangeOptionPtr* local_rowid_range);
