@@ -17,8 +17,13 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "gutil/casts.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks {
 class JavaUDFTest : public testing::Test {
@@ -115,6 +120,113 @@ TEST_F(JavaUDFTest, test_time_convert) {
     _env->DeleteLocalRef(time_obj);
     _env->DeleteLocalRef(time_array);
     _env->DeleteLocalRef(time_class);
+}
+
+// ============================================================================
+// LocalDate / LocalDateTime helper round-trips and end-to-end batch output.
+// Wire format mirrors BE column storage:
+//   DATE     -> int32 Julian day (DateValue::_julian)
+//   DATETIME -> packed int64 (julian << 40 | microseconds_of_day)
+// ============================================================================
+
+// newLocalDate(julian) -> LocalDate -> valLocalDate(...) must round-trip the
+// underlying int32 Julian day exactly across the JNI boundary.
+TEST_F(JavaUDFTest, local_date_helper_roundtrip) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    DateValue cases[] = {
+            DateValue::create(1970, 1, 1),
+            DateValue::create(1, 1, 1),
+            DateValue::create(2024, 1, 15),
+            DateValue::create(9999, 12, 31),
+    };
+    for (auto v : cases) {
+        jobject ld = helper.newLocalDate(v._julian);
+        ASSERT_NE(ld, nullptr);
+        LOCAL_REF_GUARD(ld);
+        EXPECT_EQ(v._julian, helper.valLocalDate(ld));
+        EXPECT_TRUE(_env->IsInstanceOf(ld, helper.local_date_class()));
+    }
+}
+
+// newLocalDateTime(packed) -> LocalDateTime -> valLocalDateTime(...) round-trip.
+// The packed encoding bridges the BE Julian-time format and Java LocalDateTime
+// via UDFHelper's packedTimestampFromLocalDateTime / localDateTimeFromPackedTimestamp.
+TEST_F(JavaUDFTest, local_datetime_helper_roundtrip) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    TimestampValue cases[] = {
+            TimestampValue::create(1970, 1, 1, 0, 0, 0, 0),
+            TimestampValue::create(1970, 1, 1, 0, 0, 0, 1), // 1 microsecond
+            TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000),
+            TimestampValue::create(9999, 12, 31, 23, 59, 59, 999999),
+    };
+    for (auto v : cases) {
+        jobject ldt = helper.newLocalDateTime(v.timestamp());
+        ASSERT_NE(ldt, nullptr);
+        LOCAL_REF_GUARD(ldt);
+        EXPECT_EQ(v.timestamp(), helper.valLocalDateTime(ldt));
+        EXPECT_TRUE(_env->IsInstanceOf(ldt, helper.local_datetime_class()));
+    }
+}
+
+// End-to-end batch output for DATE: build a Java LocalDate[] (with one null)
+// and let UDFHelper.getResultFromBoxedArray write into a native DateColumn.
+// Mirrors the path a UDF returning DATE goes through.
+TEST_F(JavaUDFTest, get_result_from_boxed_array_date) {
+    auto& helper = JVMFunctionHelper::getInstance();
+
+    DateValue d0 = DateValue::create(2024, 1, 15);
+    DateValue d2 = DateValue::create(1970, 1, 1);
+    jobject ld0 = helper.newLocalDate(d0._julian);
+    jobject ld2 = helper.newLocalDate(d2._julian);
+    LOCAL_REF_GUARD(ld0);
+    LOCAL_REF_GUARD(ld2);
+
+    jobjectArray arr = _env->NewObjectArray(3, helper.local_date_class(), nullptr);
+    ASSERT_NE(arr, nullptr);
+    LOCAL_REF_GUARD(arr);
+    _env->SetObjectArrayElement(arr, 0, ld0);
+    // index 1 stays null
+    _env->SetObjectArrayElement(arr, 2, ld2);
+
+    auto result = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ASSERT_OK(helper.get_result_from_boxed_array(TYPE_DATE, result.get(), arr, 3));
+    // Java memcpys the null buffer directly; mirror the production path
+    // (java_function_call_expr.cpp::get_boxed_result) and refresh _has_null.
+    down_cast<NullableColumn*>(result.get())->update_has_null();
+    ASSERT_EQ(result->size(), 3);
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_EQ(result->debug_item(0), d0.to_string());
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_EQ(result->debug_item(2), d2.to_string());
+}
+
+// End-to-end batch output for DATETIME, mirroring the DATE test.
+TEST_F(JavaUDFTest, get_result_from_boxed_array_datetime) {
+    auto& helper = JVMFunctionHelper::getInstance();
+
+    TimestampValue t0 = TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000);
+    TimestampValue t2 = TimestampValue::create(1970, 1, 1, 0, 0, 0, 0);
+    jobject ldt0 = helper.newLocalDateTime(t0.timestamp());
+    jobject ldt2 = helper.newLocalDateTime(t2.timestamp());
+    LOCAL_REF_GUARD(ldt0);
+    LOCAL_REF_GUARD(ldt2);
+
+    jobjectArray arr = _env->NewObjectArray(3, helper.local_datetime_class(), nullptr);
+    ASSERT_NE(arr, nullptr);
+    LOCAL_REF_GUARD(arr);
+    _env->SetObjectArrayElement(arr, 0, ldt0);
+    _env->SetObjectArrayElement(arr, 2, ldt2);
+
+    auto result = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ASSERT_OK(helper.get_result_from_boxed_array(TYPE_DATETIME, result.get(), arr, 3));
+    down_cast<NullableColumn*>(result.get())->update_has_null();
+    ASSERT_EQ(result->size(), 3);
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_EQ(result->debug_item(0), t0.to_string());
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_EQ(result->debug_item(2), t2.to_string());
 }
 
 // ============================================================================
@@ -229,6 +341,40 @@ TEST(GetUdafMethodDescTest, MultiDimensionalPrimitiveArray) {
     ASSERT_EQ(desc.size(), 2);
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_UNKNOWN); // param long[][] (array)
+}
+
+// Test: java.time.LocalDate / LocalDateTime must map to TYPE_DATE / TYPE_DATETIME.
+// Before the fix, the L-type parser silently skipped these classes, leaving
+// method_desc empty and producing a SIGSEGV at method_desc[0].is_box.
+TEST(GetUdafMethodDescTest, LocalDateAndLocalDateTime) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    // Signature: evaluate(LocalDate, LocalDateTime) -> LocalDateTime
+    std::string sign = "(Ljava/time/LocalDate;Ljava/time/LocalDateTime;)Ljava/time/LocalDateTime;";
+    ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
+    ASSERT_EQ(desc.size(), 3);
+    EXPECT_EQ(desc[0].type, TYPE_DATETIME); // return LocalDateTime
+    EXPECT_TRUE(desc[0].is_box);
+    EXPECT_EQ(desc[1].type, TYPE_DATE); // param LocalDate
+    EXPECT_TRUE(desc[1].is_box);
+    EXPECT_EQ(desc[2].type, TYPE_DATETIME); // param LocalDateTime
+    EXPECT_TRUE(desc[2].is_box);
+}
+
+// Test: unrecognized object class surfaces as TYPE_UNKNOWN (rejected by
+// get_method_desc validation) instead of being silently skipped.
+TEST(GetUdafMethodDescTest, UnknownObjectClassRejected) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    // process(String, com/example/Mystery) -> void
+    ASSERT_OK(analyzer.get_udaf_method_desc("(Ljava/lang/String;Lcom/example/Mystery;)V", &desc));
+    ASSERT_EQ(desc.size(), 3);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_VARCHAR); // String
+    EXPECT_EQ(desc[2].type, TYPE_UNKNOWN); // unknown class
+    // get_method_desc validation must reject the parameter TYPE_UNKNOWN.
+    desc.clear();
+    EXPECT_FALSE(analyzer.get_method_desc("(Ljava/lang/String;Lcom/example/Mystery;)V", &desc).ok());
 }
 
 } // namespace starrocks

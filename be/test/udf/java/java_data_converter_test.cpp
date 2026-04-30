@@ -29,9 +29,11 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "types/date_value.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks {
@@ -482,6 +484,242 @@ TEST_F(DataConverterTest, convert_to_boxed_array_decimal) {
         std::vector<const Column*> cols = {col.get()};
         ASSERT_OK(JavaDataTypeConverter::convert_to_boxed_array(ctx.get(), cols.data(), 1, 3, &res));
         ASSERT_EQ(res.size(), 1);
+        ASSERT_NE(res[0], nullptr);
+        env->DeleteLocalRef(res[0]);
+    }
+}
+
+// ============================================================================
+// DATE / DATETIME tests. Wire format mirrors BE column storage:
+//   - DATE     : int32 Julian day (DateValue::_julian)
+//   - DATETIME : packed int64 (julian << 40 | microseconds_of_day)
+// Round-trips exercise cast_to_jvalue (BE -> LocalDate/LocalDateTime) and
+// assign_jvalue / append_jvalue (LocalDate/LocalDateTime -> BE).
+// ============================================================================
+
+namespace {
+ColumnPtr make_date_column(std::initializer_list<DateValue> rows) {
+    auto data = DateColumn::create();
+    for (auto v : rows) {
+        data->append(v);
+    }
+    auto nulls = NullColumn::create(rows.size(), 0);
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+ColumnPtr make_datetime_column(std::initializer_list<TimestampValue> rows) {
+    auto data = TimestampColumn::create();
+    for (auto v : rows) {
+        data->append(v);
+    }
+    auto nulls = NullColumn::create(rows.size(), 0);
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+} // namespace
+
+// cast_to_jvalue must produce a LocalDate / LocalDateTime whose Java value
+// matches the BE-side row, validated via the corresponding val{LocalDate,
+// LocalDateTime} accessor.
+TEST_F(DataConverterTest, cast_to_jvalue_date_datetime) {
+    auto& helper = JVMFunctionHelper::getInstance();
+
+    {
+        TypeDescriptor td(TYPE_DATE);
+        DateValue dv = DateValue::create(2024, 1, 15);
+        auto src = make_date_column({dv});
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        jobject obj = val.l;
+        LOCAL_REF_GUARD(obj);
+        ASSERT_NE(obj, nullptr);
+        EXPECT_EQ(dv._julian, helper.valLocalDate(obj));
+    }
+    {
+        TypeDescriptor td(TYPE_DATETIME);
+        TimestampValue tv = TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000);
+        auto src = make_datetime_column({tv});
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        jobject obj = val.l;
+        LOCAL_REF_GUARD(obj);
+        ASSERT_NE(obj, nullptr);
+        EXPECT_EQ(tv.timestamp(), helper.valLocalDateTime(obj));
+    }
+}
+
+// Null cells short-circuit cast_to_jvalue to a null jobject (no JNI call), so
+// the resulting jvalue.l must be nullptr without throwing.
+TEST_F(DataConverterTest, cast_to_jvalue_date_datetime_null) {
+    {
+        TypeDescriptor td(TYPE_DATE);
+        auto col = ColumnHelper::create_column(td, true);
+        col->append_nulls(1);
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, col.get(), 0));
+        EXPECT_EQ(val.l, nullptr);
+    }
+    {
+        TypeDescriptor td(TYPE_DATETIME);
+        auto col = ColumnHelper::create_column(td, true);
+        col->append_nulls(1);
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, col.get(), 0));
+        EXPECT_EQ(val.l, nullptr);
+    }
+}
+
+// Round-trip a DATE / DATETIME value through cast_to_jvalue -> append_jvalue
+// (the UDAF finalize / UDTF emit path).
+TEST_F(DataConverterTest, append_jvalue_date_datetime_roundtrip) {
+    {
+        TypeDescriptor td(TYPE_DATE);
+        DateValue values[] = {
+                DateValue::create(1970, 1, 1),
+                DateValue::create(2024, 12, 31),
+                DateValue::create(1, 1, 1),
+        };
+        for (auto v : values) {
+            auto src = make_date_column({v});
+            ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+            jobject obj = val.l;
+            LOCAL_REF_GUARD(obj);
+            auto dst = ColumnHelper::create_column(td, true);
+            ASSERT_OK(append_jvalue(td, true, dst.get(), val));
+            EXPECT_EQ(src->debug_item(0), dst->debug_item(0));
+        }
+    }
+    {
+        TypeDescriptor td(TYPE_DATETIME);
+        TimestampValue values[] = {
+                TimestampValue::create(1970, 1, 1, 0, 0, 0, 0),
+                TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000),
+                TimestampValue::create(9999, 12, 31, 23, 59, 59, 999999),
+        };
+        for (auto v : values) {
+            auto src = make_datetime_column({v});
+            ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+            jobject obj = val.l;
+            LOCAL_REF_GUARD(obj);
+            auto dst = ColumnHelper::create_column(td, true);
+            ASSERT_OK(append_jvalue(td, true, dst.get(), val));
+            EXPECT_EQ(src->debug_item(0), dst->debug_item(0));
+        }
+    }
+}
+
+// append_jvalue with a null jvalue on a nullable column appends a null row.
+TEST_F(DataConverterTest, append_jvalue_date_datetime_null) {
+    for (auto type : {TYPE_DATE, TYPE_DATETIME}) {
+        TypeDescriptor td(type);
+        auto dst = ColumnHelper::create_column(td, true);
+        ASSERT_OK(append_jvalue(td, true, dst.get(), jvalue{.l = nullptr}));
+        ASSERT_EQ(dst->size(), 1);
+        EXPECT_TRUE(dst->is_null(0));
+    }
+}
+
+// Round-trip via assign_jvalue at a specified row (Java window function path).
+TEST_F(DataConverterTest, assign_jvalue_date_datetime_roundtrip) {
+    {
+        TypeDescriptor td(TYPE_DATE);
+        DateValue dv = DateValue::create(2024, 1, 15);
+        auto src = make_date_column({dv});
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        jobject obj = val.l;
+        LOCAL_REF_GUARD(obj);
+        auto dst = ColumnHelper::create_column(td, true);
+        dst->resize(2);
+        ASSERT_OK(assign_jvalue(td, true, dst.get(), 1, val, /*error_if_overflow=*/true));
+        EXPECT_EQ(src->debug_item(0), dst->debug_item(1));
+    }
+    {
+        TypeDescriptor td(TYPE_DATETIME);
+        TimestampValue tv = TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000);
+        auto src = make_datetime_column({tv});
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        jobject obj = val.l;
+        LOCAL_REF_GUARD(obj);
+        auto dst = ColumnHelper::create_column(td, true);
+        dst->resize(2);
+        ASSERT_OK(assign_jvalue(td, true, dst.get(), 1, val, /*error_if_overflow=*/true));
+        EXPECT_EQ(src->debug_item(0), dst->debug_item(1));
+    }
+}
+
+// assign_jvalue with a null jvalue on a nullable column sets the null bit at
+// the chosen row without touching the data slot.
+TEST_F(DataConverterTest, assign_jvalue_date_datetime_null) {
+    for (auto type : {TYPE_DATE, TYPE_DATETIME}) {
+        TypeDescriptor td(type);
+        auto dst = ColumnHelper::create_column(td, true);
+        dst->resize(1);
+        ASSERT_OK(assign_jvalue(td, true, dst.get(), 0, jvalue{.l = nullptr}, /*error_if_overflow=*/true));
+        EXPECT_TRUE(dst->is_null(0));
+    }
+}
+
+// check_type_matched accepts LocalDate/LocalDateTime for their respective types
+// and rejects mismatches (e.g. swapping the two, or passing a String).
+TEST_F(DataConverterTest, check_type_matched_date_datetime) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    TypeDescriptor date_td(TYPE_DATE);
+    TypeDescriptor dt_td(TYPE_DATETIME);
+
+    auto date_src = make_date_column({DateValue::create(2024, 1, 15)});
+    ASSIGN_OR_ASSERT_FAIL(jvalue date_val, cast_to_jvalue(date_td, true, date_src.get(), 0));
+    jobject date_obj = date_val.l;
+    LOCAL_REF_GUARD(date_obj);
+
+    auto dt_src = make_datetime_column({TimestampValue::create(2024, 1, 15, 12, 0, 0, 0)});
+    ASSIGN_OR_ASSERT_FAIL(jvalue dt_val, cast_to_jvalue(dt_td, true, dt_src.get(), 0));
+    jobject dt_obj = dt_val.l;
+    LOCAL_REF_GUARD(dt_obj);
+
+    EXPECT_OK(check_type_matched(date_td, date_obj));
+    EXPECT_OK(check_type_matched(dt_td, dt_obj));
+    // null val is always OK.
+    EXPECT_OK(check_type_matched(date_td, nullptr));
+    EXPECT_OK(check_type_matched(dt_td, nullptr));
+
+    // Cross-type: LocalDate vs DATETIME and LocalDateTime vs DATE both fail.
+    EXPECT_FALSE(check_type_matched(date_td, dt_obj).ok());
+    EXPECT_FALSE(check_type_matched(dt_td, date_obj).ok());
+
+    // String against DATE / DATETIME is rejected.
+    jobject jstr = helper.newString("not-a-date", 10);
+    LOCAL_REF_GUARD(jstr);
+    EXPECT_FALSE(check_type_matched(date_td, jstr).ok());
+    EXPECT_FALSE(check_type_matched(dt_td, jstr).ok());
+}
+
+// convert_to_boxed_array drives the batch input path via JavaArrayConverter.
+// For DATE / DATETIME this routes through the FixedLengthColumn<T> overload
+// using the JNIPrimTypeId<DateValue> / JNIPrimTypeId<TimestampValue> id, which
+// must be registered against createBoxedLocalDate{,Time}Array in _method_map.
+TEST_F(DataConverterTest, convert_to_boxed_array_date_datetime) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    auto run = [&](LogicalType type, const ColumnPtr& col) {
+        TypeDescriptor td(type);
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+        std::vector<jobject> res;
+        std::vector<const Column*> cols = {col.get()};
+        ASSERT_OK(JavaDataTypeConverter::convert_to_boxed_array(ctx.get(), cols.data(), 1, col->size(), &res));
+        ASSERT_EQ(res.size(), 1);
+        ASSERT_NE(res[0], nullptr);
+        env->DeleteLocalRef(res[0]);
+    };
+
+    run(TYPE_DATE, make_date_column({DateValue::create(2024, 1, 15), DateValue::create(1970, 1, 1)}));
+    run(TYPE_DATETIME, make_datetime_column({TimestampValue::create(2024, 1, 15, 12, 34, 56, 0),
+                                             TimestampValue::create(1970, 1, 1, 0, 0, 0, 0)}));
+
+    // all-null short-circuit
+    {
+        TypeDescriptor td(TYPE_DATE);
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+        auto col = ColumnHelper::create_column(td, true);
+        col->append_nulls(3);
+        std::vector<jobject> res;
+        std::vector<const Column*> cols = {col.get()};
+        ASSERT_OK(JavaDataTypeConverter::convert_to_boxed_array(ctx.get(), cols.data(), 1, 3, &res));
         ASSERT_NE(res[0], nullptr);
         env->DeleteLocalRef(res[0]);
     }

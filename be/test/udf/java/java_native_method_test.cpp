@@ -30,7 +30,9 @@
 #include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 
@@ -169,6 +171,73 @@ TEST_F(JavaNativeMethodTest, get_column_logical_type_decimal) {
         auto logical_type_2 = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c2.get()));
         ASSERT_EQ(c.type, logical_type_1);
         ASSERT_EQ(c.type, logical_type_2);
+    }
+}
+
+// DateColumn / TimestampColumn are FixedLengthColumn<DateValue> and
+// FixedLengthColumn<TimestampValue>. Without explicit handling in the visitor's
+// FixedLengthColumn<T> template, the call falls through to "unsupported UDF
+// type", which is the bug fixed in this commit. Make sure both shapes resolve.
+TEST_F(JavaNativeMethodTest, get_column_logical_type_date_datetime) {
+    auto env = getJNIEnv();
+    for (auto type : {TYPE_DATE, TYPE_DATETIME}) {
+        for (bool nullable : {true, false}) {
+            auto col = ColumnHelper::create_column(TypeDescriptor(type), nullable);
+            auto t = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(col.get()));
+            EXPECT_EQ(type, t) << "type=" << type << " nullable=" << nullable;
+        }
+    }
+}
+
+// ARRAY<DATE> / ARRAY<DATETIME>: the Java side recurses into the element column
+// to dispatch the per-row write, so the element column must also resolve.
+TEST_F(JavaNativeMethodTest, get_column_logical_type_array_of_date_datetime) {
+    auto env = getJNIEnv();
+    for (auto type : {TYPE_DATE, TYPE_DATETIME}) {
+        TypeDescriptor array_type(TYPE_ARRAY);
+        array_type.children.emplace_back(type);
+        auto col = ColumnHelper::create_column(array_type, true);
+        EXPECT_EQ(TYPE_ARRAY,
+                  JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(col.get())));
+
+        const auto* nullable = down_cast<const NullableColumn*>(col.get());
+        const auto* array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
+        const auto* elements = array_col->elements_column().get();
+        EXPECT_EQ(type, JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(elements)))
+                << "elements of ARRAY<" << type << ">";
+    }
+}
+
+// getAddrs on a DATE / DATETIME column returns the underlying int32 / int64 raw
+// buffer that the Java helper memcpys into. Verify the data pointer matches the
+// FixedLengthColumn raw storage.
+TEST_F(JavaNativeMethodTest, get_addrs_date_datetime) {
+    auto env = getJNIEnv();
+    {
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+        col->resize(8);
+        auto arr = JavaNativeMethods::getAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+        ASSERT_NE(arr, nullptr);
+        jlong results[4];
+        env->GetLongArrayRegion(arr, 0, 4, results);
+        const auto* nullable = down_cast<const NullableColumn*>(col.get());
+        const auto* date_col = down_cast<const DateColumn*>(nullable->data_column().get());
+        EXPECT_EQ(results[0], (jlong)nullable->null_column_data().data());
+        EXPECT_EQ(results[1], (jlong)date_col->immutable_data().data());
+        env->DeleteLocalRef(arr);
+    }
+    {
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+        col->resize(8);
+        auto arr = JavaNativeMethods::getAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+        ASSERT_NE(arr, nullptr);
+        jlong results[4];
+        env->GetLongArrayRegion(arr, 0, 4, results);
+        const auto* nullable = down_cast<const NullableColumn*>(col.get());
+        const auto* ts_col = down_cast<const TimestampColumn*>(nullable->data_column().get());
+        EXPECT_EQ(results[0], (jlong)nullable->null_column_data().data());
+        EXPECT_EQ(results[1], (jlong)ts_col->immutable_data().data());
+        env->DeleteLocalRef(arr);
     }
 }
 

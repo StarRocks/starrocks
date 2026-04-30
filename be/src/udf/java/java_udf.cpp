@@ -26,7 +26,9 @@
 #include "exprs/function_context.h"
 #include "fmt/core.h"
 #include "jni.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/type_traits.h"
 #include "udf/java/utils.h"
@@ -190,6 +192,16 @@ void JVMFunctionHelper::_init() {
     _big_decimal_value_of_ll = _env->GetStaticMethodID(_big_decimal_class, "valueOf", "(JI)Ljava/math/BigDecimal;");
     CHECK(_big_decimal_value_of_ll);
 
+    _local_date_class = JNI_FIND_CLASS("java/time/LocalDate");
+    CHECK(_local_date_class);
+    _local_date_of_epoch_day = _env->GetStaticMethodID(_local_date_class, "ofEpochDay", "(J)Ljava/time/LocalDate;");
+    CHECK(_local_date_of_epoch_day);
+    _local_date_to_epoch_day = _env->GetMethodID(_local_date_class, "toEpochDay", "()J");
+    CHECK(_local_date_to_epoch_day);
+
+    _local_datetime_class = JNI_FIND_CLASS("java/time/LocalDateTime");
+    CHECK(_local_datetime_class);
+
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
     ADD_NUMBERIC_CLASS(byte, Byte, B);
     ADD_NUMBERIC_CLASS(short, Short, S);
@@ -262,6 +274,15 @@ void JVMFunctionHelper::_init() {
     _method_map.emplace(TYPE_ARRAY_METHOD_ID, tmp);
     INIT_HELPER_METHOD(tmp, "createBoxedMapArray", CREATE_BOXED_MAP_SIGNATURE);
     _method_map.emplace(TYPE_MAP_METHOD_ID, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedLocalDateArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<DateValue>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedLocalDateTimeArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<TimestampValue>::id, tmp);
+
+    // LocalDateTime <-> packed int64 conversion stays in UDFHelper because the
+    // packing is StarRocks-specific.
+    INIT_HELPER_METHOD(_local_datetime_from_packed, "localDateTimeFromPackedTimestamp", "(J)Ljava/time/LocalDateTime;");
+    INIT_HELPER_METHOD(_local_datetime_to_packed, "packedTimestampFromLocalDateTime", "(Ljava/time/LocalDateTime;)J");
 
     // init bytebuffer
     _direct_buffer_class = JNI_FIND_CLASS("java/nio/ByteBuffer");
@@ -604,6 +625,33 @@ jbyteArray JVMFunctionHelper::unscaled_le_bytes(jobject big_decimal, int precisi
     return (jbyteArray)_env->CallStaticObjectMethod(_udf_helper_class, _bd_unscaled_le_bytes, big_decimal,
                                                     static_cast<jint>(precision), static_cast<jint>(scale),
                                                     static_cast<jint>(byte_width));
+}
+
+// DateValue stores days as Julian day; LocalDate exposes them as days-since-1970-01-01.
+// 2440588 is the Julian day number of the Unix epoch.
+static constexpr jlong UNIX_EPOCH_JULIAN_DAYS = 2440588;
+
+jobject JVMFunctionHelper::newLocalDate(int32_t julian) {
+    jobject ld = _env->CallStaticObjectMethod(_local_date_class, _local_date_of_epoch_day,
+                                              static_cast<jlong>(julian) - UNIX_EPOCH_JULIAN_DAYS);
+    RETURN_IF_JNI_EXCEPTION(_env, "newLocalDate: ofEpochDay failed", nullptr);
+    return ld;
+}
+
+int32_t JVMFunctionHelper::valLocalDate(jobject obj) {
+    jlong epoch_day = _env->CallLongMethod(obj, _local_date_to_epoch_day);
+    return static_cast<int32_t>(epoch_day + UNIX_EPOCH_JULIAN_DAYS);
+}
+
+jobject JVMFunctionHelper::newLocalDateTime(int64_t packed_timestamp) {
+    jobject ldt = _env->CallStaticObjectMethod(_udf_helper_class, _local_datetime_from_packed,
+                                               static_cast<jlong>(packed_timestamp));
+    RETURN_IF_JNI_EXCEPTION(_env, "newLocalDateTime: localDateTimeFromPackedTimestamp failed", nullptr);
+    return ldt;
+}
+
+int64_t JVMFunctionHelper::valLocalDateTime(jobject obj) {
+    return _env->CallStaticLongMethod(_udf_helper_class, _local_datetime_to_packed, obj);
 }
 
 Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
@@ -1104,6 +1152,15 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 // BigDecimal params. The actual DECIMAL precision/scale is resolved from
                 // ctx->get_arg_type() / ctx->get_return_type() at the call site.
                 desc->emplace_back(MethodTypeDescriptor{TYPE_DECIMAL128, true});
+            } else if (type == "java/time/LocalDate") {
+                desc->emplace_back(MethodTypeDescriptor{TYPE_DATE, true});
+            } else if (type == "java/time/LocalDateTime") {
+                desc->emplace_back(MethodTypeDescriptor{TYPE_DATETIME, true});
+            } else {
+                // Unrecognized object class. Surface as TYPE_UNKNOWN so get_method_desc()
+                // validation produces a clear error instead of leaving method_desc short
+                // and crashing on a later method_desc[0].is_box access.
+                desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
             }
             continue;
         }

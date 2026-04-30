@@ -31,9 +31,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "types/date_value.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/type_traits.h"
@@ -269,6 +271,8 @@ DEFINE_CAST_TO_JVALUE(TYPE_BIGINT, helper.newLong(data_value));
 DEFINE_CAST_TO_JVALUE(TYPE_FLOAT, helper.newFloat(data_value));
 DEFINE_CAST_TO_JVALUE(TYPE_DOUBLE, helper.newDouble(data_value));
 DEFINE_CAST_TO_JVALUE(TYPE_VARCHAR, helper.newString(data_value.get_data(), data_value.get_size()));
+DEFINE_CAST_TO_JVALUE(TYPE_DATE, helper.newLocalDate(data_value._julian));
+DEFINE_CAST_TO_JVALUE(TYPE_DATETIME, helper.newLocalDateTime(data_value.timestamp()));
 
 void release_jvalue(bool is_box, jvalue val) {
     if (is_box && val.l) {
@@ -331,6 +335,16 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         auto spec_col = down_cast<const BinaryColumn*>(col);
         Slice slice = spec_col->get_slice(row_num);
         v.l = helper.newString(slice.get_data(), slice.get_size());
+        break;
+    }
+    case TYPE_DATE: {
+        auto spec_col = down_cast<const RunTimeColumnType<TYPE_DATE>*>(col);
+        v.l = helper.newLocalDate(spec_col->immutable_data()[row_num]._julian);
+        break;
+    }
+    case TYPE_DATETIME: {
+        auto spec_col = down_cast<const RunTimeColumnType<TYPE_DATETIME>*>(col);
+        v.l = helper.newLocalDateTime(spec_col->immutable_data()[row_num].timestamp());
         break;
     }
     case TYPE_DECIMAL32:
@@ -446,6 +460,18 @@ Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
         ASSIGN_BOX_TYPE(TYPE_BIGINT, int64_t)
         ASSIGN_BOX_TYPE(TYPE_FLOAT, float)
         ASSIGN_BOX_TYPE(TYPE_DOUBLE, double)
+    case TYPE_DATE: {
+        DateValue dv;
+        dv._julian = helper.valLocalDate(val.l);
+        down_cast<RunTimeColumnType<TYPE_DATE>*>(data_col)->get_data()[row_num] = dv;
+        break;
+    }
+    case TYPE_DATETIME: {
+        TimestampValue tv;
+        tv.set_timestamp(helper.valLocalDateTime(val.l));
+        down_cast<RunTimeColumnType<TYPE_DATETIME>*>(data_col)->get_data()[row_num] = tv;
+        break;
+    }
     case TYPE_VARCHAR: {
         if (val.l == nullptr) {
             col->append_nulls(1);
@@ -542,6 +568,18 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
             APPEND_BOX_TYPE(TYPE_FLOAT, float)
             APPEND_BOX_TYPE(TYPE_DOUBLE, double)
 
+        case TYPE_DATE: {
+            DateValue dv;
+            dv._julian = helper.valLocalDate(val.l);
+            col->append_datum(Datum(dv));
+            break;
+        }
+        case TYPE_DATETIME: {
+            TimestampValue tv;
+            tv.set_timestamp(helper.valLocalDateTime(val.l));
+            col->append_datum(Datum(tv));
+            break;
+        }
         case TYPE_VARCHAR: {
             std::string buffer;
             auto slice = helper.sliceVal((jstring)val.l, &buffer);
@@ -657,6 +695,24 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val) {
             LOCAL_REF_GUARD(clazz);
             return Status::InternalError(
                     fmt::format("Type not matched, expect java.math.BigDecimal, but got {}", helper.to_string(clazz)));
+        }
+        break;
+    }
+    case TYPE_DATE: {
+        if (!env->IsInstanceOf(val, helper.local_date_class())) {
+            auto clazz = env->GetObjectClass(val);
+            LOCAL_REF_GUARD(clazz);
+            return Status::InternalError(
+                    fmt::format("Type not matched, expect java.time.LocalDate, but got {}", helper.to_string(clazz)));
+        }
+        break;
+    }
+    case TYPE_DATETIME: {
+        if (!env->IsInstanceOf(val, helper.local_datetime_class())) {
+            auto clazz = env->GetObjectClass(val);
+            LOCAL_REF_GUARD(clazz);
+            return Status::InternalError(fmt::format("Type not matched, expect java.time.LocalDateTime, but got {}",
+                                                     helper.to_string(clazz)));
         }
         break;
     }
