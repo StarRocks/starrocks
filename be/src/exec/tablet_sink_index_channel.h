@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <limits>
 #include <memory>
 #include <queue>
 #include <set>
@@ -58,8 +59,8 @@ struct AddBatchCounter {
     int64_t add_batch_wait_lock_time_us = 0;
     // number of add_batch call
     int64_t add_batch_num = 0;
-    // total time of client rpc
-    int64_t client_prc_time_us = 0;
+    // total time of client rpc (in nanoseconds)
+    int64_t client_rpc_time_ns = 0;
     // total time of wait memtable flush
     int64_t add_batch_wait_memtable_flush_time_us = 0;
 
@@ -68,6 +69,7 @@ struct AddBatchCounter {
         add_batch_wait_lock_time_us += rhs.add_batch_wait_lock_time_us;
         add_batch_num += rhs.add_batch_num;
         add_batch_wait_memtable_flush_time_us += rhs.add_batch_wait_memtable_flush_time_us;
+        client_rpc_time_ns += rhs.client_rpc_time_ns;
         return *this;
     }
     friend AddBatchCounter operator+(const AddBatchCounter& lhs, const AddBatchCounter& rhs) {
@@ -99,6 +101,47 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
     RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
 };
+
+// Update per-target-BE MIN/MAX for RPC metrics in load profile.
+// Only considers nodes that actually participated (add_batch_num > 0).
+inline void update_rpc_min_max_profile(const std::unordered_map<int64_t, AddBatchCounter>& counter_map,
+                                       TabletSinkProfile* ts_profile) {
+    int64_t min_server_rpc_ns = std::numeric_limits<int64_t>::max();
+    int64_t max_server_rpc_ns = std::numeric_limits<int64_t>::min();
+    int64_t min_server_wait_flush_ns = std::numeric_limits<int64_t>::max();
+    int64_t max_server_wait_flush_ns = std::numeric_limits<int64_t>::min();
+    int64_t min_client_rpc_ns = std::numeric_limits<int64_t>::max();
+    int64_t max_client_rpc_ns = std::numeric_limits<int64_t>::min();
+    bool has_participating_node = false;
+
+    for (const auto& pair : counter_map) {
+        if (pair.second.add_batch_num == 0) {
+            continue;
+        }
+        has_participating_node = true;
+
+        // add_batch_execution_time_us is in microseconds, convert to nanoseconds
+        int64_t server_rpc_ns = pair.second.add_batch_execution_time_us * 1000;
+        min_server_rpc_ns = std::min(min_server_rpc_ns, server_rpc_ns);
+        max_server_rpc_ns = std::max(max_server_rpc_ns, server_rpc_ns);
+
+        int64_t server_wait_flush_ns = pair.second.add_batch_wait_memtable_flush_time_us * 1000;
+        min_server_wait_flush_ns = std::min(min_server_wait_flush_ns, server_wait_flush_ns);
+        max_server_wait_flush_ns = std::max(max_server_wait_flush_ns, server_wait_flush_ns);
+
+        min_client_rpc_ns = std::min(min_client_rpc_ns, pair.second.client_rpc_time_ns);
+        max_client_rpc_ns = std::max(max_client_rpc_ns, pair.second.client_rpc_time_ns);
+    }
+
+    if (has_participating_node) {
+        ts_profile->server_rpc_timer->set_min(min_server_rpc_ns);
+        ts_profile->server_rpc_timer->set_max(max_server_rpc_ns);
+        ts_profile->server_wait_flush_timer->set_min(min_server_wait_flush_ns);
+        ts_profile->server_wait_flush_timer->set_max(max_server_wait_flush_ns);
+        ts_profile->client_rpc_timer->set_min(min_client_rpc_ns);
+        ts_profile->client_rpc_timer->set_max(max_client_rpc_ns);
+    }
+}
 
 // map index_id to TabletBEMap(map tablet_id to backend id)
 using IndexIdToTabletBEMap = std::unordered_map<int64_t, std::unordered_map<int64_t, std::vector<int64_t>>>;

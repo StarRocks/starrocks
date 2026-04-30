@@ -307,6 +307,7 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
 
     int64_t total_server_rpc_time_us = 0;
     int64_t total_server_wait_memtable_flush_time_us = 0;
+    int64_t total_client_rpc_time_ns = 0;
     // print log of add batch time of all node, for tracing load performance easily
     std::stringstream ss;
     ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
@@ -314,11 +315,15 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
     for (auto const& pair : node_add_batch_counter_map) {
         total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
         total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
+        total_client_rpc_time_ns += pair.second.client_rpc_time_ns;
+
         ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
            << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
     }
     COUNTER_UPDATE(ts_profile->server_rpc_timer, total_server_rpc_time_us * 1000);
     COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);
+
+    update_rpc_min_max_profile(node_add_batch_counter_map, ts_profile);
     LOG(INFO) << ss.str();
 
     ExprExecutor::close(_output_expr_ctxs, state);
