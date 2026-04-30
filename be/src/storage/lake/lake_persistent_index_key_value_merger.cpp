@@ -180,8 +180,7 @@ Status KeyValueMerger::flush() {
         // into its block builder before returning), which is true here.
         _scratch_serialized.clear();
         index_value_pb.SerializeToString(&_scratch_serialized);
-        RETURN_IF_ERROR(
-                _output_builders.back().table_builder->Add(Slice(_key), Slice(_scratch_serialized)));
+        RETURN_IF_ERROR(_output_builders.back().table_builder->Add(Slice(_key), Slice(_scratch_serialized)));
     }
     _index_value_vers.clear();
 
