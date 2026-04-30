@@ -53,7 +53,6 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/join_path.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
@@ -949,14 +948,14 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
     _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
     auto create_st = VectorIndexReaderFactory::create_from_file(index_path, _vector_index_ctx->index_meta,
                                                                 &_vector_index_ctx->ann_reader, fs);
-    // .vi file not found — caller will set up brute-force fallback
+    // .vi file not found — fallback to brute-force scan
     if (create_st.is_not_found()) {
         _vector_index_ctx->use_vector_index = false;
         return Status::OK();
     }
     RETURN_IF_ERROR(create_st);
     auto status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs);
-    // empty ann reader — caller will set up brute-force fallback
+    // means empty ann reader — fallback to brute-force scan
     if (status.is_not_supported()) {
         _vector_index_ctx->use_vector_index = false;
         return Status::OK();
@@ -1056,20 +1055,8 @@ Status SegmentIterator::_init_ann_reader() {
     {
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
-            const std::string& seg_path = _segment->file_name();
-            const size_t last_slash = seg_path.find_last_of('/');
-            std::string seg_basename = (last_slash == std::string::npos) ? seg_path : seg_path.substr(last_slash + 1);
-            std::string vi_filename = lake::gen_vector_index_filename(seg_basename, tablet_index_meta->index_id());
-            if (last_slash == std::string::npos) {
-                index_path = std::move(vi_filename);
-            } else {
-                std::string seg_dir = seg_path.substr(0, last_slash);
-                if (seg_dir.empty()) {
-                    index_path = std::move(vi_filename);
-                } else {
-                    index_path = lake::join_path(seg_dir, vi_filename);
-                }
-            }
+            index_path =
+                    lake::gen_vector_index_path_from_segment_path(_segment->file_name(), tablet_index_meta->index_id());
         } else {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());

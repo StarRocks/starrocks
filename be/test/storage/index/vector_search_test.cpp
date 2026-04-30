@@ -19,6 +19,9 @@
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
 #include <tenann/factory/index_factory.h>
+
+#include "storage/index/vector/tenann_index_reader.h"
+#include "storage/index/vector/vector_index_file_reader.h"
 #endif
 
 #include "base/testutil/assert.h"
@@ -150,7 +153,7 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
     tablet_index->add_common_properties("metric_type", "l2_distance");
     tablet_index->add_common_properties("index_build_threshold", "0");
     tablet_index->add_index_properties("efconstruction", "40");
-    tablet_index->add_index_properties("M", "16");
+    tablet_index->add_index_properties("m", "16");
     tablet_index->add_search_properties("efsearch", "40");
 
     auto index_path = test_vector_index_dir + "/" + vector_index_name;
@@ -171,9 +174,12 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
 
         ASSERT_TRUE(!init_status.is_not_supported());
 
+        constexpr int kTopK = 1;
         Status st;
-        std::vector<int64_t> result_ids;
-        std::vector<float> result_distances;
+        // tenann::AnnSearcher::AnnSearch writes into caller-owned output buffers; the
+        // vectors must be sized to at least k before the call so .data() is non-null.
+        std::vector<int64_t> result_ids(kTopK);
+        std::vector<float> result_distances(kTopK);
         SparseRange<> scan_range;
         DelIdFilter del_id_filter(scan_range);
         std::vector<float> query_vector = {1.0f, 2.0f, 3.0f};
@@ -182,10 +188,10 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
                                          .size = static_cast<uint32_t>(3),
                                          .elem_type = tenann::PrimitiveType::kFloatType};
 
-        st = ann_reader->search(query_view, 1, (result_ids.data()), reinterpret_cast<uint8_t*>(result_distances.data()),
-                                &del_id_filter);
+        st = ann_reader->search(query_view, kTopK, result_ids.data(),
+                                reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
         CHECK_OK(st);
-        ASSERT_EQ(result_ids.size(), 0);
+        ASSERT_EQ(result_ids.size(), kTopK);
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
     }
@@ -200,6 +206,14 @@ TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
     tablet_index->add_common_properties("dim", "3");
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
+    // ivfpq requires these in index_properties for tenann meta validation
+    // (CRITICAL_CHECK_AND_GET in get_vector_meta). The values are not
+    // exercised here — the test only verifies the empty-mark path returns
+    // NotSupported, but get_vector_meta() runs before that and still
+    // requires these keys to be present.
+    tablet_index->add_index_properties("nlist", "1");
+    tablet_index->add_index_properties("nbits", "8");
+    tablet_index->add_index_properties("m_ivfpq", "3");
 
     auto index_path = test_vector_index_dir + "/" + empty_index_name;
     write_vector_index_below_threshold(index_path, tablet_index);
@@ -523,5 +537,117 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
 
     chunk_iter->close();
 }
+
+#ifdef WITH_TENANN
+
+// ==================== VectorIndexFileReader direct tests ====================
+// VectorIndexFileReader bridges StarRocks RandomAccessFile into TenANN's
+// IndexFileReader interface, enabling TenANN to read .vi files from any
+// StarRocks-supported FS (S3/HDFS/OSS). The class is otherwise only
+// exercised indirectly by TenANNReader::init_searcher; these tests pin
+// down its behavior without spinning up an ANN index.
+
+namespace {
+constexpr std::string_view kTestPayload = "0123456789ABCDEF";
+constexpr int64_t kTestPayloadSize = static_cast<int64_t>(kTestPayload.size());
+constexpr std::string_view kTestFilename = "memory_index.vi";
+
+std::unique_ptr<VectorIndexFileReader> make_reader(std::string_view payload, std::string_view name = kTestFilename) {
+    auto raf = new_random_access_file_from_memory(name, payload);
+    return std::make_unique<VectorIndexFileReader>(std::move(raf), static_cast<int64_t>(payload.size()));
+}
+} // namespace
+
+TEST_F(VectorIndexSearchTest, vector_index_file_reader_basic_read_advances_position) {
+    auto reader = make_reader(kTestPayload);
+
+    char buf[8] = {};
+    int64_t n = reader->Read(buf, 4);
+    ASSERT_EQ(n, 4);
+    EXPECT_EQ(std::string_view(buf, 4), "0123");
+
+    // Position should have advanced; the next Read continues from offset 4.
+    n = reader->Read(buf, 4);
+    ASSERT_EQ(n, 4);
+    EXPECT_EQ(std::string_view(buf, 4), "4567");
+}
+
+TEST_F(VectorIndexSearchTest, vector_index_file_reader_read_at_does_not_change_position) {
+    auto reader = make_reader(kTestPayload);
+
+    char buf[8] = {};
+    int64_t n = reader->ReadAt(8, buf, 4);
+    ASSERT_EQ(n, 4);
+    EXPECT_EQ(std::string_view(buf, 4), "89AB");
+
+    // ReadAt is independent of the streaming position cursor; a subsequent
+    // Read should still start at offset 0.
+    n = reader->Read(buf, 4);
+    ASSERT_EQ(n, 4);
+    EXPECT_EQ(std::string_view(buf, 4), "0123");
+}
+
+TEST_F(VectorIndexSearchTest, vector_index_file_reader_seek_then_read) {
+    auto reader = make_reader(kTestPayload);
+
+    reader->Seek(10);
+    char buf[8] = {};
+    int64_t n = reader->Read(buf, 4);
+    ASSERT_EQ(n, 4);
+    EXPECT_EQ(std::string_view(buf, 4), "ABCD");
+}
+
+TEST_F(VectorIndexSearchTest, vector_index_file_reader_get_size_and_filename) {
+    auto reader = make_reader(kTestPayload, "abc.vi");
+    EXPECT_EQ(reader->GetSize(), kTestPayloadSize);
+    EXPECT_EQ(reader->filename(), "abc.vi");
+}
+
+TEST_F(VectorIndexSearchTest, vector_index_file_reader_read_past_eof_returns_minus_one) {
+    auto reader = make_reader(kTestPayload);
+
+    char buf[64] = {};
+    // Reading more bytes than exist surfaces as -1 (Read uses read_at_fully
+    // which fails when count exceeds the available bytes from the offset).
+    int64_t n = reader->Read(buf, kTestPayloadSize + 4);
+    EXPECT_EQ(n, -1);
+
+    // Same expectation for ReadAt past EOF.
+    int64_t m = reader->ReadAt(kTestPayloadSize - 2, buf, 8);
+    EXPECT_EQ(m, -1);
+}
+
+// TenANNReader::init_searcher(meta, path, fs) should delegate to the legacy
+// init_searcher(meta, path) when fs is nullptr. Build a real HNSW index on
+// local disk, then invoke the FS-aware overload with fs=nullptr and confirm
+// the call reaches the legacy success path (returns OK, NOT NotSupported).
+TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_legacy) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    config::config_vector_index_default_build_threshold = 1;
+    auto ann_path = test_vector_index_dir + "/null_fs_delegate_hnsw.vi";
+    write_vector_index(ann_path, tablet_index);
+
+    try {
+        const auto empty_query_params = std::map<std::string, std::string>{};
+        ASSIGN_OR_ABORT(auto ann_meta, get_vector_meta(tablet_index, empty_query_params));
+
+        TenANNReader tenann_reader;
+        // fs=nullptr branch dispatches to the legacy init_searcher(meta, path) overload.
+        Status status = tenann_reader.init_searcher(ann_meta, ann_path, /*fs=*/nullptr);
+        EXPECT_TRUE(status.ok()) << status;
+    } catch (tenann::Error& e) {
+        LOG(WARNING) << e.what();
+    }
+}
+
+#endif // WITH_TENANN
 
 } // namespace starrocks

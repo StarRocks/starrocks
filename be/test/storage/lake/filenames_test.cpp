@@ -176,6 +176,45 @@ TEST_F(FilenamesTest, gen_vector_index_filename) {
     }
 }
 
+TEST_F(FilenamesTest, gen_vector_index_path_from_segment_path) {
+    // Segment path with a multi-level directory: keep the directory and substitute
+    // the .dat suffix on the basename with _{index_id}.vi.
+    {
+        std::string seg_path = "/foo/bar/0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.dat";
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 0);
+        ASSERT_EQ("/foo/bar/0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_0.vi", vi_path);
+    }
+
+    // Single-level directory.
+    {
+        std::string seg_path = "data/0123_abcd.dat";
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 42);
+        ASSERT_EQ("data/0123_abcd_42.vi", vi_path);
+    }
+
+    // No directory part: return just the .vi filename.
+    {
+        std::string seg_path = "0123_abcd.dat";
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 7);
+        ASSERT_EQ("0123_abcd_7.vi", vi_path);
+    }
+
+    // Root-only directory (leading slash, nothing before it): treat as no parent dir.
+    {
+        std::string seg_path = "/seg.dat";
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 1);
+        ASSERT_EQ("seg_1.vi", vi_path);
+    }
+
+    // Segment basename without .dat suffix falls through gen_vector_index_filename's
+    // fallback branch: append _{index_id}.vi to the raw name.
+    {
+        std::string seg_path = "/foo/bar/0123_abcd";
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 9);
+        ASSERT_EQ("/foo/bar/0123_abcd_9.vi", vi_path);
+    }
+}
+
 TEST_F(FilenamesTest, is_vector_index) {
     ASSERT_TRUE(is_vector_index("0123_abcd_123.vi"));
     ASSERT_TRUE(is_vector_index("vector_index.vi"));
