@@ -218,6 +218,7 @@ source_fe_query_port=9030
 source_cluster_user=root
 source_cluster_password=
 source_cluster_password_secret_key=
+# source_cluster_token 对于存算分离源集群不是必填项，留空即可。
 source_cluster_token=
 
 target_fe_host=
@@ -289,7 +290,7 @@ enable_table_property_sync=false
 | source_cluster_user                         | 登录源集群的用户名。该用户需具备 SYSTEM 级别的 OPERATE 权限。 |
 | source_cluster_password                     | 登录源集群的用户密码。 |
 | source_cluster_password_secret_key          | 用于加密 `source_cluster_password` 的密钥。默认为空字符串（不加密）。如需加密，可通过 SQL 语句 `SELECT TO_BASE64(AES_ENCRYPT('<password>','<secret_key>'))` 获取加密后的密码字符串。 |
-| source_cluster_token                        | 源集群的 Token。获取方式请参考下文[获取集群 Token](#获取集群-token)。 |
+| source_cluster_token                        | 源集群的 Token。**存算分离源集群无需填写，留空即可。** Cluster Token 仅用于存算一体源集群场景下 BE 间快照传输的认证；存算分离场景下，数据直接通过对象存储读取，不经过 BE，因此无需 Token。 |
 | target_fe_host                              | 目标集群 FE 的 IP 地址或 FQDN。 |
 | target_fe_query_port                        | 目标集群 FE 的查询端口（`query_port`）。 |
 | target_cluster_user                         | 登录目标集群的用户名。该用户需具备 SYSTEM 级别的 OPERATE 权限。 |
@@ -331,19 +332,17 @@ enable_table_property_sync=false
 **主键表持久化索引**：在两个存算分离集群之间迁移时，迁移工具会自动将主键表建表语句中的 `persistent_index_type = LOCAL` 改写为 `CLOUD_NATIVE`，无需手动操作。
 :::
 
-### 获取集群 Token
+### 存储卷映射说明
 
-Cluster Token 存储在 FE 元数据中。登录源集群 FE 节点所在的服务器，执行以下命令：
+迁移工具在目标集群创建表时，按以下优先级决定表所使用的存储卷：
 
-```Bash
-cat fe/meta/image/VERSION | grep token
-```
+1. 若 `target_cluster_use_builtin_storage_volume_only = true`：所有表统一使用 `builtin_storage_volume`。
+2. 若 `target_cluster_storage_volume = <名称>`：所有表使用指定的存储卷。
+3. 以上均未配置（默认）：保留源集群表的存储卷名称。源集群不同存储卷上的表，将在目标集群上分别绑定到同名存储卷（前提是这些存储卷已在目标集群上创建）。
 
-输出示例：
+因此，**目标集群支持创建多个非 `src_` 前缀的存储卷**。例如，若源集群的表分布在 `ssd_volume` 和 `oss_volume` 两个存储卷上，则可以在目标集群上预先创建这两个存储卷，迁移完成后各表将分别绑定到对应的存储卷。
 
-```Properties
-token=wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
-```
+`src_<名称>` 存储卷的用途与此不同：它们**仅在迁移过程中使用**，用于授权目标集群的 CN 读取源集群对象存储中的数据文件。迁移完成后，`src_<名称>` 存储卷不再需要，可以删除。
 
 ### 配置网络（可选）
 

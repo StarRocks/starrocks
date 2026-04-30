@@ -218,6 +218,8 @@ source_fe_query_port=9030
 source_cluster_user=root
 source_cluster_password=
 source_cluster_password_secret_key=
+# source_cluster_token is NOT required for shared-data source clusters.
+# Leave this empty or omit it.
 source_cluster_token=
 
 target_fe_host=
@@ -291,7 +293,7 @@ Parameter descriptions:
 | source_cluster_user                       | The username used to log in to the source cluster. This user must have the OPERATE privilege at the SYSTEM level. |
 | source_cluster_password                   | The password for the source cluster user. |
 | source_cluster_password_secret_key        | The secret key used to encrypt `source_cluster_password`. Leave empty (default) to use the password as plain text. To encrypt, run: `SELECT TO_BASE64(AES_ENCRYPT('<password>','<secret_key>'))`. |
-| source_cluster_token                      | Token of the source cluster. See [Obtain Cluster Token](#obtain-cluster-token) below. |
+| source_cluster_token                      | Token of the source cluster. **Not required for shared-data source clusters.** Leave this empty. Cluster tokens are only used for BE-to-BE snapshot authentication in shared-nothing source clusters; for shared-data clusters, files are read directly from object storage without any BE involvement. |
 | target_fe_host                            | The IP address or FQDN of the target cluster's FE. |
 | target_fe_query_port                      | The query port (`query_port`) of the target cluster's FE. |
 | target_cluster_user                       | The username used to log in to the target cluster. This user must have the OPERATE privilege at the SYSTEM level. |
@@ -333,19 +335,17 @@ Parameter descriptions:
 **Primary Key table persistent index**: When migrating between two shared-data clusters, the tool automatically converts `persistent_index_type = LOCAL` to `CLOUD_NATIVE` in the CREATE TABLE statement for Primary Key tables. No manual action is needed.
 :::
 
-### Obtain Cluster Token
+### Storage volume mapping
 
-The cluster token is stored in FE metadata. Log in to the server where the source FE node is located and run:
+When the migration tool creates a table on the target cluster, it determines the table's storage volume as follows (in order of precedence):
 
-```Bash
-cat fe/meta/image/VERSION | grep token
-```
+1. If `target_cluster_use_builtin_storage_volume_only = true`: use `builtin_storage_volume` for all tables.
+2. If `target_cluster_storage_volume = <name>`: use the specified storage volume for all tables.
+3. Otherwise (default): preserve the source table's storage volume name. Tables from different source storage volumes are created under the corresponding storage volumes on the target cluster, provided those storage volumes exist on the target.
 
-Output:
+This means you can use **multiple non-`src_`-prefixed storage volumes on the target cluster**. For example, if the source cluster has tables split across `ssd_volume` and `oss_volume`, you can pre-create both volumes on the target cluster, and each table will be placed in its corresponding volume after migration.
 
-```Properties
-token=wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
-```
+The `src_<name>` storage volumes serve a different purpose: they are used **only during migration** to give target CNs read access to the source cluster's object storage. After migration is complete, the `src_<name>` volumes are no longer needed and can be dropped.
 
 ### Network-related configuration (Optional)
 
