@@ -33,4 +33,10 @@ CONF_mInt32(config_vector_index_build_concurrency, "8");
 // default not to build the empty index
 CONF_mInt32(config_vector_index_default_build_threshold, "10000");
 
+// Maximum fraction of CPU cores that vector index build targets to use.
+// Effective pool_size * omp_threads is sized from nproc * this value, but a minimum
+// budget of 2 is enforced, so on small-core machines or with small ratios the effective
+// value may exceed nproc * this value.
+CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
+
 } // namespace starrocks::config

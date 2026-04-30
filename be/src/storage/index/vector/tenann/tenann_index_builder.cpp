@@ -32,10 +32,7 @@ namespace starrocks {
 Status TenAnnIndexBuilderProxy::init() {
     ASSIGN_OR_RETURN(auto meta, get_vector_meta(_tablet_index, std::map<std::string, std::string>{}))
 
-    RETURN_IF_ERROR(success_once(_init_once, []() {
-                        tenann::OmpSetNumThreads(config::config_vector_index_build_concurrency);
-                        return Status::OK();
-                    }).status());
+    tenann::OmpSetNumThreads(std::max(1, _omp_threads));
 
     const auto& params = meta.common_params();
 
@@ -166,7 +163,7 @@ Status TenAnnIndexBuilderProxy::flush() {
     return Status::OK();
 }
 
-void TenAnnIndexBuilderProxy::close() const {
+Status TenAnnIndexBuilderProxy::close() const {
     if (_index_builder && !_index_builder->is_closed()) {
         _index_builder->Close();
     }
@@ -176,7 +173,9 @@ void TenAnnIndexBuilderProxy::close() const {
     // is idempotent, so the destructor path can safely re-enter.
     if (_file_writer) {
         _file_writer->Close();
+        return _file_writer->status();
     }
+    return Status::OK();
 }
 
 } // namespace starrocks

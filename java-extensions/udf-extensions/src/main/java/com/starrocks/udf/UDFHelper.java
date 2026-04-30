@@ -35,6 +35,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -85,8 +86,16 @@ public class UDFHelper {
             put(TYPE_DECIMAL64, BigDecimal.class);
             put(TYPE_DECIMAL128, BigDecimal.class);
             put(TYPE_DECIMAL256, BigDecimal.class);
+            put(TYPE_DATE, LocalDate.class);
+            put(TYPE_DATETIME, LocalDateTime.class);
         }
     };
+
+    // StarRocks DateValue stores the int32 Julian-day. DateValue '1970-01-01' -> 2440588.
+    private static final int UNIX_EPOCH_JULIAN = 2440588;
+    // StarRocks TimestampValue packs (julian_days << 40) | microseconds_of_day.
+    private static final int TIMESTAMP_BITS = 40;
+    private static final long TIMESTAMP_MICROS_OF_DAY_MASK = (1L << TIMESTAMP_BITS) - 1L;
 
     private static final byte[] emptyBytes = new byte[0];
 
@@ -314,6 +323,64 @@ public class UDFHelper {
             }
         }
         getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    // Decode StarRocks DateValue (int32 Julian day) into a LocalDate.
+    private static LocalDate localDateFromJulian(int julian) {
+        return LocalDate.ofEpochDay((long) julian - UNIX_EPOCH_JULIAN);
+    }
+
+    // Encode a LocalDate as StarRocks DateValue (int32 Julian day).
+    private static int julianFromLocalDate(LocalDate ld) {
+        return (int) (ld.toEpochDay() + UNIX_EPOCH_JULIAN);
+    }
+
+    // Decode StarRocks TimestampValue (packed int64) into a LocalDateTime.
+    // Layout: high 24 bits = Julian day, low 40 bits = microseconds-of-day.
+    public static LocalDateTime localDateTimeFromPackedTimestamp(long packed) {
+        long julian = packed >>> TIMESTAMP_BITS;
+        long microsOfDay = packed & TIMESTAMP_MICROS_OF_DAY_MASK;
+        return LocalDateTime.of(LocalDate.ofEpochDay(julian - UNIX_EPOCH_JULIAN),
+                LocalTime.ofNanoOfDay(microsOfDay * 1000L));
+    }
+
+    // Encode a LocalDateTime as StarRocks TimestampValue (packed int64).
+    public static long packedTimestampFromLocalDateTime(LocalDateTime ldt) {
+        long julian = ldt.toLocalDate().toEpochDay() + UNIX_EPOCH_JULIAN;
+        long microsOfDay = ldt.toLocalTime().toNanoOfDay() / 1000L;
+        return (julian << TIMESTAMP_BITS) | microsOfDay;
+    }
+
+    // Output batch: write LocalDate[] into a TYPE_DATE column as int32 Julian days.
+    private static void getLocalDateBoxedResult(int numRows, LocalDate[] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] dataArr = new int[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = julianFromLocalDate(column[i]);
+            }
+        }
+        final long[] addrs = getAddrs(columnAddr);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+        Platform.copyMemory(dataArr, Platform.INT_ARRAY_OFFSET, null, addrs[1], numRows * 4L);
+    }
+
+    // Output batch: write LocalDateTime[] into a TYPE_DATETIME column as packed int64.
+    private static void getLocalDateTimeBoxedResult(int numRows, LocalDateTime[] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        long[] dataArr = new long[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = packedTimestampFromLocalDateTime(column[i]);
+            }
+        }
+        final long[] addrs = getAddrs(columnAddr);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+        Platform.copyMemory(dataArr, Platform.LONG_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
     public static void getStringDecimalResult(int numRows, BigDecimal[] column, long columnAddr) {
@@ -704,6 +771,14 @@ public class UDFHelper {
                 getBigIntBoxedResult(numRows, (Long[]) boxedResult, columnAddr);
                 break;
             }
+            case TYPE_DATE: {
+                getLocalDateBoxedResult(numRows, (LocalDate[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_DATETIME: {
+                getLocalDateTimeBoxedResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
+                break;
+            }
             case TYPE_TIME: {
                 getDoubleTimeResult(numRows, (Time[]) boxedResult, columnAddr);
                 break;
@@ -813,6 +888,20 @@ public class UDFHelper {
                     return createBoxedStringArray(numRows, null, buffer[0], buffer[1]);
                 } else {
                     return createBoxedStringArray(numRows, buffer[0], buffer[1], buffer[2]);
+                }
+            }
+            case TYPE_DATE: {
+                if (!nullable) {
+                    return createBoxedLocalDateArray(numRows, null, buffer[0]);
+                } else {
+                    return createBoxedLocalDateArray(numRows, buffer[0], buffer[1]);
+                }
+            }
+            case TYPE_DATETIME: {
+                if (!nullable) {
+                    return createBoxedLocalDateTimeArray(numRows, null, buffer[0]);
+                } else {
+                    return createBoxedLocalDateTimeArray(numRows, buffer[0], buffer[1]);
                 }
             }
             default:
@@ -946,6 +1035,46 @@ public class UDFHelper {
             }
             return res;
         }
+    }
+
+    // Read a TYPE_DATE column (int32 Julian-day per row) into a LocalDate[].
+    public static Object[] createBoxedLocalDateArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {
+        int[] dataArr = new int[numRows];
+        dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(dataArr);
+        LocalDate[] res = new LocalDate[numRows];
+        if (nullBuffer != null) {
+            byte[] nullArr = getNullData(nullBuffer, numRows);
+            for (int i = 0; i < numRows; i++) {
+                if (nullArr[i] == 0) {
+                    res[i] = localDateFromJulian(dataArr[i]);
+                }
+            }
+        } else {
+            for (int i = 0; i < numRows; i++) {
+                res[i] = localDateFromJulian(dataArr[i]);
+            }
+        }
+        return res;
+    }
+
+    // Read a TYPE_DATETIME column (packed int64 per row) into a LocalDateTime[].
+    public static Object[] createBoxedLocalDateTimeArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {
+        long[] dataArr = new long[numRows];
+        dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asLongBuffer().get(dataArr);
+        LocalDateTime[] res = new LocalDateTime[numRows];
+        if (nullBuffer != null) {
+            byte[] nullArr = getNullData(nullBuffer, numRows);
+            for (int i = 0; i < numRows; i++) {
+                if (nullArr[i] == 0) {
+                    res[i] = localDateTimeFromPackedTimestamp(dataArr[i]);
+                }
+            }
+        } else {
+            for (int i = 0; i < numRows; i++) {
+                res[i] = localDateTimeFromPackedTimestamp(dataArr[i]);
+            }
+        }
+        return res;
     }
 
     public static Object[] createBoxedDoubleArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {

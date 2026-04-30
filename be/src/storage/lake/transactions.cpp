@@ -176,7 +176,7 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata) {
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -189,6 +189,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
         new_metadata->set_gtid(txns[0].gtid());
+        // Apply max(prev_bv, fe_bv) for async vector index build
+        if (fe_built_version > 0 || new_metadata->has_vector_index_built_version()) {
+            int64_t prev_bv =
+                    new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
+            new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
+        }
         if (!skip_write_tablet_metadata) {
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
@@ -495,6 +501,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                 }
             }
         }
+    }
+
+    // Apply max(prev_bv, fe_bv) for async vector index build
+    if (fe_built_version > 0 || new_metadata->has_vector_index_built_version()) {
+        int64_t prev_bv =
+                new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
+        new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
     }
 
     // Save new metadata

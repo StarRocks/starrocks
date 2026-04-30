@@ -283,6 +283,32 @@ protected:
         return schema_pb;
     }
 
+    // Variant of create_vi_schema_pb with index_build_mode=async and a configurable
+    // index_build_threshold so tests can exercise the async branch in
+    // general_tablet_writer.cpp::flush_segment_writer.
+    TabletSchemaPB create_vi_schema_pb_async(uint32_t threshold) {
+        auto schema_pb = create_vi_schema_pb();
+        auto* idx = schema_pb.mutable_table_indices(0);
+        std::string props_json = R"({
+            "common_properties": {
+                "index_type": "hnsw",
+                "dim": "3",
+                "is_vector_normed": "false",
+                "metric_type": "l2_distance",
+                "index_build_mode": "async",
+                "index_build_threshold": ")" +
+                                 std::to_string(threshold) +
+                                 R"("
+            },
+            "index_properties": {
+                "efconstruction": "40",
+                "m": "16"
+            }
+        })";
+        idx->set_index_properties(props_json);
+        return schema_pb;
+    }
+
     ChunkUniquePtr build_chunk(const TabletSchemaCSPtr& tablet_schema, int num_rows) {
         auto schema = ChunkHelper::convert_schema(tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, num_rows);
@@ -665,6 +691,117 @@ TEST_F(SharedDataTabletWriterVITest, test_segment_writer_no_vi_column_has_vector
     ASSERT_OK(writer->finalize(&seg_size, &idx_size, &footer_pos));
 
     EXPECT_FALSE(writer->has_vector_index_written());
+}
+
+// HorizontalGeneralTabletWriter, async mode, num_rows above threshold:
+// flush_segment_writer should NOT generate .vi inline (defer_vector_index_build=true)
+// but must still record vector_index_ids in SegmentFileInfo so the build task picks it
+// up. Covers the "Async vector index ... recorded" branch in general_tablet_writer.cpp.
+TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_async_above_threshold_records_index_ids) {
+    auto schema_pb = create_vi_schema_pb_async(/*threshold=*/3);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 4001;
+    auto writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                                  /*is_compaction=*/false);
+    ASSERT_OK(writer->open());
+    auto chunk = build_chunk(tablet_schema, 5); // >= threshold
+    ASSERT_OK(writer->write(*chunk));
+    ASSERT_OK(writer->finish());
+
+    ASSERT_EQ(1u, writer->segments().size());
+    const auto& seg = writer->segments().front();
+    EXPECT_EQ(5, seg.num_rows);
+    ASSERT_EQ(1u, seg.vector_index_ids.size());
+    EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
+
+    // Async: no .vi inline; the deferred build task is responsible for producing it.
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    EXPECT_FALSE(fs::path_exist(vi_path));
+    writer->close();
+}
+
+// HorizontalGeneralTabletWriter, async mode, num_rows below threshold:
+// flush_segment_writer must NOT record vector_index_ids (no .vi will ever be built
+// for this segment). Covers the "Async vector index ... SKIPPED (below threshold)"
+// branch in general_tablet_writer.cpp.
+TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_async_below_threshold_skips_record) {
+    auto schema_pb = create_vi_schema_pb_async(/*threshold=*/100);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 4002;
+    auto writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                                  /*is_compaction=*/false);
+    ASSERT_OK(writer->open());
+    auto chunk = build_chunk(tablet_schema, 5); // < threshold
+    ASSERT_OK(writer->write(*chunk));
+    ASSERT_OK(writer->finish());
+
+    ASSERT_EQ(1u, writer->segments().size());
+    const auto& seg = writer->segments().front();
+    EXPECT_EQ(5, seg.num_rows);
+    EXPECT_TRUE(seg.vector_index_ids.empty()) << "below-threshold async segment should not record vi ids";
+    writer->close();
+}
+
+// VerticalGeneralTabletWriter, async mode, above threshold: same recording semantics as
+// the horizontal writer but exercised via the column-by-column pipeline. Covers the
+// async branch in VerticalGeneralTabletWriter::finish().
+TEST_F(SharedDataTabletWriterVITest, test_vertical_writer_async_above_threshold_records_index_ids) {
+    auto schema_pb = create_vi_schema_pb_async(/*threshold=*/3);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 4003;
+    auto writer = std::make_unique<VerticalGeneralTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                                /*max_rows_per_segment=*/INT32_MAX,
+                                                                /*is_compaction=*/false);
+    ASSERT_OK(writer->open());
+
+    // VerticalGeneralTabletWriter::write_columns expects a chunk whose columns match
+    // the provided column_indexes. Build per-column chunks (mirrors test_vertical_writer_vi).
+    constexpr int kRows = 5;
+    auto key_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema, {0}));
+    auto vec_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema, {1}));
+
+    auto key_col = Int32Column::create();
+    for (int i = 0; i < kRows; ++i) {
+        key_col->append(i);
+    }
+    Chunk key_chunk({std::move(key_col)}, key_schema);
+
+    auto element_col = FixedLengthColumn<float>::create();
+    auto element_null = NullColumn::create();
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    for (int i = 0; i < kRows; ++i) {
+        element_col->append(static_cast<float>(i) + 0.1f);
+        element_col->append(static_cast<float>(i) + 0.2f);
+        element_col->append(static_cast<float>(i) + 0.3f);
+        element_null->append(0);
+        element_null->append(0);
+        element_null->append(0);
+        offsets->append((i + 1) * 3);
+    }
+    auto nullable_elements = NullableColumn::create(std::move(element_col), std::move(element_null));
+    auto vec_col = ArrayColumn::create(std::move(nullable_elements), std::move(offsets));
+    Chunk vec_chunk({std::move(vec_col)}, vec_schema);
+
+    ASSERT_OK(writer->write_columns(key_chunk, {0}, /*is_key=*/true));
+    ASSERT_OK(writer->flush_columns());
+    ASSERT_OK(writer->write_columns(vec_chunk, {1}, /*is_key=*/false));
+    ASSERT_OK(writer->flush_columns());
+    ASSERT_OK(writer->finish());
+
+    ASSERT_EQ(1u, writer->segments().size());
+    const auto& seg = writer->segments().front();
+    EXPECT_EQ(kRows, seg.num_rows);
+    ASSERT_EQ(1u, seg.vector_index_ids.size());
+    EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
+
+    // Async: no .vi inline.
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    EXPECT_FALSE(fs::path_exist(vi_path));
+    writer->close();
 }
 
 } // namespace starrocks::lake

@@ -35,6 +35,7 @@
 #include "base/compression/stream_compressor.h"
 
 #include <bzlib.h>
+#include <fmt/compile.h>
 #include <glog/logging.h>
 #include <zlib.h>
 
@@ -45,7 +46,7 @@
 #include "base/coding.h"
 #include "base/compression/compression_context_pool_singletons.h"
 #include "base/compression/compression_headers.h"
-#include "fmt/compile.h"
+#include "base/format.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -396,7 +397,7 @@ StatusOr<std::unique_ptr<StreamCompressor>> StreamCompressor::create_compressor(
         compressor = std::make_unique<ZstdStreamCompressor>();
         break;
     default:
-        return Status::InternalError(fmt::format("Unknown compress type: {}", static_cast<int>(type)));
+        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
     }
 
     RETURN_IF_ERROR(compressor->init());

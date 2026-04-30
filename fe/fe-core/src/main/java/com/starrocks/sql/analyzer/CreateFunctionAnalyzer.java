@@ -463,6 +463,8 @@ public class CreateFunctionAnalyzer {
                     .put(PrimitiveType.DECIMAL64, java.math.BigDecimal.class)
                     .put(PrimitiveType.DECIMAL128, java.math.BigDecimal.class)
                     .put(PrimitiveType.DECIMAL256, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DATE, java.time.LocalDate.class)
+                    .put(PrimitiveType.DATETIME, java.time.LocalDateTime.class)
                     .build();
     private static final Class<?> JAVA_ARRAY_CLASS_TYPE = List.class;
     private static final Class<?> JAVA_MAP_CLASS_TYPE = Map.class;

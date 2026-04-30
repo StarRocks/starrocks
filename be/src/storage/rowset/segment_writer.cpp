@@ -193,8 +193,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // generate paths that don't match what readers look up. Disable need_vector_index
         // before the column writers are constructed so ArrayColumnWriter does not try
         // to spin up a VectorIndexWriter and look up a non-existent entry in
-        // standalone_index_file_paths.
-        if (opts.need_vector_index && _opts.skip_vector_index) {
+        // standalone_index_file_paths. Async mode also skips per-column writer creation;
+        // .vi files are produced later by the deferred build task.
+        if (opts.need_vector_index && (_opts.skip_vector_index || _opts.defer_vector_index_build)) {
             opts.need_vector_index = false;
         }
 
@@ -405,6 +406,17 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         if (standalone_index_size > 0) {
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
             _has_vector_index_written = true;
+        } else if (!_has_vector_index_written &&
+                   _tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR)) {
+            // No .vi was produced inline. In async mode, the deferred build task will
+            // produce one later iff this segment has enough rows and isn't a bundle
+            // (bundle segments don't carry .vi). Mark STANDALONE in that case so the
+            // read path looks for the .vi when it lands; otherwise mark NONE so
+            // readers fall back to brute-force scan instead of waiting forever.
+            const bool will_build_async = _opts.defer_vector_index_build && !_opts.skip_vector_index &&
+                                          _num_rows >= _opts.vector_index_build_threshold;
+            _footer.set_vector_index_storage_type(will_build_async ? VECTOR_INDEX_STORAGE_STANDALONE
+                                                                   : VECTOR_INDEX_STORAGE_NONE);
         }
 
         // check global dict valid

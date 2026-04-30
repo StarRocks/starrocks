@@ -16,6 +16,9 @@
 
 #include <fmt/format.h>
 
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
 #include <unordered_map>
 
 #include "column/chunk.h"
@@ -37,6 +40,67 @@
 namespace starrocks::lake {
 
 namespace {
+// async/sync is a table-level setting (every vector index on a given schema shares the
+// same index_build_mode). Returning bool from "any vector index has async mode" is
+// equivalent to "the table is in async mode" for this purpose.
+bool has_async_vector_index(const TabletSchemaCSPtr& schema) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
+            continue;
+        }
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            continue;
+        }
+        const auto& props = it->second.common_properties();
+        auto mode_it = props.find("index_build_mode");
+        if (mode_it != props.end() && mode_it->second == "async") {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint32_t get_vector_index_build_threshold(const TabletSchemaCSPtr& schema) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
+            continue;
+        }
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            continue;
+        }
+        const auto& props = it->second.common_properties();
+        auto threshold_it = props.find("index_build_threshold");
+        if (threshold_it != props.end()) {
+            // Use a checked parse: atoi() silently treats malformed strings as 0 and would
+            // wrap a negative int into a huge uint32_t after the cast, neither of which is
+            // a sensible build threshold. Fall back to the config default on parse failure
+            // or out-of-range values.
+            char* end = nullptr;
+            errno = 0;
+            unsigned long parsed = std::strtoul(threshold_it->second.c_str(), &end, 10);
+            if (errno == 0 && end != threshold_it->second.c_str() && *end == '\0' &&
+                parsed <= std::numeric_limits<uint32_t>::max()) {
+                return static_cast<uint32_t>(parsed);
+            }
+            LOG(WARNING) << "ignoring invalid index_build_threshold='" << threshold_it->second
+                         << "', falling back to config_vector_index_default_build_threshold";
+        }
+    }
+    return config::config_vector_index_default_build_threshold;
+}
+
 // For each column with a vector index, resolve a full segment-level path for the
 // upcoming .vi file and stash it in |opts.vector_index_file_paths|. The SegmentWriter
 // picks these up to direct tenann's writer at object storage.
@@ -187,6 +251,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+    opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
         metadata && metadata->has_flat_json_config()) {
@@ -195,6 +260,8 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     }
 
     opts.global_dicts = _global_dicts;
+
+    opts.defer_vector_index_build = has_async_vector_index(_schema);
 
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
@@ -249,11 +316,32 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
-        // Record vector index IDs only when .vi files were actually produced.
-        // VectorIndexWriter::finish skips file creation when the build threshold is not reached.
-        if (_seg_writer->has_vector_index_written()) {
-            for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-                segment_file_info.vector_index_ids.push_back(index_id);
+        // Record which vector indexes need .vi files
+        // Skip bundled segments: .vi files don't support bundle format yet
+        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
+        if (_seg_writer->defer_vector_index_build()) {
+            if (is_bundled) {
+                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
+                        << " SKIPPED (bundled segment)";
+            } else if (segment_file_info.num_rows >= _seg_writer->vector_index_build_threshold()) {
+                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
+                    segment_file_info.vector_index_ids.push_back(index_id);
+                }
+                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
+                        << " num_rows=" << segment_file_info.num_rows
+                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " recorded "
+                        << segment_file_info.vector_index_ids.size() << " index_ids";
+            } else {
+                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
+                        << " num_rows=" << segment_file_info.num_rows
+                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " SKIPPED (below threshold)";
+            }
+        } else {
+            // Sync mode: record vector index IDs only when .vi files were actually produced.
+            if (_seg_writer->has_vector_index_written()) {
+                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
+                    segment_file_info.vector_index_ids.push_back(index_id);
+                }
             }
         }
         _data_size += segment_size;
@@ -396,11 +484,20 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_file_info.encryption_meta = segment_writer->encryption_meta();
         segment_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = segment_writer->num_rows();
-        // Record vector index IDs only when .vi files were actually produced.
-        // VectorIndexWriter::finish skips file creation when the build threshold is not reached.
-        if (segment_writer->has_vector_index_written()) {
-            for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
-                segment_file_info.vector_index_ids.push_back(index_id);
+        // Record which vector indexes need .vi files
+        if (segment_writer->defer_vector_index_build()) {
+            // async mode: only record when segment has enough rows to meet threshold
+            if (segment_file_info.num_rows >= segment_writer->vector_index_build_threshold()) {
+                for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
+                    segment_file_info.vector_index_ids.push_back(index_id);
+                }
+            }
+        } else {
+            // Sync mode: record vector index IDs only when .vi files were actually produced.
+            if (segment_writer->has_vector_index_written()) {
+                for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
+                    segment_file_info.vector_index_ids.push_back(index_id);
+                }
             }
         }
         _data_size += segment_size;
@@ -460,6 +557,7 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+    opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
         metadata && metadata->has_flat_json_config()) {
@@ -482,6 +580,7 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
 
     RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
                                                  _fs.get(), opts));
+    opts.defer_vector_index_build = has_async_vector_index(_schema);
 
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));

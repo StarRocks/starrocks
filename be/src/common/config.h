@@ -1331,7 +1331,6 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
-CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
@@ -1369,7 +1368,6 @@ CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 CONF_mBool(lake_cache_select_in_physical_way, "true");
 // The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
 CONF_mInt32(lake_metadata_fetch_thread_count, "3");
-
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
 // A comma-separated list of debug contexts to enable.
@@ -1858,6 +1856,12 @@ CONF_mInt32(config_vector_index_build_concurrency, "8");
 
 // default not to build the empty index
 CONF_mInt32(config_vector_index_default_build_threshold, "10000");
+
+// Maximum fraction of CPU cores that vector index build targets to use.
+// Effective pool_size * omp_threads is sized from nproc * this value, but a minimum
+// budget of 2 is enforced, so on small-core machines or with small ratios the effective
+// value may exceed nproc * this value.
+CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
 
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.

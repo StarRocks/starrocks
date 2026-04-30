@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "base/concurrency/spinlock.h"
+#include "base/format.h"
 #include "base/utility/dynamic_util.h"
 #include "common/config_udf_fwd.h"
 #include "common/status.h"

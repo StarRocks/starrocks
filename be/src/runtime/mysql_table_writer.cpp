@@ -179,6 +179,8 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                             fmt::format_to(std::back_inserter(_stmt_buffer), "{}", (int32_t)viewer.value(i));
                         } else if constexpr (type == TYPE_JSON || type == TYPE_VARIANT) {
                             fmt::format_to(std::back_inserter(_stmt_buffer), "{}", *viewer.value(i));
+                        } else if constexpr (std::is_same_v<RunTimeCppType<type>, Slice>) {
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "{}", std::string_view(viewer.value(i)));
                         } else {
                             fmt::format_to(std::back_inserter(_stmt_buffer), "{}", viewer.value(i));
                         }

@@ -2295,6 +2295,51 @@ struct TBatchGetTableSchemaResponse {
     2: optional list<TGetTableSchemaResponse> responses;
 }
 
+struct TGetTabletMetadataRequest {
+    1: optional i64 tablet_id;
+    2: optional i64 table_id;
+    3: optional i64 partition_id;
+    4: optional i64 index_id;
+    // The metadata version to fetch. Defaults to 1 when unset.
+    // The current implementation only serves version 1 (the initial empty metadata
+    // produced by tablet creation). Other versions return NOT_IMPLEMENTED until a
+    // future change extends the response with the fields needed for higher versions
+    // (rowsets, historical schemas, etc.).
+    5: optional i64 version;
+}
+
+// Subset of tablet metadata fields needed to construct a version-1 TabletMetadataPB
+// on CN. The shape currently overlaps with AgentService.TCreateTabletReq; the two
+// must be kept in sync per the NOTE on TCreateTabletReq. Higher versions will need
+// additional fields (rowsets, sstable meta, historical schemas, etc.) which can be
+// added without breaking compatibility since all fields are optional.
+struct TCloudTabletMeta {
+    1: optional i64 tablet_id;
+    2: optional AgentService.TTabletSchema schema;
+    3: optional bool enable_persistent_index;
+    4: optional AgentService.TPersistentIndexType persistent_index_type;
+    5: optional AgentService.TCompactionStrategy compaction_strategy;
+    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    7: optional map<i64, Types.TTabletRange> tablet_ranges;
+    8: optional i64 gtid;
+    9: optional Types.TCompressionType compression_type;
+    10: optional i32 compression_level;
+}
+
+struct TGetTabletMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional TCloudTabletMeta meta;
+}
+
+struct TBatchGetTabletMetadataRequest {
+    1: optional list<TGetTabletMetadataRequest> requests;
+}
+
+struct TBatchGetTabletMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTabletMetadataResponse> responses;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2446,4 +2491,6 @@ service FrontendService {
     TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
 
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
+
+    TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
 }

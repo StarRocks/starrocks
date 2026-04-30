@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include "base/compression/block_compression.h"
 #include "fs/fs.h"
 #include "gen_cpp/binlog.pb.h"
@@ -249,3 +251,8 @@ private:
 using BinlogFileWriterPtr = std::shared_ptr<BinlogFileWriter>;
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::WriterState> : formatter<std::underlying_type_t<starrocks::WriterState>> {
+    auto format(starrocks::WriterState value, format_context& ctx) const -> format_context::iterator;
+};
