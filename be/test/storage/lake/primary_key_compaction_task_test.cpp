@@ -1306,6 +1306,128 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     config::enable_pk_size_tiered_compaction_strategy = old_val;
 }
 
+// Helper: build a tablet_metadata-like vector of rowset PBs with explicit num_dels set,
+// so pick_rowset_indexes does not need to consult UpdateManager for delete counts.
+static void build_rowsets_with_dels(const std::vector<std::pair<int64_t /*bytes*/, int64_t /*dels*/>>& specs,
+                                    std::vector<RowsetMetadataPB>* rowset_metas) {
+    uint32_t id = 0;
+    for (const auto& spec : specs) {
+        RowsetMetadataPB rm;
+        rm.set_id(id++);
+        rm.set_overlapped(false);
+        rm.set_num_rows(1000);
+        rm.set_data_size(spec.first);
+        rm.set_num_dels(spec.second);
+        rowset_metas->push_back(rm);
+    }
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier) {
+    // Reproduce the pathological case observed on a 13 GB 10T-tier tablet:
+    //   size-tiered selector picks a level holding only a handful of large
+    //   non-overlapped rowsets, the merge rewrites GBs of base data with
+    //   negligible IO-count reduction, and write amplification balloons.
+    // The new lake_pk_compaction_min_level_score config skips these picks.
+
+    const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
+    const double old_threshold = config::lake_pk_compaction_min_level_score;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    DeferOp restore([&] {
+        config::enable_pk_size_tiered_compaction_strategy = old_strategy;
+        config::lake_pk_compaction_min_level_score = old_threshold;
+    });
+
+    // Sparse mid-tier: 4 rowsets at ~700 MB each, no overlap, no deletes.
+    // Per-rowset score = 1 MB / ~700 MB ≈ 0.00143
+    // Level score      ≈ 0.0057  (well below any non-trivial threshold)
+    {
+        std::vector<RowsetMetadataPB> rowset_metas;
+        std::vector<RowsetCandidate> rowset_vec;
+        generate_test_rowsets({700LL * 1024 * 1024, 700LL * 1024 * 1024, 700LL * 1024 * 1024, 700LL * 1024 * 1024},
+                              &rowset_metas, &rowset_vec);
+        ASSIGN_OR_ABORT(auto pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
+        ASSERT_NE(pick_level_ptr, nullptr);
+        EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
+        // Score is the axis the new config gates on; document the regime.
+        EXPECT_LT(pick_level_ptr->score, 0.01);
+    }
+
+    // High-overhead L0: 10 small rowsets at 10 KB each, no overlap, no deletes.
+    // Per-rowset score = 1 MB / 10 KB ≈ 102.4
+    // Level score      ≈ 1024  (any sane threshold leaves this alone)
+    {
+        std::vector<RowsetMetadataPB> rowset_metas;
+        std::vector<RowsetCandidate> rowset_vec;
+        std::vector<int64_t> small_bytes(10, 10 * 1024);
+        generate_test_rowsets(small_bytes, &rowset_metas, &rowset_vec);
+        ASSIGN_OR_ABORT(auto pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
+        ASSERT_NE(pick_level_ptr, nullptr);
+        EXPECT_GT(pick_level_ptr->score, 100.0);
+    }
+
+    // Now exercise the gate end-to-end via pick_rowset_indexes: with threshold 0,
+    // the sparse mid-tier should still be picked (legacy behavior preserved).
+    auto build_metadata = [&](const std::vector<std::pair<int64_t, int64_t>>& specs) {
+        auto md = std::make_shared<TabletMetadataPB>();
+        md->set_id(_tablet_metadata->id());
+        md->set_version(1);
+        std::vector<RowsetMetadataPB> rowset_metas;
+        build_rowsets_with_dels(specs, &rowset_metas);
+        for (auto& rm : rowset_metas) {
+            *md->add_rowsets() = rm;
+        }
+        return md;
+    };
+
+    // Lower min_input_segments gate so 4 rowsets pass the basic eligibility check.
+    const int64_t old_min_segs = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 2;
+    DeferOp restore_segs([&] { config::lake_pk_compaction_min_input_segments = old_min_segs; });
+
+    // Sparse mid-tier metadata: 4 large rowsets, no deletes.
+    auto sparse_md = build_metadata(
+            {{700LL * 1024 * 1024, 0}, {700LL * 1024 * 1024, 0}, {700LL * 1024 * 1024, 0}, {700LL * 1024 * 1024, 0}});
+
+    PrimaryCompactionPolicy policy(_tablet_mgr.get(), sparse_md, /*force_base_compaction=*/false);
+
+    // (a) threshold=0 (default): legacy behavior — picks the 4 rowsets.
+    config::lake_pk_compaction_min_level_score = 0.0;
+    {
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(sparse_md, &has_dels));
+        EXPECT_EQ(picked.size(), 4);
+    }
+
+    // (b) threshold=0.01: gate trips, no rowsets picked, FE-side score collapses to 0.
+    config::lake_pk_compaction_min_level_score = 0.01;
+    {
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(sparse_md, &has_dels));
+        EXPECT_EQ(picked.size(), 0);
+    }
+
+    // (c) High-overhead L0 still compacts even at the same threshold (high score).
+    auto small_md = build_metadata({{10 * 1024, 0}, {10 * 1024, 0}, {10 * 1024, 0}, {10 * 1024, 0}, {10 * 1024, 0}});
+    PrimaryCompactionPolicy small_policy(_tablet_mgr.get(), small_md, /*force_base_compaction=*/false);
+    {
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, small_policy.pick_rowset_indexes(small_md, &has_dels));
+        EXPECT_GE(picked.size(), 1);
+    }
+
+    // (d) Sparse mid-tier WITH deletes bypasses the gate (delete vectors must compact).
+    auto delete_md = build_metadata({{700LL * 1024 * 1024, 0},
+                                     {700LL * 1024 * 1024, 0},
+                                     {700LL * 1024 * 1024, 0},
+                                     {700LL * 1024 * 1024, 500 /* dels */}});
+    PrimaryCompactionPolicy delete_policy(_tablet_mgr.get(), delete_md, /*force_base_compaction=*/false);
+    {
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, delete_policy.pick_rowset_indexes(delete_md, &has_dels));
+        EXPECT_GE(picked.size(), 1);
+    }
+}
+
 TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     // Prepare data for writing
     Chunk chunks[3];
