@@ -244,7 +244,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     @Override
     public OptExpression visitPhysicalUnion(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalUnionOperator unionOp = optExpression.getOp().cast();
-        DecodeInfo info = context.operatorDecodeInfo.getOrDefault(unionOp, DecodeInfo.EMPTY);
+        DecodeInfo info = context.operatorDecodeInfo.getOrDefault(unionOp, DecodeInfo.empty());
         List<Map<ColumnRefOperator, ConstantOperator>> constantMappings =
                 context.unionDictionaryManager.generateConstantEncodingMap(
                         unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), context.allStringColumns);
