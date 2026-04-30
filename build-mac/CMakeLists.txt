@@ -860,6 +860,8 @@ message(STATUS "Apple frameworks configured for brpc support")
 include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/include)
 include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/override)
 include_directories(${SRC_DIR})
+# Header-only: base/format.h needs orc::TypeKind.
+include_directories(BEFORE ${SRC_DIR}/formats/orc/apache-orc/c++/include)
 include_directories(${BE_PROTO_THRIFT_GENSRC_DIR})
 include_directories(${GENSRC_DIR})
 include_directories(${BASE_DIR}/build)
@@ -1021,7 +1023,8 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/memory_lock.cpp$")
 # ==============================================================================
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/formats/(avro|orc|parquet)/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/file_scanner/(avro|orc|parquet)_.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(avro|orc|parquet|iceberg).*\\.cpp$")
+# Anchored to ${SRC_DIR} to keep generated thrift types (parquet_types.cpp).
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX "${SRC_DIR}/.*(avro|orc|parquet|iceberg).*\\.cpp$")
 
 
 # ==============================================================================
