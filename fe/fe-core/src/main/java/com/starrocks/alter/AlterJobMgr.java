@@ -50,6 +50,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
@@ -88,6 +89,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -246,16 +248,21 @@ public class AlterJobMgr {
                             "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());
             }
 
+            Map<TableName, Table> tableNameTableMap =
+                    AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(mvQueryStatement);
+            Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
             // Skip checks to maintain eventual consistency when replay
-            List<BaseTableInfo> baseTableInfos =
-                        Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
+            if (!isReplay) {
+                MaterializedViewAnalyzer.checkBaseTables(
+                        tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
+            }
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = taskManager.getTask(materializedView);
             if (task == null) {
                 throw new SemanticException("Can not find running task for materialized view [%s]",
                         materializedView.getName());
             }
-            return new AlterMaterializedViewStatusContext(status, reason, baseTableInfos, task);
+            return new AlterMaterializedViewStatusContext(status, reason, Lists.newArrayList(baseTableInfos), task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
