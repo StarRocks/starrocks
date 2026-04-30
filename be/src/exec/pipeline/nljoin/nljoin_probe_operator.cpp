@@ -19,7 +19,6 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/query_context.h"
 #include "exprs/expr_executor.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
@@ -788,21 +787,22 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chun
     return Status::OK();
 }
 
-void NLJoinProbeOperator::update_exec_stats(RuntimeState* state) {
-    auto ctx = state->query_ctx();
-    if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
-        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
-            ctx->update_pred_filter_stats(
-                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
-        }
-
-        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
-            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
-            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
-        }
+OperatorExecStatsSnapshot NLJoinProbeOperator::exec_stats_snapshot() const {
+    OperatorExecStatsSnapshot snapshot;
+    snapshot.plan_node_id = _plan_node_id;
+    snapshot.update_pull_rows = true;
+    snapshot.pull_rows = COUNTER_VALUE(_pull_row_num_counter);
+    if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+        snapshot.update_pred_filter_rows = true;
+        snapshot.pred_filter_rows = COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter);
     }
+    if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        snapshot.update_rf_filter_rows = true;
+        int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+        int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
+        snapshot.rf_filter_rows = input_rows - output_rows;
+    }
+    return snapshot;
 }
 
 void NLJoinProbeOperatorFactory::_init_row_desc() {

@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "exec/pipeline/primitives/operator_exec_stats.h"
 #include "exec/pipeline/primitives/operator_runtime_access.h"
 #include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
@@ -239,7 +240,7 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
-    virtual void update_exec_stats(RuntimeState* state);
+    virtual OperatorExecStatsSnapshot exec_stats_snapshot() const;
 
     void set_observer(PipelineObserver* observer) { _observer = observer; }
     PipelineObserver* observer() const { return _observer; }

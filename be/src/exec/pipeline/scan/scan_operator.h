@@ -99,7 +99,7 @@ public:
 
     virtual int64_t get_scan_table_id() const { return -1; }
 
-    void update_exec_stats(RuntimeState* state) override;
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override;
 
     bool has_full_events() { return get_chunk_buffer().limiter()->has_full_events(); }
     virtual bool need_notify_all() { return true; }

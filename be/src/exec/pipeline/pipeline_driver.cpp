@@ -53,6 +53,36 @@ namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
 DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
+namespace {
+
+void update_operator_exec_stats(QueryContext* query_ctx, const OperatorExecStatsSnapshot& snapshot) {
+    if (!snapshot.valid || query_ctx == nullptr) {
+        return;
+    }
+    if (snapshot.require_registered_plan_node && !query_ctx->need_record_exec_stats(snapshot.plan_node_id)) {
+        return;
+    }
+
+    if (snapshot.update_push_rows) {
+        query_ctx->update_push_rows_stats(snapshot.plan_node_id, snapshot.push_rows);
+    }
+    if (snapshot.update_pull_rows) {
+        if (snapshot.force_set_pull_rows) {
+            query_ctx->force_set_pull_rows_stats(snapshot.plan_node_id, snapshot.pull_rows);
+        } else {
+            query_ctx->update_pull_rows_stats(snapshot.plan_node_id, snapshot.pull_rows);
+        }
+    }
+    if (snapshot.update_pred_filter_rows) {
+        query_ctx->update_pred_filter_stats(snapshot.plan_node_id, snapshot.pred_filter_rows);
+    }
+    if (snapshot.update_rf_filter_rows) {
+        query_ctx->update_rf_filter_stats(snapshot.plan_node_id, snapshot.rf_filter_rows);
+    }
+}
+
+} // namespace
+
 PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                Pipeline* pipeline, int32_t driver_id)
         : _observer(this),
@@ -369,7 +399,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    curr_op->update_exec_stats(runtime_state);
+                    update_operator_exec_stats(_query_ctx, curr_op->exec_stats_snapshot());
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -477,7 +507,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    curr_op->update_exec_stats(runtime_state);
+                    update_operator_exec_stats(_query_ctx, curr_op->exec_stats_snapshot());
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -512,7 +542,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         _first_unfinished = new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
-            sink_operator()->update_exec_stats(runtime_state);
+            update_operator_exec_stats(_query_ctx, sink_operator()->exec_stats_snapshot());
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
