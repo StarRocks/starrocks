@@ -620,19 +620,19 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         // supported
         starRocksAssert.query("select count(1) from information_schema.warehouse_metrics")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select * from information_schema.warehouse_metrics")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics")
                 .explainContains("constant exprs: \n" +
                         "         'default_warehouse' | '0'");
         starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where warehouse_id = '0'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_ID = '0'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics " +
                         "where WAREHOUSE_ID = 0")
                 .explainContains("constant exprs: \n" +
@@ -640,10 +640,10 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where WAREHOUSE_NAME = " +
                         "'default_warehouse'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_NAME= 'default_warehouse'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics " +
                         "where WAREHOUSE_NAME = 'default_warehouse'")
                 .explainContains("constant exprs: \n" +
@@ -681,19 +681,19 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         // supported
         starRocksAssert.query("select count(1) from information_schema.warehouse_queries")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select * from information_schema.warehouse_queries")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries")
                 .explainContains("     constant exprs: \n" +
                         "         'default_warehouse' | '1'");
         starRocksAssert.query("select count(1) from information_schema.warehouse_queries where warehouse_id = '0'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = '0'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries " +
                         "where WAREHOUSE_ID = 0")
                 .explainContains("     constant exprs: \n" +
@@ -701,10 +701,10 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         starRocksAssert.query("select count(1) from information_schema.warehouse_queries where WAREHOUSE_NAME = " +
                         "'default_warehouse'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_NAME= 'default_warehouse'")
                 .explainContains("     constant exprs: \n" +
-                        "         '0'");
+                        "         0");
         starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries " +
                         "where WAREHOUSE_NAME = 'default_warehouse'")
                 .explainContains("     constant exprs: \n" +
