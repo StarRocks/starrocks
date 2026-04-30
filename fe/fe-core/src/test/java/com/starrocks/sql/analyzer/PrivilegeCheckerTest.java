@@ -2178,6 +2178,75 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testDropTaskStmtLegacyTaskNoUserIdentity() throws Exception {
+        // Legacy task images (pre-#47561) deserialize with userIdentity == null.
+        // The visitor's `creator != null && creator.equals(...)` guard means an
+        // unmigrated legacy task is treated as "not owned by anyone" — every caller
+        // (including the original creator) needs OPERATE on SYSTEM.
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        String legacyTaskName = "priv_drop_task_legacy";
+        Task legacyTask = new Task(legacyTaskName);
+        // Intentionally do NOT call setUserIdentity — simulates legacy state.
+        taskManager.replayCreateTask(legacyTask);
+
+        try {
+            StatementBase dropLegacy = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + legacyTaskName, ctx);
+
+            // 1) testUser without OPERATE is denied.
+            ctxToTestUser();
+            try {
+                Authorizer.check(dropLegacy, ctx);
+                Assertions.fail("expected AccessDeniedException for legacy DROP TASK without OPERATE");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+            }
+
+            // 2) After GRANT OPERATE on SYSTEM, the same DROP succeeds.
+            grantRevokeSqlAsRoot("grant OPERATE on system to test");
+            ctxToTestUser();
+            Authorizer.check(dropLegacy, ctx);
+            grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+        } finally {
+            ctxToRoot();
+            Task t = taskManager.getTask(legacyTaskName);
+            if (t != null) {
+                taskManager.dropTasks(Collections.singletonList(t.getId()));
+            }
+        }
+    }
+
+    @Test
+    public void testTaskGsonPostProcessMigratesLegacyCreateUser() throws Exception {
+        // gsonPostProcess() must back-fill userIdentity from the deprecated
+        // createUser field so that owners of legacy task images keep ownership
+        // semantics under the new DROP TASK auth rule.
+        Task legacy = new Task("legacy_post_process");
+        legacy.setCreateUser("test");
+        // userIdentity stays null until gsonPostProcess runs.
+        Assertions.assertNull(legacy.getUserIdentity());
+
+        legacy.gsonPostProcess();
+
+        UserIdentity migrated = legacy.getUserIdentity();
+        Assertions.assertNotNull(migrated, "gsonPostProcess must back-fill userIdentity");
+        Assertions.assertEquals("test", migrated.getUser());
+        Assertions.assertEquals("%", migrated.getHost());
+        // Equality with the live testUser ('test'@'%') — the visitor's guard relies on this.
+        Assertions.assertEquals(testUser, migrated);
+
+        // Idempotency: a task already carrying userIdentity must not be overwritten.
+        Task modern = new Task("modern_post_process");
+        modern.setCreateUser("test");
+        modern.setUserIdentity(UserIdentity.ROOT);
+        modern.gsonPostProcess();
+        Assertions.assertEquals(UserIdentity.ROOT, modern.getUserIdentity());
+    }
+
+    @Test
     public void testShowProcStmt() throws Exception {
         // ShowProcStmt
         verifyGrantRevoke(
