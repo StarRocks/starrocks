@@ -2499,7 +2499,6 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testUnionAll() throws Exception {
         String sql = """
                 SELECT * FROM (
@@ -2769,7 +2768,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  36 <-> DictDefine(37: c_user, [upper(<place-holder>)])\n" +
                 "  |  cardinality: 1", plan);
-=======
+    }
+
+    @Test
     public void testCreateDecodeInfoDoesNotReturnSharedMutableSingleton() {
         DecodeInfo empty1 = DecodeInfo.create();
         DecodeInfo empty2 = DecodeInfo.create();
@@ -2781,6 +2782,5 @@ public class LowCardinalityTest2 extends PlanTestBase {
         Assertions.assertTrue(d2.getOutputStringColumns().isEmpty());
         Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
         Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
->>>>>>> 6c7601648d ([BugFix] Fix low-cardinality rewrite NPE caused by shared DecodeInfo (backport #68799) (#68890))
     }
 }

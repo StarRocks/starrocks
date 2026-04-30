@@ -561,9 +561,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         context = cteDecodeInfo.get(consume.getCteId());
         Preconditions.checkNotNull(context);
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
-        DecodeInfo info = DecodeInfo.EMPTY;
+        DecodeInfo info = DecodeInfo.create();
         info.inputStringColumns.union(context.outputStringColumns);
         // Map producer columns to consumer columns (like a projection)
         for (var entry : consume.getCteOutputColumnRefMap().entrySet()) {
@@ -700,10 +700,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
         PhysicalSetOperation setOp = optExpression.getOp().cast();
         DistributionSpec dist = optExpression.getRequiredProperties().get(0).getDistributionProperty().getSpec();
-<<<<<<< HEAD
         if (setOp instanceof PhysicalUnionOperator && ((PhysicalUnionOperator) setOp).isUnionAll()) {
             Preconditions.checkState(!(dist instanceof HashDistributionSpec));
-            DecodeInfo result = new DecodeInfo();
+            DecodeInfo result = DecodeInfo.create();
             result.inputStringColumns.union(context.outputStringColumns);
             for (int i = 0; i < setOp.getOutputColumnRefOp().size(); ++i) {
                 final int finalI = i;
@@ -731,9 +730,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             result.inputStringColumns.except(result.decodeStringColumns);
             return result;
         }
-=======
 
->>>>>>> 6c7601648d ([BugFix] Fix low-cardinality rewrite NPE caused by shared DecodeInfo (backport #68799) (#68890))
         if (!(dist instanceof HashDistributionSpec)) {
             return visit(optExpression, context);
         }
