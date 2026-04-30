@@ -1508,6 +1508,12 @@ public class MaterializedViewAnalyzer {
                         "refresh_mode=" + refreshMode.name() + ". Please refresh the whole materialized view instead.",
                         tableRef.getPos());
             }
+            if (statement.isForceRefresh() && refreshMode.isIncrementalOrAuto()) {
+                throw new SemanticException("FORCE refresh is not supported for materialized views with " +
+                        "refresh_mode=" + refreshMode.name() +
+                        ". Please drop and re-create the materialized view instead.",
+                        tableRef.getPos());
+            }
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (statement.getPartitionRangeDesc() != null) {
                 if (partitionInfo.isUnPartitioned()) {
