@@ -40,7 +40,10 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     const std::string& value = iter_ptr->value().to_string();
     uint64_t max_rss_rowid = iter_ptr->max_rss_rowid();
 
-    IndexValuesWithVerPB index_value_ver;
+    // Reuse the per-merger protobuf instance: ParseFromString resets it before
+    // populating, and RepeatedPtrField retains its element backing across calls,
+    // so we avoid a heap alloc + free of the message and its values list per key.
+    IndexValuesWithVerPB& index_value_ver = _scratch_value_pb;
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
     }
@@ -145,7 +148,11 @@ Status KeyValueMerger::flush() {
         return Status::OK();
     }
 
-    IndexValuesWithVerPB index_value_pb;
+    // Reuse the per-merger protobuf instance: Clear() retains the values'
+    // RepeatedPtrField backing memory, so the add_values() loop below can
+    // reuse the slot allocations across flushes for the same merger.
+    IndexValuesWithVerPB& index_value_pb = _scratch_flush_pb;
+    index_value_pb.Clear();
     for (const auto& index_value_with_ver : _index_value_vers) {
         if (_merge_base_level && index_value_with_ver.second == IndexValue(NullIndexValue)) {
             // deleted

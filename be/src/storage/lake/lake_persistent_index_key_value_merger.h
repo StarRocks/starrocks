@@ -83,6 +83,12 @@ private:
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
     std::vector<TableBuilderWrapper> _output_builders;
+    // Reused across merge() calls to avoid per-key heap alloc/free of the
+    // protobuf message and its repeated-field storage. ParseFromString resets
+    // the message; RepeatedPtrField::Clear retains element backing memory.
+    IndexValuesWithVerPB _scratch_value_pb;
+    // Reused across flush() calls for the same reason.
+    IndexValuesWithVerPB _scratch_flush_pb;
 };
 } // namespace lake
 } // namespace starrocks
