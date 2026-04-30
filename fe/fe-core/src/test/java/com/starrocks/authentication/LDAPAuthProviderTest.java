@@ -177,7 +177,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "uid=${USER},ou=People,dc=test,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -196,7 +196,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "${USER}@abc.com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -217,7 +217,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "uid=${USER}@abc.com,ou=People,dc=test,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -235,7 +235,7 @@ class LDAPAuthProviderTest {
                 perUserDN,
                 "uid=${USER},ou=People,dc=test,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("bob", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -252,7 +252,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "cn=${USER},dc=pattern,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("charlie", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -270,7 +270,7 @@ class LDAPAuthProviderTest {
                 "uid=${USER},dc=test,dc=com");
 
         // DN special characters: , + " < > ; \ should be escaped (RFC 4514)
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice,+\"<>;\\bob", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -289,14 +289,14 @@ class LDAPAuthProviderTest {
                 "uid=${USER},dc=test,dc=com");
 
         // Leading space
-        AccessControlContext authCtx1 = new AccessControlContext();
+        ConnectContext authCtx1 = new ConnectContext();
         UserIdentity user1 = UserIdentity.createEphemeralUserIdent(" alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
         provider.authenticate(authCtx1, user1, authResponse);
         Assertions.assertEquals("uid=\\ alice,dc=test,dc=com", authCtx1.getDistinguishedName());
 
         // Leading #
-        AccessControlContext authCtx2 = new AccessControlContext();
+        ConnectContext authCtx2 = new ConnectContext();
         UserIdentity user2 = UserIdentity.createEphemeralUserIdent("#alice", "%");
         provider.authenticate(authCtx2, user2, authResponse);
         Assertions.assertEquals("uid=\\#alice,dc=test,dc=com", authCtx2.getDistinguishedName());
@@ -312,7 +312,7 @@ class LDAPAuthProviderTest {
                 "uid=${USER},dc=test,dc=com");
 
         // Filter special characters * ( ) | are NOT special in DN values
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice*()|", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -329,7 +329,7 @@ class LDAPAuthProviderTest {
                 "ou=People,dc=starrocks,dc=com", "uid",
                 /* ldapUserDN */ null, /* ldapBindDNPattern */ "");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -355,7 +355,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "uid=${USER},ou=A,dc=test,dc=com;uid=${USER},ou=B,dc=test,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -391,7 +391,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "uid=${USER},ou=A,dc=test,dc=com;uid=${USER},ou=B,dc=test,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -421,7 +421,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "uid=shared_account,dc=test,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -440,7 +440,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "uid=${USER},ou=A,dc=test,dc=com;uid=shared,dc=test,dc=com");
 
-        AccessControlContext authCtx = new AccessControlContext();
+        ConnectContext authCtx = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -501,7 +501,7 @@ class LDAPAuthProviderTest {
                     null, null, null, "uid", null,
                     "uid=${USER},ou=People,dc=test,dc=com");
 
-            AccessControlContext authCtx = new AccessControlContext();
+            ConnectContext authCtx = new ConnectContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
@@ -536,7 +536,7 @@ class LDAPAuthProviderTest {
                     null, null, null, "uid", null,
                     "uid=${USER}@abc.com,ou=People,dc=test,dc=com");
 
-            AccessControlContext authCtx = new AccessControlContext();
+            ConnectContext authCtx = new ConnectContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
@@ -569,7 +569,7 @@ class LDAPAuthProviderTest {
                     null, null, null, "uid", null,
                     "uid=${USER},ou=People,dc=test,dc=com");
 
-            AccessControlContext authCtx = new AccessControlContext();
+            ConnectContext authCtx = new ConnectContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
@@ -604,7 +604,7 @@ class LDAPAuthProviderTest {
                     null, null, null, "uid", null,
                     "uid=${USER}@abc.com,ou=People,dc=test,dc=com");
 
-            AccessControlContext authCtx = new AccessControlContext();
+            ConnectContext authCtx = new ConnectContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
@@ -638,7 +638,7 @@ class LDAPAuthProviderTest {
                     null, null, null, "uid", null,
                     "uid=${USER}@abc.com,ou=People,dc=test,dc=com");
 
-            AccessControlContext authCtx = new AccessControlContext();
+            ConnectContext authCtx = new ConnectContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
