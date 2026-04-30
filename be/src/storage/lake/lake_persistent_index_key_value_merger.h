@@ -89,6 +89,11 @@ private:
     IndexValuesWithVerPB _scratch_value_pb;
     // Reused across flush() calls for the same reason.
     IndexValuesWithVerPB _scratch_flush_pb;
+    // Reused across flush() calls to avoid the heap alloc + copy + dtor that
+    // SerializeAsString() does each call. SerializeToString reuses the existing
+    // backing storage of this string; the Slice handed to TableBuilder::Add only
+    // needs to outlive the Add() call.
+    std::string _scratch_serialized;
 };
 } // namespace lake
 } // namespace starrocks

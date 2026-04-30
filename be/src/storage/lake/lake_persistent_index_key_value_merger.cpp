@@ -173,8 +173,15 @@ Status KeyValueMerger::flush() {
             // Create a new sst file when current file is empty or exceed target size.
             RETURN_IF_ERROR(create_table_builder());
         }
+        // Reuse the per-merger serialization buffer: SerializeAsString() returns a
+        // brand new std::string each call (heap alloc + copy + dtor). SerializeToString
+        // into a long-lived buffer reuses the existing backing storage; the Slice we
+        // hand to TableBuilder::Add only needs to outlive the Add() call (Add copies
+        // into its block builder before returning), which is true here.
+        _scratch_serialized.clear();
+        index_value_pb.SerializeToString(&_scratch_serialized);
         RETURN_IF_ERROR(
-                _output_builders.back().table_builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString())));
+                _output_builders.back().table_builder->Add(Slice(_key), Slice(_scratch_serialized)));
     }
     _index_value_vers.clear();
 

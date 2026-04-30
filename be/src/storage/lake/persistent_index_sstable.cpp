@@ -119,13 +119,23 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
     sstable::Options options;
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf);
+    // Hoist the per-key protobuf message and its serialization buffer out of the
+    // loop. RepeatedPtrField::Clear() retains the value-slot allocation, so
+    // add_values() reuses the existing slot across iterations; SerializeToString
+    // reuses the existing std::string backing storage. This eliminates three
+    // per-key heap allocations (the message, the values slot, and the temporary
+    // returned by SerializeAsString) on a loop driven by every key in `map`.
+    IndexValuesWithVerPB index_value_pb;
+    std::string serialized;
     for (const auto& [k, v] : map) {
-        IndexValuesWithVerPB index_value_pb;
+        index_value_pb.Clear();
         auto* value = index_value_pb.add_values();
         value->set_version(v.first);
         value->set_rssid(v.second.get_rssid());
         value->set_rowid(v.second.get_rowid());
-        RETURN_IF_ERROR(builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString())));
+        serialized.clear();
+        index_value_pb.SerializeToString(&serialized);
+        RETURN_IF_ERROR(builder.Add(Slice(k), Slice(serialized)));
     }
     if (auto st = builder.Finish(); !st.ok()) {
         StarRocksMetrics::instance()->pk_index_sst_write_error_total.increment(1);
