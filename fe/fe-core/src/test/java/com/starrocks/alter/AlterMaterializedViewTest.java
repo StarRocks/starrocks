@@ -54,17 +54,17 @@ public class AlterMaterializedViewTest extends MVTestBase {
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
         Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
 
-        // change refresh mode from auto to incremental
+        // alter auto -> incremental: rejected (cross-mode ALTER not supported)
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+            alterMaterializedView(alterStmt, true);
+            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from incremental to auto: rejected (AUTO is hidden from users)
+        // alter auto -> auto: rejected (AUTO is hidden from users at the analyzer level)
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
             alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
     }
 
@@ -103,6 +103,12 @@ public class AlterMaterializedViewTest extends MVTestBase {
         // alter incremental -> auto: rejected (AUTO is hidden from users)
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
+            alterMaterializedView(alterStmt, true);
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+        }
+        // alter incremental -> pct: rejected (cross-mode ALTER not supported)
+        {
+            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"pct\")";
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
