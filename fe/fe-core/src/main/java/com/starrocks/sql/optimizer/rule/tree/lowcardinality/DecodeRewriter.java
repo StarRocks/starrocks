@@ -716,12 +716,14 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                                 context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
                                 context.stringRefToDictRefMap.getOrDefault(e.getValue(), e.getValue())))
                 .collect(Collectors.toMap(p -> p.first, p -> p.second));
+        ColumnRefSet supportColumns = new ColumnRefSet(consume.getCteOutputColumnRefMap().entrySet().stream()
+                .filter(k -> info.inputStringColumns.contains(k.getValue())).map(Map.Entry::getKey).toList());
         PhysicalCTEConsumeOperator newOp = new PhysicalCTEConsumeOperator(
                 consume.getCteId(),
                 newMap,
                 consume.getLimit(),
-                rewritePredicate(consume.getPredicate(), info.outputStringColumns),
-                rewriteProjection(consume.getProjection(), info.outputStringColumns),
+                rewritePredicate(consume.getPredicate(), supportColumns),
+                rewriteProjection(consume.getProjection(), supportColumns),
                 computeDictExpr(fragmentUseDictExprs)
         );
         return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
