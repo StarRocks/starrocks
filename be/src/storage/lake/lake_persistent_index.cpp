@@ -641,8 +641,7 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
         // Compare via Slice directly; .to_string() would allocate a fresh
         // std::string per key on a loop driven by every input row.
         const Slice cur_key = iter_ptr->key();
-        if (!seek_range.stop_key.empty() &&
-            options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
+        if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
             // meet the scan range boundary, quit.
             break;
         }
