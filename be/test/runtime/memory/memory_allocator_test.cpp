@@ -50,6 +50,27 @@ TEST(JemallocAllocatorTest, ClearAndAlignment) {
     allocator.free(grown, 32);
 }
 
+TEST(JemallocAllocatorTest, ReallocWithLargeAlignment) {
+    JemallocAllocator<true> allocator;
+    constexpr size_t alignment = 64;
+    auto* ptr = static_cast<char*>(allocator.alloc(32, alignment));
+    ASSERT_NE(ptr, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(ptr) % alignment, 0);
+
+    std::memset(ptr, 0x5A, 32);
+    auto* grown = static_cast<char*>(allocator.realloc(ptr, 32, 96, alignment));
+    ASSERT_NE(grown, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(grown) % alignment, 0);
+    for (int i = 0; i < 32; ++i) {
+        EXPECT_EQ(grown[i], 0x5A);
+    }
+    for (int i = 32; i < 96; ++i) {
+        EXPECT_EQ(grown[i], 0);
+    }
+
+    allocator.free(grown, 96);
+}
+
 TEST(TrackedAllocatorTest, TracksMemTrackerConsumption) {
     struct RestoreMemTrackerSource {
         ~RestoreMemTrackerSource() { starrocks::CurrentThread::set_mem_tracker_source(nullptr, nullptr); }
