@@ -21,7 +21,6 @@
 #include "base/failpoint/fail_point.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
-#include "exec/pipeline/operator_factory.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
@@ -35,13 +34,14 @@ const int32_t Operator::s_pseudo_plan_node_id_for_final_sink = -1;
 Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
                    int32_t driver_sequence, OperatorRuntimeAccess* runtime_access)
         : _factory(factory),
-          _runtime_access(runtime_access != nullptr ? runtime_access : factory),
+          _runtime_access(runtime_access),
           _id(id),
           _name(std::move(name)),
           _plan_node_id(plan_node_id),
           _is_subordinate(is_subordinate),
           _driver_sequence(driver_sequence),
           _runtime_filter_probe_sequence(driver_sequence) {
+    DCHECK(_runtime_access != nullptr);
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);

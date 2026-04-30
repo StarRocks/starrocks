@@ -338,6 +338,35 @@
       "remediation": "Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code."
     },
     {
+      "id": "pipelineprimitives",
+      "doc_label": "PipelinePrimitives",
+      "summary": "Stable pipeline operator primitives without pipeline runtime, scheduler, context, factory, or concrete operator coupling.",
+      "owned_targets": ["PipelinePrimitives"],
+      "owned_globs": [
+        "be/src/exec/pipeline/operator.h",
+        "be/src/exec/pipeline/operator.cpp",
+        "be/src/exec/pipeline/primitives/operator_exec_stats.h",
+        "be/src/exec/pipeline/primitives/operator_runtime_access.h"
+      ],
+      "allowed_include_prefixes": ["exec/pipeline/operator.h", "exec/pipeline/primitives/", "exec/pipeline/runtime_filter_core_types.h", "exec/runtime_filter/", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "storage/", "service/", "http/", "connector/", "cache/", "util/"],
+      "forbidden_includes": [
+        "exec/exec_node.h",
+        "exec/data_sink.h",
+        "exec/pipeline/fragment_context.h",
+        "exec/pipeline/operator_factory.h",
+        "exec/pipeline/pipeline.h",
+        "exec/pipeline/pipeline_driver.h",
+        "exec/pipeline/pipeline_driver_executor.h",
+        "exec/pipeline/query_context.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": [],
+      "allowed_test_link_deps": [],
+      "remediation": "Keep pipeline primitives limited to base operator contracts and narrow helper types; move runtime, scheduler, factory, and concrete operator behavior into higher pipeline modules."
+    },
+    {
       "id": "execsinkcore",
       "doc_label": "ExecSinkCore",
       "summary": "DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.",

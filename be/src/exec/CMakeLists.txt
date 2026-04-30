@@ -505,8 +505,21 @@ set(EXEC_NON_PIPELINE_FILES
     workgroup/lock_free_work_group_scan_task_queue.cpp
 )
 
-add_library(pipeline_primitives_exec_objs OBJECT
+ADD_BE_LIB(PipelinePrimitives
     ${PIPELINE_PRIMITIVES_SRCS}
+)
+
+target_link_libraries(PipelinePrimitives PUBLIC
+    ExecCore
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
 )
 
 # `pipeline/aggregate/aggregate_operators.cpp` intentionally includes the
@@ -530,7 +543,6 @@ add_library(pipeline_extensions_exec_objs OBJECT
 )
 
 IF(ENABLE_MULTI_DYNAMIC_LIBS)
-    set_property(TARGET pipeline_primitives_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_runtime_compat_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_operators_batch_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_extensions_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -538,10 +550,9 @@ ENDIF()
 
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
-    $<TARGET_OBJECTS:pipeline_primitives_exec_objs>
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)
+target_link_libraries(Exec PUBLIC PipelinePrimitives ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)

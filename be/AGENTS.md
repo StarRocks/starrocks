@@ -174,6 +174,13 @@ Execution-node base and runtime-filter infrastructure on top of ExprCore without
 - Core tests: `exec_core_test`
 - Remediation: Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code.
 
+### PipelinePrimitives (`pipelineprimitives`)
+Stable pipeline operator primitives without pipeline runtime, scheduler, context, factory, or concrete operator coupling.
+- Targets: `PipelinePrimitives`
+- Allowed internal include prefixes: `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/runtime_filter/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecCore`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep pipeline primitives limited to base operator contracts and narrow helper types; move runtime, scheduler, factory, and concrete operator behavior into higher pipeline modules.
+
 ### ExecSinkCore (`execsinkcore`)
 DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.
 - Targets: `ExecSinkCore`
