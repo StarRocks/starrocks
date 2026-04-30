@@ -1347,14 +1347,19 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         if (!commonType.isValid()) {
             commonType = leftType;
         }
-        
-        Type[] argTypes = new Type[] {leftType, rightType};
+        ScalarOperator leftCasted = leftType.equals(commonType)
+                ? leftOp : foldCast(new CastOperator(commonType, leftOp, true));
+        ScalarOperator rightCasted = rightType.equals(commonType)
+                ? rightOp : foldCast(new CastOperator(commonType, rightOp, true));
+
+        Type[] argTypes = new Type[] {commonType, commonType};
+
         com.starrocks.catalog.Function coalesceFunction = Expr.getBuiltinFunction(
                         FunctionSet.COALESCE, argTypes,
                         com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         return new CallOperator(FunctionSet.COALESCE, commonType,
-                Lists.newArrayList(leftOp, rightOp), coalesceFunction);
+                Lists.newArrayList(leftCasted, rightCasted), coalesceFunction);
     }
     
     /**
