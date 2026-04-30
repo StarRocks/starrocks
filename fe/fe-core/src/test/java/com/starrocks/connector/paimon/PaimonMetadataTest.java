@@ -190,8 +190,6 @@ public class PaimonMetadataTest {
                 result = new ArrayList<>(Collections.singleton("col1"));
                 paimonNativeTable.location().toString();
                 result = "hdfs://127.0.0.1:10000/paimon";
-                paimonNativeTable.primaryKeys();
-                result = List.of("col2");
                 paimonNativeTable.uuid();
                 result = "fake_uuid";
             }
