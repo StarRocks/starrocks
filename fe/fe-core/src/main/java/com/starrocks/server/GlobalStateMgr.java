@@ -128,7 +128,6 @@ import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.authorization.ranger.starrocks.RangerStarRocksAccessControllerEPack;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
-import com.starrocks.epack.lake.VectorIndexBuildScheduler;
 import com.starrocks.epack.load.DeleteMgrEPack;
 import com.starrocks.epack.load.loadv2.LoadMgrEPack;
 import com.starrocks.epack.load.pipe.PipeManagerEPack;
@@ -172,6 +171,7 @@ import com.starrocks.lake.snapshot.ClusterSnapshotRestoredVersionMgr;
 import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.leader.TabletCollector;
@@ -873,6 +873,7 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
             this.fullVacuumDaemon = new FullVacuumDaemon();
+            this.vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -1787,7 +1788,6 @@ public class GlobalStateMgr {
             autovacuumDaemon.start();
             fullVacuumDaemon.start();
 
-            vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
             vectorIndexBuildScheduler.start();
         }
 

@@ -1,6 +1,6 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 
-package com.starrocks.epack.lake;
+package com.starrocks.lake.vector;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
@@ -134,6 +134,12 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
     /**
      * One-time scan after becoming leader.
      * Finds all tablets in async vector index tables where builtVersion &lt; visibleVersion.
+     *
+     * TODO: this scan is currently synchronous and runs on the daemon thread. On large
+     * clusters (many DBs/tables/partitions) it can block checkRunningTasks /
+     * checkRunningTaskTimeout / scheduleFromPending for the duration of the scan and
+     * compete with DDL for catalog readlocks. Make it incremental (paged) and/or move
+     * it off the daemon thread so the scheduler stays responsive after a leader switch.
      */
     void recoveryScan() {
         int count = 0;
@@ -169,7 +175,10 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                                 builtVersion = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
                             }
                             if (builtVersion < visibleVersion) {
-                                pendingTablets.put(tablet.getId(), visibleVersion);
+                                // Use merge(Math::max) so a concurrent onPublishComplete
+                                // enqueue with a newer target version is not overwritten
+                                // by recoveryScan's snapshot of visibleVersion.
+                                pendingTablets.merge(tablet.getId(), visibleVersion, Math::max);
                                 count++;
                             }
                         }
@@ -194,7 +203,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             long tabletId = task.getTabletId();
             long targetVersion = task.getVersion();
 
-            // Check dedup rejection (SERVICE_UNAVAILABLE) before getResponse()
+            // Check dedup rejection (RESOURCE_BUSY) before getResponse()
             // which throws for non-zero status codes.
             if (task.isAlreadyBuilding()) {
                 // CN is still building this tablet. Re-enqueue with cooldown
@@ -219,8 +228,10 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                 }
 
                 if (newBuiltVersion < targetVersion) {
-                    // Not all rowsets built yet (batch_limit), re-enqueue for next round
+                    // Not all rowsets built yet (batch_limit), re-enqueue for next round.
+                    // Keep CN affinity so the next round reuses the same CN's cache warmup.
                     pendingTablets.merge(tabletId, targetVersion, Math::max);
+                    preferredNodes.put(tabletId, task.getNode());
                     LOG.info("Async vector index build partial: tablet={}, newBuiltVersion={}, "
                                     + "targetVersion={}, re-enqueued",
                             tabletId, newBuiltVersion, targetVersion);

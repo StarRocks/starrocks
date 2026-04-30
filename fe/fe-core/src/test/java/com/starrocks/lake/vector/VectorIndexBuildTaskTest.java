@@ -1,6 +1,6 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 
-package com.starrocks.epack.lake;
+package com.starrocks.lake.vector;
 
 import com.starrocks.proto.BuildVectorIndexRequest;
 import com.starrocks.proto.BuildVectorIndexResponse;

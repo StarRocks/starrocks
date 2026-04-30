@@ -244,9 +244,6 @@ public class IndexAnalyzer {
 
     // VectorIndexUtil methods
     public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("The vector index does not support shared data mode");
-        }
         if (!Config.enable_experimental_vector) {
             throw new SemanticException(
                     "The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");

@@ -1,6 +1,6 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 
-package com.starrocks.epack.lake;
+package com.starrocks.lake.vector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
