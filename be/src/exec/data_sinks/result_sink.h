@@ -36,9 +36,9 @@
 
 #include "common/status.h"
 #include "exec/data_sink.h"
+#include "exec/data_sinks/file_result_writer.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "exec/data_sinks/file_result_writer.h"
 
 namespace starrocks {
 

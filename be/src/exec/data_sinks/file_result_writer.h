@@ -34,11 +34,11 @@
 
 #pragma once
 
+#include "exec/data_sinks/result_writer.h"
 #include "exec/parquet_builder.h"
 #include "fs/fs_fwd.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "parquet/file_writer.h"
-#include "exec/data_sinks/result_writer.h"
 
 namespace starrocks {
 

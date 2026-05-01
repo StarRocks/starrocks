@@ -51,9 +51,9 @@
 #define __StarRocksMysql MYSQL
 #include <sstream>
 
+#include "exec/data_sinks/mysql_table_writer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exec/data_sinks/mysql_table_writer.h"
 
 namespace starrocks {
 
