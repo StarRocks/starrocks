@@ -20,6 +20,7 @@ import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.elasticsearch.ElasticsearchConnector;
 import com.starrocks.connector.elasticsearch.EsConfig;
+import com.starrocks.connector.fluss.FlussConnector;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
@@ -44,6 +45,7 @@ public enum ConnectorType {
     PAIMON("paimon", PaimonConnector.class, null),
     ODPS("odps", OdpsConnector.class, null),
     KUDU("kudu", KuduConnector.class, null),
+    FLUSS("fluss", FlussConnector.class, null),
     UNIFIED("unified", UnifiedConnector.class, null),
     BENCHMARK("benchmark", BenchmarkConnector.class, BenchmarkConfig.class);
 
@@ -57,6 +59,7 @@ public enum ConnectorType {
             PAIMON,
             ODPS,
             KUDU,
+            FLUSS,
             UNIFIED,
             BENCHMARK
     );

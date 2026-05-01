@@ -677,6 +677,27 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-lake-paimon</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-flink-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-core</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>org.xerial.snappy</groupId>
             <artifactId>snappy-java</artifactId>
         </dependency>

@@ -799,6 +799,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/fluss-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/starrocks-fluss-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/starrocks-fluss-reader.jar ${STARROCKS_OUTPUT}/be/lib/fluss-reader-lib
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/kudu-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib

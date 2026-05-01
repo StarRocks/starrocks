@@ -78,6 +78,7 @@ under the License.
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <paimon.version>1.3.1</paimon.version>
+        <fluss.version>0.9.0-incubating</fluss.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
         <staros.version>4.1-rc3</staros.version>
@@ -1386,6 +1387,32 @@ under the License.
                 <groupId>org.apache.paimon</groupId>
                 <artifactId>paimon-oss</artifactId>
                 <version>${paimon.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-client</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-common</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-lake-paimon</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-flink-common</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-core</artifactId>
+                <version>1.20.1</version>
             </dependency>
 
             <dependency>
