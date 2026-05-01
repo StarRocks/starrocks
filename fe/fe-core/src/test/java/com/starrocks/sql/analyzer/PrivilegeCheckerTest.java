@@ -2247,6 +2247,63 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testDropTaskStmtExecutorReChecksAfterAnalyzerSkip() throws Exception {
+        // Reproduce the analyzer→executor TOCTOU window: at analyze time the task
+        // does not exist (so AuthorizerStmtVisitor.visitDropTaskStmt skips the
+        // check), then a concurrent SUBMIT TASK registers a task owned by ROOT
+        // before the executor runs. The executor must re-check authorization
+        // against the resolved task and reject testUser's drop.
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        String raceTaskName = "priv_drop_task_race";
+        try {
+            // 1) Analyze phase: task absent — analyzer must allow the statement
+            //    (existence is left to the executor to avoid leaking).
+            StatementBase dropRace = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + raceTaskName, ctx);
+            ctxToTestUser();
+            Authorizer.check(dropRace, ctx);
+
+            // 2) Race: a concurrent SUBMIT TASK installs a task owned by ROOT
+            //    between analyze and execute.
+            Task rootTask = new Task(raceTaskName);
+            rootTask.setUserIdentity(UserIdentity.ROOT);
+            taskManager.replayCreateTask(rootTask);
+
+            // 3) Execute phase: testUser has no OPERATE on SYSTEM and is not the
+            //    creator. Without the executor-side re-check this would silently
+            //    drop ROOT's task; with it, the executor must reject.
+            try {
+                DDLStmtExecutor.execute(dropRace, ctx);
+                Assertions.fail("expected access denial in DDLStmtExecutor for TOCTOU race");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+            }
+
+            // Sanity: the task must still exist — the failed execute did not drop it.
+            Assertions.assertNotNull(taskManager.getTask(raceTaskName),
+                    "executor must not drop the task when re-check fails");
+
+            // 4) After GRANT OPERATE on SYSTEM, the executor allows the drop.
+            grantRevokeSqlAsRoot("grant OPERATE on system to test");
+            ctxToTestUser();
+            DDLStmtExecutor.execute(dropRace, ctx);
+            grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+
+            Assertions.assertNull(taskManager.getTask(raceTaskName),
+                    "task should be dropped once OPERATE on SYSTEM is granted");
+        } finally {
+            ctxToRoot();
+            Task t = taskManager.getTask(raceTaskName);
+            if (t != null) {
+                taskManager.dropTasks(Collections.singletonList(t.getId()));
+            }
+        }
+    }
+
+    @Test
     public void testShowProcStmt() throws Exception {
         // ShowProcStmt
         verifyGrantRevoke(
