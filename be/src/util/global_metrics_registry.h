@@ -20,12 +20,11 @@
 #include <string>
 #include <vector>
 
-#include "base/metrics.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
-#include "common/util/table_metrics.h"
 #include "util/metrics/catalog_scan_metrics.h"
 #include "util/metrics/file_scan_metrics.h"
 #include "util/metrics/spill_metrics.h"
@@ -45,10 +44,11 @@ public:
                     const std::set<std::string>& disk_devices = std::set<std::string>(),
                     const std::vector<std::string>& network_interfaces = std::vector<std::string>());
 
-    MetricRegistry* metrics() { return &_metrics; }
+    ProcessMetricsRegistry* process_metrics_registry() { return &_process_metrics_registry; }
+    MetricRegistry* metrics() { return _process_metrics_registry.root_registry(); }
     SystemMetrics* system_metrics() { return &_system_metrics; }
-    TableMetricsManager* table_metrics_mgr() { return &_table_metrics_mgr; }
-    TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
+    TableMetricsManager* table_metrics_mgr() { return _process_metrics_registry.table_metrics_mgr(); }
+    TableMetricsPtr table_metrics(uint64_t table_id) { return _process_metrics_registry.table_metrics(table_id); }
     FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
     CatalogScanMetrics* catalog_scan_metrics() { return _catalog_scan_metrics.get(); }
     SpillMetrics* spill_metrics() { return _spill_metrics.get(); }
@@ -66,12 +66,11 @@ private:
     static const std::string _s_hook_name;
 
     StarRocksMetrics* _fast_metrics;
-    MetricRegistry _metrics;
+    ProcessMetricsRegistry _process_metrics_registry;
     SystemMetrics _system_metrics;
 #ifndef __APPLE__
     JVMMetrics _jvm_metrics;
 #endif
-    TableMetricsManager _table_metrics_mgr;
     std::unique_ptr<FileScanMetrics> _file_scan_metrics;
     std::unique_ptr<CatalogScanMetrics> _catalog_scan_metrics;
     std::unique_ptr<SpillMetrics> _spill_metrics;

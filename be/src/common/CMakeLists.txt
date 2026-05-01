@@ -19,6 +19,7 @@ set(COMMON_FILES
   configbase.cpp
   config.cpp
   memory/column_allocator.cpp
+  metrics/process_metrics_registry.cpp
   runtime_profile.cpp
   stack_util.cpp
   system/backend_options.cpp
