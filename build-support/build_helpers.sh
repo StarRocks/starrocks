@@ -158,11 +158,16 @@ starrocks_validate_darwin_thirdparty() {
         fi
     done
 
+    # libgrpc.a / libgrpc++.a: be/cmake_modules/ThirdParty.cmake does
+    # find_package(gRPC CONFIG REQUIRED) against ${tp_installed}/lib/cmake/grpc.
+    # Failing here gives a clear rebuild-thirdparty error up front.
     local required_libs=(
         "libprotobuf.a"
         "librocksdb.a"
         "libglog.a"
         "libbrpc.a"
+        "libgrpc.a"
+        "libgrpc++.a"
     )
     local required_lib=""
     for required_lib in "${required_libs[@]}"; do
@@ -172,9 +177,10 @@ starrocks_validate_darwin_thirdparty() {
         fi
     done
 
+    # gRPC is built from source as a static archive (libgrpc.a / libgrpc++.a)
+    # and consumed via ${tp_installed}/lib/cmake/grpc/gRPCConfig.cmake, matching
+    # the Linux flow. Only list dylibs that Homebrew still provides.
     local required_darwin_dylibs=(
-        "libgrpc.dylib"
-        "libgrpc++.dylib"
         "libkrb5support.dylib"
         "libkrb5.dylib"
         "libcom_err.dylib"

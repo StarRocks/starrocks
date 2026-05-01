@@ -448,29 +448,24 @@ set_target_properties(benchgen PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
-if (APPLE)
-    # Homebrew's exported gRPC targets are not self-contained on Darwin. Import the
-    # shared libraries directly for local development builds and surface the host
-    # dylib requirement explicitly in output/be packaging.
-    add_library(gRPC::grpc SHARED IMPORTED GLOBAL)
-    set_target_properties(gRPC::grpc PROPERTIES
-        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc.dylib"
-        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include")
-    add_library(gRPC::grpc++ SHARED IMPORTED GLOBAL)
-    set_target_properties(gRPC::grpc++ PROPERTIES
-        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc++.dylib"
-        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include"
-        INTERFACE_LINK_LIBRARIES "gRPC::grpc")
-    set(gRPC_VERSION "darwin-manual")
-    set(gRPC_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
-else()
-    set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
-    find_package(gRPC CONFIG REQUIRED)
-    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-endif()
+
+# Pre-declare protobuf::libprotobuf + Protobuf_FOUND so gRPCConfig.cmake's
+# guarded find_package(Protobuf) is skipped. TP ships no ProtobufConfig.cmake
+# for 3.14; without this, module-mode FindProtobuf can bind to a host
+# protobuf (e.g. Homebrew 33.x) whose imported target then collides with
+# the ALIAS below.
+add_library(protobuf::libprotobuf ALIAS protobuf)
+set(Protobuf_FOUND TRUE)
+set(PROTOBUF_FOUND TRUE)
+set(Protobuf_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+set(Protobuf_INCLUDE_DIRS "${THIRDPARTY_DIR}/include")
+set(Protobuf_LIBRARIES protobuf::libprotobuf)
+
+set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
+find_package(gRPC CONFIG REQUIRED)
+get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 message(STATUS "Using gRPC ${gRPC_VERSION}")
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
-add_library(protobuf::libprotobuf ALIAS protobuf)
 add_library(ZLIB::ZLIB ALIAS libz)
 
 # Disable libdeflate on aarch64
