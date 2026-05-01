@@ -72,7 +72,6 @@
 #include "http/web_page_handler.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
@@ -197,7 +196,7 @@ Status HttpServiceBE::start() {
 
     // register metrics
     {
-        auto action = new MetricsAction(GlobalMetricsRegistry::instance()->metrics());
+        auto action = new MetricsAction(GlobalMetricsRegistry::instance()->process_metrics_registry());
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 

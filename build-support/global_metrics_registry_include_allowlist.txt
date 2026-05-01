@@ -13,7 +13,6 @@ be/src/exec/spill/spiller.cpp
 be/src/exec/workgroup/mem_tracker_manager.cpp
 be/src/exec/workgroup/work_group.cpp
 be/src/fs/key_cache.cpp
-be/src/http/action/metrics_action.cpp
 be/src/http/action/stream_load.cpp
 be/src/io/io_profiler.cpp
 be/src/runtime/batch_write/batch_write_mgr.cpp
