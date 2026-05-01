@@ -2127,10 +2127,14 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
+            // Surface the alternative path (task ownership) in the error message;
+            // the standard AccessDenied template otherwise reads as if OPERATE on
+            // SYSTEM is the only way through.
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(),
+                    "(or be the task creator)");
         }
         return null;
     }
