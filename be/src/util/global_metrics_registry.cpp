@@ -33,10 +33,11 @@ const std::string GlobalMetricsRegistry::_s_registry_name = "starrocks_be";
 const std::string GlobalMetricsRegistry::_s_hook_name = "starrocks_metrics";
 
 GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
-        : _fast_metrics(fast_metrics), _metrics(_s_registry_name) {
+        : _fast_metrics(fast_metrics), _process_metrics_registry(_s_registry_name) {
     DCHECK(_fast_metrics != nullptr);
-    compression::install_compression_context_pool_metrics(&_metrics);
-#define REGISTER_STARROCKS_METRIC(name) _metrics.register_metric(#name, &(_fast_metrics->name))
+    auto* registry = metrics();
+    compression::install_compression_context_pool_metrics(registry);
+#define REGISTER_STARROCKS_METRIC(name) registry->register_metric(#name, &(_fast_metrics->name))
     // You can put StarRocksMetrics's metrics initial code here
     REGISTER_STARROCKS_METRIC(fragment_requests_total);
     REGISTER_STARROCKS_METRIC(fragment_request_duration_us);
@@ -117,27 +118,27 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
 
     // clone
-    _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
-                             &(_fast_metrics->clone_task_inter_node_copy_bytes));
-    _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTRA_NODE"),
-                             &(_fast_metrics->clone_task_intra_node_copy_bytes));
-    _metrics.register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTER_NODE"),
-                             &(_fast_metrics->clone_task_inter_node_copy_duration_ms));
-    _metrics.register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
-                             &(_fast_metrics->clone_task_intra_node_copy_duration_ms));
+    registry->register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
+                              &(_fast_metrics->clone_task_inter_node_copy_bytes));
+    registry->register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTRA_NODE"),
+                              &(_fast_metrics->clone_task_intra_node_copy_bytes));
+    registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTER_NODE"),
+                              &(_fast_metrics->clone_task_inter_node_copy_duration_ms));
+    registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
+                              &(_fast_metrics->clone_task_intra_node_copy_duration_ms));
 
     // push request
-    _metrics.register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
-                             &(_fast_metrics->push_requests_success_total));
-    _metrics.register_metric("push_requests_total", MetricLabels().add("status", "FAIL"),
-                             &(_fast_metrics->push_requests_fail_total));
+    registry->register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
+                              &(_fast_metrics->push_requests_success_total));
+    registry->register_metric("push_requests_total", MetricLabels().add("status", "FAIL"),
+                              &(_fast_metrics->push_requests_fail_total));
     REGISTER_STARROCKS_METRIC(push_request_duration_us);
     REGISTER_STARROCKS_METRIC(push_request_write_bytes);
     REGISTER_STARROCKS_METRIC(push_request_write_rows);
 
-#define REGISTER_ENGINE_REQUEST_METRIC(type, status, metric)                                                    \
-    _metrics.register_metric("engine_requests_total", MetricLabels().add("type", #type).add("status", #status), \
-                             &(_fast_metrics->metric))
+#define REGISTER_ENGINE_REQUEST_METRIC(type, status, metric)                                                     \
+    registry->register_metric("engine_requests_total", MetricLabels().add("type", #type).add("status", #status), \
+                              &(_fast_metrics->metric))
 
     REGISTER_ENGINE_REQUEST_METRIC(create_tablet, total, create_tablet_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(create_tablet, failed, create_tablet_requests_failed);
@@ -175,57 +176,57 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_ENGINE_REQUEST_METRIC(publish, total, publish_task_request_total);
     REGISTER_ENGINE_REQUEST_METRIC(publish, failed, publish_task_failed_total);
 
-    _metrics.register_metric("compaction_deltas_total", MetricLabels().add("type", "base"),
-                             &(_fast_metrics->base_compaction_deltas_total));
-    _metrics.register_metric("compaction_deltas_total", MetricLabels().add("type", "cumulative"),
-                             &(_fast_metrics->cumulative_compaction_deltas_total));
-    _metrics.register_metric("compaction_bytes_total", MetricLabels().add("type", "base"),
-                             &(_fast_metrics->base_compaction_bytes_total));
-    _metrics.register_metric("compaction_bytes_total", MetricLabels().add("type", "cumulative"),
-                             &(_fast_metrics->cumulative_compaction_bytes_total));
-    _metrics.register_metric("compaction_deltas_total", MetricLabels().add("type", "update"),
-                             &(_fast_metrics->update_compaction_deltas_total));
-    _metrics.register_metric("compaction_bytes_total", MetricLabels().add("type", "update"),
-                             &(_fast_metrics->update_compaction_bytes_total));
-    _metrics.register_metric("update_compaction_outputs_total", MetricLabels().add("type", "update"),
-                             &(_fast_metrics->update_compaction_outputs_total));
-    _metrics.register_metric("update_compaction_outputs_bytes_total", MetricLabels().add("type", "update"),
-                             &(_fast_metrics->update_compaction_outputs_bytes_total));
-    _metrics.register_metric("update_compaction_duration_us", MetricLabels().add("type", "update"),
-                             &(_fast_metrics->update_compaction_duration_us));
+    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "base"),
+                              &(_fast_metrics->base_compaction_deltas_total));
+    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "cumulative"),
+                              &(_fast_metrics->cumulative_compaction_deltas_total));
+    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "base"),
+                              &(_fast_metrics->base_compaction_bytes_total));
+    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "cumulative"),
+                              &(_fast_metrics->cumulative_compaction_bytes_total));
+    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "update"),
+                              &(_fast_metrics->update_compaction_deltas_total));
+    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "update"),
+                              &(_fast_metrics->update_compaction_bytes_total));
+    registry->register_metric("update_compaction_outputs_total", MetricLabels().add("type", "update"),
+                              &(_fast_metrics->update_compaction_outputs_total));
+    registry->register_metric("update_compaction_outputs_bytes_total", MetricLabels().add("type", "update"),
+                              &(_fast_metrics->update_compaction_outputs_bytes_total));
+    registry->register_metric("update_compaction_duration_us", MetricLabels().add("type", "update"),
+                              &(_fast_metrics->update_compaction_duration_us));
 
-    _metrics.register_metric("meta_request_total", MetricLabels().add("type", "write"),
-                             &(_fast_metrics->meta_write_request_total));
-    _metrics.register_metric("meta_request_total", MetricLabels().add("type", "read"),
-                             &(_fast_metrics->meta_read_request_total));
-    _metrics.register_metric("meta_request_duration", MetricLabels().add("type", "write"),
-                             &(_fast_metrics->meta_write_request_duration_us));
-    _metrics.register_metric("meta_request_duration", MetricLabels().add("type", "read"),
-                             &(_fast_metrics->meta_read_request_duration_us));
+    registry->register_metric("meta_request_total", MetricLabels().add("type", "write"),
+                              &(_fast_metrics->meta_write_request_total));
+    registry->register_metric("meta_request_total", MetricLabels().add("type", "read"),
+                              &(_fast_metrics->meta_read_request_total));
+    registry->register_metric("meta_request_duration", MetricLabels().add("type", "write"),
+                              &(_fast_metrics->meta_write_request_duration_us));
+    registry->register_metric("meta_request_duration", MetricLabels().add("type", "read"),
+                              &(_fast_metrics->meta_read_request_duration_us));
 
-    _metrics.register_metric("segment_read", MetricLabels().add("type", "segment_total_read_times"),
-                             &(_fast_metrics->segment_read_total));
-    _metrics.register_metric("segment_read", MetricLabels().add("type", "segment_total_row_num"),
-                             &(_fast_metrics->segment_row_total));
-    _metrics.register_metric("segment_read", MetricLabels().add("type", "segment_rows_by_short_key"),
-                             &(_fast_metrics->segment_rows_by_short_key));
-    _metrics.register_metric("segment_read", MetricLabels().add("type", "segment_rows_read_by_zone_map"),
-                             &(_fast_metrics->segment_rows_read_by_zone_map));
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_total_read_times"),
+                              &(_fast_metrics->segment_read_total));
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_total_row_num"),
+                              &(_fast_metrics->segment_row_total));
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_rows_by_short_key"),
+                              &(_fast_metrics->segment_rows_by_short_key));
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_rows_read_by_zone_map"),
+                              &(_fast_metrics->segment_rows_read_by_zone_map));
 
-    _metrics.register_metric("txn_request", MetricLabels().add("type", "begin"),
-                             &(_fast_metrics->txn_begin_request_total));
-    _metrics.register_metric("txn_request", MetricLabels().add("type", "commit"),
-                             &(_fast_metrics->txn_commit_request_total));
-    _metrics.register_metric("txn_request", MetricLabels().add("type", "rollback"),
-                             &(_fast_metrics->txn_rollback_request_total));
-    _metrics.register_metric("txn_request", MetricLabels().add("type", "exec"), &(_fast_metrics->txn_exec_plan_total));
+    registry->register_metric("txn_request", MetricLabels().add("type", "begin"),
+                              &(_fast_metrics->txn_begin_request_total));
+    registry->register_metric("txn_request", MetricLabels().add("type", "commit"),
+                              &(_fast_metrics->txn_commit_request_total));
+    registry->register_metric("txn_request", MetricLabels().add("type", "rollback"),
+                              &(_fast_metrics->txn_rollback_request_total));
+    registry->register_metric("txn_request", MetricLabels().add("type", "exec"), &(_fast_metrics->txn_exec_plan_total));
 
-    _metrics.register_metric("stream_load", MetricLabels().add("type", "receive_bytes"),
-                             &(_fast_metrics->stream_receive_bytes_total));
-    _metrics.register_metric("stream_load", MetricLabels().add("type", "load_rows"),
-                             &(_fast_metrics->stream_load_rows_total));
-    _metrics.register_metric("load_rows", &(_fast_metrics->load_rows_total));
-    _metrics.register_metric("load_bytes", &(_fast_metrics->load_bytes_total));
+    registry->register_metric("stream_load", MetricLabels().add("type", "receive_bytes"),
+                              &(_fast_metrics->stream_receive_bytes_total));
+    registry->register_metric("stream_load", MetricLabels().add("type", "load_rows"),
+                              &(_fast_metrics->stream_load_rows_total));
+    registry->register_metric("load_rows", &(_fast_metrics->load_rows_total));
+    registry->register_metric("load_bytes", &(_fast_metrics->load_bytes_total));
 
     // Gauge
     REGISTER_STARROCKS_METRIC(memory_pool_bytes_total);
@@ -256,7 +257,7 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(max_network_send_bytes_rate);
     REGISTER_STARROCKS_METRIC(max_network_receive_bytes_rate);
 
-    _metrics.register_hook(_s_hook_name, [this] { _update(); });
+    registry->register_hook(_s_hook_name, [this] { _update(); });
 
     REGISTER_STARROCKS_METRIC(readable_blocks_total);
     REGISTER_STARROCKS_METRIC(writable_blocks_total);
@@ -299,27 +300,28 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
 void GlobalMetricsRegistry::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
                                        bool init_jvm_metrics, const std::set<std::string>& disk_devices,
                                        const std::vector<std::string>& network_interfaces) {
-    _pipeline_executor_metrics.register_all_metrics(&_metrics);
+    auto* registry = metrics();
+    _pipeline_executor_metrics.register_all_metrics(registry);
 
     // disk usage
     for (auto& path : paths) {
         IntGauge* gauge = _fast_metrics->disks_total_capacity.add_metric(path, MetricUnit::BYTES);
-        _metrics.register_metric("disks_total_capacity", MetricLabels().add("path", path), gauge);
+        registry->register_metric("disks_total_capacity", MetricLabels().add("path", path), gauge);
         gauge = _fast_metrics->disks_avail_capacity.add_metric(path, MetricUnit::BYTES);
-        _metrics.register_metric("disks_avail_capacity", MetricLabels().add("path", path), gauge);
+        registry->register_metric("disks_avail_capacity", MetricLabels().add("path", path), gauge);
         gauge = _fast_metrics->disks_data_used_capacity.add_metric(path, MetricUnit::BYTES);
-        _metrics.register_metric("disks_data_used_capacity", MetricLabels().add("path", path), gauge);
+        registry->register_metric("disks_data_used_capacity", MetricLabels().add("path", path), gauge);
         gauge = _fast_metrics->disks_state.add_metric(path, MetricUnit::NOUNIT);
-        _metrics.register_metric("disks_state", MetricLabels().add("path", path), gauge);
+        registry->register_metric("disks_state", MetricLabels().add("path", path), gauge);
     }
 
     if (init_system_metrics) {
-        _system_metrics.install(&_metrics, disk_devices, network_interfaces);
+        _system_metrics.install(registry, disk_devices, network_interfaces);
     }
 
-    _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
-    _catalog_scan_metrics = std::make_unique<CatalogScanMetrics>(&_metrics);
-    _spill_metrics = std::make_unique<SpillMetrics>(&_metrics);
+    _file_scan_metrics = std::make_unique<FileScanMetrics>(registry);
+    _catalog_scan_metrics = std::make_unique<CatalogScanMetrics>(registry);
+    _spill_metrics = std::make_unique<SpillMetrics>(registry);
 
 #ifndef __APPLE__
     if (init_jvm_metrics) {
@@ -328,7 +330,7 @@ void GlobalMetricsRegistry::initialize(const std::vector<std::string>& paths, bo
             LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
             return;
         }
-        _jvm_metrics.install(&_metrics);
+        _jvm_metrics.install(registry);
     }
 #endif
 }
