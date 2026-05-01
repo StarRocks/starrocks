@@ -37,11 +37,11 @@
 #include <map>
 #include <memory>
 
+#include "base/concurrency/once.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
-#include "util/once.h"
 
 namespace starrocks {
 

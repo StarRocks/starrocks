@@ -32,13 +32,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/frame_of_reference_coding.h"
+#include "base/bit/frame_of_reference_coding.h"
 
 #include <algorithm>
 #include <cstring>
 
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
+#include "base/logging.h"
 
 namespace starrocks {
 
