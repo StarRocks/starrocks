@@ -22,6 +22,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/mem_tracker_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
@@ -206,7 +207,7 @@ void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker) {
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
 
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>(
-            GlobalMetricsRegistry::instance()->pipeline_executor_metrics()->get_driver_queue_metrics()));
+            pipeline::PipelineExecutorMetrics::instance()->get_driver_queue_metrics()));
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 

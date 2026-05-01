@@ -147,7 +147,7 @@ public:
     // constructor so the pointers travel with the value (operators may
     // reassign SpillProcessMetrics via Spiller::set_metrics after prepare,
     // which would lose pointers cached on Spiller itself). Stable for the
-    // lifetime of the GlobalMetricsRegistry; callers use `global(is_remote)`
+    // lifetime of SpillMetrics; callers use `global(is_remote)`
     // and skip updates when null (e.g. in unit tests without a registry).
     SpillMetrics::LabeledCounters* global_local = nullptr;
     SpillMetrics::LabeledCounters* global_remote = nullptr;

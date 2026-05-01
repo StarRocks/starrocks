@@ -24,7 +24,17 @@ namespace starrocks {
 static const std::vector<std::string> FILE_FORMATS = {"avro", "csv", "json", "orc", "parquet"};
 static const std::vector<std::string> SCAN_TYPES = {"insert", "query", "load"};
 
-FileScanMetrics::FileScanMetrics(MetricRegistry* registry) {
+FileScanMetrics* FileScanMetrics::instance() {
+    static FileScanMetrics instance;
+    return &instance;
+}
+
+void FileScanMetrics::install(MetricRegistry* registry) {
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        return;
+    }
+    _registry = registry;
     for (const auto& file_format : FILE_FORMATS) {
         for (const auto& scan_type : SCAN_TYPES) {
             _register_metrics(registry, file_format, scan_type);

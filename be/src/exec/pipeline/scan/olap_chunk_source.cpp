@@ -62,6 +62,7 @@
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "util/global_metrics_registry.h"
+#include "util/metrics/catalog_scan_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -840,7 +841,7 @@ void OlapChunkSource::_update_counter() {
     _table_metrics->scan_read_rows.increment(_scan_rows_num);
 
     // Update catalog scan metrics for internal table
-    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    auto* catalog_metrics = CatalogScanMetrics::instance();
     if (catalog_metrics != nullptr) {
         catalog_metrics->update_scan_bytes("default", _scan_bytes);
         catalog_metrics->update_scan_rows("default", _scan_rows_num);

@@ -33,6 +33,11 @@
 
 namespace starrocks {
 
+JVMMetrics* JVMMetrics::instance() {
+    static JVMMetrics instance;
+    return &instance;
+}
+
 Status JVMMetrics::init() {
     RETURN_IF_ERROR(detect_java_runtime());
 

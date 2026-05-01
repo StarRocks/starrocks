@@ -26,9 +26,13 @@ struct ScannerCounter;
 
 class FileScanMetrics {
 public:
-    FileScanMetrics(MetricRegistry* registry);
+    FileScanMetrics() = default;
+    explicit FileScanMetrics(MetricRegistry* registry) { install(registry); }
     ~FileScanMetrics() = default;
 
+    static FileScanMetrics* instance();
+
+    void install(MetricRegistry* registry);
     void update(const std::string& file_format, const std::string& scan_type, const ScannerCounter& counter);
 
 private:
@@ -44,6 +48,7 @@ private:
 
     // Key is <file_format, scan_type>
     std::map<std::pair<std::string, std::string>, std::unique_ptr<SingleFileScanMetrics>> _metrics_map;
+    MetricRegistry* _registry = nullptr;
 };
 
 } // namespace starrocks

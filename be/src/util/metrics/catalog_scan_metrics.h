@@ -25,9 +25,13 @@ namespace starrocks {
 
 class CatalogScanMetrics {
 public:
-    explicit CatalogScanMetrics(MetricRegistry* registry);
+    CatalogScanMetrics() = default;
+    explicit CatalogScanMetrics(MetricRegistry* registry) { install(registry); }
     ~CatalogScanMetrics() = default;
 
+    static CatalogScanMetrics* instance();
+
+    void install(MetricRegistry* registry);
     void update_scan_bytes(const std::string& catalog_type, int64_t bytes);
     void update_scan_rows(const std::string& catalog_type, int64_t rows);
     void update_files_scan_bytes_read(const std::string& catalog_type, int64_t bytes);

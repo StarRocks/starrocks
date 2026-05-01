@@ -55,6 +55,7 @@
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
@@ -585,7 +586,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
-            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
+            pipeline::PipelineExecutorMetrics::instance());
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), _max_executor_threads);
@@ -809,7 +810,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     // via a collect-time hook so the metrics registry stays decoupled from
     // spill internals. The callback captures a raw pointer because the
     // DirManager lives for the lifetime of ExecEnv.
-    if (auto* spill_metrics = GlobalMetricsRegistry::instance()->spill_metrics(); spill_metrics != nullptr) {
+    if (auto* spill_metrics = SpillMetrics::instance(); spill_metrics->local_disk_bytes_used() != nullptr) {
         GlobalMetricsRegistry::instance()->metrics()->register_hook(
                 "spill_disk_bytes_used", [dir_mgr = _spill_dir_mgr.get(), spill_metrics]() {
                     int64_t local_bytes = 0;

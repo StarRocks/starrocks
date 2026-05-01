@@ -20,6 +20,12 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "runtime/starrocks_metrics.h"
+#ifndef __APPLE__
+#include "util/jvm_metrics.h"
+#endif
+#include "util/metrics/catalog_scan_metrics.h"
+#include "util/metrics/file_scan_metrics.h"
+#include "util/metrics/spill_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -297,11 +303,31 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(block_cache_miss_bytes);
 }
 
+SystemMetrics* GlobalMetricsRegistry::system_metrics() {
+    return SystemMetrics::instance();
+}
+
+FileScanMetrics* GlobalMetricsRegistry::file_scan_metrics() {
+    return FileScanMetrics::instance();
+}
+
+CatalogScanMetrics* GlobalMetricsRegistry::catalog_scan_metrics() {
+    return CatalogScanMetrics::instance();
+}
+
+SpillMetrics* GlobalMetricsRegistry::spill_metrics() {
+    return SpillMetrics::instance();
+}
+
+pipeline::PipelineExecutorMetrics* GlobalMetricsRegistry::pipeline_executor_metrics() {
+    return pipeline::PipelineExecutorMetrics::instance();
+}
+
 void GlobalMetricsRegistry::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
                                        bool init_jvm_metrics, const std::set<std::string>& disk_devices,
                                        const std::vector<std::string>& network_interfaces) {
     auto* registry = metrics();
-    _pipeline_executor_metrics.register_all_metrics(registry);
+    pipeline::PipelineExecutorMetrics::instance()->register_all_metrics(registry);
 
     // disk usage
     for (auto& path : paths) {
@@ -316,21 +342,22 @@ void GlobalMetricsRegistry::initialize(const std::vector<std::string>& paths, bo
     }
 
     if (init_system_metrics) {
-        _system_metrics.install(registry, disk_devices, network_interfaces);
+        SystemMetrics::instance()->install(registry, disk_devices, network_interfaces);
     }
 
-    _file_scan_metrics = std::make_unique<FileScanMetrics>(registry);
-    _catalog_scan_metrics = std::make_unique<CatalogScanMetrics>(registry);
-    _spill_metrics = std::make_unique<SpillMetrics>(registry);
+    FileScanMetrics::instance()->install(registry);
+    CatalogScanMetrics::instance()->install(registry);
+    SpillMetrics::instance()->install(registry);
 
 #ifndef __APPLE__
     if (init_jvm_metrics) {
-        auto status = _jvm_metrics.init();
+        auto* jvm_metrics = JVMMetrics::instance();
+        auto status = jvm_metrics->init();
         if (!status.ok()) {
             LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
             return;
         }
-        _jvm_metrics.install(registry);
+        jvm_metrics->install(registry);
     }
 #endif
 }

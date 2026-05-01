@@ -40,6 +40,7 @@
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
@@ -325,9 +326,9 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
 }
 
 TEST_F(StarRocksMetricsTest, test_metrics_register) {
-    pipeline::ExecStateReporterMetrics exec_metrics;
-    exec_metrics.register_all_metrics();
     auto instance = GlobalMetricsRegistry::instance()->metrics();
+    pipeline::ExecStateReporterMetrics exec_metrics;
+    exec_metrics.register_all_metrics(instance);
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_io_time_us"));
