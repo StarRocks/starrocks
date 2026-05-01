@@ -34,15 +34,16 @@
 
 #pragma once
 
-#include <cstdlib>
-#include <iostream>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <vector>
 
 #include "base/bit/bit_stream_utils.h"
 #include "base/bit/bit_stream_utils.inline.h"
 #include "base/string/faststring.h"
+#include "base/types/int128.h"
 #include "base/types/uint24.h"
-#include "storage/olap_common.h"
 
 namespace starrocks {
 

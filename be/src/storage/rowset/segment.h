@@ -38,6 +38,7 @@
 #include <memory>
 #include <string>
 
+#include "base/concurrency/once.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -50,7 +51,6 @@
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
 #include "storage/tablet_schema.h"
-#include "util/once.h"
 
 namespace starrocks {
 

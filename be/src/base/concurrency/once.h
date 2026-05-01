@@ -17,9 +17,11 @@
 #include <bthread/sys_futex.h>
 
 #include <atomic>
+#include <climits>
 #include <functional>
+#include <utility>
 
-#include "common/statusor.h"
+#include "base/statusor.h"
 
 namespace starrocks {
 

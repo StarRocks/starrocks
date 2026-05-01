@@ -305,7 +305,6 @@ set(EXEC_FILES
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
         ./util/fail_point_test.cpp
-        ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp

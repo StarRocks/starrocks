@@ -38,7 +38,6 @@ set(UTIL_FILES
   system_metrics.cpp
 # coding_util.cpp
   thrift_rpc_helper.cpp
-  frame_of_reference_coding.cpp
   debug/query_trace_impl.cpp
   memory_lock.cpp
   internal_service_recoverable_stub.cpp

@@ -14,17 +14,19 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <google/protobuf/stubs/common.h>
 
-#include <atomic>
+#include <exception>
+#include <functional>
+#include <memory>
 #include <string_view>
 #include <utility>
 
 #include "base/brpc/brpc.h"
+#include "base/logging.h"
 
 namespace starrocks {
-
-class MemTracker;
 
 // Disposable call back, it must be created on the heap.
 // It will destroy itself after call back
@@ -55,9 +57,9 @@ public:
                 _success_handler(_ctx, result);
             }
         } catch (const std::exception& exp) {
-            LOG(FATAL) << "[ExchangeSinkOperator] Callback error: " << exp.what();
+            LOG(FATAL) << "DisposableClosure callback error: " << exp.what();
         } catch (...) {
-            LOG(FATAL) << "[ExchangeSinkOperator] Callback error: Unknown";
+            LOG(FATAL) << "DisposableClosure callback error: Unknown";
         }
     }
 
