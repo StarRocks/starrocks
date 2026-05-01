@@ -2141,6 +2141,10 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
             } catch (Exception e) {
                 logSysInfo(e.getMessage());
                 Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+                // Lock the creator-ownership hint so the standard AccessDenied template
+                // never silently drops it again — users rely on this to discover the
+                // task-owner alternative path.
+                Assertions.assertTrue(e.getMessage().contains("(or be the task creator)"), e.getMessage());
             }
 
             // 2) After granting OPERATE on SYSTEM, the same DROP succeeds at auth time.
@@ -2297,6 +2301,44 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         } finally {
             ctxToRoot();
             Task t = taskManager.getTask(raceTaskName);
+            if (t != null) {
+                taskManager.dropTasks(Collections.singletonList(t.getId()));
+            }
+        }
+    }
+
+    @Test
+    public void testDropTaskStmtForceDoesNotBypassAuth() throws Exception {
+        // FORCE only bypasses the source-type guard (MV/PIPE), never the
+        // privilege check. Lock this in so a future change that nests the
+        // auth check inside the !isForce() block silently regressing into
+        // "FORCE = anyone" will fail this test.
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        String forceTaskName = "priv_drop_task_force";
+        Task rootTask = new Task(forceTaskName);
+        rootTask.setUserIdentity(UserIdentity.ROOT);
+        taskManager.replayCreateTask(rootTask);
+
+        try {
+            StatementBase dropForce = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + forceTaskName + " FORCE", ctx);
+            ctxToTestUser();
+            try {
+                Authorizer.check(dropForce, ctx);
+                Assertions.fail("expected AccessDeniedException — FORCE must not bypass auth");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+            }
+
+            // Sanity: the task was not dropped at analyze time.
+            Assertions.assertNotNull(taskManager.getTask(forceTaskName),
+                    "auth failure must not drop the task");
+        } finally {
+            ctxToRoot();
+            Task t = taskManager.getTask(forceTaskName);
             if (t != null) {
                 taskManager.dropTasks(Collections.singletonList(t.getId()));
             }
