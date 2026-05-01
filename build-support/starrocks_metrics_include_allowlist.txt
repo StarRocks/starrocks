@@ -24,7 +24,6 @@ be/src/exec/workgroup/work_group.cpp
 be/src/exec/workgroup/work_group.h
 be/src/fs/key_cache.cpp
 be/src/http/action/compaction_action.cpp
-be/src/http/action/metrics_action.cpp
 be/src/http/action/stream_load.cpp
 be/src/http/action/transaction_stream_load.cpp
 be/src/io/io_profiler.cpp
@@ -48,7 +47,6 @@ be/src/runtime/stream_load/stream_load_executor.cpp
 be/src/runtime/stream_load/transaction_mgr.cpp
 be/src/runtime/stream_load/transaction_mgr.h
 be/src/service/daemon.cpp
-be/src/service/service_be/http_service.cpp
 be/src/service/staros_worker.cpp
 be/src/storage/async_delta_writer.cpp
 be/src/storage/base_compaction.cpp
