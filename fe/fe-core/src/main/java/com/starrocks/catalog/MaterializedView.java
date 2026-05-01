@@ -195,10 +195,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
          */
         PCT,
         /**
-         * FULL: Full refresh mode, refresh all partitions of the materialized view.
-         */
-        FULL,
-        /**
          * INCREMENTAL: Incremental refresh mode, only refresh the incremental changed rows since the last refresh.
          */
         INCREMENTAL;
@@ -213,10 +209,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public boolean isIncremental() {
             return this == INCREMENTAL;
-        }
-
-        public boolean isFull() {
-            return this == FULL;
         }
 
         public boolean isIncrementalOrAuto() {
@@ -1904,10 +1896,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (refreshScheme == null) {
             sb.append("\nREFRESH ").append("UNKNOWN");
         } else {
+            // Prefer the SCHEDULE keyword for scheduled refresh (ASYNC + EVERY). ASYNC is kept
+            // as the legacy synonym in the parser; for bare ASYNC (no EVERY) we still emit
+            // ASYNC because bare SCHEDULE is not a valid form.
+            String typeName = refreshScheme.getType().name();
+            if (refreshScheme.getType() == MaterializedViewRefreshType.ASYNC
+                    && refreshScheme.getAsyncRefreshContext().getTimeUnit() != null) {
+                typeName = "SCHEDULE";
+            }
             if (refreshScheme.getMoment().equals(RefreshMoment.DEFERRED)) {
-                sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), refreshScheme.getType()));
+                sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), typeName));
             } else {
-                sb.append("\nREFRESH ").append(refreshScheme.getType());
+                sb.append("\nREFRESH ").append(typeName);
             }
         }
         if (refreshScheme != null && refreshScheme.getType() == MaterializedViewRefreshType.ASYNC) {

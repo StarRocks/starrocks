@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
+#include "base/compression/compression_utils.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
@@ -27,7 +28,6 @@
 #include "io/formatted_output_stream_file.h"
 #include "io/formatted_output_stream_string.h"
 #include "runtime/current_thread.h"
-#include "util/compression/compression_utils.h"
 
 namespace starrocks::formats {
 

@@ -29,6 +29,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "json2pb/json_to_pb.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -75,7 +76,7 @@ protected:
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
-        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name)) {
+        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -2807,6 +2808,510 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
         EXPECT_TRUE(file_exist("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"));
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"));
     }
+}
+
+// Test: vacuum deletes .vi files for compaction_inputs using segment_metas
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
+    // Segment files
+    create_data_file("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111.dat");
+    create_data_file("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat");
+    create_data_file("00000000000a59e5_cccc3333-3333-3333-3333-333333333333.dat");
+    // .vi files for the compaction input segments
+    create_data_file("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_100.vi");
+    create_data_file("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_200.vi");
+    create_data_file("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222_100.vi");
+    // .vi file for the alive segment (should NOT be deleted)
+    create_data_file("00000000000a59e5_cccc3333-3333-3333-3333-333333333333_100.vi");
+
+    // Version 2: has the old segments (will become compaction_inputs in v3)
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000a59e4_aaaa1111-1111-1111-1111-111111111111.dat",
+                    "00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat"
+                ],
+                "data_size": 4096,
+                "segment_metas": [
+                    { "vector_index_ids": [100, 200] },
+                    { "vector_index_ids": [100] }
+                ]
+            }
+        ],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    // Version 3: compaction output replaces old segments; compaction_inputs carries segment_metas
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000a59e5_cccc3333-3333-3333-3333-333333333333.dat"
+                ],
+                "data_size": 100,
+                "segment_metas": [
+                    { "vector_index_ids": [100] }
+                ]
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000a59e4_aaaa1111-1111-1111-1111-111111111111.dat",
+                    "00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat"
+                ],
+                "data_size": 4096,
+                "segment_metas": [
+                    { "vector_index_ids": [100, 200] },
+                    { "vector_index_ids": [100] }
+                ]
+            }
+        ],
+        "prev_garbage_version": 2,
+        "commit_time": 1
+        }
+        )DEL")));
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5000);
+        info->set_min_version(2);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Compaction input segments and their .vi files should be deleted
+        EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111.dat"));
+        EXPECT_FALSE(file_exist("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat"));
+        EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_100.vi"));
+        EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_200.vi"));
+        EXPECT_FALSE(file_exist("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222_100.vi"));
+
+        // Alive segment and its .vi file should survive
+        EXPECT_TRUE(file_exist("00000000000a59e5_cccc3333-3333-3333-3333-333333333333.dat"));
+        EXPECT_TRUE(file_exist("00000000000a59e5_cccc3333-3333-3333-3333-333333333333_100.vi"));
+    }
+}
+
+// Test: vacuum does NOT blindly delete .vi files when vector_index_ids is empty
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_no_blind_vi_deletion) {
+    create_data_file("00000000000b59e4_dddd4444-4444-4444-4444-444444444444.dat");
+    create_data_file("00000000000b59e5_eeee5555-5555-5555-5555-555555555555.dat");
+    // A .vi file that happens to match the naming pattern but is NOT tracked in segment_metas
+    // (e.g., leftover from a different operation). It should NOT be deleted by vacuum.
+    create_data_file("00000000000b59e4_dddd4444-4444-4444-4444-444444444444_999.vi");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5100,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000b59e4_dddd4444-4444-4444-4444-444444444444.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5100,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000b59e5_eeee5555-5555-5555-5555-555555555555.dat"
+                ],
+                "data_size": 100
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000b59e4_dddd4444-4444-4444-4444-444444444444.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "prev_garbage_version": 2,
+        "commit_time": 1
+        }
+        )DEL")));
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5100);
+        info->set_min_version(2);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Segment should be deleted
+        EXPECT_FALSE(file_exist("00000000000b59e4_dddd4444-4444-4444-4444-444444444444.dat"));
+        // .vi file is NOT tracked in segment_metas, so vacuum should NOT delete it
+        EXPECT_TRUE(file_exist("00000000000b59e4_dddd4444-4444-4444-4444-444444444444_999.vi"));
+    }
+}
+
+// Test: partial compaction correctly trims segment_metas in compaction_inputs
+// so vacuum only deletes .vi files for truly consumed segments, not reused ones.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
+    // Scenario: rowset has segments [a, b, c, d], partial compaction consumes [b, c] -> [m]
+    // Output rowset: [a, m, d] (a and d are reused from original)
+    // compaction_inputs should only contain consumed segments [b, c] with their vi info
+    // a.vi and d.vi must survive because they're still in the output rowset
+
+    // Original segments
+    create_data_file("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001.dat"); // a - reused
+    create_data_file("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat"); // b - consumed
+    create_data_file("00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat"); // c - consumed
+    create_data_file("00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat"); // d - reused
+    // New compacted segment
+    create_data_file("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005.dat"); // m - new
+
+    // .vi files for all segments
+    create_data_file("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001_100.vi"); // a - must survive
+    create_data_file("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002_100.vi"); // b - must be deleted
+    create_data_file("00000000000e59e4_cccc0003-0003-0003-0003-000000000003_100.vi"); // c - must be deleted
+    create_data_file("00000000000e59e4_dddd0004-0004-0004-0004-000000000004_100.vi"); // d - must survive
+    create_data_file("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005_100.vi"); // m - must survive
+
+    // Version 2: original rowset
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5400,
+        "version": 2,
+        "rowsets": [
+            {
+                "id": 10,
+                "segments": [
+                    "00000000000e59e4_aaaa0001-0001-0001-0001-000000000001.dat",
+                    "00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat",
+                    "00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat",
+                    "00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat"
+                ],
+                "data_size": 8192,
+                "segment_metas": [
+                    { "vector_index_ids": [100] },
+                    { "vector_index_ids": [100] },
+                    { "vector_index_ids": [100] },
+                    { "vector_index_ids": [100] }
+                ]
+            }
+        ],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    // Version 3: after partial compaction
+    // Output rowset has segments [a, m, d] with their vi info
+    // compaction_inputs has only consumed segments [b, c] with their vi info
+    // (trim_partial_compaction_last_input_rowset should have removed a and d from inputs)
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5400,
+        "version": 3,
+        "rowsets": [
+            {
+                "id": 11,
+                "segments": [
+                    "00000000000e59e4_aaaa0001-0001-0001-0001-000000000001.dat",
+                    "00000000000e59e5_mmmm0005-0005-0005-0005-000000000005.dat",
+                    "00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat"
+                ],
+                "data_size": 6144,
+                "segment_metas": [
+                    { "vector_index_ids": [100] },
+                    { "vector_index_ids": [100] },
+                    { "vector_index_ids": [100] }
+                ]
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "id": 10,
+                "segments": [
+                    "00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat",
+                    "00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat"
+                ],
+                "data_size": 4096,
+                "segment_metas": [
+                    { "vector_index_ids": [100] },
+                    { "vector_index_ids": [100] }
+                ]
+            }
+        ],
+        "prev_garbage_version": 2,
+        "commit_time": 1
+        }
+        )DEL")));
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5400);
+        info->set_min_version(2);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Consumed segments and their .vi files should be deleted
+        EXPECT_FALSE(file_exist("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat"));
+        EXPECT_FALSE(file_exist("00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat"));
+        EXPECT_FALSE(file_exist("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002_100.vi"));
+        EXPECT_FALSE(file_exist("00000000000e59e4_cccc0003-0003-0003-0003-000000000003_100.vi"));
+
+        // Reused segments and their .vi files must survive
+        EXPECT_TRUE(file_exist("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001.dat"));
+        EXPECT_TRUE(file_exist("00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat"));
+        EXPECT_TRUE(file_exist("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001_100.vi"));
+        EXPECT_TRUE(file_exist("00000000000e59e4_dddd0004-0004-0004-0004-000000000004_100.vi"));
+
+        // New compacted segment and its .vi file must survive
+        EXPECT_TRUE(file_exist("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005.dat"));
+        EXPECT_TRUE(file_exist("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005_100.vi"));
+    }
+}
+
+// Test: delete_tablets deletes .vi files using segment_metas
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
+    // Segments in alive rowsets
+    create_data_file("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat");
+    create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.dat");
+    // .vi files for alive rowsets
+    create_data_file("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_300.vi");
+    create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_300.vi");
+    create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_400.vi");
+    // Segments in compaction_inputs
+    create_data_file("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc.dat");
+    // .vi files for compaction_inputs
+    create_data_file("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc_300.vi");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5200,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat",
+                    "00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.dat"
+                ],
+                "segment_metas": [
+                    { "vector_index_ids": [300] },
+                    { "vector_index_ids": [300, 400] }
+                ]
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc.dat"
+                ],
+                "data_size": 2048,
+                "segment_metas": [
+                    { "vector_index_ids": [300] }
+                ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(5200);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // All segments should be deleted
+        EXPECT_FALSE(file_exist("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat"));
+        EXPECT_FALSE(file_exist("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.dat"));
+        EXPECT_FALSE(file_exist("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc.dat"));
+
+        // All .vi files should be deleted (tracked in segment_metas)
+        EXPECT_FALSE(file_exist("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_300.vi"));
+        EXPECT_FALSE(file_exist("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_300.vi"));
+        EXPECT_FALSE(file_exist("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_400.vi"));
+        EXPECT_FALSE(file_exist("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc_300.vi"));
+
+        // Metadata should be deleted
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5200, 2)));
+    }
+}
+
+// Test: find_orphan_data_files protects .vi files referenced by segment_metas
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_find_orphan_vi_files) {
+    // Referenced segment and its .vi file
+    create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111.dat");
+    create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_500.vi");
+    // Orphan .vi file (not tracked in any segment_metas)
+    create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_999.vi");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5300,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000d59e4_aaaa1111-1111-1111-1111-111111111111.dat"
+                ],
+                "segment_metas": [
+                    { "vector_index_ids": [500] }
+                ]
+            }
+        ],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDir));
+    auto metadata_root = join_path(kTestDir, kMetadataDirectoryName);
+    std::list<std::string> meta_files;
+    ASSERT_OK(ignore_not_found(fs->iterate_dir(metadata_root, [&](std::string_view name) {
+        if (is_tablet_metadata(name)) {
+            meta_files.emplace_back(name);
+        }
+        return true;
+    })));
+    std::list<std::string> bundle_meta_files;
+
+    ASSIGN_OR_ABORT(auto orphan_files, find_orphan_data_files(fs.get(), kTestDir, 0 /*expired_seconds*/, meta_files,
+                                                              bundle_meta_files, nullptr /*audit_ostream*/));
+
+    // The referenced .vi file should NOT be in orphan list
+    EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_500.vi"), 0);
+    // The referenced segment should NOT be in orphan list
+    EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111.dat"), 0);
+    // The untracked .vi file SHOULD be in orphan list
+    EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_999.vi"), 1);
+}
+
+// Test: vacuum honours the `i < segment_metas_size()` defensive guard in
+// delete_rowset_vi_files when a rowset has only partial segment_metas
+// (a mix of segments — some with VI tracking, some without). Pre-existing
+// rowsets that landed before precise-vacuum tracking can have segment_metas
+// shorter than segments. The vacuum must:
+//   * delete .vi files for segments that DO have segment_metas entries, and
+//   * not crash and not fabricate filenames for segments without entries.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
+    // Two segments in the compaction inputs. seg_a has segment_metas with a
+    // .vi entry; seg_b does not. Vacuum should delete seg_a's .vi only.
+    create_data_file("00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat");
+    create_data_file("00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat");
+    create_data_file("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi");
+    // The fresh-version segment (alive after compaction).
+    create_data_file("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5400,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat",
+                    "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"
+                ],
+                "data_size": 4096,
+                "segment_metas": [
+                    { "vector_index_ids": [700] }
+                ]
+            }
+        ],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5400,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat"
+                ],
+                "data_size": 200
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat",
+                    "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"
+                ],
+                "data_size": 4096,
+                "segment_metas": [
+                    { "vector_index_ids": [700] }
+                ]
+            }
+        ],
+        "prev_garbage_version": 2,
+        "commit_time": 1
+        }
+        )DEL")));
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(5400);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_min_active_txn_id(1000);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_OK(Status(response.status()));
+    }
+
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDir));
+    auto data_dir = join_path(kTestDir, kSegmentDirectoryName);
+    auto exists = [&](const std::string& name) { return fs->path_exists(join_path(data_dir, name)).ok(); };
+
+    // Both compaction-input segments removed.
+    EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat"));
+    EXPECT_FALSE(exists("00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"));
+    // The .vi tracked by segment_metas[0] is deleted.
+    EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi"));
+    // The alive segment must still exist; vacuum did not crash on the partial-metas rowset.
+    EXPECT_TRUE(exists("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat"));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,

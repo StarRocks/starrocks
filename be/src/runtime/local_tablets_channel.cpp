@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
@@ -53,7 +54,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/block_compression.h"
 #include "util/disposable_closure.h"
 #include "util/global_metrics_registry.h"
 

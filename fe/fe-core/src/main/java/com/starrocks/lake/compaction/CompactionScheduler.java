@@ -307,13 +307,20 @@ public class CompactionScheduler extends Daemon {
         PhysicalPartition partition;
         Map<Long, List<Long>> beToTablets;
 
+        // Intensive path: IS on DB + READ on this one table. The critical section
+        // only reads / mutates state of one known table (partition lookup,
+        // collectPartitionTablets, beginTransaction, setMinRetainVersion). Concurrent
+        // schema change on this table takes IX + table-WRITE which still conflicts
+        // with our table-READ, preserving the "no shadow index appears before
+        // beginTransaction" invariant the original comment below relies on.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = partitionIdentifier.getTableId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
 
         try {
             // lake table or lake materialized view
             table = (OlapTable) stateMgr.getLocalMetastore()
-                        .getTable(db.getId(), partitionIdentifier.getTableId());
+                        .getTable(db.getId(), tableId);
 
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
@@ -335,8 +342,8 @@ public class CompactionScheduler extends Daemon {
                 return null;
             }
 
-            // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
-            // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
+            // Note: call `beginTransaction()` while holding the per-table READ lock (intensive path) to make sure
+            // no shadow index will be added to this table (i.e., no schema change) before calling `beginTransaction()`.
             txnId = beginTransaction(partitionIdentifier, partition, info.computeResource);
 
             partition.setMinRetainVersion(currentVersion);
@@ -348,7 +355,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;

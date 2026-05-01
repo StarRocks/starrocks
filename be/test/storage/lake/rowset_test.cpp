@@ -32,6 +32,7 @@
 #include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -1291,6 +1292,259 @@ TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
     auto rs = rowset->read(input_schema, rs_opts);
     ASSERT_FALSE(rs.ok());
     ASSERT_GE(total_hits.load(), 2);
+}
+
+// Test: collect_files_in_log collects .vi files for op_write abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->mutable_rowset()->add_segments("seg1.dat");
+    op_write->mutable_rowset()->add_segments("seg2.dat");
+    op_write->add_dels("del1.del");
+
+    // seg1 has two vector indexes, seg2 has one
+    auto* meta_seg1 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg1->add_vector_index_ids(100);
+    meta_seg1->add_vector_index_ids(200);
+    auto* meta_seg2 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg2->add_vector_index_ids(100);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Expected: 2 segments + 1 del + 3 vi files = 6
+    EXPECT_EQ(files_to_delete.size(), 6);
+
+    // Check .vi files are included
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("seg1.dat"));
+    EXPECT_TRUE(contains("seg2.dat"));
+    EXPECT_TRUE(contains("del1.del"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg2.dat", 100)));
+}
+
+// Test: collect_files_in_log collects .vi files only for new segments in op_compaction abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    // Partial compaction: segments [reused_a, new_x, new_y, reused_b]
+    output_rowset->add_segments("reused_a.dat");
+    output_rowset->add_segments("new_x.dat");
+    output_rowset->add_segments("new_y.dat");
+    output_rowset->add_segments("reused_b.dat");
+    op_compaction->set_new_segment_offset(1);
+    op_compaction->set_new_segment_count(2);
+
+    // All segments have vi tracking via segment_metas
+    auto* meta_a = output_rowset->add_segment_metas();
+    meta_a->add_vector_index_ids(100);
+    auto* meta_x = output_rowset->add_segment_metas();
+    meta_x->add_vector_index_ids(100);
+    meta_x->add_vector_index_ids(200);
+    auto* meta_y = output_rowset->add_segment_metas();
+    meta_y->add_vector_index_ids(100);
+    auto* meta_b = output_rowset->add_segment_metas();
+    meta_b->add_vector_index_ids(100);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Should only delete new segments and their vi files:
+    // new_x.dat, new_y.dat, new_x_100.vi, new_x_200.vi, new_y_100.vi = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    // New segments and their vi files should be collected
+    EXPECT_TRUE(contains("new_x.dat"));
+    EXPECT_TRUE(contains("new_y.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_y.dat", 100)));
+
+    // Reused segments and their vi files must NOT be collected
+    EXPECT_FALSE(contains("reused_a.dat"));
+    EXPECT_FALSE(contains("reused_b.dat"));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_a.dat", 100)));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_b.dat", 100)));
+}
+
+// Test: collect_files_in_log collects .vi files for op_schema_change abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_sc = txn_log.mutable_op_schema_change();
+    op_sc->set_linked_segment(false);
+    auto* rowset = op_sc->add_rowsets();
+    rowset->add_segments("sc_seg1.dat");
+    rowset->add_segments("sc_seg2.dat");
+
+    auto* meta_sc1 = rowset->add_segment_metas();
+    meta_sc1->add_vector_index_ids(300);
+    auto* meta_sc2 = rowset->add_segment_metas();
+    meta_sc2->add_vector_index_ids(300);
+    meta_sc2->add_vector_index_ids(400);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 2 segments + 3 vi files = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("sc_seg1.dat"));
+    EXPECT_TRUE(contains("sc_seg2.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg1.dat", 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", 400)));
+}
+
+// Test: collect_files_in_log collects .vi files for op_replication abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_repl = txn_log.mutable_op_replication();
+    auto* op_write = op_repl->add_op_writes();
+    op_write->mutable_rowset()->add_segments("repl_seg1.dat");
+    op_write->add_dels("repl_del1.del");
+
+    auto* meta_repl = op_write->mutable_rowset()->add_segment_metas();
+    meta_repl->add_vector_index_ids(500);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 1 segment + 1 del + 1 vi file = 3
+    EXPECT_EQ(files_to_delete.size(), 3);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("repl_seg1.dat"));
+    EXPECT_TRUE(contains("repl_del1.del"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("repl_seg1.dat", 500)));
+}
+
+// Test: collect_files_in_log handles empty vector_index_ids gracefully
+TEST_F(LakeRowsetTest, test_collect_files_in_log_no_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->mutable_rowset()->add_segments("seg_no_vi.dat");
+    // No vector_index_ids in segment_metas
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Only the segment file, no vi files
+    EXPECT_EQ(files_to_delete.size(), 1);
+    EXPECT_TRUE(files_to_delete[0].find("seg_no_vi.dat") != std::string::npos);
+}
+
+// Test: collect_files_in_log honours the `i < segment_metas_size()` defensive
+// guard when segment_metas is partially populated. This can happen during
+// rolling upgrade or for rowsets that pre-date precise-vacuum tracking — the
+// loop must not walk past the end of the segment_metas array.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->mutable_rowset()->add_segments("seg_a.dat");
+    op_write->mutable_rowset()->add_segments("seg_b.dat");
+    op_write->mutable_rowset()->add_segments("seg_c.dat");
+
+    // Only seg_a has segment_metas; seg_b and seg_c do not (e.g., pre-VI rowset).
+    auto* meta_a = op_write->mutable_rowset()->add_segment_metas();
+    meta_a->add_vector_index_ids(100);
+    meta_a->add_vector_index_ids(200);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 3 segments + 2 vi files (only seg_a has VI tracking) = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("seg_a.dat"));
+    EXPECT_TRUE(contains("seg_b.dat"));
+    EXPECT_TRUE(contains("seg_c.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 200)));
+    // No phantom .vi entries fabricated for seg_b / seg_c which lack metas.
+    EXPECT_FALSE(contains("seg_b.dat_"));
+    EXPECT_FALSE(contains("seg_c.dat_"));
+}
+
+// Test: collect_files_in_log for op_compaction with new_segment_offset / count
+// pointing past the segment_metas array. The combined `idx < segments.size()
+// && cnt < new_segment_count && idx < segment_metas_size()` guard must not crash
+// or fabricate VI filenames for indices without a corresponding segment_meta.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    output_rowset->add_segments("reused.dat");
+    output_rowset->add_segments("new_a.dat");
+    output_rowset->add_segments("new_b.dat");
+    op_compaction->set_new_segment_offset(1);
+    op_compaction->set_new_segment_count(2);
+
+    // Only one segment_meta entry — covers reused.dat. new_a.dat and new_b.dat
+    // do not have segment_metas. The op_compaction loop iterates idx=1 (new_a)
+    // and idx=2 (new_b), both past the metas array — no .vi filenames should
+    // be emitted for either.
+    auto* meta_reused = output_rowset->add_segment_metas();
+    meta_reused->add_vector_index_ids(100);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Only the two new segments (reused is not part of new_segment_count window).
+    // No .vi entries since the new segments don't have segment_metas.
+    EXPECT_EQ(files_to_delete.size(), 2);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("new_a.dat"));
+    EXPECT_TRUE(contains("new_b.dat"));
+    EXPECT_FALSE(contains("reused.dat"));
+    // The one segment_meta entry sits at index 0; the new-segment window starts
+    // at idx=1 and never reads segment_metas(0), so no spurious .vi paths.
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", 100)));
 }
 
 } // namespace starrocks::lake

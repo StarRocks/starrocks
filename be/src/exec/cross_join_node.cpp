@@ -21,6 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
@@ -165,7 +166,7 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     // cross_join_right as sink operator
     auto right_factory = std::make_shared<BuildFactory>(context->next_operator_id(), id(), cross_join_context);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, right_factory.get(), context, rc_rf_probe_collector);
 
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
@@ -179,7 +180,7 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
             _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
             std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, left_factory.get(), context, rc_rf_probe_collector);
     if (!context->is_colocate_group()) {
         left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
                                                                                   context->degree_of_parallelism());
@@ -196,7 +197,7 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
-        may_add_chunk_accumulate_operator(left_ops, context, id());
+        pipeline::may_add_chunk_accumulate_operator(left_ops, context, id());
     }
 
     // return as the following pipeline

@@ -24,6 +24,7 @@
 #include "base/testutil/sync_point.h"
 #include "common/config_hdfs_fwd.h"
 #include "common/system/backend_options.h"
+#include "exec/data_sinks/file_result_writer.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_registry.h"
 #include "fs/fs_scheme.h"
@@ -31,7 +32,6 @@
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/file_result_writer.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 

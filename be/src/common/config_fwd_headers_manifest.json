@@ -243,6 +243,8 @@
         "pipeline_scan_thread_pool_thread_num",
         "pipeline_sink_io_thread_pool_queue_size",
         "pipeline_sink_io_thread_pool_thread_num",
+        "lake_partial_update_thread_pool_max_threads",
+        "lake_partial_update_thread_pool_queue_size",
         "pk_index_memtable_flush_threadpool_max_threads",
         "pk_index_memtable_flush_threadpool_size",
         "pk_index_parallel_execution_threadpool_max_threads",
@@ -330,7 +332,8 @@
         "vector_query_cache_capacity",
         "enable_vector_index_block_cache",
         "config_vector_index_build_concurrency",
-        "config_vector_index_default_build_threshold"
+        "config_vector_index_default_build_threshold",
+        "vector_index_build_max_cpu_ratio"
       ]
     },
     {
@@ -768,6 +771,7 @@
     {
       "path": "be/src/common/config_rowset_fwd.h",
       "configs": [
+        "segment_sort_key_sample_row_interval",
         "enable_transparent_data_encryption",
         "default_num_rows_per_column_file_block",
         "data_page_size",
@@ -828,7 +832,6 @@
         "lake_metadata_fetch_thread_count",
         "lake_metadata_cache_limit",
         "lake_cache_select_in_physical_way",
-        "lake_enable_publish_version_trace_log",
         "lake_service_max_concurrency",
         "lake_enable_orphan_delvec_cleanup_on_compaction"
       ]

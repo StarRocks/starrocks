@@ -28,6 +28,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -45,6 +46,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -97,6 +99,7 @@ import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
@@ -134,6 +137,9 @@ import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TABLET_ID_COLU
 import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_COLUMN_NAME;
 
 public class QueryAnalyzer {
+    private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
+            "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
+
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
@@ -156,9 +162,9 @@ public class QueryAnalyzer {
     }
 
     /**
-     * Pre-resolve external (non-internal catalog) table relations without touching internal table metadata.
+     * Pre-resolve external (non-internal catalog) relations without touching internal table metadata.
      * This is used to avoid holding PlannerMetaLock while doing potentially slow connector metadata fetch
-     * (e.g. JDBC).
+     * (e.g. JDBC external tables and JDBC native_query schema inference).
      */
     public void analyzeExternalTablesOnly(StatementBase node) {
         new ExternalTablesOnlyVisitor().process(node);
@@ -166,6 +172,93 @@ public class QueryAnalyzer {
 
     public void analyze(StatementBase node, Scope parent) {
         new Visitor().process(node, parent);
+    }
+
+    private static class JdbcQueryTableFunctionName {
+        private final String catalogName;
+
+        private JdbcQueryTableFunctionName(String catalogName) {
+            this.catalogName = catalogName;
+        }
+    }
+
+    private static JdbcQueryTableFunctionName tryParseCanonicalJdbcQueryTableFunctionName(String functionName) {
+        List<String> parts = Arrays.stream(functionName.split("\\."))
+                .filter(part -> !part.isEmpty())
+                .collect(Collectors.toList());
+        if (parts.size() == 2 && parts.get(1).equalsIgnoreCase("native_query")) {
+            return new JdbcQueryTableFunctionName(parts.get(0));
+        }
+        return null;
+    }
+
+    private static JdbcQueryTableFunctionName tryParseJdbcQueryTableFunctionName(String functionName) {
+        List<String> parts = Arrays.stream(functionName.split("\\."))
+                .filter(part -> !part.isEmpty())
+                .collect(Collectors.toList());
+        if (parts.isEmpty()) {
+            return null;
+        }
+
+        String lastPart = parts.get(parts.size() - 1);
+        if (lastPart.equalsIgnoreCase("native_query")) {
+            if (parts.size() == 2) {
+                return new JdbcQueryTableFunctionName(parts.get(0));
+            }
+
+            throw new SemanticException(JDBC_QUERY_TABLE_FUNCTION_USAGE);
+        }
+
+        if (lastPart.equalsIgnoreCase("query") && parts.size() == 3
+                && parts.get(1).equalsIgnoreCase("system")) {
+            throw new SemanticException(JDBC_QUERY_TABLE_FUNCTION_USAGE);
+        }
+
+        return null;
+    }
+
+    private JDBCTable resolveJdbcQueryTable(JdbcQueryTableFunctionName functionName, String passThroughQuery) {
+        Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata(functionName.catalogName);
+        if (metadata.isEmpty()) {
+            throw new SemanticException("Unknown catalog '%s'", functionName.catalogName);
+        }
+
+        String currentDb = null;
+        if (functionName.catalogName.equalsIgnoreCase(session.getCurrentCatalog())) {
+            currentDb = session.getDatabase();
+        }
+
+        Table table;
+        try {
+            table = metadata.get().getTableFromQuery(session, currentDb, passThroughQuery);
+        } catch (RuntimeException e) {
+            throw new SemanticException("Failed to resolve JDBC query table function: %s", e.getMessage());
+        }
+
+        if (!(table instanceof JDBCTable jdbcTable) || !jdbcTable.isQueryTable()) {
+            throw new SemanticException("Catalog '%s' does not support JDBC query table function",
+                    functionName.catalogName);
+        }
+        return jdbcTable;
+    }
+
+    private Scope buildJdbcQueryTableScope(TableFunctionRelation node, JDBCTable jdbcTable) {
+        node.setQueryTable(jdbcTable);
+        TableName relationName = node.getResolveTableName();
+        ImmutableList.Builder<Field> fields = ImmutableList.builder();
+        for (Column column : jdbcTable.getFullSchema()) {
+            String columnName = column.getName();
+            fields.add(new Field(columnName,
+                    column.getType(),
+                    relationName,
+                    new SlotRef(relationName, columnName, columnName),
+                    true,
+                    column.isAllowNull()));
+        }
+
+        Scope outputScope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
+        node.setScope(outputScope);
+        return outputScope;
     }
 
     private class GeneratedColumnExprMappingCollector implements AstVisitorExtendInterface<Void, Scope> {
@@ -604,6 +697,16 @@ public class QueryAnalyzer {
             ((TableRelation) fromRelation).setPruneScanColumns(scanColumns);
         }
 
+        private boolean hasTemporalClause(TableRelation tableRelation) {
+            return tableRelation.getQueryPeriod() != null || tableRelation.getQueryPeriodString() != null;
+        }
+
+        private void checkNoTemporalClauseOnNonTableRelation(TableRelation tableRelation, String relationType) {
+            if (hasTemporalClause(tableRelation)) {
+                throw unsupportedException("Unsupported relation type for temporal clauses, relation type: " + relationType);
+            }
+        }
+
         private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
@@ -649,6 +752,8 @@ public class QueryAnalyzer {
                 if (tableName != null && Strings.isNullOrEmpty(tableName.getDb())) {
                     Optional<CTERelation> withQuery = scope.getCteQueries(tableName.getTbl());
                     if (withQuery.isPresent()) {
+                        checkNoTemporalClauseOnNonTableRelation(tableRelation, "CTE");
+
                         CTERelation withRelation = withQuery.get();
                         withRelation.addTableRef();
                         RelationFields withRelationFields = withQuery.get().getRelationFields();
@@ -703,6 +808,8 @@ public class QueryAnalyzer {
 
                 Relation r;
                 if (table instanceof View) {
+                    checkNoTemporalClauseOnNonTableRelation(tableRelation, table.getType().name());
+
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
@@ -725,6 +832,8 @@ public class QueryAnalyzer {
 
                     r = viewRelation;
                 } else if (table instanceof ConnectorView) {
+                    checkNoTemporalClauseOnNonTableRelation(tableRelation, table.getType().name());
+
                     ConnectorView connectorView = (ConnectorView) table;
                     QueryStatement queryStatement = connectorView.getQueryStatement();
                     View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
@@ -735,7 +844,7 @@ public class QueryAnalyzer {
 
                     r = viewRelation;
                 } else {
-                    if (tableRelation.getQueryPeriodString() != null && !table.isTemporal()) {
+                    if (hasTemporalClause(tableRelation) && !table.isTemporal()) {
                         throw unsupportedException("Unsupported table type for temporal clauses, table type: " +
                                 table.getType());
                     }
@@ -1734,6 +1843,11 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
             List<String> names = node.getFunctionParams().getExprsNames();
+            Scope queryTableScope = tryResolveJdbcQueryTableFunction(node, names);
+            if (queryTableScope != null) {
+                return queryTableScope;
+            }
+
             String[] namesArray = null;
             if (names != null && !names.isEmpty()) {
                 namesArray = names.toArray(String[]::new);
@@ -1823,6 +1937,45 @@ public class QueryAnalyzer {
             return node.getScope();
         }
 
+        private Scope tryResolveJdbcQueryTableFunction(TableFunctionRelation node, List<String> argNames) {
+            JdbcQueryTableFunctionName functionName = tryParseJdbcQueryTableFunctionName(
+                    node.getFunctionName().getFunction());
+            if (functionName == null) {
+                return null;
+            }
+
+            if (node.getColumnOutputNames() != null) {
+                throw new SemanticException("column aliases are not supported for JDBC query table function");
+            }
+
+            List<Expr> args = node.getFunctionParams().exprs();
+            if (args.size() != 1) {
+                throw new SemanticException("JDBC query table function requires exactly one query argument");
+            }
+            if (argNames != null && !argNames.isEmpty()) {
+                throw new SemanticException(JDBC_QUERY_TABLE_FUNCTION_USAGE);
+            }
+
+            Expr queryExpr = args.get(0);
+            if (!(queryExpr instanceof StringLiteral)) {
+                throw new SemanticException("JDBC query table function argument must be a string literal");
+            }
+            String passThroughQuery;
+            try {
+                passThroughQuery = JDBCTable.normalizePassThroughQuery(((StringLiteral) queryExpr).getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
+            node.setChildExpressions(args);
+
+            JDBCTable jdbcTable = node.getQueryTable();
+            if (jdbcTable == null) {
+                jdbcTable = resolveJdbcQueryTable(functionName, passThroughQuery);
+            }
+            return buildJdbcQueryTableScope(node, jdbcTable);
+        }
+
         private List<Expr> appendPositionalDefaultArgExprs(FunctionParams functionParams, Function fn) {
             List<Expr> result = Lists.newArrayList(functionParams.exprs());
             List<Expr> lastDefaults = fn.getLastDefaultsFromN(functionParams.exprs().size());
@@ -1863,9 +2016,10 @@ public class QueryAnalyzer {
     }
 
     /**
-     * A lightweight visitor that pre-resolves only external (non-internal catalog) TableRelation,
+     * A lightweight visitor that pre-resolves external (non-internal catalog) relations,
      * so connector metadata fetch is done without holding PlannerMetaLock.
-     * Similar to TableCollector but inverts the logic: skips internal tables, pre-resolves external tables.
+     * Similar to TableCollector but inverts the logic: skips internal tables, pre-resolves external
+     * TableRelation and JDBC native_query table functions.
      */
     private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
         private final Deque<Set<String>> cteNameStack = new ArrayDeque<>();
@@ -1972,6 +2126,61 @@ public class QueryAnalyzer {
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            if (node.getRight() != null) {
+                visit(node.getRight(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            if (node.getQueryTable() != null) {
+                return null;
+            }
+
+            JdbcQueryTableFunctionName functionName =
+                    tryParseCanonicalJdbcQueryTableFunctionName(node.getFunctionName().getFunction());
+            if (functionName == null) {
+                return null;
+            }
+
+            if (node.getColumnOutputNames() != null) {
+                return null;
+            }
+
+            List<Expr> args = node.getFunctionParams().exprs();
+            List<String> argNames = node.getFunctionParams().getExprsNames();
+            if (args.size() != 1 || (argNames != null && !argNames.isEmpty())) {
+                return null;
+            }
+
+            Expr queryExpr = args.get(0);
+            if (!(queryExpr instanceof StringLiteral)) {
+                return null;
+            }
+
+            String passThroughQuery;
+            try {
+                passThroughQuery = JDBCTable.normalizePassThroughQuery(((StringLiteral) queryExpr).getStringValue());
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+
+            Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata(functionName.catalogName);
+            if (metadata.isEmpty()) {
+                return null;
+            }
+
+            JDBCTable jdbcTable;
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                jdbcTable = resolveJdbcQueryTable(functionName, passThroughQuery);
+            }
+            node.setQueryTable(jdbcTable);
             return null;
         }
 

@@ -23,10 +23,6 @@ set(UTIL_FILES
   bloom_filter.cpp
   block_split_bloom_filter.cpp
   brpc_stub_cache.cpp
-  compression/block_compression.cpp
-  compression/compression_context_pool_singletons.cpp
-  compression/stream_compressor.cpp
-  compression/stream_decompressor.cpp
   download_util.cpp
   json_util.cpp
   json_flattener.cpp

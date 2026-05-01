@@ -480,6 +480,16 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    public boolean isRangeColocateGroup(GroupId groupId) {
+        readLock();
+        try {
+            ColocateGroupSchema schema = group2Schema.get(groupId);
+            return schema != null && schema.isRangeColocate();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public boolean isGroupExist(GroupId groupId) {
         readLock();
         try {
@@ -1068,9 +1078,12 @@ public class ColocateTableIndex implements Writable {
             }
             badTableIds.add(tableId);
         }
-        LOG.warn("remove {} invalid tableid: {}", badTableIds.size(), badTableIds);
-        for (Long tableId : badTableIds) {
-            removeTable(tableId, null, false /* isReplay */);
+        
+        if (badTableIds.size() > 0) {
+            LOG.warn("remove {} invalid tableid: {}", badTableIds.size(), badTableIds);
+            for (Long tableId : badTableIds) {
+                removeTable(tableId, null, false /* isReplay */);
+            }
         }
     }
 

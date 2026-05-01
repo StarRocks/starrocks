@@ -44,6 +44,7 @@
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
@@ -82,6 +83,17 @@ Status LakeDataSource::open(RuntimeState* state) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
+
+    if (thrift_lake_scan_node.__isset.vector_search_options) {
+        const auto& vector_search_options = thrift_lake_scan_node.vector_search_options;
+        _use_vector_index = vector_search_options.enable_use_ann;
+        if (_use_vector_index) {
+            _use_ivfpq = vector_search_options.use_ivfpq;
+            _vector_distance_column_name = vector_search_options.vector_distance_column_name;
+            _vector_slot_id = vector_search_options.vector_slot_id;
+            _params.vector_search_option = std::make_shared<VectorSearchOption>();
+        }
+    }
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
     if (thrift_lake_scan_node.__isset.rollup_name) {
@@ -276,7 +288,14 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
                                             std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
-        int32_t index = _tablet_schema->field_index(slot->col_name());
+        int32_t index;
+        if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+            index = _tablet_schema->num_columns();
+            _params.vector_search_option->vector_column_id = index;
+            _params.vector_search_option->vector_slot_id = slot->id();
+        } else {
+            index = _tablet_schema->field_index(slot->col_name());
+        }
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -353,6 +372,24 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
+    }
+
+    _params.use_vector_index = _use_vector_index;
+    if (_use_vector_index) {
+        const auto& vector_options = thrift_lake_scan_node.vector_search_options;
+        _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
+        _params.vector_search_option->k = vector_options.vector_limit_k;
+        for (const std::string& str : vector_options.query_vector) {
+            _params.vector_search_option->query_vector.push_back(std::stof(str));
+        }
+        if (_runtime_state->query_options().__isset.ann_params) {
+            _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
+        }
+        _params.vector_search_option->vector_range = vector_options.vector_range;
+        _params.vector_search_option->result_order = vector_options.result_order;
+        _params.vector_search_option->use_ivfpq = _use_ivfpq;
+        _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
+        _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
     }
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));

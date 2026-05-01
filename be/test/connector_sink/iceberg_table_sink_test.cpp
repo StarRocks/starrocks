@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/iceberg_table_sink.h"
+#include "exec/data_sinks/iceberg_table_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -24,6 +24,9 @@
 #include "common/config_exec_fwd.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"

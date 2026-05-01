@@ -55,16 +55,23 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
         // this row has been deleted in this sst, skip it
         return Status::OK();
     }
-    // fill shared version & rssid if have
+    // Tombstone-aware projection: see is_index_tombstone() in storage/lake/utils.h
+    // for why the rssid/rowid sentinel must be preserved. Version is independent of
+    // the NullIndexValue encoding and must be projected even onto tombstones — the
+    // dup-resolution below in this function and the time-travel multi_get path both
+    // key off version, and a tombstone left at its source-sstable version would
+    // lose ordering against live entries projected to shared_version.
     if (iter_ptr->shared_version() > 0) {
         for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
             index_value_ver.mutable_values(i)->set_version(iter_ptr->shared_version());
+            if (is_index_tombstone(index_value_ver.values(i))) continue;
             index_value_ver.mutable_values(i)->set_rssid(iter_ptr->shared_rssid());
         }
     }
     if (iter_ptr->rssid_offset() != 0) {
         const int32_t rssid_offset = iter_ptr->rssid_offset();
         for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
+            if (is_index_tombstone(index_value_ver.values(i))) continue;
             const int64_t rssid = static_cast<int64_t>(index_value_ver.values(i).rssid()) + rssid_offset;
             index_value_ver.mutable_values(i)->set_rssid(static_cast<uint32_t>(rssid));
         }

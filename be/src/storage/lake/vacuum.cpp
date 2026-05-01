@@ -97,6 +97,19 @@ static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_d
                                                            get_num_active_file_queued_tasks, nullptr);
 namespace {
 
+// Delete .vi files for segments in a rowset using segment_metas metadata.
+static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, const std::string& base_dir,
+                                     const RowsetMetadataPB& rowset) {
+    for (int i = 0; i < rowset.segments_size() && i < rowset.segment_metas_size(); i++) {
+        const auto& seg_meta = rowset.segment_metas(i);
+        for (int64_t vi_id : seg_meta.vector_index_ids()) {
+            auto vi_name = gen_vector_index_filename(rowset.segments(i), vi_id);
+            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, vi_name)));
+        }
+    }
+    return Status::OK();
+}
+
 const char* const kDuplicateFilesError =
         "Duplicate files were returned from the remote storage. The most likely cause is an S3 or HDFS API "
         "compatibility issue with your remote storage implementation.";
@@ -241,6 +254,8 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segments(i))));
             }
         }
+        // Delete associated .vi files using per-segment vector index metadata
+        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, base_dir, rowset));
 
         for (const auto& del_file : rowset.del_files()) {
             if (del_file.shared() && shared_file_deleter != nullptr) {
@@ -936,6 +951,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, del_file.name())));
                         }
                     }
+                    // Delete associated .vi files using per-segment vector index metadata
+                    RETURN_IF_ERROR(delete_rowset_vi_files(&deleter, data_dir, rowset));
                 }
                 if (latest_metadata->has_delvec_meta()) {
                     for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
@@ -1134,9 +1151,10 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                   total_files++;
                                                   total_bytes += entry.size.value_or(0);
 
-                                                  // should consider segment files, sst, del file, delvector
+                                                  // should consider segment files, sst, del file, delvector, vector index
                                                   if (!is_segment(entry.name) && !is_sst(entry.name) &&
-                                                      !is_delvec(entry.name) && !is_del(entry.name)) {
+                                                      !is_delvec(entry.name) && !is_del(entry.name) &&
+                                                      !is_vector_index(entry.name)) {
                                                       return true;
                                                   }
                                                   if (!entry.mtime.has_value()) {
@@ -1175,6 +1193,15 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
             for (const auto& segment : rowset.segments()) {
                 data_files.erase(segment);
                 data_files_in_metadatas.emplace(segment);
+            }
+            // Protect associated .vi files using per-segment vector index metadata
+            for (int i = 0; i < rowset.segments_size() && i < rowset.segment_metas_size(); i++) {
+                const auto& seg_meta = rowset.segment_metas(i);
+                for (int64_t vi_id : seg_meta.vector_index_ids()) {
+                    auto vi_name = gen_vector_index_filename(rowset.segments(i), vi_id);
+                    data_files.erase(vi_name);
+                    data_files_in_metadatas.emplace(vi_name);
+                }
             }
             for (const auto& del_file : rowset.del_files()) {
                 data_files.erase(del_file.name());

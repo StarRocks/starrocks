@@ -154,6 +154,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return normal.getTableFromQuery(context, dbName, query);
+    }
+
+    @Override
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         ConnectorMetadata metadata = metadataOfTable(table);
         if (metadata == null) {

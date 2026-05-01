@@ -32,10 +32,7 @@ namespace starrocks {
 Status TenAnnIndexBuilderProxy::init() {
     ASSIGN_OR_RETURN(auto meta, get_vector_meta(_tablet_index, std::map<std::string, std::string>{}))
 
-    RETURN_IF_ERROR(success_once(_init_once, []() {
-                        tenann::OmpSetNumThreads(config::config_vector_index_build_concurrency);
-                        return Status::OK();
-                    }).status());
+    tenann::OmpSetNumThreads(std::max(1, _omp_threads));
 
     const auto& params = meta.common_params();
 
@@ -62,6 +59,11 @@ Status TenAnnIndexBuilderProxy::init() {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
         _index_builder->index_writer()->SetIndexCache(tenann::IndexCache::GetGlobalInstance());
+        // Use tenann file writer for remote FS (S3/HDFS) in shared-data mode
+        if (_file_writer != nullptr) {
+            _index_builder->index_writer()->SetFileWriter(
+                    std::shared_ptr<tenann::IndexFileWriter>(_file_writer, [](tenann::IndexFileWriter*) {}));
+        }
         if (_is_element_nullable) {
             _index_builder->EnableCustomRowId();
         }
@@ -161,10 +163,19 @@ Status TenAnnIndexBuilderProxy::flush() {
     return Status::OK();
 }
 
-void TenAnnIndexBuilderProxy::close() const {
+Status TenAnnIndexBuilderProxy::close() const {
     if (_index_builder && !_index_builder->is_closed()) {
         _index_builder->Close();
     }
+    // TenANN's IndexBuilder::Close() does NOT call IndexFileWriter::Close().
+    // For S3, objects are only visible after close(), so we must explicitly
+    // close the file writer to finalize the upload. VectorIndexFileWriter::Close()
+    // is idempotent, so the destructor path can safely re-enter.
+    if (_file_writer) {
+        _file_writer->Close();
+        return _file_writer->status();
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

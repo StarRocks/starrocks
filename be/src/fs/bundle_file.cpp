@@ -149,4 +149,12 @@ StatusOr<int64_t> BundleSeekableInputStream::read(void* data, int64_t count) {
     return _stream->read(data, count);
 }
 
+std::string BundleSeekableInputStream::page_cache_key(int64_t stream_offset) const {
+    // Fold the slice base offset into the offset and delegate to the base's default impl. The
+    // default uses virtual filename(), which dispatches back to this slice's filename()
+    // (which forwards to _stream->filename()) — so the key is encoded against the underlying
+    // physical file's name, not against _stream's possibly-empty _filename member.
+    return SeekableInputStream::page_cache_key(_offset + stream_offset);
+}
+
 } // namespace starrocks

@@ -42,6 +42,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
+#include "common/config_compression_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
@@ -53,6 +54,7 @@
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
 #include "base/string/faststring.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -69,7 +71,6 @@
 #include "storage/rowset/zone_map_index.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
@@ -185,7 +186,9 @@ public:
             _encode_buf.resize(codec->max_compressed_len(_null_map.size()));
             Slice origin_slice(_null_map);
             Slice compressed_slice(_encode_buf);
-            status = codec->compress(origin_slice, &compressed_slice);
+            BlockCompressionOptions compression_options;
+            compression_options.lz4_acceleration = config::lz4_acceleration;
+            status = codec->compress(origin_slice, &compressed_slice, compression_options);
             if (!status.ok()) {
                 LOG(ERROR) << "compress null map failed";
                 return {};

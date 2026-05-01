@@ -24,7 +24,6 @@
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "runtime/chunk_cursor.h"
 
 namespace starrocks {
 

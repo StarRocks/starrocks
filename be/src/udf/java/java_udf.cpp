@@ -26,7 +26,9 @@
 #include "exprs/function_context.h"
 #include "fmt/core.h"
 #include "jni.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/type_traits.h"
 #include "udf/java/utils.h"
@@ -178,11 +180,27 @@ void JVMFunctionHelper::_init() {
     _string_class = JNI_FIND_CLASS("java/lang/String");
     _jarrays_class = JNI_FIND_CLASS("java/util/Arrays");
     _exception_util_class = JNI_FIND_CLASS("org/apache/commons/lang3/exception/ExceptionUtils");
+    _big_decimal_class = JNI_FIND_CLASS("java/math/BigDecimal");
 
     CHECK(_object_class);
     CHECK(_string_class);
     CHECK(_jarrays_class);
     CHECK(_exception_util_class);
+    CHECK(_big_decimal_class);
+    _big_decimal_ctor_string = _env->GetMethodID(_big_decimal_class, "<init>", "(Ljava/lang/String;)V");
+    CHECK(_big_decimal_ctor_string);
+    _big_decimal_value_of_ll = _env->GetStaticMethodID(_big_decimal_class, "valueOf", "(JI)Ljava/math/BigDecimal;");
+    CHECK(_big_decimal_value_of_ll);
+
+    _local_date_class = JNI_FIND_CLASS("java/time/LocalDate");
+    CHECK(_local_date_class);
+    _local_date_of_epoch_day = _env->GetStaticMethodID(_local_date_class, "ofEpochDay", "(J)Ljava/time/LocalDate;");
+    CHECK(_local_date_of_epoch_day);
+    _local_date_to_epoch_day = _env->GetMethodID(_local_date_class, "toEpochDay", "()J");
+    CHECK(_local_date_to_epoch_day);
+
+    _local_datetime_class = JNI_FIND_CLASS("java/time/LocalDateTime");
+    CHECK(_local_datetime_class);
 
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
     ADD_NUMBERIC_CLASS(byte, Byte, B);
@@ -219,6 +237,11 @@ void JVMFunctionHelper::_init() {
     DCHECK_EQ(res, 0);
 
     INIT_HELPER_METHOD(_create_boxed_array, "createBoxedArray", "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
+    INIT_HELPER_METHOD(_create_boxed_decimal_array, "createBoxedDecimalArray",
+                       "(IIILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
+    INIT_HELPER_METHOD(_get_decimal_boxed_result, "getDecimalResultFromBoxedArray", "(IIIILjava/lang/Object;JZ)V");
+    INIT_HELPER_METHOD(_bd_unscaled_long, "unscaledLong", "(Ljava/math/BigDecimal;II)J");
+    INIT_HELPER_METHOD(_bd_unscaled_le_bytes, "unscaledLEBytes", "(Ljava/math/BigDecimal;III)[B");
     INIT_HELPER_METHOD(_batch_update, "batchUpdate", BATCH_UPDATE_SIGNATURE);
     INIT_HELPER_METHOD(_batch_call, "batchCall", BATCH_CALL_SIGNATURE);
     INIT_HELPER_METHOD(_batch_call_no_args, "batchCall", BATCH_CALL_NO_ARGS_SIGNATURE);
@@ -251,6 +274,15 @@ void JVMFunctionHelper::_init() {
     _method_map.emplace(TYPE_ARRAY_METHOD_ID, tmp);
     INIT_HELPER_METHOD(tmp, "createBoxedMapArray", CREATE_BOXED_MAP_SIGNATURE);
     _method_map.emplace(TYPE_MAP_METHOD_ID, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedLocalDateArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<DateValue>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedLocalDateTimeArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<TimestampValue>::id, tmp);
+
+    // LocalDateTime <-> packed int64 conversion stays in UDFHelper because the
+    // packing is StarRocks-specific.
+    INIT_HELPER_METHOD(_local_datetime_from_packed, "localDateTimeFromPackedTimestamp", "(J)Ljava/time/LocalDateTime;");
+    INIT_HELPER_METHOD(_local_datetime_to_packed, "packedTimestampFromLocalDateTime", "(Ljava/time/LocalDateTime;)J");
 
     // init bytebuffer
     _direct_buffer_class = JNI_FIND_CLASS("java/nio/ByteBuffer");
@@ -406,6 +438,14 @@ jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nulla
     return res;
 }
 
+StatusOr<jobject> JVMFunctionHelper::create_boxed_decimal_array(int type, int scale, int num_rows, jobject null_buff,
+                                                                jobject data_buff) {
+    jobject res = _env->CallStaticObjectMethod(_udf_helper_class, _create_boxed_decimal_array, type, num_rows, scale,
+                                               null_buff, data_buff);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(_env, "create_boxed_decimal_array");
+    return res;
+}
+
 jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
     jobjectArray res_arr = _env->NewObjectArray(num_rows, _object_array_class, o);
     RETURN_IF_JNI_EXCEPTION(_env, "create_object_array: NewObjectArray failed", nullptr);
@@ -502,6 +542,15 @@ Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, job
     return Status::OK();
 }
 
+Status JVMFunctionHelper::get_decimal_result_from_boxed_array(int type, int precision, int scale, Column* col,
+                                                              jobject jcolumn, int rows, bool error_if_overflow) {
+    col->resize(rows);
+    _env->CallStaticVoidMethod(_udf_helper_class, _get_decimal_boxed_result, type, precision, scale, rows, jcolumn,
+                               reinterpret_cast<int64_t>(col), static_cast<jboolean>(error_if_overflow));
+    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
+    return Status::OK();
+}
+
 // convert UDAF ctx to jobject
 jobject JVMFunctionHelper::convert_handle_to_jobject(FunctionContext* ctx, int state) {
     auto* udaf_ctx = get_java_udaf_context(ctx);
@@ -547,6 +596,62 @@ jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     jobject nstr = _env->NewObject(_string_class, _string_construct_with_bytes, bytesArr, _utf8_charsets);
     RETURN_IF_JNI_EXCEPTION(_env, "newString: NewObject failed", nullptr);
     return nstr;
+}
+
+jobject JVMFunctionHelper::newBigDecimal(const std::string& s) {
+    jobject jstr = newString(s.data(), s.size());
+    if (jstr == nullptr) {
+        return nullptr;
+    }
+    LOCAL_REF_GUARD(jstr);
+    jobject bd = _env->NewObject(_big_decimal_class, _big_decimal_ctor_string, jstr);
+    RETURN_IF_JNI_EXCEPTION(_env, "newBigDecimal: NewObject failed", nullptr);
+    return bd;
+}
+
+jobject JVMFunctionHelper::newBigDecimal(int64_t unscaled, int scale) {
+    jobject bd = _env->CallStaticObjectMethod(_big_decimal_class, _big_decimal_value_of_ll,
+                                              static_cast<jlong>(unscaled), static_cast<jint>(scale));
+    RETURN_IF_JNI_EXCEPTION(_env, "newBigDecimal(long, int): CallStatic failed", nullptr);
+    return bd;
+}
+
+jlong JVMFunctionHelper::unscaled_long(jobject big_decimal, int precision, int scale) {
+    return _env->CallStaticLongMethod(_udf_helper_class, _bd_unscaled_long, big_decimal, static_cast<jint>(precision),
+                                      static_cast<jint>(scale));
+}
+
+jbyteArray JVMFunctionHelper::unscaled_le_bytes(jobject big_decimal, int precision, int scale, int byte_width) {
+    return (jbyteArray)_env->CallStaticObjectMethod(_udf_helper_class, _bd_unscaled_le_bytes, big_decimal,
+                                                    static_cast<jint>(precision), static_cast<jint>(scale),
+                                                    static_cast<jint>(byte_width));
+}
+
+// DateValue stores days as Julian day; LocalDate exposes them as days-since-1970-01-01.
+// 2440588 is the Julian day number of the Unix epoch.
+static constexpr jlong UNIX_EPOCH_JULIAN_DAYS = 2440588;
+
+jobject JVMFunctionHelper::newLocalDate(int32_t julian) {
+    jobject ld = _env->CallStaticObjectMethod(_local_date_class, _local_date_of_epoch_day,
+                                              static_cast<jlong>(julian) - UNIX_EPOCH_JULIAN_DAYS);
+    RETURN_IF_JNI_EXCEPTION(_env, "newLocalDate: ofEpochDay failed", nullptr);
+    return ld;
+}
+
+int32_t JVMFunctionHelper::valLocalDate(jobject obj) {
+    jlong epoch_day = _env->CallLongMethod(obj, _local_date_to_epoch_day);
+    return static_cast<int32_t>(epoch_day + UNIX_EPOCH_JULIAN_DAYS);
+}
+
+jobject JVMFunctionHelper::newLocalDateTime(int64_t packed_timestamp) {
+    jobject ldt = _env->CallStaticObjectMethod(_udf_helper_class, _local_datetime_from_packed,
+                                               static_cast<jlong>(packed_timestamp));
+    RETURN_IF_JNI_EXCEPTION(_env, "newLocalDateTime: localDateTimeFromPackedTimestamp failed", nullptr);
+    return ldt;
+}
+
+int64_t JVMFunctionHelper::valLocalDateTime(jobject obj) {
+    return _env->CallStaticLongMethod(_udf_helper_class, _local_datetime_to_packed, obj);
 }
 
 Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
@@ -1042,6 +1147,20 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 desc->emplace_back(MethodTypeDescriptor{TYPE_ARRAY, true});
             } else if (type == "java/util/Map") {
                 desc->emplace_back(MethodTypeDescriptor{TYPE_MAP, true});
+            } else if (type == "java/math/BigDecimal") {
+                // Structural placeholder only: `.type` is not dispatched on at runtime for
+                // BigDecimal params. The actual DECIMAL precision/scale is resolved from
+                // ctx->get_arg_type() / ctx->get_return_type() at the call site.
+                desc->emplace_back(MethodTypeDescriptor{TYPE_DECIMAL128, true});
+            } else if (type == "java/time/LocalDate") {
+                desc->emplace_back(MethodTypeDescriptor{TYPE_DATE, true});
+            } else if (type == "java/time/LocalDateTime") {
+                desc->emplace_back(MethodTypeDescriptor{TYPE_DATETIME, true});
+            } else {
+                // Unrecognized object class. Surface as TYPE_UNKNOWN so get_method_desc()
+                // validation produces a clear error instead of leaving method_desc short
+                // and crashing on a later method_desc[0].is_box access.
+                desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
             }
             continue;
         }

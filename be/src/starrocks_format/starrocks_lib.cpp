@@ -24,6 +24,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/configbase.h"
 #include "common/system/mem_info.h"
+#include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_s3.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -58,6 +59,9 @@ void starrocks_format_initialize(void) {
         }
 
         Aws::InitAPI(aws_sdk_options);
+
+        auto lzo_status = starrocks::register_orc_lzo_decompressor();
+        CHECK(lzo_status.ok()) << "register ORC LZO decompressor error: " << lzo_status;
 
         MemInfo::init();
         date::init_date_cache();

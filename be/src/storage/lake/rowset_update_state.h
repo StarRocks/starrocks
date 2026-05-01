@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <unordered_map>
 
@@ -151,6 +152,7 @@ public:
     // How to use `RowsetUpdateState` when publish:
     //
     // init()
+    // prepare()
     //
     // for each segment:
     //      load_segment()
@@ -166,16 +168,27 @@ public:
     // init params in RowsetUpdateState.
     void init(const RowsetUpdateStateParams& params);
 
-    // Load `segment_id`-th segment file's state.
+    // Initialize shared state (rowset, segment iterators, per-segment vectors, column expr values).
+    // Must be called once before any load_segment call, for both serial and parallel paths.
+    Status prepare(const RowsetUpdateStateParams& params);
+
+    // Load `segment_id`-th segment file's state. Requires prepare() called first.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
     Status load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                         bool need_resolve_conflict, bool need_lock);
 
     // Handle `segment_id`-th segment file's partial update request.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values,
+    // provided each call uses its own replace_segments/orphan_files containers.
     Status rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                            std::map<int, FileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
 
-    // Release `segment_id`-th segment file's state.
+    // Release `segment_id`-th segment file's state (upserts + partial state).
     void release_segment(uint32_t segment_id);
+
+    // Release partial update state (write_columns) for a segment, but keep upserts for Phase 2.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
+    void release_segment_partial_state(uint32_t segment_id);
 
     // Load `del_id`-th delete file's state.
     Status load_delete(uint32_t del_id, const RowsetUpdateStateParams& params);
@@ -186,7 +199,7 @@ public:
     const SegmentPKIteratorPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
     const MutableColumnPtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
 
-    std::size_t memory_usage() const { return _memory_usage; }
+    std::size_t memory_usage() const { return _memory_usage.load(std::memory_order_relaxed); }
 
     std::string to_string() const;
 
@@ -229,7 +242,7 @@ private:
     std::vector<SegmentPKIteratorPtr> _upserts;
     // one for each delete file
     MutableColumns _deletes;
-    size_t _memory_usage = 0;
+    std::atomic<size_t> _memory_usage{0};
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
     std::vector<int64_t> _base_versions;
@@ -246,6 +259,8 @@ private:
     RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
 
+    // Initialized by prepare(), reused by _do_load_upserts for each segment.
+    Schema _pkey_schema;
     // to be destructed after segment iters
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;

@@ -203,16 +203,22 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                 continue;
             }
         }
-        // fill shared rssid & version if have
+        // Tombstone-aware projection: see is_index_tombstone() in storage/lake/utils.h
+        // for why the rssid/rowid sentinel must be preserved through both the
+        // shared_rssid overwrite and the rssid_offset shift. Version is independent of
+        // the NullIndexValue encoding and is projected onto every entry (including
+        // tombstones) so that the version-equality lookup below matches them.
         if (_sstable_pb.has_shared_version() && _sstable_pb.shared_version() > 0) {
             DCHECK(_sstable_pb.has_shared_rssid());
             for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
-                index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
                 index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
+                if (is_index_tombstone(index_value_with_ver_pb.values(j))) continue;
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
             }
         }
         if (_sstable_pb.rssid_offset() != 0) {
             for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                if (is_index_tombstone(index_value_with_ver_pb.values(j))) continue;
                 const int64_t rssid =
                         static_cast<int64_t>(index_value_with_ver_pb.values(j).rssid()) + _sstable_pb.rssid_offset();
                 index_value_with_ver_pb.mutable_values(j)->set_rssid(static_cast<uint32_t>(rssid));

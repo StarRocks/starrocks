@@ -50,7 +50,7 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
-    void update_exec_stats(RuntimeState* state) override;
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override;
 
 protected:
     /// Reference the read-only hash table from builder in the first pull_chunk.

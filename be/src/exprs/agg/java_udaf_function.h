@@ -106,7 +106,8 @@ public:
         auto* udaf_ctx = get_java_udaf_context(ctx);
         DCHECK(udaf_ctx != nullptr);
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
-        auto st = append_jvalue(ctx->get_return_type(), udaf_ctx->ctx->finalize->method_desc[0].is_box, to, val);
+        auto st = append_jvalue(ctx->get_return_type(), udaf_ctx->ctx->finalize->method_desc[0].is_box, to, val,
+                                ctx->error_if_overflow());
         SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
         release_jvalue(udaf_ctx->ctx->finalize->method_desc[0].is_box, val);
@@ -449,14 +450,27 @@ public:
         RETURN_IF_UNLIKELY_NULL(res, (void)0);
         LOCAL_REF_GUARD_ENV(env, res);
 
-        LogicalType type = udf_ctxs->ctx->finalize->method_desc[0].type;
+        // Use the SQL return type's logical type/scale rather than the Java-parsed method
+        // descriptor type. For DECIMAL, method_desc[0].type is a coarse BigDecimal sentinel;
+        // the true precision/scale lives on the UDAF's declared return type.
+        const auto& return_type = ctx->get_return_type();
+        auto write_result = [&](Column* col) {
+            if (is_decimalv3_field_type(return_type.type)) {
+                auto st = helper.get_decimal_result_from_boxed_array(return_type.type, return_type.precision,
+                                                                     return_type.scale, col, res, batch_size,
+                                                                     ctx->error_if_overflow());
+                SET_FUNCTION_CONTEXT_ERR(st, ctx);
+            } else {
+                helper.get_result_from_boxed_array(ctx, return_type.type, col, res, batch_size);
+            }
+        };
         // For nullable inputs, our UDAF does not produce nullable results
         if (!to->is_nullable()) {
             MutableColumnPtr wrapper = const_cast<Column*>(to)->as_mutable_ptr();
             auto output = NullableColumn::create(std::move(wrapper), NullColumn::create());
-            helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
+            write_result(output.get());
         } else {
-            helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);
+            write_result(to);
             (void)ColumnHelper::update_nested_has_null(to);
             down_cast<NullableColumn*>(to)->update_has_null();
         }

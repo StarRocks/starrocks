@@ -243,6 +243,75 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+    public void testCreateMaterializedViewWithTimeTravelClause() {
+        analyzeFail("create materialized view mv_time_travel\n" +
+                        "distributed by hash(id) buckets 3\n" +
+                        "refresh deferred manual\n" +
+                        "as select id, data, date from iceberg0.partitioned_db.t1 for version as of 1",
+                "Do not support create materialized view with time travel clause");
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithTimeTravelClauseInCte() {
+        analyzeFail("create materialized view mv_time_travel_in_cte\n" +
+                        "distributed by hash(id) buckets 3\n" +
+                        "refresh deferred manual\n" +
+                        "as with cte as (select id, data, date from iceberg0.partitioned_db.t1 for version as of 1)\n" +
+                        "select id, data, date from cte",
+                "Do not support create materialized view with time travel clause");
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_mv_time_travel as select k1, k2 from test.tbl1", () ->
+                analyzeFail("create materialized view mv_time_travel_on_view\n" +
+                                "distributed by hash(k2) buckets 3\n" +
+                                "refresh deferred manual\n" +
+                                "as select k1, k2 from test.base_view_mv_time_travel for version as of 1",
+                        "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClause() {
+        analyzeFail("create view test.view_time_travel as " +
+                        "select id, data from iceberg0.partitioned_db.t1 for version as of 1",
+                "Do not support create view with time travel clause");
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClauseInCte() {
+        analyzeFail("create view test.view_time_travel_in_cte as " +
+                        "with cte as (select id, data from iceberg0.partitioned_db.t1 for version as of 1)\n" +
+                        "select id, data from cte",
+                "Do not support create view with time travel clause");
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_time_travel as select k1, k2 from test.tbl1", () ->
+                analyzeFail("create view test.view_time_travel_on_view as " +
+                                "select k1, k2 from test.base_view_time_travel for version as of 1",
+                        "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testAlterViewWithTimeTravelClause() throws Exception {
+        starRocksAssert.withView("create view test.view_alter_time_travel as select k1 from test.tbl1", () ->
+                analyzeFail("alter view test.view_alter_time_travel as " +
+                                "select id, data from iceberg0.partitioned_db.t1 for version as of 1",
+                        "Do not support alter view with time travel clause"));
+    }
+
+    @Test
+    public void testAlterViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_alter_time_travel as select k1, k2 from test.tbl1", () ->
+                starRocksAssert.withView("create view test.target_view_alter_time_travel as select k1, k2 from test.tbl1",
+                        () -> analyzeFail("alter view test.target_view_alter_time_travel as " +
+                                        "select k1, k2 from test.base_view_alter_time_travel for version as of 1",
+                                "Unsupported relation type for temporal clauses, relation type: VIEW")));
+    }
+
+    @Test
     public void testCreateMvWithNotExistResourceGroup() {
         String sql = "create materialized view mv\n" +
                 "PARTITION BY k1\n" +
@@ -502,12 +571,27 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
-    public void testCreateMvOnIcebergTableWithPartitionEvolution() {
-        // Test creating MV on Iceberg table with partition evolution should fail
-        String mvName = "iceberg_evolution_mv";
+    public void testCreateMvOnIcebergTableWithPartitionEvolution() throws Exception {
+        String unpartitionedMvName = "iceberg_evolution_unpartitioned_mv";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + unpartitionedMvName + "`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")\n" +
+                        "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                        + "`t0_date_month_identity_evolution` as a;");
+        Table unpartitionedMv = starRocksAssert.getTable("test", unpartitionedMvName);
+        Assertions.assertTrue(unpartitionedMv instanceof MaterializedView);
+        Assertions.assertTrue(((MaterializedView) unpartitionedMv).getPartitionInfo().isUnPartitioned());
+        starRocksAssert.dropMaterializedView(unpartitionedMvName);
+
+        String partitionedMvName = "iceberg_evolution_partitioned_mv";
         try {
             starRocksAssert.useDatabase("test")
-                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + partitionedMvName + "`\n" +
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "PARTITION BY date_trunc('month', ts)\n" +
                             "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
@@ -519,9 +603,7 @@ public class MaterializedViewAnalyzerTest {
                             + "`t0_date_month_identity_evolution` as a;");
             Assertions.fail("Should fail because Iceberg table has partition evolution");
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains(
-                    "Do not support create materialized view when base iceberg table"));
-            Assertions.assertTrue(e.getMessage().contains("has done partition evolution"));
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"));
         }
     }
 

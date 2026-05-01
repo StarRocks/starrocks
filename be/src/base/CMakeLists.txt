@@ -16,6 +16,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
 ADD_BE_LIB(Base
   bthreads/future_impl.cpp
+  compression/block_compression.cpp
+  compression/compression_context_pool_metrics.cpp
+  compression/compression_context_pool_singletons.cpp
+  compression/lzo_decompressor_registry.cpp
+  compression/stream_compressor.cpp
+  compression/stream_decompressor.cpp
   concurrency/await.cpp
   concurrency/core_local.cpp
   concurrency/spinlock.cpp
@@ -39,6 +45,7 @@ ADD_BE_LIB(Base
   hash/hash_util.cpp
   hash/murmur_hash3.cpp
   failpoint/fail_point.cpp
+  format.cpp
   path/filesystem_util.cc
   process/lite_exec.cpp
   types/decimal12.cpp

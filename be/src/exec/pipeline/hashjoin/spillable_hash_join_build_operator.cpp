@@ -267,7 +267,8 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
             _hash_table_iterate_idx++;
             for (; _hash_table_iterate_idx < _hash_tables.size(); _hash_table_iterate_idx++) {
                 auto build_chunk = _hash_tables[_hash_table_iterate_idx]->get_build_chunk();
-                if (build_chunk->num_rows() > 0) {
+                // Every build chunk has a dummy row at index 0. Skip partitions that have no real build rows.
+                if (build_chunk->num_rows() > kHashJoinKeyColumnOffset) {
                     _hash_table_build_chunk_slice.reset(build_chunk);
                     _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
                     break;

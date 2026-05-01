@@ -34,6 +34,7 @@ import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.TabletRangePB;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -386,7 +387,8 @@ public class SplitTabletJobTest {
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
                                        long baseVersion, long newVersion, Map<Long, Double> compactionScores,
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
-                                       Map<Long, Long> tabletRowNums, boolean useAggregatePublish) {
+                                       Map<Long, Long> tabletRowNums, boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
                 actualResource.set(computeResource);
             }
         };

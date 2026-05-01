@@ -16,6 +16,7 @@
 
 #include <unistd.h>
 
+#include "base/compression/compression_context_pool_metrics.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "runtime/starrocks_metrics.h"
@@ -34,6 +35,7 @@ const std::string GlobalMetricsRegistry::_s_hook_name = "starrocks_metrics";
 GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
         : _fast_metrics(fast_metrics), _metrics(_s_registry_name) {
     DCHECK(_fast_metrics != nullptr);
+    compression::install_compression_context_pool_metrics(&_metrics);
 #define REGISTER_STARROCKS_METRIC(name) _metrics.register_metric(#name, &(_fast_metrics->name))
     // You can put StarRocksMetrics's metrics initial code here
     REGISTER_STARROCKS_METRIC(fragment_requests_total);
@@ -49,6 +51,10 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_memtable_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_replica_duration_us);
+
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
 
     REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);

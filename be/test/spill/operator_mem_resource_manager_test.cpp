@@ -66,6 +66,19 @@ TEST_F(OperatorMemoryResourceManagerTest, test_low_memory_transition_is_idempote
     EXPECT_FALSE(op_mem_res_mgr.enter_low_memory_mode());
 }
 
+TEST_F(OperatorMemoryResourceManagerTest, test_destructor_releases_reserved_resources) {
+    QuerySpillManager query_spill_manager(dummy_query_id, &_global_mgr, &_dir_mgr);
+    {
+        OperatorMemoryResourceManager op_mem_res_mgr;
+        op_mem_res_mgr.prepare(&query_spill_manager, true, true, 128);
+        EXPECT_EQ(_global_mgr.spillable_operators(), 1);
+        EXPECT_EQ(_global_mgr.spill_expected_reserved_bytes(), 128);
+    }
+
+    EXPECT_EQ(_global_mgr.spillable_operators(), 0);
+    EXPECT_EQ(_global_mgr.spill_expected_reserved_bytes(), 0);
+}
+
 TEST_F(OperatorMemoryResourceManagerTest, test_compute_available_memory_bytes_matches_runtime_state) {
     const size_t expected =
             std::min<size_t>(std::max<size_t>(_dummy_state.spill_mem_table_size() * _dummy_state.spill_mem_table_num(),

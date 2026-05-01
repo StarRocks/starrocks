@@ -132,6 +132,13 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Build a temporary table from a pass-through query when the connector can infer the result schema.
+     */
+    default Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return null;
+    }
+
+    /**
      * Get the Time Varying Relation (TVR) version range for the table between the specified versions.
      */
     default TvrVersionRange getTableVersionRange(String dbName, Table table,

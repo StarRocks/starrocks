@@ -545,20 +545,37 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 > **注意**
 >
-> 当前 Scalar UDF 只支持非嵌套的 ARRAY 和 MAP 的参数/返回类型。
+> Scalar UDF 支持嵌套的 `ARRAY` 和 `MAP` 参数/返回类型,例如
+> `ARRAY<ARRAY<INT>>`、`ARRAY<MAP<INT, STRING>>`、
+> `MAP<INT, ARRAY<STRING>>`。叶子元素类型仍须为下表列出的标量类型。
+> 由于 Java 泛型擦除,Java 方法签名只需声明原始类型
+> `java.util.List` / `java.util.Map`,StarRocks 会根据 SQL 签名
+> 驱动逐行的类型转换。
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
-| ARRAY          | java.util.List    |
-| Map            | java.util.Map     |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| DATE                                           | java.time.LocalDate   |
+| DATETIME                                       | java.time.LocalDateTime |
+| ARRAY                                          | java.util.List        |
+| Map                                            | java.util.Map         |
+
+> **说明**
+>
+> 对于 `DECIMAL` 参数，UDF 返回的 BigDecimal 在写回列前会按照列声明的
+> `(precision, scale)` 使用 `RoundingMode.HALF_UP` 重新缩放。如果重新缩放后的
+> 值无法装入声明的 `(precision, scale)`，行为由会话变量 `overflow_mode` 决定：
+>
+> - `OUTPUT_NULL`（默认）：该行写入 `NULL`。
+> - `REPORT_ERROR`：查询以 `ArithmeticException` 错误终止。
 
 ## 参数配置
 

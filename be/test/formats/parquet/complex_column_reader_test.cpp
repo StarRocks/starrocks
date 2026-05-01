@@ -464,11 +464,11 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowSeekFail) {
 // When stats_on_age_chunk=true, col 3 gets INT32 statistics [20, 24].
 // When age_value_all_null=true, the fallback `value` payload for this shredded path is
 // marked all-null in the row-group metadata so typed_value statistics are safe to use.
-static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(tparquet::RowGroup& rg,
-                                                                            ColumnReaderOptions& opts,
-                                                                            bool stats_on_age_chunk = false,
-                                                                            bool age_value_all_null = false,
-                                                                            bool include_age_value = true) {
+// Caller owns `root_field`: ColumnReaderFactory stores raw pointers into the field tree,
+// so it must outlive the returned reader.
+static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(
+        tparquet::RowGroup& rg, ColumnReaderOptions& opts, ParquetField& root_field, bool stats_on_age_chunk = false,
+        bool age_value_all_null = false, bool include_age_value = true) {
     ParquetField meta_f;
     meta_f.name = "metadata";
     meta_f.type = ColumnType::SCALAR;
@@ -512,10 +512,10 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(tpar
     tv_struct.type = ColumnType::STRUCT;
     tv_struct.children = {age_node};
 
-    ParquetField field;
-    field.name = "data";
-    field.type = ColumnType::STRUCT;
-    field.children = {meta_f, val_f, tv_struct};
+    root_field = ParquetField();
+    root_field.name = "data";
+    root_field.type = ColumnType::STRUCT;
+    root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 3; ++i) {
         tparquet::ColumnChunk chunk;
@@ -541,11 +541,11 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(tpar
     rg.__set_num_rows(5);
     opts.row_group_meta = &rg;
 
-    return ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
+    return ColumnReaderFactory::create(opts, &root_field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
 }
 
 static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with_commit_operation_hint(
-        tparquet::RowGroup& rg, ColumnReaderOptions& opts) {
+        tparquet::RowGroup& rg, ColumnReaderOptions& opts, ParquetField& root_field) {
     auto scalar_field = [](std::string name, tparquet::Type::type physical_type, int column_index) {
         ParquetField field;
         field.name = std::move(name);
@@ -595,10 +595,10 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
     tv_struct.type = ColumnType::STRUCT;
     tv_struct.children = {time_node, commit_node};
 
-    ParquetField field;
-    field.name = "data";
-    field.type = ColumnType::STRUCT;
-    field.children = {meta_f, val_f, tv_struct};
+    root_field = ParquetField();
+    root_field.name = "data";
+    root_field.type = ColumnType::STRUCT;
+    root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 8; ++i) {
         tparquet::ColumnChunk chunk;
@@ -615,13 +615,14 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
 
     VariantShreddedReadHints hints;
     RETURN_IF_ERROR(hints.add_path("commit.operation"));
-    return ColumnReaderFactory::create_variant_column_reader(opts, &field, hints);
+    return ColumnReaderFactory::create_variant_column_reader(opts, &root_field, hints);
 }
 
 TEST(VariantShreddedPruningTest, CollectIORangeSkipsUnrequestedSiblings) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
-    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader_with_commit_operation_hint(rg, opts));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field));
 
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
@@ -636,11 +637,9 @@ TEST(VariantShreddedPruningTest, CollectIORangeSkipsUnrequestedSiblings) {
     EXPECT_EQ(expected_offsets, offsets);
 }
 
-static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_reader(tparquet::RowGroup& rg,
-                                                                                    ColumnReaderOptions& opts,
-                                                                                    bool stats_on_leaf_chunk = false,
-                                                                                    bool leaf_value_all_null = false,
-                                                                                    bool include_leaf_value = true) {
+static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_reader(
+        tparquet::RowGroup& rg, ColumnReaderOptions& opts, ParquetField& root_field, bool stats_on_leaf_chunk = false,
+        bool leaf_value_all_null = false, bool include_leaf_value = true) {
     ParquetField meta_f;
     meta_f.name = "metadata";
     meta_f.type = ColumnType::SCALAR;
@@ -685,10 +684,10 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_rea
                                              : std::vector<ParquetField>{price_typed_f};
     tv_struct.children = {price_node};
 
-    ParquetField field;
-    field.name = "data";
-    field.type = ColumnType::STRUCT;
-    field.children = {meta_f, val_f, tv_struct};
+    root_field = ParquetField();
+    root_field.name = "data";
+    root_field.type = ColumnType::STRUCT;
+    root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 3; ++i) {
         tparquet::ColumnChunk chunk;
@@ -715,7 +714,7 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_rea
     rg.__set_num_rows(5);
     opts.row_group_meta = &rg;
 
-    return ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
+    return ColumnReaderFactory::create(opts, &root_field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
 }
 
 // Build a minimal FileMetaData (writer version "unknown") so that
@@ -744,7 +743,8 @@ static std::unique_ptr<FileMetaData> make_minimal_file_meta() {
 TEST(VariantZoneMapTest, TypedValueReaderForPathEmptyPath) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
-    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, root_field));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     EXPECT_EQ(nullptr, vr->filterable_typed_value_reader_for_path(VariantPath{}));
@@ -754,7 +754,8 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathEmptyPath) {
 TEST(VariantZoneMapTest, TypedValueReaderForPathNonExistentKey) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
-    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, root_field));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("nonexistent"));
@@ -766,7 +767,8 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathNonExistentKey) {
 TEST(VariantZoneMapTest, TypedValueReaderForPathValidScalarLeaf) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
-    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, root_field));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
@@ -777,7 +779,8 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathValidScalarLeaf) {
 TEST(VariantZoneMapTest, VariantVirtualZoneMapReaderNoOpApis) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
-    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, root_field));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
@@ -811,7 +814,8 @@ TEST(VariantZoneMapTest, VariantVirtualZoneMapReaderNoOpApis) {
 TEST(VariantZoneMapTest, ZoneMapReaderNonExistentPathReturnsFalse) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
-    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, root_field));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("nonexistent")));
@@ -829,7 +833,8 @@ TEST(VariantZoneMapTest, ZoneMapReaderNonExistentPathReturnsFalse) {
 TEST(VariantZoneMapTest, ZoneMapReaderValidPathNoStatsReturnsFalse) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
-    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, root_field));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
@@ -851,9 +856,10 @@ TEST(VariantZoneMapTest, ZoneMapReaderFiltersWhenPredicateOutOfStatRange) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
     ASSIGN_OR_ABORT(auto reader,
-                    make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true, /*age_value_all_null=*/false,
-                                                 /*include_age_value=*/false));
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
@@ -876,9 +882,10 @@ TEST(VariantZoneMapTest, ZoneMapReaderDoesNotFilterWhenPredicateInStatRange) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
     ASSIGN_OR_ABORT(auto reader,
-                    make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true, /*age_value_all_null=*/false,
-                                                 /*include_age_value=*/false));
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
@@ -900,9 +907,10 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
     ASSIGN_OR_ABORT(auto reader,
-                    make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true, /*age_value_all_null=*/false,
-                                                 /*include_age_value=*/false));
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
@@ -935,8 +943,9 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
     ASSIGN_OR_ABORT(auto reader,
-                    make_shredded_decimal_variant_reader(rg, opts, /*stats_on_leaf_chunk=*/true,
+                    make_shredded_decimal_variant_reader(rg, opts, root_field, /*stats_on_leaf_chunk=*/true,
                                                          /*leaf_value_all_null=*/true, /*include_leaf_value=*/true));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
@@ -968,9 +977,10 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
     ASSIGN_OR_ABORT(auto reader,
-                    make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true, /*age_value_all_null=*/false,
-                                                 /*include_age_value=*/false));
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
@@ -1001,8 +1011,9 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsWhenFallbackValueMayContainNonNullRow
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
-    ASSIGN_OR_ABORT(auto reader,
-                    make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true, /*age_value_all_null=*/false));
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                              /*age_value_all_null=*/false));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));

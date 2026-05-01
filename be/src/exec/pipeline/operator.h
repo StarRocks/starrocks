@@ -19,10 +19,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "exec/pipeline/primitives/operator_exec_stats.h"
 #include "exec/pipeline/primitives/operator_runtime_access.h"
 #include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "exec/spill/operator_mem_resource_manager.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -49,7 +49,9 @@ class Operator {
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
-             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access = nullptr);
+             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
+             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -209,7 +211,6 @@ public:
     // Operator can free memory/buffer early
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
-    spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
@@ -241,7 +242,7 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
-    virtual void update_exec_stats(RuntimeState* state);
+    virtual OperatorExecStatsSnapshot exec_stats_snapshot() const;
 
     void set_observer(PipelineObserver* observer) { _observer = observer; }
     PipelineObserver* observer() const { return _observer; }
@@ -271,8 +272,6 @@ protected:
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
     RuntimeMembershipFilterEvalContext _bloom_filter_eval_context;
-
-    spill::OperatorMemoryResourceManager _mem_resource_manager;
 
     // the memory that can be released by this operator
     size_t _revocable_mem_bytes = 0;
