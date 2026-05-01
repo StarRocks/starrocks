@@ -27,7 +27,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
-#include "runtime/memory_scratch_sink.h"
+#include "exec/data_sinks/memory_scratch_sink.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"

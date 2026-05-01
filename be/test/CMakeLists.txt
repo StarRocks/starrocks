@@ -45,7 +45,7 @@ set(EXEC_FILES
         ./fs/poco_http_client_test.cpp
         ./fs/bundle_file_test.cpp
         ./exec/column_value_range_test.cpp
-        ./exec/range_router_test.cpp
+        ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
@@ -107,13 +107,13 @@ set(EXEC_FILES
         ./exec/json_parser_test.cpp
         ./exec/cache_stats_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
-        ./exec/multi_olap_table_sink_test.cpp
+        ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
-        ./exec/tablet_sink_index_channel_test.cpp
-        ./exec/tablet_sink_sender_range_test.cpp
-        ./exec/tablet_sink_test.cpp
+        ./exec/data_sinks/tablet_sink_index_channel_test.cpp
+        ./exec/data_sinks/tablet_sink_sender_range_test.cpp
+        ./exec/data_sinks/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
@@ -261,13 +261,13 @@ set(EXEC_FILES
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./runtime/agg_state_desc_test.cpp
-        ./runtime/arrow_result_writer_test.cpp
+        ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
-        ./runtime/http_result_writer_test.cpp
+        ./exec/data_sinks/http_result_writer_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/local_tablets_channel_test.cpp
@@ -288,8 +288,8 @@ set(EXEC_FILES
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/merge_cascade_test.cpp
-        ./runtime/memory_scratch_sink_test_issue_8676.cpp
-        ./runtime/memory_scratch_sink_test.cpp
+        ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
+        ./exec/data_sinks/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
         ./serde/column_array_serde_test.cpp

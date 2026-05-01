@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/iceberg_table_sink.h"
+#include "exec/data_sinks/iceberg_table_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>

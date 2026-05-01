@@ -31,7 +31,7 @@
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/file_result_writer.h"
+#include "exec/data_sinks/file_result_writer.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 

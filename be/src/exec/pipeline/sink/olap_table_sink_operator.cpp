@@ -16,7 +16,7 @@
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/tablet_sink.h"
+#include "exec/data_sinks/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/result_buffer_mgr.h"
