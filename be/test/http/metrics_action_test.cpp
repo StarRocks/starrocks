@@ -176,11 +176,11 @@ TEST_F(MetricsActionTest, json_output_with_table_metrics) {
     registry.root_registry()->register_metric("requests_total", MetricLabels().add("type", "put"), &put_requests_total);
     enable_table_metrics(&registry);
     s_expect_response =
-            "[{\"tags\":{\"metric\":\"requests_total\",\"type\":\"put\"},\"unit\":\"NOUNIT\",\"value\":2345},"
-            "{\"tags\":{\"metric\":\"table_load_bytes\",\"table_id\":\"42\"},\"unit\":\"BYTES\",\"value\":0},"
-            "{\"tags\":{\"metric\":\"table_load_rows\",\"table_id\":\"42\"},\"unit\":\"BYTES\",\"value\":0},"
-            "{\"tags\":{\"metric\":\"table_scan_read_bytes\",\"table_id\":\"42\"},\"unit\":\"BYTES\",\"value\":0},"
-            "{\"tags\":{\"metric\":\"table_scan_read_rows\",\"table_id\":\"42\"},\"unit\":\"ROWS\",\"value\":11}]";
+            "[{\"tags\":{\"metric\":\"requests_total\",\"type\":\"put\"},\"unit\":\"nounit\",\"value\":2345},"
+            "{\"tags\":{\"metric\":\"table_load_bytes\",\"table_id\":\"42\"},\"unit\":\"bytes\",\"value\":0},"
+            "{\"tags\":{\"metric\":\"table_load_rows\",\"table_id\":\"42\"},\"unit\":\"bytes\",\"value\":0},"
+            "{\"tags\":{\"metric\":\"table_scan_read_bytes\",\"table_id\":\"42\"},\"unit\":\"bytes\",\"value\":0},"
+            "{\"tags\":{\"metric\":\"table_scan_read_rows\",\"table_id\":\"42\"},\"unit\":\"rows\",\"value\":11}]";
     HttpRequest request(_evhttp_req);
     request.add_param("type", "json");
     MetricsAction action(&registry, &mock_send_reply);
