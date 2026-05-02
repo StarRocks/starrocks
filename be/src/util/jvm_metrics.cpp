@@ -34,8 +34,10 @@
 namespace starrocks {
 
 JVMMetrics* JVMMetrics::instance() {
-    static JVMMetrics instance;
-    return &instance;
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new JVMMetrics();
+    return instance;
 }
 
 Status JVMMetrics::init() {

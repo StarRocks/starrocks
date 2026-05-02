@@ -48,8 +48,10 @@ void register_labeled(MetricRegistry* registry, const char* storage_type, SpillM
 } // namespace
 
 SpillMetrics* SpillMetrics::instance() {
-    static SpillMetrics instance;
-    return &instance;
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new SpillMetrics();
+    return instance;
 }
 
 void SpillMetrics::install(MetricRegistry* registry) {

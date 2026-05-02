@@ -25,8 +25,10 @@ static const std::vector<std::string> FILE_FORMATS = {"avro", "csv", "json", "or
 static const std::vector<std::string> SCAN_TYPES = {"insert", "query", "load"};
 
 FileScanMetrics* FileScanMetrics::instance() {
-    static FileScanMetrics instance;
-    return &instance;
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new FileScanMetrics();
+    return instance;
 }
 
 void FileScanMetrics::install(MetricRegistry* registry) {

@@ -159,8 +159,11 @@ public:
 SystemMetrics::SystemMetrics() = default;
 
 SystemMetrics* SystemMetrics::instance() {
-    static SystemMetrics instance;
-    return &instance;
+    // Process-lifetime singleton: IO instrumentation may touch SystemMetrics
+    // before GlobalMetricsRegistry is constructed, then install it into the
+    // registry later. Avoid exit-time destructor ordering against the registry.
+    static auto* instance = new SystemMetrics();
+    return instance;
 }
 
 SystemMetrics::~SystemMetrics() {

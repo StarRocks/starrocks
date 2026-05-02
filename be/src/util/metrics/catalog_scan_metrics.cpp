@@ -17,8 +17,10 @@
 namespace starrocks {
 
 CatalogScanMetrics* CatalogScanMetrics::instance() {
-    static CatalogScanMetrics instance;
-    return &instance;
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new CatalogScanMetrics();
+    return instance;
 }
 
 void CatalogScanMetrics::install(MetricRegistry* registry) {

@@ -154,8 +154,10 @@ void PipelineExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
 }
 
 PipelineExecutorMetrics* PipelineExecutorMetrics::instance() {
-    static PipelineExecutorMetrics instance;
-    return &instance;
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new PipelineExecutorMetrics();
+    return instance;
 }
 
 } // namespace starrocks::pipeline
