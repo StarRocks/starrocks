@@ -351,3 +351,37 @@ select * from test2 where v2 = '1';
 -- result:
 1	1	1
 -- !result
+
+-- name: test_alter_table_char_padding @cloud
+CREATE TABLE test3
+(
+    k1 BIGINT,
+    v1 LARGEINT,
+    v2 CHAR(4)
+)
+ENGINE=olap
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH (k1) BUCKETS 3
+PROPERTIES(
+    "replication_num"="1"
+);
+-- result:
+-- !result
+insert into test3 values (1, 1, 'a');
+-- result:
+-- !result
+select * from test3 where v2 = 'a';
+-- result:
+1	1	a
+-- !result
+alter table test3 modify column v2 CHAR(10);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from test3 where v2 = 'a';
+-- result:
+1	1	a
+-- !result
