@@ -38,6 +38,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "runtime/starrocks_metrics.h"
+#include "storage/storage_metrics.h"
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
@@ -238,44 +239,8 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
 
-    REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
-    REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
-    REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
-    REGISTER_STARROCKS_METRIC(async_delta_writer_task_pending_duration_us);
-
-    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_read_total);
-    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_write_total);
-    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_read_total);
-    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_write_total);
-    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_read_total);
-    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_write_total);
-    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_read_total);
-    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_write_total);
-
-    REGISTER_STARROCKS_METRIC(delta_writer_commit_task_total);
-    REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_task_total);
-    REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
-    REGISTER_STARROCKS_METRIC(delta_writer_pk_preload_duration_us);
-    REGISTER_STARROCKS_METRIC(delta_writer_wait_replica_duration_us);
-    REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
-
-    REGISTER_STARROCKS_METRIC(memtable_flush_total);
-    REGISTER_STARROCKS_METRIC(memtable_finalize_task_total);
-    REGISTER_STARROCKS_METRIC(memtable_finalize_duration_us);
-    REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);
-    REGISTER_STARROCKS_METRIC(memtable_flush_io_time_us);
-    REGISTER_STARROCKS_METRIC(memtable_flush_memory_bytes_total);
-    REGISTER_STARROCKS_METRIC(memtable_flush_disk_bytes_total);
-    REGISTER_STARROCKS_METRIC(segment_flush_total);
-    REGISTER_STARROCKS_METRIC(segment_flush_duration_us);
-    REGISTER_STARROCKS_METRIC(segment_flush_io_time_us);
-    REGISTER_STARROCKS_METRIC(segment_flush_bytes_total);
     REGISTER_STARROCKS_METRIC(segment_file_not_found_total);
 
-    REGISTER_STARROCKS_METRIC(update_rowset_commit_request_total);
-    REGISTER_STARROCKS_METRIC(update_rowset_commit_request_failed);
-    REGISTER_STARROCKS_METRIC(update_rowset_commit_apply_total);
-    REGISTER_STARROCKS_METRIC(update_rowset_commit_apply_duration_us);
     REGISTER_STARROCKS_METRIC(update_primary_index_num);
     REGISTER_STARROCKS_METRIC(update_primary_index_bytes_total);
     REGISTER_STARROCKS_METRIC(update_del_vector_num);
@@ -307,14 +272,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
                               &(fast_metrics->clone_task_intra_node_copy_duration_ms));
 
-    registry->register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
-                              &(fast_metrics->push_requests_success_total));
-    registry->register_metric("push_requests_total", MetricLabels().add("status", "FAIL"),
-                              &(fast_metrics->push_requests_fail_total));
-    REGISTER_STARROCKS_METRIC(push_request_duration_us);
-    REGISTER_STARROCKS_METRIC(push_request_write_bytes);
-    REGISTER_STARROCKS_METRIC(push_request_write_rows);
-
 #define REGISTER_ENGINE_REQUEST_METRIC(type, status, metric)                                                     \
     registry->register_metric("engine_requests_total", MetricLabels().add("type", #type).add("status", #status), \
                               &(fast_metrics->metric))
@@ -336,45 +293,16 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     REGISTER_ENGINE_REQUEST_METRIC(schema_change, failed, schema_change_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(create_rollup, total, create_rollup_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(create_rollup, failed, create_rollup_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(storage_migrate, total, storage_migrate_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(delete, total, delete_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(delete, failed, delete_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(clone, total, clone_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(clone, failed, clone_requests_failed);
 
     REGISTER_ENGINE_REQUEST_METRIC(finish_task, total, finish_task_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(finish_task, failed, finish_task_requests_failed);
 
-    REGISTER_ENGINE_REQUEST_METRIC(base_compaction, total, base_compaction_request_total);
-    REGISTER_ENGINE_REQUEST_METRIC(base_compaction, failed, base_compaction_request_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, total, cumulative_compaction_request_total);
-    REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, failed, cumulative_compaction_request_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(update_compaction, total, update_compaction_request_total);
-    REGISTER_ENGINE_REQUEST_METRIC(update_compaction, failed, update_compaction_request_failed);
-
     REGISTER_ENGINE_REQUEST_METRIC(publish, total, publish_task_request_total);
     REGISTER_ENGINE_REQUEST_METRIC(publish, failed, publish_task_failed_total);
 
 #undef REGISTER_ENGINE_REQUEST_METRIC
-
-    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "base"),
-                              &(fast_metrics->base_compaction_deltas_total));
-    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "cumulative"),
-                              &(fast_metrics->cumulative_compaction_deltas_total));
-    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "base"),
-                              &(fast_metrics->base_compaction_bytes_total));
-    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "cumulative"),
-                              &(fast_metrics->cumulative_compaction_bytes_total));
-    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "update"),
-                              &(fast_metrics->update_compaction_deltas_total));
-    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "update"),
-                              &(fast_metrics->update_compaction_bytes_total));
-    registry->register_metric("update_compaction_outputs_total", MetricLabels().add("type", "update"),
-                              &(fast_metrics->update_compaction_outputs_total));
-    registry->register_metric("update_compaction_outputs_bytes_total", MetricLabels().add("type", "update"),
-                              &(fast_metrics->update_compaction_outputs_bytes_total));
-    registry->register_metric("update_compaction_duration_us", MetricLabels().add("type", "update"),
-                              &(fast_metrics->update_compaction_duration_us));
 
     registry->register_metric("meta_request_total", MetricLabels().add("type", "write"),
                               &(fast_metrics->meta_write_request_total));
@@ -415,23 +343,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     REGISTER_STARROCKS_METRIC(process_fd_num_limit_soft);
     REGISTER_STARROCKS_METRIC(process_fd_num_limit_hard);
 
-    REGISTER_STARROCKS_METRIC(tablet_cumulative_max_compaction_score);
-    REGISTER_STARROCKS_METRIC(tablet_base_max_compaction_score);
-    REGISTER_STARROCKS_METRIC(tablet_update_max_compaction_score);
-    REGISTER_STARROCKS_METRIC(max_tablet_rowset_num);
-    REGISTER_STARROCKS_METRIC(wait_cumulative_compaction_task_num);
-    REGISTER_STARROCKS_METRIC(wait_base_compaction_task_num);
-    REGISTER_STARROCKS_METRIC(running_cumulative_compaction_task_num);
-    REGISTER_STARROCKS_METRIC(running_base_compaction_task_num);
-    REGISTER_STARROCKS_METRIC(running_update_compaction_task_num);
-    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_cost_time_ms);
-    REGISTER_STARROCKS_METRIC(base_compaction_task_cost_time_ms);
-    REGISTER_STARROCKS_METRIC(update_compaction_task_cost_time_ns);
-    REGISTER_STARROCKS_METRIC(base_compaction_task_byte_per_second);
-    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_byte_per_second);
-    REGISTER_STARROCKS_METRIC(update_compaction_task_byte_per_second);
-
-    REGISTER_STARROCKS_METRIC(push_request_write_bytes_per_second);
     REGISTER_STARROCKS_METRIC(query_scan_bytes_per_second);
     REGISTER_STARROCKS_METRIC(max_disk_io_util_percent);
     REGISTER_STARROCKS_METRIC(max_network_send_bytes_rate);
@@ -521,6 +432,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     CatalogScanMetrics::instance()->install(registry);
     SpillMetrics::instance()->install(registry);
     DataCacheMetrics::instance()->install(registry);
+    StorageMetrics::instance()->install(registry);
 
 #ifndef __APPLE__
     if (options.init_jvm_metrics) {

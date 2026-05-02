@@ -29,13 +29,13 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/non_retryable_load_errors.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
 
@@ -343,8 +343,8 @@ Status MemTable::finalize() {
     _chunk.reset();
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
-    StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
-    StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->memtable_finalize_task_total.increment(1);
+    StorageMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
@@ -378,11 +378,11 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, 
     ADD_COUNTER_RELAXED(_stats.flush_memory_size, memory_usage());
     ADD_COUNTER_RELAXED(_stats.flush_disk_size, io_stat.write_bytes);
 
-    StarRocksMetrics::instance()->memtable_flush_total.increment(1);
-    StarRocksMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
-    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(_stats.io_time_ns / 1000);
-    StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(_stats.flush_memory_size);
-    StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(_stats.flush_disk_size);
+    StorageMetrics::instance()->memtable_flush_total.increment(1);
+    StorageMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
+    StorageMetrics::instance()->memtable_flush_io_time_us.increment(_stats.io_time_ns / 1000);
+    StorageMetrics::instance()->memtable_flush_memory_bytes_total.increment(_stats.flush_memory_size);
+    StorageMetrics::instance()->memtable_flush_disk_bytes_total.increment(_stats.flush_disk_size);
     VLOG(2) << "memtable of tablet " << _tablet_id << " flush duration: " << _stats.flush_time_ns / 1000 << "us, "
             << "io time: " << _stats.io_time_ns / 1000 << "us, memory bytes: " << _stats.flush_memory_size
             << ", disk bytes: " << _stats.flush_disk_size;

@@ -53,13 +53,13 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/cumulative_compaction.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
@@ -119,9 +119,9 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
 
     auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
     if (tablet->updates() != nullptr) {
-        StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
-        DeferOp op([&] { StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1); });
+        StorageMetrics::instance()->update_compaction_request_total.increment(1);
+        StorageMetrics::instance()->running_update_compaction_task_num.increment(1);
+        DeferOp op([&] { StorageMetrics::instance()->running_update_compaction_task_num.increment(-1); });
         Status res;
         if (rowset_ids_string.empty()) {
             res = tablet->updates()->compaction(mem_tracker);
@@ -147,7 +147,7 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
             res = tablet->updates()->compaction(mem_tracker, rowset_ids);
         }
         if (!res.ok()) {
-            StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
+            StorageMetrics::instance()->update_compaction_request_failed.increment(1);
             LOG(WARNING) << "failed to perform update compaction. res=" << res.message()
                          << ", tablet=" << tablet->full_name();
             return res;
@@ -185,7 +185,7 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
                     tablet->set_last_cumu_compaction_failure_time(UnixMillis());
                 }
                 if (!res.is_not_found()) {
-                    StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
+                    StorageMetrics::instance()->cumulative_compaction_request_failed.increment(1);
                     LOG(WARNING) << "Fail to vectorized compact tablet=" << tablet->full_name()
                                  << ", err=" << res.to_string();
                 }
@@ -218,7 +218,7 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
             if (!res.ok()) {
                 tablet->set_last_base_compaction_failure_time(UnixMillis());
                 if (!res.is_not_found()) {
-                    StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
+                    StorageMetrics::instance()->base_compaction_request_failed.increment(1);
                     LOG(WARNING) << "failed to init vectorized base compaction. res=" << res.to_string()
                                  << ", tablet=" << tablet->full_name();
                 }

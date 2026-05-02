@@ -26,6 +26,7 @@
 #include "storage/cumulative_compaction.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
@@ -60,7 +61,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
     }
 
     if (_base_compaction) {
-        StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
+        StorageMetrics::instance()->base_compaction_request_total.increment(1);
         if (config::enable_size_tiered_compaction_strategy) {
             if (tablet->force_base_compaction()) {
                 auto compaction_task = tablet->create_compaction_task();
@@ -85,7 +86,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
             if (!res.ok()) {
                 tablet->set_last_base_compaction_failure_time(UnixMillis());
                 if (!res.is_not_found()) {
-                    StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
+                    StorageMetrics::instance()->base_compaction_request_failed.increment(1);
                     LOG(WARNING) << "failed to init base compaction. res=" << res.to_string()
                                  << ", tablet=" << tablet->full_name();
                 }
@@ -94,7 +95,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
         }
         tablet->set_last_base_compaction_failure_time(0);
     } else {
-        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
+        StorageMetrics::instance()->cumulative_compaction_request_total.increment(1);
         if (config::enable_size_tiered_compaction_strategy) {
             if (tablet->need_compaction()) {
                 auto compaction_task = tablet->create_compaction_task();
@@ -119,7 +120,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
                     tablet->set_last_cumu_compaction_failure_time(UnixMillis());
                 }
                 if (!res.is_not_found()) {
-                    StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
+                    StorageMetrics::instance()->cumulative_compaction_request_failed.increment(1);
                     LOG(WARNING) << "Fail to cumulative compact tablet=" << tablet->full_name()
                                  << ", err=" << res.to_string();
                 }

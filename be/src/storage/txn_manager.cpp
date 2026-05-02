@@ -52,6 +52,7 @@
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 
@@ -341,10 +342,10 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
                                          TTransactionId transaction_id, int64_t version, const RowsetSharedPtr& rowset,
                                          uint32_t wait_time) {
     if (tablet->updates() != nullptr) {
-        StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
+        StorageMetrics::instance()->update_rowset_commit_request_total.increment(1);
         auto st = tablet->rowset_commit(version, rowset, wait_time, true, false);
         if (!st.ok()) {
-            StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
+            StorageMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
         }
     } else {
@@ -384,10 +385,10 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
                                int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
                                bool is_double_write) {
     if (tablet->updates() != nullptr) {
-        StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
+        StorageMetrics::instance()->update_rowset_commit_request_total.increment(1);
         auto st = tablet->rowset_commit(version, rowset, wait_time, false, is_double_write);
         if (!st.ok()) {
-            StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
+            StorageMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
         }
     } else {

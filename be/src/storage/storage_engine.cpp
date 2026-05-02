@@ -83,6 +83,7 @@
 #include "storage/rowset/unique_rowset_id_generator.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
@@ -919,7 +920,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
             best_tablet->set_last_cumu_compaction_failure_status(res.code());
         }
         if (!res.is_not_found()) {
-            StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
+            StorageMetrics::instance()->cumulative_compaction_request_failed.increment(1);
             LOG(WARNING) << "Fail to vectorized compact table=" << best_tablet->full_name()
                          << ", err=" << res.to_string();
         }
@@ -957,7 +958,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     if (!res.ok()) {
         best_tablet->set_last_base_compaction_failure_time(UnixMillis());
         if (!res.is_not_found()) {
-            StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
+            StorageMetrics::instance()->base_compaction_request_failed.increment(1);
             LOG(WARNING) << "failed to init vectorized base compaction. res=" << res.to_string()
                          << ", table=" << best_tablet->full_name();
         }
@@ -1010,18 +1011,18 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     Status res;
     int64_t duration_ns = 0;
     {
-        StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
+        StorageMetrics::instance()->update_compaction_request_total.increment(1);
+        StorageMetrics::instance()->running_update_compaction_task_num.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
 
         std::unique_ptr<MemTracker> mem_tracker =
                 std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
-    StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
-    StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1);
+    StorageMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->running_update_compaction_task_num.increment(-1);
     if (!res.ok() && !res.is_already_exist()) {
-        StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
+        StorageMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
                      << ", tablet=" << best_tablet->full_name();
     }

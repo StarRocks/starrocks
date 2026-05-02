@@ -61,6 +61,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
@@ -786,9 +787,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the
         // biggest in history(like peak), but it is really just the value at current moment.
         if (compaction_type == CompactionType::BASE_COMPACTION) {
-            StarRocksMetrics::instance()->tablet_base_max_compaction_score.set_value(highest_score);
+            StorageMetrics::instance()->tablet_base_max_compaction_score.set_value(highest_score);
         } else {
-            StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(highest_score);
+            StorageMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(highest_score);
         }
     }
     return best_tablet;
@@ -887,7 +888,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
         VLOG(2) << "Found the best tablet to compact. "
                 << "compaction_type=update"
                 << " tablet_id=" << best_tablet->tablet_id() << " highest_score=" << highest_score;
-        StarRocksMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
+        StorageMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
     }
     return best_tablet;
 }
@@ -1069,7 +1070,7 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
     LOG(INFO) << "Report all " << tablets_info->size() << " tablets info"
               << ". max_tablet_rowset_num:" << max_tablet_rowset_num << ", tablet_id:" << max_tablet_id
               << ", cost:" << MonotonicMillis() - start_ms << "ms";
-    StarRocksMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
+    StorageMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
     return Status::OK();
 }
 
