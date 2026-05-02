@@ -17,13 +17,16 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockParams;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -222,6 +225,89 @@ public class TestLockInterface {
         Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
         Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
+    }
+
+    /**
+     * Regression: lockTableWithIntensiveDbLock acquires a DB intention lock first
+     * and a table lock second. If the table-lock acquisition throws (deadlock
+     * victim, interrupt, etc.) the helper must release the already-held DB
+     * intention lock; otherwise it leaks an IS / IX lock and blocks subsequent
+     * DB-WRITE operations until the FE restarts.
+     */
+    @Test
+    public void testLockTableWithIntensiveDbLockRollsBackDbLockOnTableLockFailure() {
+        long dbId = 100L;
+        long tableId = 101L;
+        Database database = new Database(dbId, "db_rollback_single");
+
+        // Force the second LockManager.lock call (the table-lock acquisition) to fail.
+        // The first call (DB intention) is allowed to proceed normally so the rollback
+        // path actually has something to release.
+        final int[] callCount = {0};
+        new MockUp<LockManager>() {
+            @Mock
+            public void lock(Invocation inv, long rid, Locker locker, LockType lockType, long timeout)
+                    throws LockException {
+                callCount[0]++;
+                if (callCount[0] == 2) {
+                    throw new NotSupportLockException("simulated table-lock failure");
+                }
+                inv.proceed();
+            }
+        };
+
+        Locker locker = new Locker();
+        Assertions.assertThrows(ErrorReportException.class, () ->
+                locker.lockTableWithIntensiveDbLock(database.getId(), tableId, LockType.WRITE));
+
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        Assertions.assertFalse(lockManager.isOwner(database.getId(), locker, LockType.INTENTION_EXCLUSIVE),
+                "DB intention lock must be released after partial-acquire rollback");
+        Assertions.assertFalse(lockManager.isOwner(tableId, locker, LockType.WRITE),
+                "Table lock must not be held (acquisition failed)");
+    }
+
+    /**
+     * Regression: lockTablesWithIntensiveDbLock loops over multiple table ids.
+     * If the Nth table-lock acquisition fails after earlier ones succeeded, the
+     * helper must release the DB intention lock AND every already-acquired table
+     * lock; otherwise it strands all of them.
+     */
+    @Test
+    public void testLockTablesWithIntensiveDbLockRollsBackAllAcquiredLocksOnNthTableLockFailure() {
+        long dbId = 200L;
+        long tableId1 = 201L;
+        long tableId2 = 202L;
+        Database database = new Database(dbId, "db_rollback_multi");
+
+        // Call sequence: 1 = DB IX, 2 = tableId1 (succeeds), 3 = tableId2 (fails).
+        // The helper sorts the table list, and 201 < 202, so this ordering is
+        // deterministic.
+        final int[] callCount = {0};
+        new MockUp<LockManager>() {
+            @Mock
+            public void lock(Invocation inv, long rid, Locker locker, LockType lockType, long timeout)
+                    throws LockException {
+                callCount[0]++;
+                if (callCount[0] == 3) {
+                    throw new NotSupportLockException("simulated table-lock failure");
+                }
+                inv.proceed();
+            }
+        };
+
+        Locker locker = new Locker();
+        Assertions.assertThrows(ErrorReportException.class, () ->
+                locker.lockTablesWithIntensiveDbLock(database.getId(),
+                        Lists.newArrayList(tableId1, tableId2), LockType.WRITE));
+
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        Assertions.assertFalse(lockManager.isOwner(database.getId(), locker, LockType.INTENTION_EXCLUSIVE),
+                "DB intention lock must be released after partial-acquire rollback");
+        Assertions.assertFalse(lockManager.isOwner(tableId1, locker, LockType.WRITE),
+                "First table lock (acquired before failure) must be released by rollback");
+        Assertions.assertFalse(lockManager.isOwner(tableId2, locker, LockType.WRITE),
+                "Second table lock (acquisition failed) must not be held");
     }
 
     @Test
