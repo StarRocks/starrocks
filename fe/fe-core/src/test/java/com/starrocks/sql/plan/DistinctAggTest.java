@@ -213,4 +213,72 @@ public class DistinctAggTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: abs(1: v1) = 1");
     }
+
+    @Test
+    void testDistinctOrderByDuplicatedConstantAlias() throws Exception {
+        String sql = "select distinct v1, 'Current' as ext_period, 'Current' as int_period from t0 " +
+                "order by ext_period, v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: expr ASC, <slot 1> 1: v1 ASC");
+
+        sql = "select distinct v1, 'Current' as ext_period, 'Current' as int_period from t0 " +
+                "order by ext_period";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: expr ASC");
+
+        sql = "select distinct v1, 'Current' as ext_period, 'Current' as int_period from t0 " +
+                "order by int_period";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: expr ASC");
+
+        sql = "select distinct v1, 'Current' as ext_period, 'Current' as int_period from t0 " +
+                "order by ext_period, int_period, v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: expr ASC, <slot 1> 1: v1 ASC");
+    }
+
+
+    @Test
+    void testDistinctOrderByDuplicatedNumericConstants() throws Exception {
+        String sql = "select distinct v1, 1 as a, 1 as b from t0 order by a, b, v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: expr ASC, <slot 1> 1: v1 ASC");
+    }
+
+    @Test
+    void testDistinctOrderByDuplicatedNonLiteralExprAliases() throws Exception {
+        String sql = "select distinct v1, v1 + 1 as a, v1 + 1 as b from t0 order by a, v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 4> 4: expr ASC, <slot 1> 1: v1 ASC");
+
+        sql = "select distinct v1, concat('Cur', 'rent') as p1, concat('Cur', 'rent') as p2 from t0 " +
+                "order by p1, v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: concat ASC, <slot 1> 1: v1 ASC");
+
+        sql = "select distinct v1, concat('Cur', 'rent') as p1, concat('Cur', 'rent') as p2 from t0 " +
+                "order by p1, v1, p2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: concat ASC, <slot 1> 1: v1 ASC");
+
+        sql = "select distinct v1, v1 + 1 as a, v1 + 1 as b from t0 order by b, v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 4> 4: expr ASC, <slot 1> 1: v1 ASC");
+
+        sql = "select distinct v1, v1 + 1 as a, v1 + 1 as b from t0 order by v1, b";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 1> 1: v1 ASC, <slot 4> 4: expr ASC");
+
+        sql = "select distinct v1, v1 + 1 as a, v1 + 1 as b, v1 + 1 as c from t0 order by c, v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 4> 4: expr ASC, <slot 1> 1: v1 ASC");
+    }
+
+    @Test
+    void testGroupByAndOrderByConstantAliases() throws Exception {
+        String sql = "select 'Current' as p1, 'Current' as p2, count(distinct v1) as cnt from t0 " +
+                "group by p1, p2 order by p1, p2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: expr ASC");
+    }
 }
