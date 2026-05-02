@@ -198,8 +198,7 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
                                                    true /* generate multi outputs*/);
     while (merging_iter->Valid()) {
         const Slice cur_key = merging_iter->key();
-        if (!_seek_range.stop_key.empty() &&
-            options.comparator->Compare(cur_key, Slice(_seek_range.stop_key)) >= 0) {
+        if (!_seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(_seek_range.stop_key)) >= 0) {
             // meet the scan range boundary, quit.
             break;
         }
