@@ -134,17 +134,8 @@ struct fmt::formatter<std::atomic<T>> : fmt::formatter<T> {
 // because fmt::formatter has only two template parameters in most fmt versions.
 // The format_as() overloads above are sufficient and safer.
 
-// However, some external enums (not found by ADL or older fmt versions)
-// still fail. Provide narrow specializations for the ones used with fmt::format.
+// Formatters for thrift enums not covered by be/src/base/format.h.
 namespace fmt {
-template <>
-struct formatter<starrocks::TFileType::type> : formatter<int> {
-  template <typename FormatContext>
-  auto format(starrocks::TFileType::type v, FormatContext& ctx) const {
-    return formatter<int>::format(static_cast<int>(v), ctx);
-  }
-};
-
 template <>
 struct formatter<starrocks::StreamSourceType::type> : formatter<int> {
   template <typename FormatContext>
@@ -153,47 +144,10 @@ struct formatter<starrocks::StreamSourceType::type> : formatter<int> {
   }
 };
 
-// Formatter for thrift enum used in ArrowFunctionCall
-template <>
-struct formatter<starrocks::TFunctionBinaryType::type> : formatter<int> {
-  template <typename FormatContext>
-  auto format(starrocks::TFunctionBinaryType::type v, FormatContext& ctx) const {
-    return formatter<int>::format(static_cast<int>(v), ctx);
-  }
-};
-
-// Formatter for TExprNodeType thrift enum used in expr.cpp
-template <>
-struct formatter<starrocks::TExprNodeType::type> : formatter<int> {
-  template <typename FormatContext>
-  auto format(starrocks::TExprNodeType::type v, FormatContext& ctx) const {
-    return formatter<int>::format(static_cast<int>(v), ctx);
-  }
-};
-
-// Formatter for TStatusCode thrift enum used in compaction_action.cpp
-template <>
-struct formatter<starrocks::TStatusCode::type> : formatter<int> {
-  template <typename FormatContext>
-  auto format(starrocks::TStatusCode::type v, FormatContext& ctx) const {
-    return formatter<int>::format(static_cast<int>(v), ctx);
-  }
-};
-
-// Formatter for MVTaskType thrift enum used in internal_service.cpp
 template <>
 struct formatter<starrocks::MVTaskType::type> : formatter<int> {
   template <typename FormatContext>
   auto format(starrocks::MVTaskType::type v, FormatContext& ctx) const {
-    return formatter<int>::format(static_cast<int>(v), ctx);
-  }
-};
-
-// Formatter for SampleMethod thrift enum used in segment_iterator.cpp
-template <>
-struct formatter<starrocks::SampleMethod::type> : formatter<int> {
-  template <typename FormatContext>
-  auto format(starrocks::SampleMethod::type v, FormatContext& ctx) const {
     return formatter<int>::format(static_cast<int>(v), ctx);
   }
 };

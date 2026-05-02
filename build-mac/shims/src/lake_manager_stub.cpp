@@ -17,6 +17,9 @@
 
 #include <string_view>
 
+// Cache must be complete for unique_ptr<Cache> destructors reached via
+// UpdateManager::~UpdateManager = default.
+#include "base/container/lru_cache.h"
 #include "common/status.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
@@ -91,6 +94,19 @@ Status TabletReader::parse_seek_range(const TabletSchema& /*schema*/,
 }
 
 UpdateManager::~UpdateManager() = default;
+
+// glm_manager.cpp uses dynamic_pointer_cast<lake::Rowset>(...), which needs
+// the full vtable. Defining ~Rowset() and the non-inline virtual overrides
+// here forces emission. Stubs only — lake is disabled on macOS.
+Rowset::~Rowset() = default;
+
+RowsetId Rowset::rowset_id() const {
+    return {};
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    return {};
+}
 
 CompactionScheduler::~CompactionScheduler() = default;
 

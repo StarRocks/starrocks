@@ -29,6 +29,8 @@ const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";
 const std::string Connector::BINLOG = "binlog";
 const std::string Connector::ICEBERG = "iceberg";
+const std::string Connector::BENCHMARK = "benchmark";
+const std::string Connector::CACHE_STATS = "cache_stats";
 
 // Minimal ConnectorManager that returns no connectors on macOS
 ConnectorManager* ConnectorManager::default_instance() {

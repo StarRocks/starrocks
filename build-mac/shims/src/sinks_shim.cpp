@@ -28,7 +28,7 @@ Status HiveTableSink::init(const TDataSink&, RuntimeState*) { return Status::Not
 Status HiveTableSink::prepare(RuntimeState*) { return Status::NotSupported("hive sink not supported on macOS"); }
 Status HiveTableSink::open(RuntimeState*) { return Status::NotSupported("hive sink not supported on macOS"); }
 Status HiveTableSink::send_chunk(RuntimeState*, Chunk*) { return Status::NotSupported("hive sink not supported on macOS"); }
-Status HiveTableSink::close(RuntimeState*, Status) { return Status::OK(); }
+Status HiveTableSink::close(RuntimeState*, const Status&) { return Status::OK(); }
 Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories, const TDataSink&, pipeline::PipelineBuilderContext*) const {
     return Status::NotSupported("hive sink not supported on macOS");
 }
@@ -40,7 +40,7 @@ Status TableFunctionTableSink::init(const TDataSink&, RuntimeState*) { return St
 Status TableFunctionTableSink::prepare(RuntimeState*) { return Status::NotSupported("table function sink not supported on macOS"); }
 Status TableFunctionTableSink::open(RuntimeState*) { return Status::NotSupported("table function sink not supported on macOS"); }
 Status TableFunctionTableSink::send_chunk(RuntimeState*, Chunk*) { return Status::NotSupported("table function sink not supported on macOS"); }
-Status TableFunctionTableSink::close(RuntimeState*, Status) { return Status::OK(); }
+Status TableFunctionTableSink::close(RuntimeState*, const Status&) { return Status::OK(); }
 Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories, const TDataSink&, pipeline::PipelineBuilderContext*) const {
     return Status::NotSupported("table function sink not supported on macOS");
 }
