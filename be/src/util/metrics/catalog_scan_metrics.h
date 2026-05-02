@@ -47,7 +47,7 @@ private:
 
     SingleCatalogMetrics* _get_or_create_metrics(const std::string& catalog_type);
 
-    MetricRegistry* _registry;
+    MetricRegistry* _registry = nullptr;
     std::shared_mutex _mutex;
     std::map<std::string, std::unique_ptr<SingleCatalogMetrics>> _metrics_map;
 };
