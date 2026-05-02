@@ -38,14 +38,18 @@
 namespace starrocks::lake {
 
 Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
-    const std::string& key = iter_ptr->key().to_string();
-    const std::string& value = iter_ptr->value().to_string();
+    // Iterator-owned slices stay valid until iter_ptr->Next(); both the parse
+    // and the equality check below complete before the caller advances the
+    // iterator, so we can avoid the per-key std::string heap allocations that
+    // Slice::to_string() would force on every input row.
+    const Slice key = iter_ptr->key();
+    const Slice value = iter_ptr->value();
     uint64_t max_rss_rowid = iter_ptr->max_rss_rowid();
 
     // Reuse scratch protobuf to avoid allocating/freeing internal storage on every key.
     IndexValuesWithVerPB& index_value_ver = _merge_pb_scratch;
     index_value_ver.Clear();
-    if (!index_value_ver.ParseFromString(value)) {
+    if (!index_value_ver.ParseFromArray(value.data, value.size)) {
         return Status::InternalError("Failed to parse index value ver");
     }
     if (index_value_ver.values_size() == 0) {
@@ -84,7 +88,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
 
     auto version = index_value_ver.values(0).version();
     auto index_value = build_index_value(index_value_ver.values(0));
-    if (_key == key) {
+    if (Slice(_key) == key) {
         if (_index_value_vers.empty()) {
             _max_rss_rowid = max_rss_rowid;
             _index_value_vers.emplace_front(version, index_value);
@@ -137,7 +141,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
         }
     } else {
         RETURN_IF_ERROR(flush());
-        _key = key;
+        _key.assign(key.data, key.size);
         _max_rss_rowid = max_rss_rowid;
         _index_value_vers.emplace_front(version, index_value);
     }
