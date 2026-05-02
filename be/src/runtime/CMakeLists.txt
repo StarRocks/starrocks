@@ -33,6 +33,7 @@ set(RUNTIME_CORE_FILES
     query_statistics.cpp
     record_batch_queue.cpp
     starrocks_metrics.cpp
+    runtime_metrics.cpp
     global_dict/decoder.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp

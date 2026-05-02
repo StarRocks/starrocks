@@ -49,7 +49,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/utils.h"
@@ -111,7 +111,7 @@ static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
 }
 
 LoadChannelMgr::LoadChannelMgr(lake::TabletManager* lake_tablet_manager) : _lake_tablet_manager(lake_tablet_manager) {
-    REGISTER_GAUGE_STARROCKS_METRIC(load_channel_count, [this]() {
+    REGISTER_GAUGE_RUNTIME_METRIC(load_channel_count, [this]() {
         std::lock_guard l(_lock);
         return _load_channels.size();
     });
@@ -148,7 +148,7 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
                             .set_max_queue_size(config::load_channel_rpc_thread_pool_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(60000))
                             .build(&_async_rpc_pool));
-    REGISTER_THREAD_POOL_METRICS(load_channel, _async_rpc_pool.get());
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(load_channel, _async_rpc_pool.get());
     return Status::OK();
 }
 

@@ -37,7 +37,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
@@ -45,7 +45,7 @@ namespace starrocks {
 ResultQueueMgr::ResultQueueMgr() {
     // Each TimedBlockingQueue has a limited size (default 20, by config::max_memory_sink_batch_count),
     // it's not needed to count the actual size of all TimedBlockingQueue.
-    REGISTER_GAUGE_STARROCKS_METRIC(result_block_queue_count, [this]() {
+    REGISTER_GAUGE_RUNTIME_METRIC(result_block_queue_count, [this]() {
         std::lock_guard<std::mutex> l(_lock);
         return _fragment_queue_map.size();
     });

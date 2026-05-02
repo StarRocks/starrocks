@@ -70,8 +70,6 @@ public:
     METRIC_DEFINE_INT_GAUGE(pipe_drivers, MetricUnit::NOUNIT);
 
     // counters
-    METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(fragment_request_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(http_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(http_request_send_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(create_tablet_requests_total, MetricUnit::REQUESTS);
@@ -140,23 +138,6 @@ public:
     METRIC_DEFINE_INT_COUNTER(stream_load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
-    METRICS_DEFINE_THREAD_POOL(merge_commit);
-
-    // Metrics for LoadChannel
-    METRICS_DEFINE_THREAD_POOL(load_channel);
-    // The number that LoadChannel#add_chunks is accessed
-    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_total, MetricUnit::OPERATIONS);
-    // The number that LoadChannel#add_chunks eos is accessed
-    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_eos_total, MetricUnit::OPERATIONS);
-    // Accumulated time that LoadChannel#add_chunks costs. The time can be divided into
-    // waiting memtable, waiting async delta writer, waiting replicas, and others.
-    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_duration_us, MetricUnit::MICROSECONDS);
-    // Accumulated time that waiting memtable costs in LoadChannel#add_chunks
-    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_memtable_duration_us, MetricUnit::MICROSECONDS);
-    // Accumulated time that waiting async delta writer costs in LoadChannel#add_chunks
-    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_writer_duration_us, MetricUnit::MICROSECONDS);
-    // Accumulated time that waiting replicas costs in LoadChannel#add_chunks
-    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_replica_duration_us, MetricUnit::MICROSECONDS);
 
     // Shared-data combined_txn_log collection dispatch counters. Each eos on a
     // LakeTabletsChannel that enters the collection path bumps exactly one of
@@ -213,21 +194,10 @@ public:
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
 
     // Gauges
-    METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(process_thread_num, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(process_fd_num_used, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(process_fd_num_limit_soft, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(process_fd_num_limit_hard, MetricUnit::NOUNIT);
     IntGaugeMetricsMap disks_total_capacity;
     IntGaugeMetricsMap disks_avail_capacity;
     IntGaugeMetricsMap disks_data_used_capacity;
     IntGaugeMetricsMap disks_state;
-
-    // The following metrics will be calculated
-    // by metric calculator
-    METRIC_DEFINE_INT_GAUGE(max_disk_io_util_percent, MetricUnit::PERCENT);
-    METRIC_DEFINE_INT_GAUGE(max_network_send_bytes_rate, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(max_network_receive_bytes_rate, MetricUnit::BYTES);
 
     // Metrics related with BlockManager
     METRIC_DEFINE_INT_COUNTER(readable_blocks_total, MetricUnit::BLOCKS);
@@ -243,19 +213,6 @@ public:
     // Size of some global containers
     METRIC_DEFINE_UINT_GAUGE(rowset_count_generated_and_in_use, MetricUnit::ROWSETS);
     METRIC_DEFINE_UINT_GAUGE(unused_rowsets_count, MetricUnit::ROWSETS);
-    METRIC_DEFINE_UINT_GAUGE(broker_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(data_stream_receiver_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(fragment_endpoint_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(active_scan_context_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(plan_fragment_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(load_channel_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(result_buffer_block_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(result_block_queue_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(routine_load_task_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(small_file_cache_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(stream_load_pipe_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(brpc_endpoint_stub_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);
 
     // thread pool metrics
     METRICS_DEFINE_THREAD_POOL(publish_version);
@@ -269,19 +226,11 @@ public:
     METRICS_DEFINE_THREAD_POOL(pk_index_compaction);
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
-    METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
-    METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
-    METRICS_DEFINE_THREAD_POOL(lake_vi_build);
-    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
-    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
-    METRICS_DEFINE_THREAD_POOL(lake_partial_update);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
     METRICS_DEFINE_THREAD_POOL(pip_prepare);
     METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
-
-    METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
     // agent server thread pools
     METRICS_DEFINE_THREAD_POOL(drop);
@@ -303,9 +252,6 @@ public:
     METRICS_DEFINE_THREAD_POOL(clone);
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
-    METRICS_DEFINE_THREAD_POOL(automatic_partition);
-
-    METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
 
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);

@@ -37,6 +37,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__
@@ -52,7 +53,7 @@ namespace starrocks {
 
 namespace {
 
-const char* const kStarRocksMetricsHookName = "starrocks_metrics";
+const char* const kRuntimeMetricsHookName = "runtime_metrics";
 
 bool is_known_disk_device_name(const std::string& dev) {
     for (int i = 0; i < DiskInfo::num_disks(); ++i) {
@@ -144,7 +145,7 @@ bool prepare_system_metrics_inputs(const BackendMetricsInitOptions& options, std
     return true;
 }
 
-void update_process_thread_num(StarRocksMetrics* fast_metrics) {
+void update_process_thread_num(RuntimeMetrics* runtime_metrics) {
     int64_t pid = getpid();
     std::stringstream ss;
     ss << "/proc/" << pid << "/task/";
@@ -156,14 +157,14 @@ void update_process_thread_num(StarRocksMetrics* fast_metrics) {
     });
     if (!st.ok()) {
         LOG(WARNING) << "failed to count thread num from: " << ss.str();
-        fast_metrics->process_thread_num.set_value(0);
+        runtime_metrics->process_thread_num.set_value(0);
         return;
     }
 
-    fast_metrics->process_thread_num.set_value(count);
+    runtime_metrics->process_thread_num.set_value(count);
 }
 
-void update_process_fd_num(StarRocksMetrics* fast_metrics) {
+void update_process_fd_num(RuntimeMetrics* runtime_metrics) {
     int64_t pid = getpid();
 
     std::stringstream ss;
@@ -175,10 +176,10 @@ void update_process_fd_num(StarRocksMetrics* fast_metrics) {
     });
     if (!st.ok()) {
         LOG(WARNING) << "failed to count fd from: " << ss.str();
-        fast_metrics->process_fd_num_used.set_value(0);
+        runtime_metrics->process_fd_num_used.set_value(0);
         return;
     }
-    fast_metrics->process_fd_num_used.set_value(count);
+    runtime_metrics->process_fd_num_used.set_value(count);
 
     std::stringstream ss2;
     ss2 << "/proc/" << pid << "/limits";
@@ -195,8 +196,8 @@ void update_process_fd_num(StarRocksMetrics* fast_metrics) {
         memset(values, 0, sizeof(values));
         int num = sscanf(line_ptr, "Max open files %" PRId64 " %" PRId64, &values[0], &values[1]);
         if (num == 2) {
-            fast_metrics->process_fd_num_limit_soft.set_value(values[0]);
-            fast_metrics->process_fd_num_limit_hard.set_value(values[1]);
+            runtime_metrics->process_fd_num_limit_soft.set_value(values[0]);
+            runtime_metrics->process_fd_num_limit_hard.set_value(values[1]);
             break;
         }
     }
@@ -211,9 +212,9 @@ void update_process_fd_num(StarRocksMetrics* fast_metrics) {
     fclose(fp);
 }
 
-void update_starrocks_metrics(StarRocksMetrics* fast_metrics) {
-    update_process_thread_num(fast_metrics);
-    update_process_fd_num(fast_metrics);
+void update_runtime_metrics(RuntimeMetrics* runtime_metrics) {
+    update_process_thread_num(runtime_metrics);
+    update_process_fd_num(runtime_metrics);
 }
 
 void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_metrics) {
@@ -221,19 +222,10 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
 
 #define REGISTER_STARROCKS_METRIC(name) registry->register_metric(#name, &(fast_metrics->name))
 
-    REGISTER_STARROCKS_METRIC(fragment_requests_total);
-    REGISTER_STARROCKS_METRIC(fragment_request_duration_us);
     REGISTER_STARROCKS_METRIC(http_requests_total);
     REGISTER_STARROCKS_METRIC(http_request_send_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
-
-    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_total);
-    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_eos_total);
-    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_duration_us);
-    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_memtable_duration_us);
-    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
-    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_replica_duration_us);
 
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
@@ -337,18 +329,7 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     registry->register_metric("load_rows", &(fast_metrics->load_rows_total));
     registry->register_metric("load_bytes", &(fast_metrics->load_bytes_total));
 
-    REGISTER_STARROCKS_METRIC(memory_pool_bytes_total);
-    REGISTER_STARROCKS_METRIC(process_thread_num);
-    REGISTER_STARROCKS_METRIC(process_fd_num_used);
-    REGISTER_STARROCKS_METRIC(process_fd_num_limit_soft);
-    REGISTER_STARROCKS_METRIC(process_fd_num_limit_hard);
-
     REGISTER_STARROCKS_METRIC(query_scan_bytes_per_second);
-    REGISTER_STARROCKS_METRIC(max_disk_io_util_percent);
-    REGISTER_STARROCKS_METRIC(max_network_send_bytes_rate);
-    REGISTER_STARROCKS_METRIC(max_network_receive_bytes_rate);
-
-    registry->register_hook(kStarRocksMetricsHookName, [fast_metrics] { update_starrocks_metrics(fast_metrics); });
 
     REGISTER_STARROCKS_METRIC(readable_blocks_total);
     REGISTER_STARROCKS_METRIC(writable_blocks_total);
@@ -359,8 +340,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     REGISTER_STARROCKS_METRIC(disk_sync_total);
     REGISTER_STARROCKS_METRIC(blocks_open_reading);
     REGISTER_STARROCKS_METRIC(blocks_open_writing);
-
-    REGISTER_STARROCKS_METRIC(exec_runtime_memory_size);
 
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
@@ -414,6 +393,9 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     auto* registry = process_metrics_registry->root_registry();
     registry->set_collect_hook_enabled(options.collect_hook_enabled);
     install_starrocks_metrics(registry, fast_metrics);
+    auto* runtime_metrics = RuntimeMetrics::instance();
+    runtime_metrics->install(registry);
+    registry->register_hook(kRuntimeMetricsHookName, [runtime_metrics] { update_runtime_metrics(runtime_metrics); });
 
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;

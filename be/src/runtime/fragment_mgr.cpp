@@ -70,8 +70,8 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/starrocks_metrics.h"
 #include "types/datetime_value.h"
 #include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
@@ -220,8 +220,8 @@ Status FragmentExecState::execute() {
                       strings::Substitute("Fail to open fragment $0", print_id(_fragment_instance_id)));
         _executor.close();
     }
-    StarRocksMetrics::instance()->fragment_requests_total.increment(1);
-    StarRocksMetrics::instance()->fragment_request_duration_us.increment(duration_ns / 1000);
+    RuntimeMetrics::instance()->fragment_requests_total.increment(1);
+    RuntimeMetrics::instance()->fragment_request_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
@@ -355,7 +355,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
 FragmentMgr::FragmentMgr(ExecEnv* exec_env) : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
     Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
-    REGISTER_GAUGE_STARROCKS_METRIC(plan_fragment_count, [this]() {
+    REGISTER_GAUGE_RUNTIME_METRIC(plan_fragment_count, [this]() {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();
     });

@@ -53,7 +53,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -265,9 +265,9 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     }
 
     int64_t total_time_us = watch.elapsed_time() / 1000;
-    StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
-    StarRocksMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
-    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
+    RuntimeMetrics::instance()->load_channel_add_chunks_total.increment(1);
+    RuntimeMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
+    RuntimeMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
 
     report_profile(response, config::pipeline_print_profile);
     _check_and_log_timeout_rpc("tablet writer add chunk", total_time_us / 1000, timeout_ms);

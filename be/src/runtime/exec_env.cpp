@@ -94,6 +94,7 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/small_file_mgr.h"
 #include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
@@ -485,7 +486,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(automatic_partition_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
-    REGISTER_THREAD_POOL_METRICS(automatic_partition, _automatic_partition_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(automatic_partition, _automatic_partition_pool);
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads == 0) {
@@ -532,7 +533,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(0)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_load_rpc_pool));
-    REGISTER_GAUGE_STARROCKS_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads)
+    REGISTER_GAUGE_RUNTIME_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads)
 
     RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache") // thread pool for dictionary cache Sink
                             .set_min_threads(1)
@@ -701,7 +702,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
     max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
@@ -713,7 +714,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
                             .build(&_pk_index_execution_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
     max_thread_count = config::pk_index_memtable_flush_threadpool_max_threads;
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores() / 2;
@@ -723,7 +724,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_memtable_flush_threadpool_size)
                             .build(&_pk_index_memtable_flush_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
     max_thread_count = config::lake_partial_update_thread_pool_max_threads;
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores() / 2;
@@ -733,7 +734,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::lake_partial_update_thread_pool_queue_size)
                             .build(&_lake_partial_update_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(lake_partial_update, _lake_partial_update_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(lake_partial_update, _lake_partial_update_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -773,7 +774,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, (int)config::lake_metadata_fetch_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_lake_metadata_fetch_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
 
     {
         // Adaptive pool sizing: pool = budget / omp_threads,
@@ -790,7 +791,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                                 .set_max_queue_size(std::numeric_limits<int>::max())
                                 .build(&_lake_vector_index_build_thread_pool));
     }
-    REGISTER_THREAD_POOL_METRICS(lake_vi_build, _lake_vector_index_build_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(lake_vi_build, _lake_vector_index_build_thread_pool);
 
     _agent_server = new AgentServer(this, false);
     RETURN_IF_ERROR(_agent_server->init());

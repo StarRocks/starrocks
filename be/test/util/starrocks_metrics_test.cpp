@@ -42,6 +42,7 @@
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
+#include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "storage/storage_metrics.h"
 #include "util/global_metrics_registry.h"
@@ -138,18 +139,19 @@ private:
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto instance = StarRocksMetrics::instance();
+    auto runtime_metrics = RuntimeMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
     auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
     // check metric
     {
-        instance->fragment_requests_total.increment(12);
+        runtime_metrics->fragment_requests_total.increment(12);
         auto metric = metrics->get_metric("fragment_requests_total");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("12", metric->to_string().c_str());
     }
     {
-        instance->fragment_request_duration_us.increment(101);
+        runtime_metrics->fragment_request_duration_us.increment(101);
         auto metric = metrics->get_metric("fragment_request_duration_us");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("101", metric->to_string().c_str());
@@ -299,7 +301,7 @@ TEST_F(StarRocksMetricsTest, Normal) {
     }
     // Gauge
     {
-        instance->memory_pool_bytes_total.increment(40);
+        runtime_metrics->memory_pool_bytes_total.increment(40);
         auto metric = metrics->get_metric("memory_pool_bytes_total");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("40", metric->to_string().c_str());

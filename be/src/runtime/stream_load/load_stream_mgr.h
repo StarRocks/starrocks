@@ -39,7 +39,7 @@
 #include <unordered_map>
 
 #include "base/uid_util.h" // for std::hash for UniqueId
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_pipe.h" // for StreamLoadPipe
 #include "util/global_metrics_registry.h"
 
@@ -51,7 +51,7 @@ public:
     LoadStreamMgr() {
         // Each StreamLoadPipe has a limited buffer size (default 1M), it's not needed to count the
         // actual size of all StreamLoadPipe.
-        REGISTER_GAUGE_STARROCKS_METRIC(stream_load_pipe_count, [this]() {
+        REGISTER_GAUGE_RUNTIME_METRIC(stream_load_pipe_count, [this]() {
             std::lock_guard<std::mutex> l(_lock);
             return _stream_map.size();
         });

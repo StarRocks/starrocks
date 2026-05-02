@@ -45,6 +45,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -53,7 +54,7 @@
 namespace starrocks {
 
 Status RoutineLoadTaskExecutor::init() {
-    REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
+    REGISTER_GAUGE_RUNTIME_METRIC(routine_load_task_count, [this]() {
         std::lock_guard<std::mutex> l(_lock);
         return _task_map.size();
     })
