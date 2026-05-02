@@ -14,29 +14,28 @@
 
 #pragma once
 
-#include <cstdint>
 #include <string>
-
-#include "common/metrics/process_metrics_registry.h"
+#include <vector>
 
 namespace starrocks {
 
-class GlobalMetricsRegistry {
+class ProcessMetricsRegistry;
+class StarRocksMetrics;
+
+struct BackendMetricsInitOptions {
+    std::vector<std::string> storage_paths;
+    bool collect_hook_enabled = true;
+    bool init_system_metrics = false;
+    bool init_jvm_metrics = false;
+    bool bind_ipv6 = false;
+};
+
+class BackendMetricsInitializer {
 public:
-    static GlobalMetricsRegistry* instance();
+    static BackendMetricsInitOptions from_config(std::vector<std::string> storage_paths);
 
-    ProcessMetricsRegistry* process_metrics_registry() { return &_process_metrics_registry; }
-    MetricRegistry* metrics() { return _process_metrics_registry.root_registry(); }
-    TableMetricsManager* table_metrics_mgr() { return _process_metrics_registry.table_metrics_mgr(); }
-    TableMetricsPtr table_metrics(uint64_t table_id) { return _process_metrics_registry.table_metrics(table_id); }
-
-private:
-    GlobalMetricsRegistry();
-
-private:
-    static const std::string _s_registry_name;
-
-    ProcessMetricsRegistry _process_metrics_registry;
+    static void initialize(ProcessMetricsRegistry* process_metrics_registry, StarRocksMetrics* fast_metrics,
+                           const BackendMetricsInitOptions& options);
 };
 
 } // namespace starrocks

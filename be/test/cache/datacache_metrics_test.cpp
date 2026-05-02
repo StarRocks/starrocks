@@ -16,10 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <mutex>
+
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
 #include "runtime/starrocks_metrics.h"
+#include "service/backend_metrics_initializer.h"
 #include "util/global_metrics_registry.h"
 
 #ifdef WITH_STARCACHE
@@ -29,13 +32,29 @@
 
 namespace starrocks {
 
+namespace {
+
+void init_backend_metrics_for_test() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        BackendMetricsInitOptions options;
+        options.collect_hook_enabled = true;
+        options.init_system_metrics = false;
+        options.init_jvm_metrics = false;
+        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(),
+                                              StarRocksMetrics::instance(), options);
+    });
+}
+
+} // namespace
+
 class DataCacheMetricsTest : public ::testing::Test {
 public:
     DataCacheMetricsTest() = default;
     ~DataCacheMetricsTest() override = default;
 
 protected:
-    void SetUp() override {}
+    void SetUp() override { init_backend_metrics_for_test(); }
 
     void TearDown() override {}
 };
