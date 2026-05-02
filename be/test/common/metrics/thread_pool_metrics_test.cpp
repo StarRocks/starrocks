@@ -24,7 +24,11 @@ namespace starrocks {
 TEST(ThreadPoolMetricGroupTest, RegisterAndUpdate) {
     MetricRegistry registry("test");
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_TRUE(ThreadPoolBuilder("metric_test").set_min_threads(1).set_max_threads(2).set_max_queue_size(8).build(&pool)
+    ASSERT_TRUE(ThreadPoolBuilder("metric_test")
+                        .set_min_threads(1)
+                        .set_max_threads(2)
+                        .set_max_queue_size(8)
+                        .build(&pool)
                         .ok());
 
     ThreadPoolMetricGroup metrics;

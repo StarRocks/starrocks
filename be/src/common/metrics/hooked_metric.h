@@ -25,8 +25,8 @@ template <typename Metric, typename UpdateFunc>
 bool register_hooked_metric(MetricRegistry* registry, const std::string& name, Metric* metric,
                             UpdateFunc&& update_func) {
     const bool metric_registered = registry->register_metric(name, metric);
-    const bool hook_registered = registry->register_hook(
-            name, [metric, update_func = std::forward<UpdateFunc>(update_func)]() mutable {
+    const bool hook_registered =
+            registry->register_hook(name, [metric, update_func = std::forward<UpdateFunc>(update_func)]() mutable {
                 metric->set_value(update_func());
             });
     return metric_registered && hook_registered;
