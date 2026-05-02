@@ -121,7 +121,7 @@ StarRocks v2.0 クラスタをアップグレードする前に、次の BE 設�
 3. BE ノードを起動します。
 
    ```Bash
-   sh bin/start_be.sh --daemon
+   ./bin/start_be.sh --daemon
    ```
 
 4. BE ノードが正常に起動したかどうかを確認します。
@@ -156,7 +156,7 @@ StarRocks v2.0 クラスタをアップグレードする前に、次の BE 設�
 3. CN ノードを起動します。
 
    ```Bash
-   sh bin/start_cn.sh --daemon
+   ./bin/start_cn.sh --daemon
    ```
 
 4. CN ノードが正常に起動したかどうかを確認します。
@@ -193,7 +193,7 @@ StarRocks v2.0 クラスタをアップグレードする前に、次の BE 設�
 3. FE ノードを起動します。
 
    ```Bash
-   sh bin/start_fe.sh --daemon
+   ./bin/start_fe.sh --daemon
    ```
 
 4. FE ノードが正常に起動したかどうかを確認します。
