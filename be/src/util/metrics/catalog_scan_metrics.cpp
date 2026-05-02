@@ -16,11 +16,28 @@
 
 namespace starrocks {
 
-CatalogScanMetrics::CatalogScanMetrics(MetricRegistry* registry) : _registry(registry) {}
+CatalogScanMetrics* CatalogScanMetrics::instance() {
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new CatalogScanMetrics();
+    return instance;
+}
+
+void CatalogScanMetrics::install(MetricRegistry* registry) {
+    std::unique_lock lock(_mutex);
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        return;
+    }
+    _registry = registry;
+}
 
 CatalogScanMetrics::SingleCatalogMetrics* CatalogScanMetrics::_get_or_create_metrics(const std::string& catalog_type) {
     {
         std::shared_lock lock(_mutex);
+        if (_registry == nullptr) {
+            return nullptr;
+        }
         auto it = _metrics_map.find(catalog_type);
         if (it != _metrics_map.end()) {
             return it->second.get();
@@ -56,19 +73,27 @@ CatalogScanMetrics::SingleCatalogMetrics* CatalogScanMetrics::_get_or_create_met
 }
 
 void CatalogScanMetrics::update_scan_bytes(const std::string& catalog_type, int64_t bytes) {
-    _get_or_create_metrics(catalog_type)->scan_bytes->increment(bytes);
+    if (auto* metrics = _get_or_create_metrics(catalog_type); metrics != nullptr) {
+        metrics->scan_bytes->increment(bytes);
+    }
 }
 
 void CatalogScanMetrics::update_scan_rows(const std::string& catalog_type, int64_t rows) {
-    _get_or_create_metrics(catalog_type)->scan_rows->increment(rows);
+    if (auto* metrics = _get_or_create_metrics(catalog_type); metrics != nullptr) {
+        metrics->scan_rows->increment(rows);
+    }
 }
 
 void CatalogScanMetrics::update_files_scan_bytes_read(const std::string& catalog_type, int64_t bytes) {
-    _get_or_create_metrics(catalog_type)->files_scan_bytes_read->increment(bytes);
+    if (auto* metrics = _get_or_create_metrics(catalog_type); metrics != nullptr) {
+        metrics->files_scan_bytes_read->increment(bytes);
+    }
 }
 
 void CatalogScanMetrics::update_files_scan_rows_return(const std::string& catalog_type, int64_t rows) {
-    _get_or_create_metrics(catalog_type)->files_scan_rows_return->increment(rows);
+    if (auto* metrics = _get_or_create_metrics(catalog_type); metrics != nullptr) {
+        metrics->files_scan_rows_return->increment(rows);
+    }
 }
 
 } // namespace starrocks

@@ -35,10 +35,15 @@ public:
         std::unique_ptr<IntCounter> read_io_duration_ns_total;
     };
 
-    SpillMetrics(MetricRegistry* registry);
+    SpillMetrics() = default;
+    explicit SpillMetrics(MetricRegistry* registry) { install(registry); }
     ~SpillMetrics() = default;
 
-    LabeledCounters* get(bool is_remote) { return is_remote ? &_remote : &_local; }
+    static SpillMetrics* instance();
+
+    void install(MetricRegistry* registry);
+
+    LabeledCounters* get(bool is_remote) { return _registry == nullptr ? nullptr : (is_remote ? &_remote : &_local); }
 
     IntGauge* local_disk_bytes_used() { return _local_disk_bytes_used.get(); }
     IntGauge* remote_disk_bytes_used() { return _remote_disk_bytes_used.get(); }
@@ -48,6 +53,7 @@ private:
     LabeledCounters _remote;
     std::unique_ptr<IntGauge> _local_disk_bytes_used;
     std::unique_ptr<IntGauge> _remote_disk_bytes_used;
+    MetricRegistry* _registry = nullptr;
 };
 
 } // namespace starrocks

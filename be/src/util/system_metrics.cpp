@@ -158,6 +158,14 @@ public:
 
 SystemMetrics::SystemMetrics() = default;
 
+SystemMetrics* SystemMetrics::instance() {
+    // Process-lifetime singleton: IO instrumentation may touch SystemMetrics
+    // before GlobalMetricsRegistry is constructed, then install it into the
+    // registry later. Avoid exit-time destructor ordering against the registry.
+    static auto* instance = new SystemMetrics();
+    return instance;
+}
+
 SystemMetrics::~SystemMetrics() {
     // we must deregister us from registry
     if (_registry != nullptr) {
@@ -183,7 +191,10 @@ SystemMetrics::~SystemMetrics() {
 
 void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string>& disk_devices,
                             const std::vector<std::string>& network_interfaces) {
-    DCHECK(_registry == nullptr);
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        return;
+    }
     if (!registry->register_hook(_s_hook_name, [this] { update(); })) {
         return;
     }

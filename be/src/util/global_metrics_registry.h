@@ -15,24 +15,23 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "common/metrics/process_metrics_registry.h"
-#include "exec/pipeline/pipeline_metrics.h"
-#ifndef __APPLE__
-#include "util/jvm_metrics.h"
-#endif
-#include "util/metrics/catalog_scan_metrics.h"
-#include "util/metrics/file_scan_metrics.h"
-#include "util/metrics/spill_metrics.h"
-#include "util/system_metrics.h"
 
 namespace starrocks {
 
 class StarRocksMetrics;
+class SystemMetrics;
+class FileScanMetrics;
+class CatalogScanMetrics;
+class SpillMetrics;
+
+namespace pipeline {
+struct PipelineExecutorMetrics;
+} // namespace pipeline
 
 class GlobalMetricsRegistry {
 public:
@@ -46,13 +45,13 @@ public:
 
     ProcessMetricsRegistry* process_metrics_registry() { return &_process_metrics_registry; }
     MetricRegistry* metrics() { return _process_metrics_registry.root_registry(); }
-    SystemMetrics* system_metrics() { return &_system_metrics; }
+    SystemMetrics* system_metrics();
     TableMetricsManager* table_metrics_mgr() { return _process_metrics_registry.table_metrics_mgr(); }
     TableMetricsPtr table_metrics(uint64_t table_id) { return _process_metrics_registry.table_metrics(table_id); }
-    FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
-    CatalogScanMetrics* catalog_scan_metrics() { return _catalog_scan_metrics.get(); }
-    SpillMetrics* spill_metrics() { return _spill_metrics.get(); }
-    pipeline::PipelineExecutorMetrics* pipeline_executor_metrics() { return &_pipeline_executor_metrics; }
+    FileScanMetrics* file_scan_metrics();
+    CatalogScanMetrics* catalog_scan_metrics();
+    SpillMetrics* spill_metrics();
+    pipeline::PipelineExecutorMetrics* pipeline_executor_metrics();
 
 private:
     explicit GlobalMetricsRegistry(StarRocksMetrics* fast_metrics);
@@ -67,14 +66,6 @@ private:
 
     StarRocksMetrics* _fast_metrics;
     ProcessMetricsRegistry _process_metrics_registry;
-    SystemMetrics _system_metrics;
-#ifndef __APPLE__
-    JVMMetrics _jvm_metrics;
-#endif
-    std::unique_ptr<FileScanMetrics> _file_scan_metrics;
-    std::unique_ptr<CatalogScanMetrics> _catalog_scan_metrics;
-    std::unique_ptr<SpillMetrics> _spill_metrics;
-    pipeline::PipelineExecutorMetrics _pipeline_executor_metrics;
 };
 
 } // namespace starrocks

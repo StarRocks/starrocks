@@ -5,13 +5,11 @@ be/src/agent/publish_version.cpp
 be/src/agent/task_worker_pool.cpp
 be/src/cache/datacache_metrics.cpp
 be/src/cache/mem_cache/page_cache.cpp
-be/src/connector/file_connector.cpp
 be/src/connector/lake_connector.cpp
 be/src/exec/data_sinks/tablet_sink.cpp
 be/src/exec/pipeline/exec_state_reporter.cpp
 be/src/exec/pipeline/pipeline_driver.cpp
 be/src/exec/pipeline/pipeline_driver_executor.cpp
-be/src/exec/pipeline/pipeline_metrics.cpp
 be/src/exec/pipeline/scan/olap_chunk_source.cpp
 be/src/exec/schema_scanner/schema_be_compactions_scanner.cpp
 be/src/exec/schema_scanner/schema_be_configs_scanner.cpp
@@ -26,7 +24,6 @@ be/src/fs/key_cache.cpp
 be/src/http/action/compaction_action.cpp
 be/src/http/action/stream_load.cpp
 be/src/http/action/transaction_stream_load.cpp
-be/src/io/io_profiler.cpp
 be/src/runtime/broker_mgr.cpp
 be/src/runtime/data_stream_mgr.cpp
 be/src/runtime/exec_env.cpp

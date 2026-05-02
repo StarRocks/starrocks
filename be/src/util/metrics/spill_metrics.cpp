@@ -47,7 +47,19 @@ void register_labeled(MetricRegistry* registry, const char* storage_type, SpillM
 
 } // namespace
 
-SpillMetrics::SpillMetrics(MetricRegistry* registry) {
+SpillMetrics* SpillMetrics::instance() {
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new SpillMetrics();
+    return instance;
+}
+
+void SpillMetrics::install(MetricRegistry* registry) {
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        return;
+    }
+    _registry = registry;
     _local_disk_bytes_used = std::make_unique<IntGauge>(MetricUnit::BYTES);
     registry->register_metric("spill_disk_bytes_used", MetricLabels().add("storage_type", "local"),
                               _local_disk_bytes_used.get());

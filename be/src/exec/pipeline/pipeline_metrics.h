@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstdint>
 #include <mutex>
+#include <string>
+#include <vector>
 
 #include "base/metrics.h"
 #include "gen_cpp/InternalService_types.h"
@@ -46,8 +50,21 @@ struct ScanExecutorMetrics {
     void register_all_metrics(MetricRegistry* registry, const std::string& prefix);
 };
 
+struct ThreadPoolMetrics {
+    METRIC_DEFINE_UINT_GAUGE(threadpool_size, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(executed_tasks_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(pending_time_ns_total, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_UINT_GAUGE(execute_time_ns_total, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_UINT_GAUGE(queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(running_threads, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(active_threads, MetricUnit::NOUNIT);
+
+    void register_all_metrics(MetricRegistry* registry, const std::string& prefix);
+    void update(const std::vector<ThreadPool*>& thread_pools);
+};
+
 struct ExecStateReporterMetrics {
-    void register_all_metrics();
+    void register_all_metrics(MetricRegistry* registry);
 
     void monitor_reporter(ThreadPool* thread_pool) {
         std::lock_guard guard(_mutex);
@@ -69,6 +86,8 @@ struct ExecStateReporterMetrics {
     }
 
 private:
+    void _update();
+
     void _remove_thread_pool_unlocked(ThreadPool* thread_pool, std::vector<ThreadPool*>* pools) {
         auto it = std::find(pools->begin(), pools->end(), thread_pool);
         if (it != pools->end()) {
@@ -79,6 +98,9 @@ private:
     std::mutex _mutex;
     std::vector<ThreadPool*> _reporter_thr_pools;
     std::vector<ThreadPool*> _priority_reporter_thr_pools;
+    ThreadPoolMetrics _reporter_metrics;
+    ThreadPoolMetrics _priority_reporter_metrics;
+    MetricRegistry* _registry = nullptr;
 };
 
 struct DriverQueueMetrics {
@@ -101,6 +123,8 @@ struct DriverExecutorMetrics {
 
 struct PipelineExecutorMetrics {
 public:
+    static PipelineExecutorMetrics* instance();
+
     PollerMetrics poller_metrics;
     DriverQueueMetrics driver_queue_metrics;
     DriverExecutorMetrics driver_executor_metrics;
@@ -119,6 +143,9 @@ public:
     ExecStateReporterMetrics* get_exec_state_reporter_metrics() { return &exec_state_reporter_metrics; }
 
     void register_all_metrics(MetricRegistry* registry);
+
+private:
+    MetricRegistry* _registry = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks
