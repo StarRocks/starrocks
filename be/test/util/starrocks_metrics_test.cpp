@@ -43,6 +43,7 @@
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
 #include "service/backend_metrics_initializer.h"
+#include "storage/storage_metrics.h"
 #include "util/global_metrics_registry.h"
 #include "util/metrics/catalog_scan_metrics.h"
 
@@ -137,6 +138,7 @@ private:
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto instance = StarRocksMetrics::instance();
+    auto storage_metrics = StorageMetrics::instance();
     auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
     // check metric
@@ -177,31 +179,31 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("105", metric->to_string().c_str());
     }
     {
-        instance->push_requests_success_total.increment(106);
+        storage_metrics->push_requests_success_total.increment(106);
         auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("106", metric->to_string().c_str());
     }
     {
-        instance->push_requests_fail_total.increment(107);
+        storage_metrics->push_requests_fail_total.increment(107);
         auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "FAIL"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("107", metric->to_string().c_str());
     }
     {
-        instance->push_request_duration_us.increment(108);
+        storage_metrics->push_request_duration_us.increment(108);
         auto metric = metrics->get_metric("push_request_duration_us");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("108", metric->to_string().c_str());
     }
     {
-        instance->push_request_write_bytes.increment(109);
+        storage_metrics->push_request_write_bytes.increment(109);
         auto metric = metrics->get_metric("push_request_write_bytes");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("109", metric->to_string().c_str());
     }
     {
-        instance->push_request_write_rows.increment(110);
+        storage_metrics->push_request_write_rows.increment(110);
         auto metric = metrics->get_metric("push_request_write_rows");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("110", metric->to_string().c_str());
@@ -250,14 +252,14 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("20", metric->to_string().c_str());
     }
     {
-        instance->storage_migrate_requests_total.increment(21);
+        storage_metrics->storage_migrate_requests_total.increment(21);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "storage_migrate").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("21", metric->to_string().c_str());
     }
     {
-        instance->delete_requests_total.increment(22);
+        storage_metrics->delete_requests_total.increment(22);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "delete").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
@@ -272,25 +274,25 @@ TEST_F(StarRocksMetricsTest, Normal) {
     }
     //  comapction
     {
-        instance->base_compaction_deltas_total.increment(30);
+        storage_metrics->base_compaction_deltas_total.increment(30);
         auto metric = metrics->get_metric("compaction_deltas_total", MetricLabels().add("type", "base"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("30", metric->to_string().c_str());
     }
     {
-        instance->cumulative_compaction_deltas_total.increment(31);
+        storage_metrics->cumulative_compaction_deltas_total.increment(31);
         auto metric = metrics->get_metric("compaction_deltas_total", MetricLabels().add("type", "cumulative"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("31", metric->to_string().c_str());
     }
     {
-        instance->base_compaction_bytes_total.increment(32);
+        storage_metrics->base_compaction_bytes_total.increment(32);
         auto metric = metrics->get_metric("compaction_bytes_total", MetricLabels().add("type", "base"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("32", metric->to_string().c_str());
     }
     {
-        instance->cumulative_compaction_bytes_total.increment(33);
+        storage_metrics->cumulative_compaction_bytes_total.increment(33);
         auto metric = metrics->get_metric("compaction_bytes_total", MetricLabels().add("type", "cumulative"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("33", metric->to_string().c_str());

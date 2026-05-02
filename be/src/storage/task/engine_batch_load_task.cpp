@@ -44,13 +44,13 @@
 #include "base/utility/pretty_printer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/lake/spark_load.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 
 using apache::thrift::ThriftDebugString;
 using std::list;
@@ -181,7 +181,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
 
     if (tablet_info_vec == nullptr) {
         LOG(WARNING) << "The input tablet_info_vec is a null pointer";
-        StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+        StorageMetrics::instance()->push_requests_fail_total.increment(1);
         return Status::InternalError("The input tablet_info_vec is a null pointer");
     }
 
@@ -216,7 +216,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
             LOG(WARNING) << "Fail to read tablet metadata. res=" << res << ", txn_id: " << request.transaction_id
                          << ", tablet=" << tablet_id << ", version=" << tablet_version
                          << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
-            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
             return tablet_or.status();
         }
 
@@ -228,24 +228,24 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
             LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id: " << request.transaction_id
                          << ", tablet=" << tablet.id()
                          << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
-            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
         } else {
             LOG(INFO) << "Finish to load file."
                       << ". txn_id: " << request.transaction_id << ", tablet=" << tablet.id()
                       << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
             write_bytes = handler.write_bytes();
             write_rows = handler.write_rows();
-            StarRocksMetrics::instance()->push_requests_success_total.increment(1);
-            StarRocksMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
-            StarRocksMetrics::instance()->push_request_write_bytes.increment(write_bytes);
-            StarRocksMetrics::instance()->push_request_write_rows.increment(write_rows);
+            StorageMetrics::instance()->push_requests_success_total.increment(1);
+            StorageMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
+            StorageMetrics::instance()->push_request_write_bytes.increment(write_bytes);
+            StorageMetrics::instance()->push_request_write_rows.increment(write_rows);
         }
 
     } else {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
         if (tablet == nullptr) {
             LOG(WARNING) << "Not found tablet: " << request.tablet_id;
-            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
             return Status::NotFound(fmt::format("Not found tablet: {}", request.tablet_id));
         }
 
@@ -255,17 +255,17 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
             LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id=" << request.transaction_id
                          << ", tablet=" << tablet->full_name()
                          << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
-            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
         } else {
             LOG(INFO) << "Finish to load file."
                       << ". txn_id=" << request.transaction_id << ", tablet=" << tablet->full_name()
                       << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
             write_bytes = push_handler.write_bytes();
             write_rows = push_handler.write_rows();
-            StarRocksMetrics::instance()->push_requests_success_total.increment(1);
-            StarRocksMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
-            StarRocksMetrics::instance()->push_request_write_bytes.increment(write_bytes);
-            StarRocksMetrics::instance()->push_request_write_rows.increment(write_rows);
+            StorageMetrics::instance()->push_requests_success_total.increment(1);
+            StorageMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
+            StorageMetrics::instance()->push_request_write_bytes.increment(write_bytes);
+            StorageMetrics::instance()->push_request_write_rows.increment(write_rows);
         }
     }
 
@@ -274,7 +274,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
 
 Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
     VLOG(3) << "begin to process delete data. request=" << ThriftDebugString(request);
-    StarRocksMetrics::instance()->delete_requests_total.increment(1);
+    StorageMetrics::instance()->delete_requests_total.increment(1);
 
     if (tablet_info_vec == nullptr) {
         LOG(WARNING) << "The input tablet_info_vec is a null pointer";
@@ -294,7 +294,7 @@ Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TT
     Status res = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
     if (!res.ok()) {
         LOG(WARNING) << "Fail to delete data. res: " << res << ", tablet: " << tablet->full_name();
-        StarRocksMetrics::instance()->delete_requests_failed.increment(1);
+        StorageMetrics::instance()->delete_requests_failed.increment(1);
         return res;
     }
 

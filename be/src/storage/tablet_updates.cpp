@@ -71,6 +71,7 @@
 #include "storage/schema_change.h"
 #include "storage/snapshot_meta.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/types.h"
@@ -1025,11 +1026,11 @@ void TabletUpdates::do_apply() {
         if (version_info_apply->deltas.size() > 0) {
             int64_t duration_ns = 0;
             {
-                StarRocksMetrics::instance()->update_rowset_commit_apply_total.increment(1);
+                StorageMetrics::instance()->update_rowset_commit_apply_total.increment(1);
                 SCOPED_RAW_TIMER(&duration_ns);
                 apply_st = _apply_rowset_commit(*version_info_apply);
             }
-            StarRocksMetrics::instance()->update_rowset_commit_apply_duration_us.increment(duration_ns / 1000);
+            StorageMetrics::instance()->update_rowset_commit_apply_duration_us.increment(duration_ns / 1000);
             apply_operation_performed = true;
         } else if (version_info_apply->compaction) {
             // _compaction_running may be false after BE restart, reset it to true

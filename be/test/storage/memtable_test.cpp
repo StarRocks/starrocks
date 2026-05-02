@@ -31,7 +31,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
@@ -39,6 +38,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -527,9 +527,9 @@ TEST_F(MemTableTest, test_metrics) {
     // just verify the metrics have value, rather than verify it accurately
     // because other test cases may also update the metrics concurrently if
     // run tests in parallel, and it's hard to get the accurate value
-    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_total.value() > 0);
-    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.value() > 0);
-    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_memory_bytes_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
 }
 
 } // namespace starrocks

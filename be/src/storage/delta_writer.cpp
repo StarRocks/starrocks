@@ -27,7 +27,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -36,6 +35,7 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
@@ -522,10 +522,10 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     ADD_COUNTER_RELAXED(_stats.add_segment_time_ns, duration_ns);
     ADD_COUNTER_RELAXED(_stats.add_segment_io_time_ns, io_time_ns);
 
-    StarRocksMetrics::instance()->segment_flush_total.increment(1);
-    StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
-    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_ns / 1000);
-    StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
+    StorageMetrics::instance()->segment_flush_total.increment(1);
+    StorageMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->segment_flush_io_time_us.increment(io_time_ns / 1000);
+    StorageMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
     VLOG(2) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
             << ", duration: " << duration_ns / 1000 << "us, io_time: " << (io_time_ns / 1000) << "us";
     return Status::OK();
@@ -656,8 +656,8 @@ Status DeltaWriter::_flush_memtable() {
     auto elapsed_time = watch.elapsed_time();
     ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
     ADD_COUNTER_RELAXED(_stats.write_wait_flush_time_ns, elapsed_time);
-    StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
-    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(elapsed_time / 1000);
+    StorageMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
+    StorageMetrics::instance()->delta_writer_wait_flush_duration_us.increment(elapsed_time / 1000);
     return st;
 }
 
@@ -815,13 +815,12 @@ Status DeltaWriter::commit() {
     ADD_COUNTER_RELAXED(_stats.commit_pk_preload_time_ns, pk_preload_ts - rowset_build_ts);
     ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - pk_preload_ts);
     ADD_COUNTER_RELAXED(_stats.commit_txn_commit_time_ns, commit_txn_ts - replica_ts);
-    StarRocksMetrics::instance()->delta_writer_commit_task_total.increment(1);
-    StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
-    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
-    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment((pk_preload_ts - rowset_build_ts) /
-                                                                                1000);
-    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_preload_ts) / 1000);
-    StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment((commit_txn_ts - replica_ts) / 1000);
+    StorageMetrics::instance()->delta_writer_commit_task_total.increment(1);
+    StorageMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
+    StorageMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
+    StorageMetrics::instance()->delta_writer_pk_preload_duration_us.increment((pk_preload_ts - rowset_build_ts) / 1000);
+    StorageMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_preload_ts) / 1000);
+    StorageMetrics::instance()->delta_writer_txn_commit_duration_us.increment((commit_txn_ts - replica_ts) / 1000);
     return Status::OK();
 }
 

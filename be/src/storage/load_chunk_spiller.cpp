@@ -23,7 +23,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
@@ -32,6 +31,7 @@
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
+#include "storage/storage_metrics.h"
 #include "storage/union_iterator.h"
 
 namespace starrocks {
@@ -89,12 +89,12 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
     RETURN_IF_ERROR(_block->flush());
     if (_block->is_remote()) {
         // Update remote block write metric
-        StarRocksMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
-        StarRocksMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
+        StorageMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
+        StorageMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
     } else {
         // Update local block write metric
-        StarRocksMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
-        StarRocksMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
+        StorageMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
+        StorageMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
     }
     RETURN_IF_ERROR(_block_manager->release_block(_block));
     // Save this block into the block group, which is tagged with slot_idx for ordering
@@ -213,13 +213,13 @@ public:
                 COUNTER_UPDATE(metrics.block_count, 1);
                 if (_blocks[_block_idx]->is_remote()) {
                     COUNTER_UPDATE(metrics.remote_block_count, 1);
-                    StarRocksMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
-                    StarRocksMetrics::instance()->load_spill_remote_bytes_read_total.increment(
+                    StorageMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
+                    StorageMetrics::instance()->load_spill_remote_bytes_read_total.increment(
                             _blocks[_block_idx]->size());
                 } else {
                     COUNTER_UPDATE(metrics.local_block_count, 1);
-                    StarRocksMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
-                    StarRocksMetrics::instance()->load_spill_local_bytes_read_total.increment(
+                    StorageMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
+                    StorageMetrics::instance()->load_spill_local_bytes_read_total.increment(
                             _blocks[_block_idx]->size());
                 }
             }

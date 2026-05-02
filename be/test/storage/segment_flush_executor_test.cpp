@@ -27,7 +27,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "service/brpc_service_test_util.h"
 #include "storage/async_delta_writer.h"
 #include "storage/chunk_helper.h"
@@ -37,6 +36,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
@@ -276,8 +276,8 @@ TEST_F(SegmentFlushExecutorTest, test_write_and_commit_segment) {
     // just verify the metrics have value, rather than verify it accurately
     // because other test cases may also update the metrics concurrently if
     // run tests in parallel, and it's hard to get the accurate value
-    ASSERT_TRUE(StarRocksMetrics::instance()->segment_flush_total.value() > 0);
-    ASSERT_TRUE(StarRocksMetrics::instance()->segment_flush_bytes_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->segment_flush_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->segment_flush_bytes_total.value() > 0);
 }
 
 TEST_F(SegmentFlushExecutorTest, test_submit_after_cancel) {

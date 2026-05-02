@@ -50,6 +50,7 @@ set(STORAGE_FILES
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
+    storage_metrics.cpp
     data_dir.cpp
     short_key_index.cpp
     snapshot_manager.cpp

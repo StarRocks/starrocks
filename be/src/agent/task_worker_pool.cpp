@@ -73,6 +73,7 @@
 #include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/task/engine_batch_load_task.h"
 #include "storage/task/engine_clone_task.h"
 #include "storage/update_manager.h"
@@ -736,8 +737,8 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             continue;
         }
         int64_t max_compaction_score =
-                std::max(StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.value(),
-                         StarRocksMetrics::instance()->tablet_base_max_compaction_score.value());
+                std::max(StorageMetrics::instance()->tablet_cumulative_max_compaction_score.value(),
+                         StorageMetrics::instance()->tablet_base_max_compaction_score.value());
         request.__set_tablet_max_compaction_score(max_compaction_score);
         request.__set_backend(BackendOptions::get_localBackend());
 

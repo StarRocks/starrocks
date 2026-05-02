@@ -74,6 +74,7 @@
 #include "service/backend_metrics_initializer.h"
 #include "service/mem_hook.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "types/time_types.h"
 #include "util/global_metrics_registry.h"
 #include "util/logging.h"
@@ -108,7 +109,7 @@ void calculate_metrics(void* arg_this) {
 
         if (last_ts == -1L) {
             last_ts = MonotonicSeconds();
-            lst_push_bytes = StarRocksMetrics::instance()->push_request_write_bytes.value();
+            lst_push_bytes = StorageMetrics::instance()->push_request_write_bytes.value();
             lst_query_bytes = StarRocksMetrics::instance()->query_scan_bytes.value();
             SystemMetrics::instance()->get_disks_io_time(&lst_disks_io_time);
             SystemMetrics::instance()->get_network_traffic(&lst_net_send_bytes, &lst_net_receive_bytes);
@@ -118,9 +119,9 @@ void calculate_metrics(void* arg_this) {
             last_ts = current_ts;
 
             // 1. push bytes per second.
-            int64_t current_push_bytes = StarRocksMetrics::instance()->push_request_write_bytes.value();
+            int64_t current_push_bytes = StorageMetrics::instance()->push_request_write_bytes.value();
             int64_t pps = (current_push_bytes - lst_push_bytes) / (interval == 0 ? 1 : interval);
-            StarRocksMetrics::instance()->push_request_write_bytes_per_second.set_value(pps < 0 ? 0 : pps);
+            StorageMetrics::instance()->push_request_write_bytes_per_second.set_value(pps < 0 ? 0 : pps);
             lst_push_bytes = current_push_bytes;
 
             // 2. query bytes per second.

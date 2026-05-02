@@ -23,10 +23,10 @@
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
 #include "common/util/stack_trace_mutex.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -254,12 +254,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
     }
     async_writer->_writer->update_task_stat(num_tasks, pending_time_ns);
-    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
-    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
-    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() /
-                                                                                        NANOSECS_PER_USEC);
-    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns /
-                                                                                        NANOSECS_PER_USEC);
+    StorageMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StorageMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StorageMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() /
+                                                                                      NANOSECS_PER_USEC);
+    StorageMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns /
+                                                                                      NANOSECS_PER_USEC);
     return 0;
 }
 
