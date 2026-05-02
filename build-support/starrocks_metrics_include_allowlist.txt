@@ -3,8 +3,6 @@
 be/src/agent/finish_task.cpp
 be/src/agent/publish_version.cpp
 be/src/agent/task_worker_pool.cpp
-be/src/cache/datacache_metrics.cpp
-be/src/cache/mem_cache/page_cache.cpp
 be/src/connector/lake_connector.cpp
 be/src/exec/data_sinks/tablet_sink.cpp
 be/src/exec/pipeline/exec_state_reporter.cpp

@@ -433,15 +433,6 @@ public:
     METRIC_DEFINE_INT_COUNTER(flat_json_compaction_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(flat_json_compaction_schema_change_total, MetricUnit::OPERATIONS);
 
-    // data cache metrics
-    METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(datacache_mem_used_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(datacache_disk_quota_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(datacache_disk_used_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(datacache_meta_used_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_hit_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_miss_bytes, MetricUnit::BYTES);
-
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;
         return &instance;

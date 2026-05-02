@@ -59,11 +59,11 @@ protected:
     void TearDown() override {}
 };
 
-// Test that register_datacache_metrics can be called without crashing
-TEST_F(DataCacheMetricsTest, test_register_datacache_metrics_basic) {
+// Test that DataCacheMetrics update hook registration can be called without crashing.
+TEST_F(DataCacheMetricsTest, test_enable_update_hook_basic) {
     // This should not crash regardless of WITH_STARCACHE
-    ASSERT_NO_THROW(register_datacache_metrics(false));
-    ASSERT_NO_THROW(register_datacache_metrics(true));
+    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(false));
+    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(true));
 }
 
 #ifdef WITH_STARCACHE
@@ -83,7 +83,7 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
 
 // Test that metrics have correct initial values
 TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
-    auto instance = StarRocksMetrics::instance();
+    auto instance = DataCacheMetrics::instance();
 
     // Initial values should be 0 or positive integers
     ASSERT_GE(instance->datacache_mem_quota_bytes.value(), 0);
@@ -97,11 +97,11 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
 
 // Test metrics update through hook mechanism
 TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
-    auto instance = StarRocksMetrics::instance();
+    auto instance = DataCacheMetrics::instance();
     auto metrics = GlobalMetricsRegistry::instance()->metrics();
 
     // Register the metrics hook
-    register_datacache_metrics(false);
+    DataCacheMetrics::instance()->enable_update_hook(false);
 
     // Trigger the hook manually
     metrics->trigger_hook();
@@ -166,8 +166,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
 // Test that without StarCache, registration is a no-op
 TEST_F(DataCacheMetricsTest, test_without_starcache) {
     // When WITH_STARCACHE is not defined, these should be no-ops
-    ASSERT_NO_THROW(register_datacache_metrics(false));
-    ASSERT_NO_THROW(register_datacache_metrics(true));
+    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(false));
+    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(true));
 
     // The function should compile and execute successfully even without StarCache
 }

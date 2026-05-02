@@ -37,10 +37,8 @@
 #include <malloc.h>
 
 #include "base/container/lru_cache.h"
-#include "base/metrics.h"
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
@@ -48,46 +46,76 @@ namespace starrocks {
 std::atomic<size_t> StoragePageCacheMetrics::returned_page_handle_count{};
 std::atomic<size_t> StoragePageCacheMetrics::released_page_handle_count{};
 
-METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
-METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
-METRIC_DEFINE_UINT_GAUGE(page_cache_insert_count, MetricUnit::OPERATIONS);
-METRIC_DEFINE_UINT_GAUGE(page_cache_insert_evict_count, MetricUnit::OPERATIONS);
-METRIC_DEFINE_UINT_GAUGE(page_cache_release_evict_count, MetricUnit::OPERATIONS);
-METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
-METRIC_DEFINE_UINT_GAUGE(page_cache_pinned_count, MetricUnit::BYTES);
+PageCacheMetrics* PageCacheMetrics::instance() {
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new PageCacheMetrics();
+    return instance;
+}
+
+void PageCacheMetrics::install(MetricRegistry* registry, StoragePageCache* cache) {
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        _set_cache(cache);
+        return;
+    }
+    _registry = registry;
+    _set_cache(cache);
+
+    registry->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
+    registry->register_hook("page_cache_lookup_count", [] { PageCacheMetrics::instance()->_update_lookup_count(); });
+
+    registry->register_metric("page_cache_hit_count", &page_cache_hit_count);
+    registry->register_hook("page_cache_hit_count", [] { PageCacheMetrics::instance()->_update_hit_count(); });
+
+    registry->register_metric("page_cache_insert_count", &page_cache_insert_count);
+    registry->register_hook("page_cache_insert_count", [] { PageCacheMetrics::instance()->_update_insert_count(); });
+
+    registry->register_metric("page_cache_insert_evict_count", &page_cache_insert_evict_count);
+    registry->register_hook("page_cache_insert_evict_count",
+                            [] { PageCacheMetrics::instance()->_update_insert_evict_count(); });
+
+    registry->register_metric("page_cache_release_evict_count", &page_cache_release_evict_count);
+    registry->register_hook("page_cache_release_evict_count",
+                            [] { PageCacheMetrics::instance()->_update_release_evict_count(); });
+
+    registry->register_metric("page_cache_capacity", &page_cache_capacity);
+    registry->register_hook("page_cache_capacity", [] { PageCacheMetrics::instance()->_update_capacity(); });
+
+    registry->register_metric("page_cache_pinned_count", &page_cache_pinned_count);
+    registry->register_hook("page_cache_pinned_count", [] { PageCacheMetrics::instance()->_update_pinned_count(); });
+}
+
+void PageCacheMetrics::_update_lookup_count() {
+    page_cache_lookup_count.set_value(_cache == nullptr ? 0 : _cache->get_lookup_count());
+}
+
+void PageCacheMetrics::_update_hit_count() {
+    page_cache_hit_count.set_value(_cache == nullptr ? 0 : _cache->get_hit_count());
+}
+
+void PageCacheMetrics::_update_insert_count() {
+    page_cache_insert_count.set_value(_cache == nullptr ? 0 : _cache->get_insert_count());
+}
+
+void PageCacheMetrics::_update_insert_evict_count() {
+    page_cache_insert_evict_count.set_value(_cache == nullptr ? 0 : _cache->get_insert_evict_count());
+}
+
+void PageCacheMetrics::_update_release_evict_count() {
+    page_cache_release_evict_count.set_value(_cache == nullptr ? 0 : _cache->get_release_evict_count());
+}
+
+void PageCacheMetrics::_update_capacity() {
+    page_cache_capacity.set_value(_cache == nullptr ? 0 : _cache->get_capacity());
+}
+
+void PageCacheMetrics::_update_pinned_count() {
+    page_cache_pinned_count.set_value(_cache == nullptr ? 0 : _cache->get_pinned_count());
+}
 
 void StoragePageCache::init_metrics() {
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
-    GlobalMetricsRegistry::instance()->metrics()->register_hook(
-            "page_cache_lookup_count", [this]() { page_cache_lookup_count.set_value(get_lookup_count()); });
-
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_hit_count", &page_cache_hit_count);
-    GlobalMetricsRegistry::instance()->metrics()->register_hook(
-            "page_cache_hit_count", [this]() { page_cache_hit_count.set_value(get_hit_count()); });
-
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_insert_count", &page_cache_insert_count);
-    GlobalMetricsRegistry::instance()->metrics()->register_hook(
-            "page_cache_insert_count", [this]() { page_cache_insert_count.set_value(get_insert_count()); });
-
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_insert_evict_count",
-                                                                  &page_cache_insert_evict_count);
-    GlobalMetricsRegistry::instance()->metrics()->register_hook("page_cache_insert_evict_count", [this]() {
-        page_cache_insert_evict_count.set_value(get_insert_evict_count());
-    });
-
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_release_evict_count",
-                                                                  &page_cache_release_evict_count);
-    GlobalMetricsRegistry::instance()->metrics()->register_hook("page_cache_release_evict_count", [this]() {
-        page_cache_release_evict_count.set_value(get_release_evict_count());
-    });
-
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
-    GlobalMetricsRegistry::instance()->metrics()->register_hook(
-            "page_cache_capacity", [this]() { page_cache_capacity.set_value(get_capacity()); });
-
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_pinned_count", &page_cache_pinned_count);
-    GlobalMetricsRegistry::instance()->metrics()->register_hook(
-            "page_cache_pinned_count", [this]() { page_cache_pinned_count.set_value(get_pinned_count()); });
+    PageCacheMetrics::instance()->install(GlobalMetricsRegistry::instance()->metrics(), this);
 }
 
 void StoragePageCache::prune() {

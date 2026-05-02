@@ -28,6 +28,7 @@
 
 #include "base/compression/compression_context_pool_metrics.h"
 #include "base/network/network_util.h"
+#include "cache/datacache_metrics.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
@@ -465,14 +466,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     REGISTER_STARROCKS_METRIC(flat_json_compaction_total);
     REGISTER_STARROCKS_METRIC(flat_json_compaction_schema_change_total);
 
-    REGISTER_STARROCKS_METRIC(datacache_mem_quota_bytes);
-    REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
-    REGISTER_STARROCKS_METRIC(datacache_disk_quota_bytes);
-    REGISTER_STARROCKS_METRIC(datacache_disk_used_bytes);
-    REGISTER_STARROCKS_METRIC(datacache_meta_used_bytes);
-    REGISTER_STARROCKS_METRIC(block_cache_hit_bytes);
-    REGISTER_STARROCKS_METRIC(block_cache_miss_bytes);
-
 #undef REGISTER_STARROCKS_METRIC
 }
 
@@ -527,6 +520,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     FileScanMetrics::instance()->install(registry);
     CatalogScanMetrics::instance()->install(registry);
     SpillMetrics::instance()->install(registry);
+    DataCacheMetrics::instance()->install(registry);
 
 #ifndef __APPLE__
     if (options.init_jvm_metrics) {
