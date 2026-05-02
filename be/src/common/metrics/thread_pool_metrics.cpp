@@ -29,7 +29,7 @@ void ThreadPoolMetricGroup::install(MetricRegistry* registry, const std::string&
     if (_registry != nullptr) {
         DCHECK_EQ(_registry, registry);
         DCHECK_EQ(_prefix, prefix);
-        _thread_pool = thread_pool;
+        DCHECK_EQ(_thread_pool, thread_pool);
         return;
     }
 

@@ -15,6 +15,7 @@
 set(COMMON_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     process_metrics_registry_test.cpp
+    metrics/hooked_metric_test.cpp
     metrics/thread_pool_metrics_test.cpp
     backend_options_test.cpp
     config_test.cpp

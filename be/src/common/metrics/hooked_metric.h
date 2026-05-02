@@ -24,12 +24,18 @@ namespace starrocks {
 template <typename Metric, typename UpdateFunc>
 bool register_hooked_metric(MetricRegistry* registry, const std::string& name, Metric* metric,
                             UpdateFunc&& update_func) {
-    const bool metric_registered = registry->register_metric(name, metric);
+    if (!registry->register_metric(name, metric)) {
+        return false;
+    }
     const bool hook_registered =
             registry->register_hook(name, [metric, update_func = std::forward<UpdateFunc>(update_func)]() mutable {
                 metric->set_value(update_func());
             });
-    return metric_registered && hook_registered;
+    if (!hook_registered) {
+        registry->deregister_metric(metric);
+        return false;
+    }
+    return true;
 }
 
 } // namespace starrocks
