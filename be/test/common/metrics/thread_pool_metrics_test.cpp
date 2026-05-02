@@ -48,4 +48,15 @@ TEST(ThreadPoolMetricGroupTest, RegisterAndUpdate) {
     EXPECT_EQ(MetricUnit::NANOSECONDS, pending->unit());
 }
 
+TEST(ThreadPoolMetricGroupTest, DestructorDeregistersHook) {
+    MetricRegistry registry("test");
+
+    {
+        ThreadPoolMetricGroup metrics;
+        metrics.install(&registry, "metric_test", nullptr);
+    }
+
+    EXPECT_TRUE(registry.register_hook("metric_test_threadpool_metrics", [] {}));
+}
+
 } // namespace starrocks

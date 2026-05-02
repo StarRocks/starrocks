@@ -18,6 +18,12 @@
 
 namespace starrocks {
 
+ThreadPoolMetricGroup::~ThreadPoolMetricGroup() {
+    if (_registry != nullptr && _hook_registered) {
+        _registry->deregister_hook(_hook_name);
+    }
+}
+
 void ThreadPoolMetricGroup::install(MetricRegistry* registry, const std::string& prefix, ThreadPool* thread_pool) {
     DCHECK(registry != nullptr);
     if (_registry != nullptr) {
@@ -30,6 +36,7 @@ void ThreadPoolMetricGroup::install(MetricRegistry* registry, const std::string&
     _registry = registry;
     _thread_pool = thread_pool;
     _prefix = prefix;
+    _hook_name = prefix + "_threadpool_metrics";
 
     registry->register_metric(prefix + "_threadpool_size", &threadpool_size);
     registry->register_metric(prefix + "_executed_tasks_total", &executed_tasks_total);
@@ -38,7 +45,7 @@ void ThreadPoolMetricGroup::install(MetricRegistry* registry, const std::string&
     registry->register_metric(prefix + "_queue_count", &queue_count);
     registry->register_metric(prefix + "_running_threads", &running_threads);
     registry->register_metric(prefix + "_active_threads", &active_threads);
-    registry->register_hook(prefix + "_threadpool_metrics", [this] { update(); });
+    _hook_registered = registry->register_hook(_hook_name, [this] { update(); });
 }
 
 void ThreadPoolMetricGroup::update() {

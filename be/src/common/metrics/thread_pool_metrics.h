@@ -24,6 +24,8 @@ class ThreadPool;
 
 class ThreadPoolMetricGroup {
 public:
+    ~ThreadPoolMetricGroup();
+
     void install(MetricRegistry* registry, const std::string& prefix, ThreadPool* thread_pool);
     void update();
 
@@ -39,6 +41,8 @@ private:
     MetricRegistry* _registry = nullptr;
     ThreadPool* _thread_pool = nullptr;
     std::string _prefix;
+    std::string _hook_name;
+    bool _hook_registered = false;
 };
 
 } // namespace starrocks
