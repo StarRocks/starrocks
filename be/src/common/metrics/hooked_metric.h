@@ -32,7 +32,7 @@ bool register_hooked_metric(MetricRegistry* registry, const std::string& name, M
                 metric->set_value(update_func());
             });
     if (!hook_registered) {
-        registry->deregister_metric(metric);
+        metric->hide();
         return false;
     }
     return true;

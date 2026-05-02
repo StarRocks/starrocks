@@ -38,6 +38,7 @@ TEST(HookedMetricTest, DeregistersMetricWhenHookRegistrationFails) {
     ASSERT_TRUE(registry.register_hook("metric_test", [] {}));
     EXPECT_FALSE(register_hooked_metric(&registry, "metric_test", &metric, [] { return 7; }));
     EXPECT_EQ(nullptr, registry.get_metric("metric_test"));
+    EXPECT_EQ(nullptr, metric._registry);
 }
 
 } // namespace starrocks
