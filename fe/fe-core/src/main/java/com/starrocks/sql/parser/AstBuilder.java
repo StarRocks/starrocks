@@ -2638,8 +2638,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             stop = context.partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
-        return new AdminRepairTableStmt(new TableRef(targetTableName, null, partitionNames, createPos(start, stop)),
-                createPos(context));
+        TableRef tableRef = new TableRef(targetTableName, null, partitionNames, createPos(start, stop));
+        Map<String, String> properties = getProperties(context.properties());
+        return new AdminRepairTableStmt(tableRef, properties, createPos(context));
     }
 
     @Override

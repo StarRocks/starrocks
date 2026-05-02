@@ -21,6 +21,8 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -32,6 +34,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
@@ -776,10 +779,51 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
+            List<List<String>> result = Lists.newArrayList();
+            boolean isDryRun = stmt.isDryRun();
+
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().repairTable(stmt);
+                String dbName = stmt.getDbName() != null ? stmt.getDbName() : context.getDatabase();
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+                if (db == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                }
+
+                String tableName = stmt.getTblName();
+                Table table = db.getTable(tableName);
+                if (table == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                }
+
+                if (table.isCloudNativeTable()) {
+                    // cloud native table
+                    List<String> partitionNames = stmt.getPartitions();
+                    long warehouseId = context.getCurrentWarehouseId();
+
+                    if (isDryRun) {
+                        List<List<String>> rows =
+                                TabletRepairHelper.dryRunRepair(stmt, db, (OlapTable) table, partitionNames, warehouseId);
+                        result.addAll(rows);
+                    } else {
+                        TabletRepairHelper.repair(stmt, db, (OlapTable) table, partitionNames, warehouseId);
+                    }
+                } else if (table.isCloudNativeMaterializedView()) {
+                    // cloud native mv
+                    throw new DdlException("Repair cloud native materialized view is not supported");
+                } else {
+                    // olap table or mv
+                    if (isDryRun) {
+                        throw new DdlException("Dry run is only supported for cloud-native tables");
+                    }
+                    context.getGlobalStateMgr().getTabletChecker().repairTable(stmt);
+                }
             });
-            return null;
+
+            if (isDryRun) {
+                return new ShowResultSet(TabletRepairHelper.getDryRunRepairResultMetaData(), result);
+            } else {
+                return null;
+            }
         }
 
         @Override
