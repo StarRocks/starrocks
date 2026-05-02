@@ -288,23 +288,55 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
         if (Config.lock_manager_enabled) {
+            LockType intentionType = (lockType == LockType.WRITE)
+                    ? LockType.INTENTION_EXCLUSIVE
+                    : LockType.INTENTION_SHARED;
+            boolean dbLockHeld = false;
+            List<Long> ridLockedList = new ArrayList<>();
             try {
-                if (lockType == LockType.WRITE) {
-                    this.lock(dbId, LockType.INTENTION_EXCLUSIVE, 0);
-                } else {
-                    this.lock(dbId, LockType.INTENTION_SHARED, 0);
-                }
+                this.lock(dbId, intentionType, 0);
+                dbLockHeld = true;
 
                 Collections.sort(tableListClone);
                 for (Long rid : tableListClone) {
                     this.lock(rid, lockType, 0);
+                    ridLockedList.add(rid);
                 }
             } catch (LockException e) {
+                // Roll back any locks already acquired so that a partial failure
+                // (e.g. deadlock victim selection on the second / Nth lock call)
+                // does not leave a stranded DB intention or table lock that
+                // would block subsequent DB-WRITE operations indefinitely.
+                rollbackPartialIntensiveLock(dbId, intentionType, dbLockHeld, ridLockedList, lockType);
                 throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
             //Fallback to db lock
             lockDatabase(dbId, lockType);
+        }
+    }
+
+    /**
+     * Best-effort rollback of a partial intensive-lock acquisition. Releases each
+     * already-acquired lock and swallows any errors raised by individual release
+     * calls so that the original LockException (the actual cause of the rollback)
+     * surfaces to the caller instead of being masked by a release-side error.
+     */
+    private void rollbackPartialIntensiveLock(Long dbId, LockType intentionType,
+                                              boolean dbLockHeld, List<Long> ridLockedList, LockType tableLockType) {
+        for (Long rid : ridLockedList) {
+            try {
+                this.release(rid, tableLockType);
+            } catch (Exception releaseEx) {
+                LOG.warn("Failed to release table lock {} during partial-acquire rollback", rid, releaseEx);
+            }
+        }
+        if (dbLockHeld) {
+            try {
+                this.release(dbId, intentionType);
+            } catch (Exception releaseEx) {
+                LOG.warn("Failed to release DB intention lock {} during partial-acquire rollback", dbId, releaseEx);
+            }
         }
     }
 
@@ -389,14 +421,19 @@ public class Locker {
     public void lockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         if (Config.lock_manager_enabled) {
+            LockType intentionType = (lockType == LockType.WRITE)
+                    ? LockType.INTENTION_EXCLUSIVE
+                    : LockType.INTENTION_SHARED;
+            boolean dbLockHeld = false;
             try {
-                if (lockType == LockType.WRITE) {
-                    this.lock(dbId, LockType.INTENTION_EXCLUSIVE, 0);
-                } else {
-                    this.lock(dbId, LockType.INTENTION_SHARED, 0);
-                }
+                this.lock(dbId, intentionType, 0);
+                dbLockHeld = true;
                 this.lock(tableId, lockType, 0);
             } catch (LockException e) {
+                // Roll back the DB intention lock if step 1 succeeded but the
+                // table-lock acquisition failed (e.g. deadlock victim, interrupt).
+                // Otherwise the caller would leak an IS/IX lock on the DB.
+                rollbackPartialIntensiveLock(dbId, intentionType, dbLockHeld, Collections.emptyList(), lockType);
                 throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
