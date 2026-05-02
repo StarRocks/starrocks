@@ -301,6 +301,10 @@ void LakePersistentIndexParallelCompactMgr::shutdown() {
 
 Status LakePersistentIndexParallelCompactMgr::update_max_threads(int max_threads) {
     if (_thread_pool) {
+        // Apply the same CPU-aware cap as calc_max_threads() so dynamic
+        // updates (ADMIN SET pk_index_parallel_compaction_threadpool_max_threads)
+        // cannot bypass the safety bound.
+        max_threads = std::max(1, std::min(max_threads, CpuInfo::num_cores()));
         return _thread_pool->update_max_threads(max_threads);
     }
     return Status::OK();
@@ -311,6 +315,11 @@ int32_t LakePersistentIndexParallelCompactMgr::calc_max_threads() const {
     if (max_threads <= 0) {
         max_threads = CpuInfo::num_cores() / 2;
     }
+    // PK index compaction is CPU-bound (in-memory SST byte-merge); oversubscribing
+    // beyond the core count yields no throughput gain but starves co-tenant pools
+    // (publish_version, async_delta_writer, cloud_native_pk_index_execution) that
+    // share the same cores, which inflates ingest/publish p99.
+    max_threads = std::min(max_threads, CpuInfo::num_cores());
     return std::max(1, max_threads);
 }
 
