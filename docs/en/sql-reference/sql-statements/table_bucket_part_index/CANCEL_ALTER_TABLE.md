@@ -52,3 +52,15 @@ CANCEL ALTER TABLE cancels the execution of the ongoing ALTER TABLE operation, i
    ```SQL
    CANCEL ALTER TABLE ROLLUP FROM example_table;
    ```
+
+4. Cancel specific rollup alterations for `example_table` in the current database using their job IDs.
+
+   :::tip
+
+   You can get the job IDs of your rollups with [`SHOW ALTER MATERIALIZED VIEW](../materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md)
+
+   :::
+
+   ```SQL
+   CANCEL ALTER TABLE ROLLUP FROM example_table (12345, 12346);
+   ```
