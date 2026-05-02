@@ -10,14 +10,14 @@ StarRocks supports data recovery for mistakenly deleted databases/tables/partiti
 
 Syntax:
 
-~~~sql
+```sql
 -- 1) Recover database
 RECOVER DATABASE db_name;
--- 2) Restore table
+-- 2) Recover table
 RECOVER TABLE [db_name.]table_name;
 -- 3) Recover partition
 RECOVER PARTITION partition_name FROM [db_name.]table_name;
-~~~
+```
 
 ## Notes
 
@@ -28,18 +28,18 @@ RECOVER PARTITION partition_name FROM [db_name.]table_name;
 
 1. Recover the database named `example_db`
 
-    ~~~sql
+    ```sql
     RECOVER DATABASE example_db;
-    ~~~ 2.
+    ```
 
 2. Recover the table named `example_tbl`
 
-    ~~~sql
+    ```sql
     RECOVER TABLE example_db.example_tbl;
-    ~~~ 3.
+    ```
 
 3. Recover the partition named `p1` in the table `example_tbl`
 
-    ~~~sql
+    ```sql
     RECOVER PARTITION p1 FROM example_tbl;
-    ~~~
+    ```
