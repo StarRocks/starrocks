@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service")
 add_subdirectory(service_be)
 
 set(EXEC_FILES
+    backend_metrics_initializer.cpp
     backend_base.cpp
     daemon.cpp
     greplog.cpp

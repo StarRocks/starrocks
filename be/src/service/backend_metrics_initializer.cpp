@@ -1,0 +1,544 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "service/backend_metrics_initializer.h"
+
+#include <unistd.h>
+
+#include <cerrno>
+#include <cinttypes>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <set>
+#include <sstream>
+#include <utility>
+
+#include "base/compression/compression_context_pool_metrics.h"
+#include "base/network/network_util.h"
+#include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/system/disk_info.h"
+#include "exec/pipeline/pipeline_metrics.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
+#include "runtime/starrocks_metrics.h"
+#ifndef __APPLE__
+#include "util/jvm_metrics.h"
+#endif
+#include "util/logging.h"
+#include "util/metrics/catalog_scan_metrics.h"
+#include "util/metrics/file_scan_metrics.h"
+#include "util/metrics/spill_metrics.h"
+#include "util/system_metrics.h"
+
+namespace starrocks {
+
+namespace {
+
+const char* const kStarRocksMetricsHookName = "starrocks_metrics";
+
+bool is_known_disk_device_name(const std::string& dev) {
+    for (int i = 0; i < DiskInfo::num_disks(); ++i) {
+        if (DiskInfo::device_name(i) == dev) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Status get_disk_devices(const std::vector<std::string>& paths, std::set<std::string>* devices) {
+    std::vector<std::string> real_paths;
+    real_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        std::string real_path;
+        Status st = fs::canonicalize(path, &real_path);
+        if (!st.ok()) {
+            WARN_IF_ERROR(st, "canonicalize path " + path + " failed, skip disk monitoring of this path");
+            continue;
+        }
+        real_paths.emplace_back(std::move(real_path));
+    }
+
+    FILE* fp = fopen("/proc/mounts", "r");
+    if (fp == nullptr) {
+        std::stringstream ss;
+        char buf[64];
+        ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    Status status;
+    char* line_ptr = nullptr;
+    size_t line_buf_size = 0;
+    for (const auto& path : real_paths) {
+        size_t max_mount_size = 0;
+        std::string match_dev;
+        rewind(fp);
+        while (getline(&line_ptr, &line_buf_size, fp) > 0) {
+            char dev_path[4096];
+            char mount_path[4096];
+            int num = sscanf(line_ptr, "%4095s %4095s", dev_path, mount_path);
+            if (num < 2) {
+                continue;
+            }
+            size_t mount_size = strlen(mount_path);
+            if (mount_size < max_mount_size || path.size() < mount_size ||
+                strncmp(path.c_str(), mount_path, mount_size) != 0) {
+                continue;
+            }
+            std::string dev = std::filesystem::path(dev_path).filename().string();
+            if (is_known_disk_device_name(dev)) {
+                max_mount_size = mount_size;
+                match_dev = std::move(dev);
+            }
+        }
+        if (ferror(fp) != 0) {
+            std::stringstream ss;
+            char buf[64];
+            ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+            LOG(WARNING) << ss.str();
+            status = Status::InternalError(ss.str());
+            break;
+        }
+        if (max_mount_size > 0) {
+            devices->emplace(match_dev);
+        }
+    }
+    if (line_ptr != nullptr) {
+        free(line_ptr);
+    }
+    fclose(fp);
+    return status;
+}
+
+bool prepare_system_metrics_inputs(const BackendMetricsInitOptions& options, std::set<std::string>* disk_devices,
+                                   std::vector<std::string>* network_interfaces) {
+    auto st = get_disk_devices(options.storage_paths, disk_devices);
+    if (!st.ok()) {
+        LOG(WARNING) << "get disk devices failed, status=" << st.message();
+        return false;
+    }
+    st = get_inet_interfaces(network_interfaces, options.bind_ipv6);
+    if (!st.ok()) {
+        LOG(WARNING) << "get inet interfaces failed, status=" << st.message();
+        return false;
+    }
+    return true;
+}
+
+void update_process_thread_num(StarRocksMetrics* fast_metrics) {
+    int64_t pid = getpid();
+    std::stringstream ss;
+    ss << "/proc/" << pid << "/task/";
+
+    int64_t count = 0;
+    auto st = FileSystem::Default()->iterate_dir(ss.str(), [&](std::string_view /*name*/) {
+        count++;
+        return true;
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to count thread num from: " << ss.str();
+        fast_metrics->process_thread_num.set_value(0);
+        return;
+    }
+
+    fast_metrics->process_thread_num.set_value(count);
+}
+
+void update_process_fd_num(StarRocksMetrics* fast_metrics) {
+    int64_t pid = getpid();
+
+    std::stringstream ss;
+    ss << "/proc/" << pid << "/fd/";
+    int64_t count = 0;
+    auto st = FileSystem::Default()->iterate_dir(ss.str(), [&](std::string_view) {
+        count++;
+        return true;
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to count fd from: " << ss.str();
+        fast_metrics->process_fd_num_used.set_value(0);
+        return;
+    }
+    fast_metrics->process_fd_num_used.set_value(count);
+
+    std::stringstream ss2;
+    ss2 << "/proc/" << pid << "/limits";
+    FILE* fp = fopen(ss2.str().c_str(), "r");
+    if (fp == nullptr) {
+        PLOG(WARNING) << "failed to open " << ss2.str();
+        return;
+    }
+
+    int64_t values[2];
+    size_t line_buf_size = 0;
+    char* line_ptr = nullptr;
+    while (getline(&line_ptr, &line_buf_size, fp) > 0) {
+        memset(values, 0, sizeof(values));
+        int num = sscanf(line_ptr, "Max open files %" PRId64 " %" PRId64, &values[0], &values[1]);
+        if (num == 2) {
+            fast_metrics->process_fd_num_limit_soft.set_value(values[0]);
+            fast_metrics->process_fd_num_limit_hard.set_value(values[1]);
+            break;
+        }
+    }
+
+    if (line_ptr != nullptr) {
+        free(line_ptr);
+    }
+
+    if (ferror(fp) != 0) {
+        PLOG(WARNING) << "getline failed";
+    }
+    fclose(fp);
+}
+
+void update_starrocks_metrics(StarRocksMetrics* fast_metrics) {
+    update_process_thread_num(fast_metrics);
+    update_process_fd_num(fast_metrics);
+}
+
+void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_metrics) {
+    compression::install_compression_context_pool_metrics(registry);
+
+#define REGISTER_STARROCKS_METRIC(name) registry->register_metric(#name, &(fast_metrics->name))
+
+    REGISTER_STARROCKS_METRIC(fragment_requests_total);
+    REGISTER_STARROCKS_METRIC(fragment_request_duration_us);
+    REGISTER_STARROCKS_METRIC(http_requests_total);
+    REGISTER_STARROCKS_METRIC(http_request_send_bytes);
+    REGISTER_STARROCKS_METRIC(query_scan_bytes);
+    REGISTER_STARROCKS_METRIC(query_scan_rows);
+
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_total);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_eos_total);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_duration_us);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_memtable_duration_us);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_replica_duration_us);
+
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
+
+    REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
+    REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
+    REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
+    REGISTER_STARROCKS_METRIC(async_delta_writer_task_pending_duration_us);
+
+    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_write_total);
+
+    REGISTER_STARROCKS_METRIC(delta_writer_commit_task_total);
+    REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_task_total);
+    REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_writer_pk_preload_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_writer_wait_replica_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
+
+    REGISTER_STARROCKS_METRIC(memtable_flush_total);
+    REGISTER_STARROCKS_METRIC(memtable_finalize_task_total);
+    REGISTER_STARROCKS_METRIC(memtable_finalize_duration_us);
+    REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);
+    REGISTER_STARROCKS_METRIC(memtable_flush_io_time_us);
+    REGISTER_STARROCKS_METRIC(memtable_flush_memory_bytes_total);
+    REGISTER_STARROCKS_METRIC(memtable_flush_disk_bytes_total);
+    REGISTER_STARROCKS_METRIC(segment_flush_total);
+    REGISTER_STARROCKS_METRIC(segment_flush_duration_us);
+    REGISTER_STARROCKS_METRIC(segment_flush_io_time_us);
+    REGISTER_STARROCKS_METRIC(segment_flush_bytes_total);
+    REGISTER_STARROCKS_METRIC(segment_file_not_found_total);
+
+    REGISTER_STARROCKS_METRIC(update_rowset_commit_request_total);
+    REGISTER_STARROCKS_METRIC(update_rowset_commit_request_failed);
+    REGISTER_STARROCKS_METRIC(update_rowset_commit_apply_total);
+    REGISTER_STARROCKS_METRIC(update_rowset_commit_apply_duration_us);
+    REGISTER_STARROCKS_METRIC(update_primary_index_num);
+    REGISTER_STARROCKS_METRIC(update_primary_index_bytes_total);
+    REGISTER_STARROCKS_METRIC(update_del_vector_num);
+    REGISTER_STARROCKS_METRIC(update_del_vector_dels_num);
+    REGISTER_STARROCKS_METRIC(update_del_vector_bytes_total);
+    REGISTER_STARROCKS_METRIC(update_del_vector_deletes_total);
+    REGISTER_STARROCKS_METRIC(update_del_vector_deletes_new);
+    REGISTER_STARROCKS_METRIC(column_partial_update_apply_total);
+    REGISTER_STARROCKS_METRIC(column_partial_update_apply_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_total);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_hit_cache);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_total);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_hit_cache);
+    REGISTER_STARROCKS_METRIC(primary_key_table_error_state_total);
+    REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_duration_ms);
+    REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_total);
+    REGISTER_STARROCKS_METRIC(pk_index_sst_read_error_total);
+    REGISTER_STARROCKS_METRIC(pk_index_sst_write_error_total);
+
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
+
+    registry->register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
+                              &(fast_metrics->clone_task_inter_node_copy_bytes));
+    registry->register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTRA_NODE"),
+                              &(fast_metrics->clone_task_intra_node_copy_bytes));
+    registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTER_NODE"),
+                              &(fast_metrics->clone_task_inter_node_copy_duration_ms));
+    registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
+                              &(fast_metrics->clone_task_intra_node_copy_duration_ms));
+
+    registry->register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
+                              &(fast_metrics->push_requests_success_total));
+    registry->register_metric("push_requests_total", MetricLabels().add("status", "FAIL"),
+                              &(fast_metrics->push_requests_fail_total));
+    REGISTER_STARROCKS_METRIC(push_request_duration_us);
+    REGISTER_STARROCKS_METRIC(push_request_write_bytes);
+    REGISTER_STARROCKS_METRIC(push_request_write_rows);
+
+#define REGISTER_ENGINE_REQUEST_METRIC(type, status, metric)                                                     \
+    registry->register_metric("engine_requests_total", MetricLabels().add("type", #type).add("status", #status), \
+                              &(fast_metrics->metric))
+
+    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, total, create_tablet_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, failed, create_tablet_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(drop_tablet, total, drop_tablet_requests_total);
+
+    REGISTER_ENGINE_REQUEST_METRIC(report_all_tablets, total, report_all_tablets_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(report_all_tablets, failed, report_all_tablets_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(report_tablet, total, report_tablet_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(report_tablet, failed, report_tablet_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(report_disk, total, report_disk_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(report_disk, failed, report_disk_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(report_task, total, report_task_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(report_task, failed, report_task_requests_failed);
+
+    REGISTER_ENGINE_REQUEST_METRIC(schema_change, total, schema_change_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(schema_change, failed, schema_change_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, total, create_rollup_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, failed, create_rollup_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(storage_migrate, total, storage_migrate_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(delete, total, delete_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(delete, failed, delete_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(clone, total, clone_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(clone, failed, clone_requests_failed);
+
+    REGISTER_ENGINE_REQUEST_METRIC(finish_task, total, finish_task_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(finish_task, failed, finish_task_requests_failed);
+
+    REGISTER_ENGINE_REQUEST_METRIC(base_compaction, total, base_compaction_request_total);
+    REGISTER_ENGINE_REQUEST_METRIC(base_compaction, failed, base_compaction_request_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, total, cumulative_compaction_request_total);
+    REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, failed, cumulative_compaction_request_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(update_compaction, total, update_compaction_request_total);
+    REGISTER_ENGINE_REQUEST_METRIC(update_compaction, failed, update_compaction_request_failed);
+
+    REGISTER_ENGINE_REQUEST_METRIC(publish, total, publish_task_request_total);
+    REGISTER_ENGINE_REQUEST_METRIC(publish, failed, publish_task_failed_total);
+
+#undef REGISTER_ENGINE_REQUEST_METRIC
+
+    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "base"),
+                              &(fast_metrics->base_compaction_deltas_total));
+    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "cumulative"),
+                              &(fast_metrics->cumulative_compaction_deltas_total));
+    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "base"),
+                              &(fast_metrics->base_compaction_bytes_total));
+    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "cumulative"),
+                              &(fast_metrics->cumulative_compaction_bytes_total));
+    registry->register_metric("compaction_deltas_total", MetricLabels().add("type", "update"),
+                              &(fast_metrics->update_compaction_deltas_total));
+    registry->register_metric("compaction_bytes_total", MetricLabels().add("type", "update"),
+                              &(fast_metrics->update_compaction_bytes_total));
+    registry->register_metric("update_compaction_outputs_total", MetricLabels().add("type", "update"),
+                              &(fast_metrics->update_compaction_outputs_total));
+    registry->register_metric("update_compaction_outputs_bytes_total", MetricLabels().add("type", "update"),
+                              &(fast_metrics->update_compaction_outputs_bytes_total));
+    registry->register_metric("update_compaction_duration_us", MetricLabels().add("type", "update"),
+                              &(fast_metrics->update_compaction_duration_us));
+
+    registry->register_metric("meta_request_total", MetricLabels().add("type", "write"),
+                              &(fast_metrics->meta_write_request_total));
+    registry->register_metric("meta_request_total", MetricLabels().add("type", "read"),
+                              &(fast_metrics->meta_read_request_total));
+    registry->register_metric("meta_request_duration", MetricLabels().add("type", "write"),
+                              &(fast_metrics->meta_write_request_duration_us));
+    registry->register_metric("meta_request_duration", MetricLabels().add("type", "read"),
+                              &(fast_metrics->meta_read_request_duration_us));
+
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_total_read_times"),
+                              &(fast_metrics->segment_read_total));
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_total_row_num"),
+                              &(fast_metrics->segment_row_total));
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_rows_by_short_key"),
+                              &(fast_metrics->segment_rows_by_short_key));
+    registry->register_metric("segment_read", MetricLabels().add("type", "segment_rows_read_by_zone_map"),
+                              &(fast_metrics->segment_rows_read_by_zone_map));
+
+    registry->register_metric("txn_request", MetricLabels().add("type", "begin"),
+                              &(fast_metrics->txn_begin_request_total));
+    registry->register_metric("txn_request", MetricLabels().add("type", "commit"),
+                              &(fast_metrics->txn_commit_request_total));
+    registry->register_metric("txn_request", MetricLabels().add("type", "rollback"),
+                              &(fast_metrics->txn_rollback_request_total));
+    registry->register_metric("txn_request", MetricLabels().add("type", "exec"), &(fast_metrics->txn_exec_plan_total));
+
+    registry->register_metric("stream_load", MetricLabels().add("type", "receive_bytes"),
+                              &(fast_metrics->stream_receive_bytes_total));
+    registry->register_metric("stream_load", MetricLabels().add("type", "load_rows"),
+                              &(fast_metrics->stream_load_rows_total));
+    registry->register_metric("load_rows", &(fast_metrics->load_rows_total));
+    registry->register_metric("load_bytes", &(fast_metrics->load_bytes_total));
+
+    REGISTER_STARROCKS_METRIC(memory_pool_bytes_total);
+    REGISTER_STARROCKS_METRIC(process_thread_num);
+    REGISTER_STARROCKS_METRIC(process_fd_num_used);
+    REGISTER_STARROCKS_METRIC(process_fd_num_limit_soft);
+    REGISTER_STARROCKS_METRIC(process_fd_num_limit_hard);
+
+    REGISTER_STARROCKS_METRIC(tablet_cumulative_max_compaction_score);
+    REGISTER_STARROCKS_METRIC(tablet_base_max_compaction_score);
+    REGISTER_STARROCKS_METRIC(tablet_update_max_compaction_score);
+    REGISTER_STARROCKS_METRIC(max_tablet_rowset_num);
+    REGISTER_STARROCKS_METRIC(wait_cumulative_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(wait_base_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(running_cumulative_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(running_base_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(running_update_compaction_task_num);
+    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_cost_time_ms);
+    REGISTER_STARROCKS_METRIC(base_compaction_task_cost_time_ms);
+    REGISTER_STARROCKS_METRIC(update_compaction_task_cost_time_ns);
+    REGISTER_STARROCKS_METRIC(base_compaction_task_byte_per_second);
+    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_byte_per_second);
+    REGISTER_STARROCKS_METRIC(update_compaction_task_byte_per_second);
+
+    REGISTER_STARROCKS_METRIC(push_request_write_bytes_per_second);
+    REGISTER_STARROCKS_METRIC(query_scan_bytes_per_second);
+    REGISTER_STARROCKS_METRIC(max_disk_io_util_percent);
+    REGISTER_STARROCKS_METRIC(max_network_send_bytes_rate);
+    REGISTER_STARROCKS_METRIC(max_network_receive_bytes_rate);
+
+    registry->register_hook(kStarRocksMetricsHookName, [fast_metrics] { update_starrocks_metrics(fast_metrics); });
+
+    REGISTER_STARROCKS_METRIC(readable_blocks_total);
+    REGISTER_STARROCKS_METRIC(writable_blocks_total);
+    REGISTER_STARROCKS_METRIC(blocks_created_total);
+    REGISTER_STARROCKS_METRIC(blocks_deleted_total);
+    REGISTER_STARROCKS_METRIC(bytes_read_total);
+    REGISTER_STARROCKS_METRIC(bytes_written_total);
+    REGISTER_STARROCKS_METRIC(disk_sync_total);
+    REGISTER_STARROCKS_METRIC(blocks_open_reading);
+    REGISTER_STARROCKS_METRIC(blocks_open_writing);
+
+    REGISTER_STARROCKS_METRIC(exec_runtime_memory_size);
+
+    REGISTER_STARROCKS_METRIC(short_circuit_request_total);
+    REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
+
+    REGISTER_STARROCKS_METRIC(flat_json_segment_write_total);
+    REGISTER_STARROCKS_METRIC(flat_json_write_rows_total);
+    REGISTER_STARROCKS_METRIC(flat_json_paths_discovered_total);
+    REGISTER_STARROCKS_METRIC(flat_json_paths_extracted_total);
+    REGISTER_STARROCKS_METRIC(flat_json_access_hit_total);
+    REGISTER_STARROCKS_METRIC(flat_json_access_miss_total);
+    REGISTER_STARROCKS_METRIC(flat_json_cast_duration_ns_total);
+    REGISTER_STARROCKS_METRIC(flat_json_merge_duration_ns_total);
+    REGISTER_STARROCKS_METRIC(flat_json_flatten_duration_ns_total);
+    REGISTER_STARROCKS_METRIC(flat_json_compaction_total);
+    REGISTER_STARROCKS_METRIC(flat_json_compaction_schema_change_total);
+
+    REGISTER_STARROCKS_METRIC(datacache_mem_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_used_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_meta_used_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_hit_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_miss_bytes);
+
+#undef REGISTER_STARROCKS_METRIC
+}
+
+void install_disk_path_metrics(MetricRegistry* registry, StarRocksMetrics* fast_metrics,
+                               const std::vector<std::string>& paths) {
+    for (auto& path : paths) {
+        IntGauge* gauge = fast_metrics->disks_total_capacity.add_metric(path, MetricUnit::BYTES);
+        registry->register_metric("disks_total_capacity", MetricLabels().add("path", path), gauge);
+        gauge = fast_metrics->disks_avail_capacity.add_metric(path, MetricUnit::BYTES);
+        registry->register_metric("disks_avail_capacity", MetricLabels().add("path", path), gauge);
+        gauge = fast_metrics->disks_data_used_capacity.add_metric(path, MetricUnit::BYTES);
+        registry->register_metric("disks_data_used_capacity", MetricLabels().add("path", path), gauge);
+        gauge = fast_metrics->disks_state.add_metric(path, MetricUnit::NOUNIT);
+        registry->register_metric("disks_state", MetricLabels().add("path", path), gauge);
+    }
+}
+
+} // namespace
+
+BackendMetricsInitOptions BackendMetricsInitializer::from_config(std::vector<std::string> storage_paths) {
+    BackendMetricsInitOptions options;
+    options.storage_paths = std::move(storage_paths);
+    options.collect_hook_enabled = !config::enable_metric_calculator;
+    options.init_system_metrics = config::enable_system_metrics;
+    options.init_jvm_metrics = config::enable_jvm_metrics;
+    options.bind_ipv6 = BackendOptions::is_bind_ipv6();
+    return options;
+}
+
+void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metrics_registry,
+                                           StarRocksMetrics* fast_metrics, const BackendMetricsInitOptions& options) {
+    DCHECK(process_metrics_registry != nullptr);
+    DCHECK(fast_metrics != nullptr);
+
+    auto* registry = process_metrics_registry->root_registry();
+    registry->set_collect_hook_enabled(options.collect_hook_enabled);
+    install_starrocks_metrics(registry, fast_metrics);
+
+    std::set<std::string> disk_devices;
+    std::vector<std::string> network_interfaces;
+    if (options.init_system_metrics && !prepare_system_metrics_inputs(options, &disk_devices, &network_interfaces)) {
+        return;
+    }
+
+    pipeline::PipelineExecutorMetrics::instance()->register_all_metrics(registry);
+    install_disk_path_metrics(registry, fast_metrics, options.storage_paths);
+
+    if (options.init_system_metrics) {
+        SystemMetrics::instance()->install(registry, disk_devices, network_interfaces);
+    }
+
+    FileScanMetrics::instance()->install(registry);
+    CatalogScanMetrics::instance()->install(registry);
+    SpillMetrics::instance()->install(registry);
+
+#ifndef __APPLE__
+    if (options.init_jvm_metrics) {
+        auto* jvm_metrics = JVMMetrics::instance();
+        auto status = jvm_metrics->init();
+        if (!status.ok()) {
+            LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
+            return;
+        }
+        jvm_metrics->install(registry);
+    }
+#endif
+}
+
+} // namespace starrocks

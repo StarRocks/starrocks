@@ -36,14 +36,36 @@
 
 #include <gtest/gtest.h>
 
+#include <mutex>
+
 #include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "service/backend_metrics_initializer.h"
 #include "util/global_metrics_registry.h"
+#include "util/metrics/catalog_scan_metrics.h"
 
 namespace starrocks {
+
+namespace {
+
+const char* const kTestDiskPath = "test_metric_path";
+
+void init_backend_metrics_for_test() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        BackendMetricsInitOptions options;
+        options.storage_paths.emplace_back(kTestDiskPath);
+        options.collect_hook_enabled = true;
+        options.init_system_metrics = false;
+        options.init_jvm_metrics = false;
+        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(),
+                                              StarRocksMetrics::instance(), options);
+    });
+}
+
+} // namespace
 
 class StarRocksMetricsTest : public testing::Test {
 public:
@@ -52,6 +74,8 @@ public:
 
 protected:
     void SetUp() override {
+        init_backend_metrics_for_test();
+
         MemCacheOptions opts{.mem_space_size = 10 * 1024 * 1024};
         _lru_cache = std::make_shared<LRUCacheEngine>();
         ASSERT_OK(_lru_cache->init(opts));
@@ -327,8 +351,6 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
 
 TEST_F(StarRocksMetricsTest, test_metrics_register) {
     auto instance = GlobalMetricsRegistry::instance()->metrics();
-    pipeline::ExecStateReporterMetrics exec_metrics;
-    exec_metrics.register_all_metrics(instance);
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_io_time_us"));
@@ -370,6 +392,13 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("priority_exec_state_report", instance);
     assert_threadpool_metrics_register("automatic_partition", instance);
     assert_threadpool_metrics_register("lake_metadata_fetch", instance);
+    ASSERT_NE(nullptr, instance->get_metric("disks_total_capacity", MetricLabels().add("path", kTestDiskPath)));
+    ASSERT_NE(nullptr, instance->get_metric("pipe_driver_schedule_count"));
+    ASSERT_NE(nullptr, instance->get_metric("files_scan_num_files_read",
+                                            MetricLabels().add("file_format", "avro").add("scan_type", "insert")));
+    ASSERT_NE(nullptr, instance->get_metric("query_spill_trigger_total", MetricLabels().add("storage_type", "local")));
+    CatalogScanMetrics::instance()->update_scan_bytes("hive", 7);
+    ASSERT_NE(nullptr, instance->get_metric("catalog_query_scan_bytes", MetricLabels().add("catalog_type", "hive")));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));
