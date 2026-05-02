@@ -11,6 +11,10 @@
     "message": "快速开始",
     "description": "The label for category Quick Start in sidebar docs"
   },
+  "sidebar.docs.category.Best Practices": {
+    "message": "最佳实践",
+    "description": "The label for category Best Practices in sidebar docs"
+  },
   "sidebar.docs.category.Project Help": {
     "message": "技术支持",
     "description": "The label for category Project Help in sidebar docs"
