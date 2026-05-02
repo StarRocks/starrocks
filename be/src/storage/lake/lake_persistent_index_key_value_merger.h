@@ -83,6 +83,11 @@ private:
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
     std::vector<TableBuilderWrapper> _output_builders;
+    // Scratch buffers reused across merge()/flush() to avoid per-key protobuf
+    // allocator churn. Cleared between calls so internal capacity is retained.
+    IndexValuesWithVerPB _merge_pb_scratch;
+    IndexValuesWithVerPB _flush_pb_scratch;
+    std::string _flush_serialized_scratch;
 };
 } // namespace lake
 } // namespace starrocks

@@ -42,7 +42,9 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     const std::string& value = iter_ptr->value().to_string();
     uint64_t max_rss_rowid = iter_ptr->max_rss_rowid();
 
-    IndexValuesWithVerPB index_value_ver;
+    // Reuse scratch protobuf to avoid allocating/freeing internal storage on every key.
+    IndexValuesWithVerPB& index_value_ver = _merge_pb_scratch;
+    index_value_ver.Clear();
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
     }
@@ -147,7 +149,10 @@ Status KeyValueMerger::flush() {
         return Status::OK();
     }
 
-    IndexValuesWithVerPB index_value_pb;
+    // Reuse scratch protobuf and serialization buffer to avoid allocating fresh
+    // RepeatedField storage and a new std::string on every flushed key.
+    IndexValuesWithVerPB& index_value_pb = _flush_pb_scratch;
+    index_value_pb.Clear();
     for (const auto& index_value_with_ver : _index_value_vers) {
         if (_merge_base_level && index_value_with_ver.second == IndexValue(NullIndexValue)) {
             // deleted
@@ -165,8 +170,9 @@ Status KeyValueMerger::flush() {
             // Create a new sst file when current file is empty or exceed target size.
             RETURN_IF_ERROR(create_table_builder());
         }
-        RETURN_IF_ERROR(
-                _output_builders.back().table_builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString())));
+        _flush_serialized_scratch.clear();
+        index_value_pb.SerializeToString(&_flush_serialized_scratch);
+        RETURN_IF_ERROR(_output_builders.back().table_builder->Add(Slice(_key), Slice(_flush_serialized_scratch)));
     }
     _index_value_vers.clear();
 
