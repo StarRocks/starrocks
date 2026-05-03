@@ -157,7 +157,7 @@ public abstract class TestWithFeService {
     }
 
     protected void createStarrocksCluster() {
-        UtFrameUtils.createMinStarRocksCluster(true, runMode);
+        UtFrameUtils.createMinStarRocksCluster(false, runMode);
     }
 
     protected void cleanStarrocksFeDir() {
