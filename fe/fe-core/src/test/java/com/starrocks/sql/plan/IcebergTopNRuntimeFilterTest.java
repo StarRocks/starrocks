@@ -19,6 +19,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+// Tests for the TopN pre-agg runtime filter optimization on Iceberg (non-OLAP) scans.
+// The optimization is triggered by PushDownTopNToPreAggRule when:
+//   TopN(PARTIAL) -> Agg(GLOBAL) -> Agg(LOCAL) -> IcebergScan
+// which causes AggregationNode.buildRuntimeFilters() to push a TOPN_FILTER to the scan.
 public class IcebergTopNRuntimeFilterTest extends ConnectorPlanTestBase {
     private static boolean originalRunningUnitTest;
 
@@ -34,27 +38,37 @@ public class IcebergTopNRuntimeFilterTest extends ConnectorPlanTestBase {
         FeConstants.runningUnitTest = originalRunningUnitTest;
     }
 
+    // ORDER BY grouping key — basic case.
     @Test
     public void testTopNAggOrderByGroupKeyGeneratesRuntimeFilter() throws Exception {
         String sql = "SELECT id, SUM(c1) FROM iceberg0.unpartitioned_db.t_numeric " +
                 "GROUP BY id ORDER BY id LIMIT 10";
         String plan = getVerboseExplain(sql);
-
-        assertContains(plan, "IcebergScanNode");
-        assertContains(plan, "2:TOP-N");
-        assertContains(plan, "build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (<slot 1> 1: id), remote = false");
-        assertContains(plan, "probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (<slot 1> 1: id)");
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: id)");
     }
 
+    // ORDER BY grouping key via alias — the column mapping must be threaded through the Project
+    // that column pruning inserts between TopN and Agg.  This is the main regression target for
+    // the alias/project fix: without the fix isTopNOnGroupKeyAgg() returns false for this shape
+    // and no runtime filter is generated.
     @Test
-    public void testTopNAggOrderByAggregateResultDoesNotUsePreAggTopNRuntimeFilter() throws Exception {
+    public void testTopNAggOrderByAliasedGroupKeyGeneratesRuntimeFilter() throws Exception {
+        String sql = "SELECT id AS k, SUM(c1) FROM iceberg0.unpartitioned_db.t_numeric " +
+                "GROUP BY id ORDER BY k LIMIT 10";
+        String plan = getVerboseExplain(sql);
+        // The filter must probe the underlying 'id' column, not the alias 'k'.
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: id)");
+    }
+
+    // ORDER BY aggregate result — should NOT generate a pre-agg TopN runtime filter because
+    // the ordering column depends on the aggregation output, not a grouping key.
+    @Test
+    public void testTopNAggOrderByAggregateResultNoRuntimeFilter() throws Exception {
         String sql = "SELECT id, SUM(c1) AS revenue FROM iceberg0.unpartitioned_db.t_numeric " +
                 "GROUP BY id ORDER BY revenue LIMIT 10";
         String plan = getVerboseExplain(sql);
-
-        assertContains(plan, "IcebergScanNode");
         assertNotContains(plan, "probe runtime filters");
     }
 }

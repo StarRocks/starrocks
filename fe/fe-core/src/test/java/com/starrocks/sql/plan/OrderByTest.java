@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
@@ -272,7 +271,6 @@ class OrderByTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
                 "  |  group by: 2: v2, 3: v3");
-
 
         sql = "select abs(t0.v1), abs(t1.v1) from t0, t0_not_null t1 order by t1.v2";
         plan = getFragmentPlan(sql);
@@ -736,7 +734,6 @@ class OrderByTest extends PlanTestBase {
         list.add(Arguments.of("select * from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select t0.* from t0 order by t0.v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct t0.* from t0 order by t0.v1", "order by: <slot 1> 1: v1 ASC"));
-
 
         list.add(Arguments.of("select *, v1 from t0  order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select *, v1 from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));

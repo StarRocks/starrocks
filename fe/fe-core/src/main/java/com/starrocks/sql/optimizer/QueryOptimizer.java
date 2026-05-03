@@ -35,11 +35,14 @@ import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.ivm.IvmRewriter;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
@@ -151,6 +154,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -621,7 +625,9 @@ public class QueryOptimizer extends Optimizer {
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
-        if (hasTopNOnGroupKeyAgg(tree)) {
+        SessionVariable sv = rootTaskContext.getOptimizerContext().getSessionVariable();
+        if (sv.getTopNPushDownAggMode() >= 0 &&
+                hasTopNOnGroupKeyAgg(tree, sv.getCboPushDownTopNLimit())) {
             scheduler.rewriteOnce(tree, rootTaskContext, SplitTopNRule.getInstance());
             scheduler.rewriteOnce(tree, rootTaskContext, SplitTwoPhaseAggRule.getInstance());
             scheduler.rewriteOnce(tree, rootTaskContext, PushDownTopNToPreAggRule.getInstance());
@@ -1125,49 +1131,52 @@ public class QueryOptimizer extends Optimizer {
         return list;
     }
 
-    private boolean hasTopNOnGroupKeyAgg(OptExpression tree) {
-        if (isTopNOnGroupKeyAgg(tree)) {
+    private boolean hasTopNOnGroupKeyAgg(OptExpression tree, long maxLimit) {
+        if (isTopNOnGroupKeyAgg(tree, maxLimit)) {
             return true;
         }
-        return tree.getInputs().stream().anyMatch(this::hasTopNOnGroupKeyAgg);
+        return tree.getInputs().stream().anyMatch(child -> hasTopNOnGroupKeyAgg(child, maxLimit));
     }
 
-    private boolean isTopNOnGroupKeyAgg(OptExpression tree) {
+    private boolean isTopNOnGroupKeyAgg(OptExpression tree, long maxLimit) {
         Operator operator = tree.getOp();
         if (!(operator instanceof LogicalTopNOperator)) {
             return false;
         }
         LogicalTopNOperator topN = (LogicalTopNOperator) operator;
-        if (!topN.hasLimit() || topN.hasOffset() || topN.getPredicate() != null || tree.getInputs().size() != 1) {
+        if (!topN.hasLimit() || topN.getLimit() > maxLimit ||
+                topN.hasOffset() || topN.getPredicate() != null || tree.getInputs().size() != 1) {
             return false;
         }
 
-        OptExpression aggExpression = skipLogicalProject(tree.inputAt(0));
-        Operator aggOperator = aggExpression.getOp();
-        if (!(aggOperator instanceof LogicalAggregationOperator)) {
+        // Collect any project chain between TopN and Agg so we can map column refs through them.
+        List<LogicalProjectOperator> projectChain = new ArrayList<>();
+        OptExpression cur = tree.inputAt(0);
+        while (cur.getInputs().size() == 1 && cur.getOp() instanceof LogicalProjectOperator) {
+            projectChain.add((LogicalProjectOperator) cur.getOp());
+            cur = cur.inputAt(0);
+        }
+
+        if (!(cur.getOp() instanceof LogicalAggregationOperator)) {
             return false;
         }
-        LogicalAggregationOperator agg = (LogicalAggregationOperator) aggOperator;
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) cur.getOp();
         if (agg.getPredicate() != null) {
             return false;
         }
 
-        return topN.getOrderByElements().stream()
-                .allMatch(ordering -> agg.getGroupingKeys().contains(ordering.getColumnRef()));
-    }
-
-    private OptExpression skipLogicalProject(OptExpression tree) {
-        OptExpression result = tree;
-        while (result.getInputs().size() == 1) {
-            switch (result.getOp().getOpType()) {
-                case LOGICAL_PROJECT:
-                    result = result.inputAt(0);
-                    break;
-                default:
-                    return result;
+        List<ColumnRefOperator> groupingKeys = agg.getGroupingKeys();
+        return topN.getOrderByElements().stream().allMatch(ordering -> {
+            ColumnRefOperator colRef = ordering.getColumnRef();
+            for (LogicalProjectOperator proj : projectChain) {
+                ScalarOperator mapped = proj.getColumnRefMap().get(colRef);
+                if (!(mapped instanceof ColumnRefOperator)) {
+                    return false;
+                }
+                colRef = (ColumnRefOperator) mapped;
             }
-        }
-        return result;
+            return groupingKeys.contains(colRef);
+        });
     }
 
     private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {

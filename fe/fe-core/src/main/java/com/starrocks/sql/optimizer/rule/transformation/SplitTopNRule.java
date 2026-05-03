@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
@@ -76,31 +75,49 @@ public class SplitTopNRule extends TransformationRule {
         return Lists.newArrayList(finalSortExpression);
     }
 
+    // Pushes a PARTIAL TopN through one or more stacked identity-like Project nodes so that
+    // PushDownTopNToPreAggRule can later see TopN(PARTIAL) → Agg(GLOBAL) → Agg(LOCAL) directly.
     private Optional<OptExpression> splitThroughProject(OptExpression input, LogicalTopNOperator src,
                                                         LogicalTopNOperator finalSort, long limit) {
         if (input.getInputs().size() != 1 || !(input.inputAt(0).getOp() instanceof LogicalProjectOperator)) {
             return Optional.empty();
         }
-        OptExpression projectExpression = input.inputAt(0);
-        LogicalProjectOperator project = projectExpression.getOp().cast();
-        if (project.hasLimit() || projectExpression.getInputs().size() != 1) {
-            return Optional.empty();
-        }
 
-        List<Ordering> rewrittenOrderings = new ArrayList<>();
-        for (Ordering ordering : src.getOrderByElements()) {
-            ScalarOperator mapped = project.getColumnRefMap().get(ordering.getColumnRef());
-            if (!(mapped instanceof ColumnRefOperator)) {
+        // Collect the chain of consecutive, non-limiting Project nodes above the agg.
+        List<OptExpression> projectChain = new ArrayList<>();
+        OptExpression cur = input.inputAt(0);
+        while (cur.getInputs().size() == 1 && cur.getOp() instanceof LogicalProjectOperator) {
+            LogicalProjectOperator proj = cur.getOp().cast();
+            if (proj.hasLimit()) {
                 return Optional.empty();
             }
-            rewrittenOrderings.add(new Ordering((ColumnRefOperator) mapped, ordering.isAscending(),
-                    ordering.isNullsFirst()));
+            projectChain.add(cur);
+            cur = cur.inputAt(0);
         }
 
+        // Map each ordering column ref through the entire project chain (outermost → innermost).
+        List<Ordering> rewrittenOrderings = new ArrayList<>();
+        for (Ordering ordering : src.getOrderByElements()) {
+            ColumnRefOperator colRef = ordering.getColumnRef();
+            for (OptExpression projectExpr : projectChain) {
+                LogicalProjectOperator proj = projectExpr.getOp().cast();
+                ScalarOperator mapped = proj.getColumnRefMap().get(colRef);
+                if (!(mapped instanceof ColumnRefOperator)) {
+                    return Optional.empty();
+                }
+                colRef = (ColumnRefOperator) mapped;
+            }
+            rewrittenOrderings.add(new Ordering(colRef, ordering.isAscending(), ordering.isNullsFirst()));
+        }
+
+        // Place PARTIAL TopN below all projects, then rebuild the chain bottom-up.
+        // Result: TopN(FINAL,split) → P1 → ... → Pn → TopN(PARTIAL) → <rest>
         LogicalTopNOperator partialSort = new LogicalTopNOperator(
                 rewrittenOrderings, limit, Operator.DEFAULT_OFFSET, SortPhase.PARTIAL);
-        OptExpression partialSortExpression = OptExpression.create(partialSort, projectExpression.getInputs());
-        OptExpression projectOverPartialSort = OptExpression.create(project, partialSortExpression);
-        return Optional.of(OptExpression.create(finalSort, projectOverPartialSort));
+        OptExpression rebuilt = OptExpression.create(partialSort, cur);
+        for (int i = projectChain.size() - 1; i >= 0; i--) {
+            rebuilt = OptExpression.create(projectChain.get(i).getOp(), rebuilt);
+        }
+        return Optional.of(OptExpression.create(finalSort, rebuilt));
     }
 }
