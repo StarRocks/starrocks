@@ -940,7 +940,11 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
     ADD_AND_SET_TIMER(profile, "FinishPutTxnLogTime", writer_stat.finish_put_txn_log_time_ns.load());
     ADD_AND_SET_TIMER(profile, "FinishPkPreloadTime", writer_stat.finish_pk_preload_time_ns.load());
 
-    const FlushStatistic* flush_stat = writer->get_flush_stats();
+    // Use get_flush_token() to hold a shared_ptr, keeping the FlushToken alive
+    // while we read its stats. This prevents use-after-free when close()
+    // concurrently resets the token.
+    auto flush_token = writer->get_flush_token();
+    const FlushStatistic* flush_stat = flush_token ? &flush_token->get_stats() : nullptr;
     ADD_AND_SET_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count, 0));
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
