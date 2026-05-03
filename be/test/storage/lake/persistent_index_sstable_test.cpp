@@ -527,6 +527,41 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
     ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
+TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
+    const std::string filename = "open_retry_corrupted_cache.sst";
+    const std::string path = lake::join_path(kTestDir, filename);
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+
+    bool old = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+
+    bool injected = false;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void* arg) {
+        if (!injected) {
+            injected = true;
+            *(Status*)arg = Status::Corruption("inject_open_corruption");
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    auto st = sst->init(std::move(rf), sstable_pb, nullptr);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::init:table_open_error");
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old;
+
+    ASSERT_OK(st);
+}
+
 TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     const std::string path = lake::join_path(kTestDir, "metric_multiget_error.sst");
     uint64_t filesize = 0;
@@ -558,6 +593,46 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
 
     ASSERT_ERROR(st);
     ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
+}
+
+TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cache) {
+    const std::string path = lake::join_path(kTestDir, "multiget_retry_corrupted_cache.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    std::unique_ptr<Cache> cache(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename("multiget_retry_corrupted_cache.sst");
+    sstable_pb.set_filesize(filesize);
+    ASSERT_OK(sst->init(std::move(rf), sstable_pb, cache.get()));
+
+    bool old = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::multi_get:error",
+                                          [](void* arg) { *(Status*)arg = Status::Corruption("inject_corruption"); });
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    std::string key_str = fmt::format("key_{:04d}", 0);
+    Slice key(key_str);
+    KeyIndexSet key_indexes{0};
+    std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+    KeyIndexSet found;
+    auto st = sst->multi_get(&key, key_indexes, -1, values.data(), &found);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::multi_get:error");
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old;
+
+    ASSERT_OK(st);
+    ASSERT_EQ(1, found.size());
+    ASSERT_TRUE(found.contains(0));
+    ASSERT_EQ(IndexValue(0), values[0]);
 }
 
 } // namespace starrocks::lake
