@@ -3069,7 +3069,7 @@ E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 55. 
 -- !result
 select array_sort(array_intersect(as_1, [[1,2,3], [2,3,4]])) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 59. Detail message: No matching function with signature: array_sort(array<array<varchar(65533)>>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 59. Detail message: No matching function with signature: array_sort(array<array<varchar>>).')
 -- !result
 select array_sort(array_intersect(aas_1, s_1)) from array_test order by pk;
 -- result:
@@ -3117,7 +3117,7 @@ E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 45. 
 -- !result
 select array_sort(array_intersect(aad_1, aas_1)) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 47. Detail message: No matching function with signature: array_sort(array<array<array<varchar(65533)>>>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 47. Detail message: No matching function with signature: array_sort(array<array<array<varchar>>>).')
 -- !result
 select array_sort(array_intersect(aad_1, aad_1)) from array_test order by pk;
 -- result:
@@ -3273,7 +3273,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 59. D
 -- !result
 select array_sort(array_intersect([[1,2,3], [2,3,4]], as_1)) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 59. Detail message: No matching function with signature: array_sort(array<array<varchar(65533)>>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 59. Detail message: No matching function with signature: array_sort(array<array<varchar>>).')
 -- !result
 select array_sort(array_intersect([[1,2,3], [2,3,4]], aas_1)) from array_test order by pk;
 -- result:
