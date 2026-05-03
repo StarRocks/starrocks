@@ -29,7 +29,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -38,10 +37,10 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->metrics()->set_collect_hook_enabled(true);
     }
     void TearDown() override {}
 

@@ -26,7 +26,6 @@ set(UTIL_FILES
   download_util.cpp
   json_util.cpp
   json_flattener.cpp
-  global_metrics_registry.cpp
   metrics/flat_json_metrics.cpp
   metrics/file_scan_metrics.cpp
   metrics/catalog_scan_metrics.cpp

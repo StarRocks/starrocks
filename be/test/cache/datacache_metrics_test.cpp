@@ -20,9 +20,10 @@
 
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "service/backend_metrics_initializer.h"
-#include "util/global_metrics_registry.h"
 
 #ifdef WITH_STARCACHE
 #include "base/testutil/assert.h"
@@ -33,6 +34,18 @@ namespace starrocks {
 
 namespace {
 
+ProcessMetricsRegistry* backend_process_metrics_registry_for_test() {
+    if (auto* registry = ExecEnv::GetInstance()->process_metrics_registry(); registry != nullptr) {
+        return registry;
+    }
+    static auto* registry = new ProcessMetricsRegistry("starrocks_be");
+    return registry;
+}
+
+MetricRegistry* backend_metrics_registry_for_test() {
+    return backend_process_metrics_registry_for_test()->root_registry();
+}
+
 void init_backend_metrics_for_test() {
     static std::once_flag once;
     std::call_once(once, [] {
@@ -40,7 +53,7 @@ void init_backend_metrics_for_test() {
         options.collect_hook_enabled = true;
         options.init_system_metrics = false;
         options.init_jvm_metrics = false;
-        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(), options);
+        BackendMetricsInitializer::initialize(backend_process_metrics_registry_for_test(), options);
     });
 }
 
@@ -67,7 +80,7 @@ TEST_F(DataCacheMetricsTest, test_enable_update_hook_basic) {
 #ifdef WITH_STARCACHE
 // Test metrics registration with StarCache enabled
 TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
+    auto metrics = backend_metrics_registry_for_test();
 
     // Verify that datacache metrics are registered
     ASSERT_NE(nullptr, metrics->get_metric("datacache_mem_quota_bytes"));
@@ -96,7 +109,7 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
 // Test metrics update through hook mechanism
 TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
     auto instance = DataCacheMetrics::instance();
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
+    auto metrics = backend_metrics_registry_for_test();
 
     // Register the metrics hook
     DataCacheMetrics::instance()->enable_update_hook(false);
@@ -120,7 +133,7 @@ TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
 
 // Test metrics types are correct (should be INT_GAUGE)
 TEST_F(DataCacheMetricsTest, test_metrics_types) {
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
+    auto metrics = backend_metrics_registry_for_test();
 
     auto mem_quota_metric = metrics->get_metric("datacache_mem_quota_bytes");
     auto mem_used_metric = metrics->get_metric("datacache_mem_used_bytes");

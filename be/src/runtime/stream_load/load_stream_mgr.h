@@ -41,20 +41,23 @@
 #include "base/uid_util.h" // for std::hash for UniqueId
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_pipe.h" // for StreamLoadPipe
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
+
+class MetricRegistry;
 
 // used to register all streams in process so that other module can get this stream
 class LoadStreamMgr {
 public:
-    LoadStreamMgr() {
+    explicit LoadStreamMgr(MetricRegistry* metrics = nullptr) {
         // Each StreamLoadPipe has a limited buffer size (default 1M), it's not needed to count the
         // actual size of all StreamLoadPipe.
-        REGISTER_GAUGE_RUNTIME_METRIC(stream_load_pipe_count, [this]() {
-            std::lock_guard<std::mutex> l(_lock);
-            return _stream_map.size();
-        });
+        if (metrics != nullptr) {
+            REGISTER_GAUGE_RUNTIME_METRIC(metrics, stream_load_pipe_count, [this]() {
+                std::lock_guard<std::mutex> l(_lock);
+                return _stream_map.size();
+            });
+        }
     }
     ~LoadStreamMgr() = default;
 

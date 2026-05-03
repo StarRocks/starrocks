@@ -29,7 +29,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks::connector {
 
@@ -38,9 +37,9 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->metrics()->set_collect_hook_enabled(true);
         _runtime_state = _create_runtime_state();
         _pool = _runtime_state->obj_pool();
     }

@@ -35,6 +35,7 @@ namespace starrocks {
 
 class Cache;
 class CacheKey;
+class TableMetricsManager;
 
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
@@ -52,7 +53,7 @@ public:
 
     typedef std::function<void(ShardId)> add_shard_listener;
 
-    StarOSWorker();
+    explicit StarOSWorker(TableMetricsManager* table_metrics_mgr = nullptr);
 
     ~StarOSWorker() override;
 
@@ -144,11 +145,13 @@ private:
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
 extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
-void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
+                        TableMetricsManager* table_metrics_mgr = nullptr);
 void shutdown_staros_worker();
 void update_staros_starcache();
 void set_starlet_in_shutdown();

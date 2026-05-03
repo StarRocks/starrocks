@@ -92,7 +92,7 @@ public:
     StoragePageCache() = default;
     virtual ~StoragePageCache() = default;
 
-    void init_metrics();
+    void init_metrics(MetricRegistry* metrics = nullptr);
 
     // Return global instance.
     // Client should call create_global_cache before.

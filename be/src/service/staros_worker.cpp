@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "common/util/debug_util.h"
+#include "common/util/table_metrics.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
 #include "fs/fs_factory.h"
@@ -35,7 +36,6 @@
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
 #include "service/service_metrics.h"
-#include "util/global_metrics_registry.h"
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
@@ -66,11 +66,12 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 namespace fslib = staros::starlet::fslib;
 
-StarOSWorker::StarOSWorker()
+StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
         : _mtx(),
           _cache_mtx(),
           _shards(),
-          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)),
+          _table_metrics_mgr(table_metrics_mgr) {}
 
 StarOSWorker::~StarOSWorker() = default;
 
@@ -109,9 +110,9 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     auto ret = _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
     l.unlock();
     if (ret.second) {
-#ifndef BE_TEST
-        GlobalMetricsRegistry::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
-#endif
+        if (_table_metrics_mgr != nullptr) {
+            _table_metrics_mgr->register_table(get_table_id(shard));
+        }
         // it is an insert op to the map
         // NOTE:
         //  1. Since the following statement is invoked outside the lock, it is possible that
@@ -141,10 +142,10 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     std::unique_lock l(_mtx);
     auto iter = _shards.find(id);
     if (iter != _shards.end()) {
-#ifndef BE_TEST
         uint64_t table_id = get_table_id(iter->second.shard_info);
-        GlobalMetricsRegistry::instance()->table_metrics_mgr()->unregister_table(table_id);
-#endif
+        if (_table_metrics_mgr != nullptr) {
+            _table_metrics_mgr->unregister_table(table_id);
+        }
         _shards.erase(iter);
     }
     return absl::OkStatus();
@@ -490,7 +491,8 @@ Status to_status(const absl::Status& absl_status) {
     }
 }
 
-void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache) {
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
+                        TableMetricsManager* table_metrics_mgr) {
     if (g_starlet.get() != nullptr) {
         return;
     }
@@ -535,7 +537,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
-    g_worker = std::make_shared<StarOSWorker>();
+    g_worker = std::make_shared<StarOSWorker>(table_metrics_mgr);
     g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
     g_starlet->init(starlet_config);
     g_starlet->start();

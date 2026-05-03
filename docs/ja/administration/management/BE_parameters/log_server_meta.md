@@ -264,7 +264,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: No
-- 説明: StarRocks が起動時に JVM 固有のメトリクスを初期化して登録するかどうかを制御します。値は Daemon::init 内の init_starrocks_metrics で読み取られ、StarRocksMetrics::initialize の init_jvm_metrics パラメータとして渡されます。有効にするとメトリクスサブシステムは JVM 関連のコレクタ（例: heap、GC、thread メトリクス）を作成してエクスポートし、無効の場合はそれらのコレクタは初期化されません。このフラグは起動時にのみ評価され、ランタイム中に変更することはできません。前方互換性のための設定であり、将来のリリースで削除される可能性があります。システムレベルのメトリクス収集は `enable_system_metrics` を使用して制御してください。
+- 説明: StarRocks が起動時に JVM 固有のメトリクスを初期化して登録するかどうかを制御します。値は Daemon::init 内の init_starrocks_metrics で読み取られ、BackendMetricsInitializer::initialize の init_jvm_metrics パラメータとして渡されます。有効にするとメトリクスサブシステムは JVM 関連のコレクタ（例: heap、GC、thread メトリクス）を作成してエクスポートし、無効の場合はそれらのコレクタは初期化されません。このフラグは起動時にのみ評価され、ランタイム中に変更することはできません。前方互換性のための設定であり、将来のリリースで削除される可能性があります。システムレベルのメトリクス収集は `enable_system_metrics` を使用して制御してください。
 - 導入バージョン: v4.0.0
 
 ### get_pindex_worker_count

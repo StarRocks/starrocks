@@ -24,7 +24,6 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -131,12 +130,20 @@ KeyCache& KeyCache::instance() {
     return g_key_cache;
 }
 
-KeyCache::KeyCache() {
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_unwrapped",
-                                                                  &encryption_keys_unwrapped);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_in_cache",
-                                                                  &encryption_keys_in_cache);
+KeyCache::KeyCache() = default;
+
+void KeyCache::install_metrics(MetricRegistry* metrics) {
+    if (metrics == nullptr) {
+        return;
+    }
+    if (_metrics_registry != nullptr) {
+        DCHECK_EQ(_metrics_registry, metrics);
+        return;
+    }
+    _metrics_registry = metrics;
+    metrics->register_metric("encryption_keys_created", &encryption_keys_created);
+    metrics->register_metric("encryption_keys_unwrapped", &encryption_keys_unwrapped);
+    metrics->register_metric("encryption_keys_in_cache", &encryption_keys_in_cache);
 }
 
 Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::vector<const EncryptionKey*>& keys,

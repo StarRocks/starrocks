@@ -32,6 +32,7 @@
 #include "common/brpc_helper.h"
 #include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
+#include "common/util/table_metrics.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
@@ -55,7 +56,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
 #include "util/brpc_stub_cache.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -66,18 +66,23 @@ std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
 LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
                                          MemTracker* mem_tracker, RuntimeProfile* parent_profile,
-                                         BrpcStubCache* brpc_stub_cache)
+                                         BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                         TableMetricsManager* table_metrics_mgr)
         : TabletsChannel(),
           _load_channel(load_channel),
           _brpc_stub_cache(brpc_stub_cache),
+          _table_metrics_mgr(table_metrics_mgr),
           _key(key),
           _mem_tracker(mem_tracker),
           _max_sliding_window_size(config::max_load_dop * 3),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
-    std::call_once(once_flag, [] {
-        REGISTER_GAUGE_RUNTIME_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });
-    });
+    if (metrics != nullptr) {
+        std::call_once(once_flag, [metrics] {
+            REGISTER_GAUGE_RUNTIME_METRIC(metrics, tablet_writer_count,
+                                          [&]() { return _s_tablet_writer_count.load(); });
+        });
+    }
 
     _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
     _profile_update_counter = ADD_COUNTER(_profile, "ProfileUpdateCount", TUnit::UNIT);
@@ -157,7 +162,9 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 #ifndef BE_TEST
-    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics = _table_metrics_mgr->get_table_metrics(_schema->table_id());
+    }
 #endif
 
     _senders = std::vector<Sender>(params.num_senders());
@@ -1245,8 +1252,10 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
                                                                MemTracker* mem_tracker, RuntimeProfile* parent_profile,
-                                                               BrpcStubCache* brpc_stub_cache) {
-    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache);
+                                                               BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                                               TableMetricsManager* table_metrics_mgr) {
+    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache,
+                                                 metrics, table_metrics_mgr);
 }
 
 SecondaryReplicasWaiter::SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms,

@@ -5,83 +5,50 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BE_SRC="${REPO_ROOT}/be/src"
 
-check_allowlist() {
+check_absent_pattern() {
     local label="$1"
-    local include_pattern="$2"
-    local allowlist_file="$3"
+    local pattern="$2"
 
-    if [[ ! -f "${allowlist_file}" ]]; then
-        echo "allowlist file not found: ${allowlist_file}" >&2
-        exit 2
-    fi
-
-    local current_file
-    local allowlist_tmp_file
-    current_file="$(mktemp)"
-    allowlist_tmp_file="$(mktemp)"
-    trap 'rm -f "${current_file}" "${allowlist_tmp_file}"' RETURN
-
+    local matches=""
     if command -v rg >/dev/null 2>&1; then
-        local rg_output_file
         local rg_status
-        rg_output_file="$(mktemp)"
-        trap 'rm -f "${current_file}" "${allowlist_tmp_file}" "${rg_output_file}"' RETURN
         set +e
-        rg -l "${include_pattern}" "${BE_SRC}" --glob '*.{h,hpp,cc,cpp}' > "${rg_output_file}"
+        matches="$(rg -n "${pattern}" "${BE_SRC}" --glob '*.{h,hpp,cc,cpp}')"
         rg_status=$?
         set -e
         if [[ "${rg_status}" != "0" && "${rg_status}" != "1" ]]; then
-            cat "${rg_output_file}" >&2
+            echo "${matches}" >&2
             exit "${rg_status}"
         fi
-        sed "s#^${REPO_ROOT}/##" "${rg_output_file}" | sort -u > "${current_file}"
     else
-        find "${BE_SRC}" -type f \
-            \( -name '*.h' -o -name '*.hpp' -o -name '*.cc' -o -name '*.cpp' \) -print0 \
-            | while IFS= read -r -d '' file; do
-                if grep -Eq "${include_pattern}" "${file}"; then
-                    printf '%s\n' "${file}"
-                fi
-            done \
-            | sed "s#^${REPO_ROOT}/##" \
-            | sort -u > "${current_file}"
+        matches="$(
+            find "${BE_SRC}" -type f \
+                \( -name '*.h' -o -name '*.hpp' -o -name '*.cc' -o -name '*.cpp' \) -print0 \
+                | while IFS= read -r -d '' file; do
+                    if grep -Eq "${pattern}" "${file}"; then
+                        grep -En "${pattern}" "${file}" | sed "s#^#${file}:#"
+                    fi
+                done
+        )"
     fi
 
-    awk '
-        /^[[:space:]]*#/ {next}
-        /^[[:space:]]*$/ {next}
-        {print}
-    ' "${allowlist_file}" | sort -u > "${allowlist_tmp_file}"
-
-    local extra_headers
-    local stale_headers
-    extra_headers="$(comm -23 "${current_file}" "${allowlist_tmp_file}")"
-    stale_headers="$(comm -13 "${current_file}" "${allowlist_tmp_file}")"
-
-    if [[ -n "${extra_headers}" ]]; then
-        echo "Found new production includes of ${label} outside the shrink-only allowlist:" >&2
-        echo "${extra_headers}" >&2
-        echo "Remove the dependency or add it only after explicit architecture review." >&2
+    if [[ -n "${matches}" ]]; then
+        echo "Found forbidden production use of ${label}:" >&2
+        echo "${matches}" | sed "s#${REPO_ROOT}/##" >&2
         exit 1
     fi
 
-    if [[ -n "${stale_headers}" ]]; then
-        echo "Found stale ${label} allowlist entries. Remove fixed debt from ${allowlist_file}:" >&2
-        echo "${stale_headers}" >&2
-        exit 1
-    fi
-
-    local file_count
-    file_count="$(wc -l < "${current_file}" | tr -d '[:space:]')"
-    echo "OK: ${label} production include allowlist matches current tree (${file_count} files)."
+    echo "OK: no production use of ${label}."
 }
 
-check_allowlist \
+check_absent_pattern \
     "runtime/starrocks_metrics.h" \
-    '#include[[:space:]]*[<"]runtime/starrocks_metrics\.h[>"]' \
-    "${REPO_ROOT}/build-support/starrocks_metrics_include_allowlist.txt"
+    '#include[[:space:]]*[<"]runtime/starrocks_metrics\.h[>"]'
 
-check_allowlist \
+check_absent_pattern \
     "util/global_metrics_registry.h" \
-    '#include[[:space:]]*[<"]util/global_metrics_registry\.h[>"]' \
-    "${REPO_ROOT}/build-support/global_metrics_registry_include_allowlist.txt"
+    '#include[[:space:]]*[<"]util/global_metrics_registry\.h[>"]'
+
+check_absent_pattern \
+    "GlobalMetricsRegistry facade" \
+    '(^|[^[:alnum:]_])GlobalMetricsRegistry([^[:alnum:]_]|$)'

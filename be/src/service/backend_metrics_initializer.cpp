@@ -38,6 +38,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "http/http_metrics.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"
@@ -270,6 +271,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     SpillMetrics::instance()->install(registry);
     DataCacheMetrics::instance()->install(registry);
     StorageMetrics::instance()->install(registry);
+    KeyCache::instance().install_metrics(registry);
 
 #ifndef __APPLE__
     if (options.init_jvm_metrics) {

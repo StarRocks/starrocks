@@ -52,6 +52,8 @@
 
 namespace starrocks {
 
+class MetricRegistry;
+
 constexpr int TIMER_TASK_RUNNING = 1;
 
 template <typename StubCacheT>
@@ -67,7 +69,7 @@ private:
 
 class BrpcStubCache {
 public:
-    explicit BrpcStubCache(pipeline::PipelineTimer* pipeline_timer);
+    explicit BrpcStubCache(pipeline::PipelineTimer* pipeline_timer, MetricRegistry* metrics = nullptr);
     ~BrpcStubCache();
 
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint);

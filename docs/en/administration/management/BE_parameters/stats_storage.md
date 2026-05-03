@@ -47,7 +47,7 @@ This topic introduces the following types of FE configurations:
 - Type: boolean
 - Unit: -
 - Is mutable: No
-- Description: When true, the BE process launches a background "metrics_daemon" thread (started in Daemon::init on non-Apple platforms) that runs every ~15 seconds to invoke `StarRocksMetrics::instance()->metrics()->trigger_hook()` and compute derived/system metrics (e.g., push/query bytes/sec, max disk I/O util, max network send/receive rates), log memory breakdowns and run table metrics cleanup. When false, those hooks are executed synchronously inside `MetricRegistry::collect` at metric collection time, which can increase metric-scrape latency. Requires process restart to take effect.
+- Description: When true, the BE process launches a background "metrics_daemon" thread (started in Daemon::init on non-Apple platforms) that runs every ~15 seconds to invoke `MetricRegistry::trigger_hook()` on the process metrics registry and compute derived/system metrics (e.g., push/query bytes/sec, max disk I/O util, max network send/receive rates), log memory breakdowns and run table metrics cleanup. When false, those hooks are executed synchronously inside `MetricRegistry::collect` at metric collection time, which can increase metric-scrape latency. Requires process restart to take effect.
 - Introduced in: v3.2.0
 
 ### enable_system_metrics

@@ -49,6 +49,7 @@
 namespace starrocks {
 
 class ExecEnv;
+class MetricRegistry;
 class Status;
 class StreamLoadContext;
 class TRoutineLoadTask;
@@ -65,7 +66,7 @@ public:
 
     ~RoutineLoadTaskExecutor() noexcept = default;
 
-    Status init();
+    Status init(MetricRegistry* metrics = nullptr);
     void stop();
 
     // submit a routine load task

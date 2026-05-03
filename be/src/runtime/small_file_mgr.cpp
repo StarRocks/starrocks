@@ -49,15 +49,16 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_metrics.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
-SmallFileMgr::SmallFileMgr(std::string local_path) : _local_path(std::move(local_path)) {
-    REGISTER_GAUGE_RUNTIME_METRIC(small_file_cache_count, [this]() {
-        std::lock_guard<std::mutex> l(_lock);
-        return _file_cache.size();
-    });
+SmallFileMgr::SmallFileMgr(std::string local_path, MetricRegistry* metrics) : _local_path(std::move(local_path)) {
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, small_file_cache_count, [this]() {
+            std::lock_guard<std::mutex> l(_lock);
+            return _file_cache.size();
+        });
+    }
 }
 
 SmallFileMgr::~SmallFileMgr() = default;

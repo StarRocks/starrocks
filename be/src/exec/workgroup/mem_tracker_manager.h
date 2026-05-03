@@ -20,6 +20,10 @@
 #include "runtime/mem_tracker.h"
 #include "work_group_fwd.h"
 
+namespace starrocks {
+class MetricRegistry;
+}
+
 namespace starrocks::workgroup {
 
 struct MemTrackerMetrics {
@@ -39,6 +43,8 @@ struct MemTrackerInfo {
 
 class MemTrackerManager {
 public:
+    explicit MemTrackerManager(MetricRegistry* metrics = nullptr) : _metrics(metrics) {}
+
     /**
     * Constructs and returns a shared_mem_tracker for the workgroup if one does not already exist.
     * Otherwise, returns the existing instance and increments the number of tracked workgroups by one.
@@ -69,6 +75,7 @@ private:
 
     mutable std::shared_mutex _mutex;
     std::once_flag _register_metrics_hook_once_flag;
+    MetricRegistry* _metrics = nullptr;
     std::unordered_map<std::string, MemTrackerInfo> _shared_mem_trackers{};
     std::unordered_map<std::string, MemTrackerMetricsPtr> _shared_mem_trackers_metrics{};
 };
