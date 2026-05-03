@@ -23,11 +23,8 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -118,12 +115,6 @@ public class SplitTopNOnGroupKeyAggRule extends TransformationRule {
             return Optional.empty();
         }
 
-        // Native OLAP tables already have their own TopN/Aggregate split path. This lightweight split exists
-        // for non-OLAP scans so the later TopN-to-pre-agg rewrite can create scan-side runtime filters.
-        if (!containsNonOlapScan(cur)) {
-            return Optional.empty();
-        }
-
         List<Ordering> rewrittenOrderings = new ArrayList<>();
         List<ColumnRefOperator> mappedOrderByColumns = new ArrayList<>();
         for (Ordering ordering : topN.getOrderByElements()) {
@@ -146,16 +137,6 @@ public class SplitTopNOnGroupKeyAggRule extends TransformationRule {
         }
 
         return Optional.of(new MatchContext(projectChain, cur, rewrittenOrderings));
-    }
-
-    private boolean containsNonOlapScan(OptExpression tree) {
-        Operator operator = tree.getOp();
-        if (operator instanceof LogicalScanOperator &&
-                !(operator instanceof LogicalOlapScanOperator) &&
-                !(operator instanceof LogicalViewScanOperator)) {
-            return true;
-        }
-        return tree.getInputs().stream().anyMatch(this::containsNonOlapScan);
     }
 
     private boolean isColumnRefProject(LogicalProjectOperator project) {
