@@ -308,8 +308,10 @@ set(EXEC_FILES
         ./util/fail_point_test.cpp
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
+        ./util/metrics/flat_json_metrics_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
         ./util/metrics/catalog_scan_metrics_test.cpp
+        ./util/metrics/query_scan_metrics_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
         ./base/types/int96_test.cpp

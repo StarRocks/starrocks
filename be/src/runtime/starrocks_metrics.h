@@ -63,10 +63,7 @@ class StarRocksMetrics {
 public:
     METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(runtime_filter_event_queue_len, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(query_scan_rows, MetricUnit::ROWS);
     METRIC_DEFINE_INT_GAUGE(pipe_drivers, MetricUnit::NOUNIT);
 
     // counters
@@ -256,19 +253,6 @@ public:
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
-
-    // Flat JSON metrics
-    METRIC_DEFINE_INT_COUNTER(flat_json_segment_write_total, MetricUnit::OPERATIONS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_write_rows_total, MetricUnit::ROWS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_paths_discovered_total, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_COUNTER(flat_json_paths_extracted_total, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_COUNTER(flat_json_access_hit_total, MetricUnit::OPERATIONS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_access_miss_total, MetricUnit::OPERATIONS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_cast_duration_ns_total, MetricUnit::NANOSECONDS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_merge_duration_ns_total, MetricUnit::NANOSECONDS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_flatten_duration_ns_total, MetricUnit::NANOSECONDS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_total, MetricUnit::OPERATIONS);
-    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_schema_change_total, MetricUnit::OPERATIONS);
 
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;

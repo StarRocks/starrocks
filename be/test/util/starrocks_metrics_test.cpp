@@ -47,6 +47,7 @@
 #include "storage/storage_metrics.h"
 #include "util/global_metrics_registry.h"
 #include "util/metrics/catalog_scan_metrics.h"
+#include "util/metrics/query_scan_metrics.h"
 
 namespace starrocks {
 
@@ -139,6 +140,7 @@ private:
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto instance = StarRocksMetrics::instance();
+    auto query_scan_metrics = QueryScanMetrics::instance();
     auto runtime_metrics = RuntimeMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
     auto metrics = GlobalMetricsRegistry::instance()->metrics();
@@ -169,13 +171,13 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("104", metric->to_string().c_str());
     }
     {
-        instance->query_scan_bytes.increment(104);
+        query_scan_metrics->query_scan_bytes.increment(104);
         auto metric = metrics->get_metric("query_scan_bytes");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("104", metric->to_string().c_str());
     }
     {
-        instance->query_scan_rows.increment(105);
+        query_scan_metrics->query_scan_rows.increment(105);
         auto metric = metrics->get_metric("query_scan_rows");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("105", metric->to_string().c_str());
@@ -403,6 +405,20 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("query_spill_trigger_total", MetricLabels().add("storage_type", "local")));
     CatalogScanMetrics::instance()->update_scan_bytes("hive", 7);
     ASSERT_NE(nullptr, instance->get_metric("catalog_query_scan_bytes", MetricLabels().add("catalog_type", "hive")));
+    ASSERT_NE(nullptr, instance->get_metric("query_scan_bytes"));
+    ASSERT_NE(nullptr, instance->get_metric("query_scan_rows"));
+    ASSERT_NE(nullptr, instance->get_metric("query_scan_bytes_per_second"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_segment_write_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_write_rows_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_paths_discovered_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_paths_extracted_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_access_hit_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_access_miss_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_cast_duration_ns_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_merge_duration_ns_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_flatten_duration_ns_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_compaction_total"));
+    ASSERT_NE(nullptr, instance->get_metric("flat_json_compaction_schema_change_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

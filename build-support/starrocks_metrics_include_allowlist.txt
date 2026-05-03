@@ -3,17 +3,14 @@
 be/src/agent/finish_task.cpp
 be/src/agent/publish_version.cpp
 be/src/agent/task_worker_pool.cpp
-be/src/connector/lake_connector.cpp
 be/src/exec/data_sinks/tablet_sink.cpp
 be/src/exec/pipeline/exec_state_reporter.cpp
 be/src/exec/pipeline/pipeline_driver.cpp
 be/src/exec/pipeline/pipeline_driver_executor.cpp
-be/src/exec/pipeline/scan/olap_chunk_source.cpp
 be/src/exec/schema_scanner/schema_be_compactions_scanner.cpp
 be/src/exec/schema_scanner/schema_be_configs_scanner.cpp
 be/src/exec/schema_scanner/schema_be_metrics_scanner.cpp
 be/src/exec/schema_scanner/schema_fe_metrics_scanner.cpp
-be/src/exec/tablet_scanner.cpp
 be/src/exec/workgroup/mem_tracker_manager.cpp
 be/src/exec/workgroup/scan_executor.cpp
 be/src/exec/workgroup/work_group.cpp
@@ -42,8 +39,6 @@ be/src/storage/persistent_index_compaction_manager.cpp
 be/src/storage/persistent_index_compaction_manager.h
 be/src/storage/persistent_index_load_executor.cpp
 be/src/storage/primary_index.cpp
-be/src/storage/rowset/json_column_compactor.cpp
-be/src/storage/rowset/json_column_writer.cpp
 be/src/storage/rowset/segment.cpp
 be/src/storage/rowset/segment_iterator.cpp
 be/src/storage/rowset/unique_rowset_id_generator.cpp
