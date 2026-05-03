@@ -91,6 +91,9 @@ public class SplitTopNRule extends TransformationRule {
             if (proj.hasLimit()) {
                 return Optional.empty();
             }
+            if (!isColumnRefProject(proj)) {
+                return Optional.empty();
+            }
             projectChain.add(cur);
             cur = cur.inputAt(0);
         }
@@ -124,5 +127,9 @@ public class SplitTopNRule extends TransformationRule {
             rebuilt = OptExpression.create(projectChain.get(i).getOp(), rebuilt);
         }
         return Optional.of(rebuilt);
+    }
+
+    private boolean isColumnRefProject(LogicalProjectOperator project) {
+        return project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef);
     }
 }

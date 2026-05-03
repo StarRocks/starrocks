@@ -628,11 +628,8 @@ public class QueryOptimizer extends Optimizer {
         // otherwise the Node containing limit may be prune
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
         SessionVariable sv = rootTaskContext.getOptimizerContext().getSessionVariable();
-        if (sv.getTopNPushDownAggMode() >= 0 &&
-                hasTopNOnGroupKeyAgg(tree, sv.getCboPushDownTopNLimit())) {
-            scheduler.rewriteOnce(tree, rootTaskContext, SplitTopNRule.getInstance());
-            scheduler.rewriteOnce(tree, rootTaskContext, SplitTwoPhaseAggRule.getInstance());
-            scheduler.rewriteOnce(tree, rootTaskContext, PushDownTopNToPreAggRule.getInstance());
+        if (sv.getTopNPushDownAggMode() >= 0) {
+            rewriteTopNOnGroupKeyAggForNonOlapScan(tree, 0, rootTaskContext, sv.getCboPushDownTopNLimit());
         }
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
@@ -1133,11 +1130,21 @@ public class QueryOptimizer extends Optimizer {
         return list;
     }
 
-    private boolean hasTopNOnGroupKeyAgg(OptExpression tree, long maxLimit) {
+    private void rewriteTopNOnGroupKeyAggForNonOlapScan(OptExpression parent, int childIndex,
+                                                        TaskContext rootTaskContext, long maxLimit) {
+        OptExpression tree = parent.inputAt(childIndex);
         if (isTopNOnGroupKeyAgg(tree, maxLimit)) {
-            return true;
+            OptExpression subtreeAnchor = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+            scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, SplitTopNRule.getInstance());
+            scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, SplitTwoPhaseAggRule.getInstance());
+            scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, PushDownTopNToPreAggRule.getInstance());
+            parent.getInputs().set(childIndex, subtreeAnchor.inputAt(0));
+            return;
         }
-        return tree.getInputs().stream().anyMatch(child -> hasTopNOnGroupKeyAgg(child, maxLimit));
+
+        for (int i = 0; i < tree.getInputs().size(); i++) {
+            rewriteTopNOnGroupKeyAggForNonOlapScan(tree, i, rootTaskContext, maxLimit);
+        }
     }
 
     private boolean isTopNOnGroupKeyAgg(OptExpression tree, long maxLimit) {
@@ -1155,7 +1162,11 @@ public class QueryOptimizer extends Optimizer {
         List<LogicalProjectOperator> projectChain = new ArrayList<>();
         OptExpression cur = tree.inputAt(0);
         while (cur.getInputs().size() == 1 && cur.getOp() instanceof LogicalProjectOperator) {
-            projectChain.add((LogicalProjectOperator) cur.getOp());
+            LogicalProjectOperator project = (LogicalProjectOperator) cur.getOp();
+            if (!isColumnRefProject(project)) {
+                return false;
+            }
+            projectChain.add(project);
             cur = cur.inputAt(0);
         }
 
@@ -1196,6 +1207,10 @@ public class QueryOptimizer extends Optimizer {
             return true;
         }
         return tree.getInputs().stream().anyMatch(this::containsNonOlapScan);
+    }
+
+    private boolean isColumnRefProject(LogicalProjectOperator project) {
+        return project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef);
     }
 
     private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {
