@@ -1,0 +1,28 @@
+-- name: test_exec_state_report_threadpool_size
+SELECT NAME, VALUE, `DEFAULT`, MUTABLE FROM information_schema.be_configs WHERE NAME LIKE '%exec_state_report_max_threads' ORDER BY BE_ID, NAME limit 2;
+-- result:
+exec_state_report_max_threads	2	2	1
+priority_exec_state_report_max_threads	2	2	1
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '4' WHERE NAME = 'exec_state_report_max_threads';
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '6' WHERE NAME = 'priority_exec_state_report_max_threads';
+-- result:
+-- !result
+SELECT NAME, VALUE, `DEFAULT`, MUTABLE FROM information_schema.be_configs WHERE NAME LIKE '%exec_state_report_max_threads' ORDER BY BE_ID, NAME limit 2;
+-- result:
+exec_state_report_max_threads	4	2	1
+priority_exec_state_report_max_threads	6	2	1
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '2' WHERE NAME = 'exec_state_report_max_threads';
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '2' WHERE NAME = 'priority_exec_state_report_max_threads';
+-- result:
+-- !result
+SELECT NAME, VALUE, `DEFAULT`, MUTABLE FROM information_schema.be_configs WHERE NAME LIKE '%exec_state_report_max_threads' ORDER BY BE_ID, NAME limit 2;
+-- result:
+exec_state_report_max_threads	2	2	1
+priority_exec_state_report_max_threads	2	2	1
+-- !result

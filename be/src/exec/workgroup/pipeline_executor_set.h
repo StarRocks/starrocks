@@ -58,6 +58,9 @@ public:
     void notify_num_total_connector_scan_threads_changed() const;
     void notify_config_changed() const;
 
+    Status update_exec_state_report_max_threads(int max_threads) const;
+    Status update_priority_exec_state_report_max_threads(int max_threads) const;
+
     pipeline::DriverExecutor* driver_executor() const { return _driver_executor.get(); }
     ScanExecutor* scan_executor() const { return _scan_executor.get(); }
     ScanExecutor* connector_scan_executor() const { return _connector_scan_executor.get(); }
