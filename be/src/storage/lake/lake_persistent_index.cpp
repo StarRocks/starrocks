@@ -902,23 +902,77 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
-    // Iterate all del files and insert into index.
-    for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
-        TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+
+    const int num_del_files = rowset->metadata().del_files_size();
+    // Phase 1 (parallel): read each delete file's bytes from object storage and deserialize
+    // them into a per-file pk column. Index mutations stay sequential below to preserve
+    // erase ordering. Reads dominate cold-start cost (8 files × ~OSS_RTT each = seconds);
+    // parallelising them collapses that wall-clock without changing on-disk semantics.
+    std::vector<MutableColumnPtr> pkcs(num_del_files);
+    std::mutex shared_mutex;
+    Status shared_status;
+    auto read_one = [&](int del_idx) {
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
         if (!del.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
+            auto info_or = KeyCache::instance().unwrap_encryption_meta(del.encryption_meta());
+            if (!info_or.ok()) {
+                std::lock_guard<std::mutex> l(shared_mutex);
+                shared_status.update(info_or.status());
+                return;
+            }
+            ropts.encryption_info = std::move(info_or.value());
         }
-        ASSIGN_OR_RETURN(auto read_file,
-                         fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
-        ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
-        const auto* data = reinterpret_cast<const uint8_t*>(read_buffer.data());
-        const auto* end = data + read_buffer.size();
-        // serialize to column
+        auto rf_or = fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name()));
+        if (!rf_or.ok()) {
+            std::lock_guard<std::mutex> l(shared_mutex);
+            shared_status.update(rf_or.status());
+            return;
+        }
+        auto buf_or = (*rf_or)->read_all();
+        if (!buf_or.ok()) {
+            std::lock_guard<std::mutex> l(shared_mutex);
+            shared_status.update(buf_or.status());
+            return;
+        }
         auto pkc = pk_column->clone();
-        using Serd = serde::ColumnArraySerde;
-        RETURN_IF_ERROR(Serd::deserialize(data, end, pkc.get()));
+        const auto* data = reinterpret_cast<const uint8_t*>(buf_or->data());
+        const auto* end = data + buf_or->size();
+        auto st = serde::ColumnArraySerde::deserialize(data, end, pkc.get());
+        if (!st.ok()) {
+            std::lock_guard<std::mutex> l(shared_mutex);
+            shared_status.update(st);
+            return;
+        }
+        pkcs[del_idx] = std::move(pkc);
+    };
+
+    std::unique_ptr<ThreadPoolToken> token;
+    if (config::enable_pk_index_parallel_execution && num_del_files > 1) {
+        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+    }
+    for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
+        if (token) {
+            auto st = token->submit_func([&read_one, del_idx]() { read_one(del_idx); });
+            if (!st.ok()) {
+                read_one(del_idx);
+            }
+        } else {
+            read_one(del_idx);
+        }
+    }
+    if (token) {
+        token->wait();
+    }
+    RETURN_IF_ERROR(shared_status);
+
+    // Phase 2 (sequential): order-dependent index mutations. replay_erase mutates index state
+    // observed by later files' get(); keep iteration order identical to the original.
+    for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
+        TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+        const auto& del = rowset->metadata().del_files(del_idx);
+        auto& pkc = pkcs[del_idx];
         // We can't insert delete operation to index directly, because some delete operation is
         // older than current item, and we need to igore these delete operations.
         std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));
