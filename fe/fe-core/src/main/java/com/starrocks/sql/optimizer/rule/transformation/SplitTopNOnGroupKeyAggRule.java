@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
@@ -93,6 +94,15 @@ public class SplitTopNOnGroupKeyAggRule extends TransformationRule {
         LogicalTopNOperator topN = input.getOp().cast();
         if (!topN.hasLimit() || topN.getLimit() > maxLimit || topN.hasOffset() || topN.getPredicate() != null ||
                 !topN.getSortPhase().isFinal() || topN.isSplit()) {
+            return Optional.empty();
+        }
+        // Reject window-style or rank-function TopN shapes that the simple partial-sort constructor cannot represent:
+        // - partitionByColumns: PARTITION BY semantics would be dropped in partialSort
+        // - partitionPreAggCall: rank<=1 pre-agg optimization set by PushDownLimitRankingWindowRule
+        // - non-ROW_NUMBER: RANK/DENSE_RANK have different tie-breaking semantics than ROW_NUMBER
+        if ((topN.getPartitionByColumns() != null && !topN.getPartitionByColumns().isEmpty()) ||
+                (topN.getPartitionPreAggCall() != null && !topN.getPartitionPreAggCall().isEmpty()) ||
+                topN.getTopNType() != TopNType.ROW_NUMBER) {
             return Optional.empty();
         }
 

@@ -158,6 +158,7 @@ import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_TRANSPARENT_R
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
+
 /**
  * QueryOptimizer's entrance class
  */
@@ -620,7 +621,7 @@ public class QueryOptimizer extends Optimizer {
         // otherwise the Node containing limit may be prune
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
         if (sessionVariable.getTopNPushDownAggMode() >= 0) {
-            rewriteTopNOnGroupKeyAggForNonOlapScan(tree, 0, rootTaskContext);
+            rewriteTopNOnGroupKeyAggForScan(tree, 0, rootTaskContext);
         }
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
@@ -879,7 +880,8 @@ public class QueryOptimizer extends Optimizer {
             if (pushAggFlag || pushDistinctBelowWindowFlag) {
                 deriveLogicalProperty(tree);
             }
-            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
+            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to
+            // push down distinct.
             if (!joinReorder && context.getSessionVariable().isEnableJoinReorderBeforeDeduplicate()) {
                 logicalJoinReorder(tree, rootTaskContext);
             }
@@ -1120,8 +1122,8 @@ public class QueryOptimizer extends Optimizer {
         return list;
     }
 
-    private void rewriteTopNOnGroupKeyAggForNonOlapScan(OptExpression parent, int childIndex,
-                                                        TaskContext rootTaskContext) {
+    private void rewriteTopNOnGroupKeyAggForScan(OptExpression parent, int childIndex,
+                                                 TaskContext rootTaskContext) {
         OptExpression tree = parent.inputAt(childIndex);
         SplitTopNOnGroupKeyAggRule splitTopNOnGroupKeyAggRule = SplitTopNOnGroupKeyAggRule.getInstance();
         if (splitTopNOnGroupKeyAggRule.canRewrite(tree, rootTaskContext.getOptimizerContext())) {
@@ -1130,11 +1132,15 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, SplitTwoPhaseAggRule.getInstance());
             scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, PushDownTopNToPreAggRule.getInstance());
             parent.getInputs().set(childIndex, subtreeAnchor.inputAt(0));
+            OptExpression rewritten = parent.inputAt(childIndex);
+            for (int i = 0; i < rewritten.getInputs().size(); i++) {
+                rewriteTopNOnGroupKeyAggForScan(rewritten, i, rootTaskContext);
+            }
             return;
         }
 
         for (int i = 0; i < tree.getInputs().size(); i++) {
-            rewriteTopNOnGroupKeyAggForNonOlapScan(tree, i, rootTaskContext);
+            rewriteTopNOnGroupKeyAggForScan(tree, i, rootTaskContext);
         }
     }
 
