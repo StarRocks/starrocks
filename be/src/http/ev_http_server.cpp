@@ -49,8 +49,15 @@
 #include <sstream>
 #include <utility>
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <cstring>
+
 #include "base/brpc/brpc.h"
 #include "base/system/errno.h"
+#include "common/config.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/system/backend_options.h"
@@ -123,6 +130,54 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
+// Create a TCP listening socket with SO_REUSEADDR + SO_REUSEPORT, bound to
+// `point`. Returns -1 on any failure (and `errno` is set). When SO_REUSEPORT
+// is set on every listener for the same {addr, port}, the kernel load-balances
+// new connections across them — workers no longer thundering-herd on a single
+// shared listen fd's accept queue lock.
+static int listen_with_reuseport(const butil::EndPoint& point) {
+#ifndef SO_REUSEPORT
+    errno = ENOTSUP;
+    return -1;
+#else
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+    int yes = 1;
+    if (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0) {
+        int saved = errno;
+        ::close(fd);
+        errno = saved;
+        return -1;
+    }
+    if (::setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) != 0) {
+        int saved = errno;
+        ::close(fd);
+        errno = saved;
+        return -1;
+    }
+    sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(point.port);
+    addr.sin_addr = point.ip;
+    if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+        int saved = errno;
+        ::close(fd);
+        errno = saved;
+        return -1;
+    }
+    if (::listen(fd, 65535) != 0) {
+        int saved = errno;
+        ::close(fd);
+        errno = saved;
+        return -1;
+    }
+    return fd;
+#endif
+}
+
 EvHttpServer::EvHttpServer(int port, int num_workers) : _port(port), _num_workers(num_workers), _real_port(0) {
     _host = BackendOptions::get_service_bind_address();
     DCHECK_GT(_num_workers, 0);
@@ -144,8 +199,25 @@ EvHttpServer::~EvHttpServer() {
 Status EvHttpServer::start() {
     // bind to
     RETURN_IF_ERROR(_bind());
+
+    // Resolve the bind endpoint once, on the main thread, for per-worker
+    // SO_REUSEPORT listeners. _bind() has already populated _real_port (incl.
+    // the port==0 auto-assign case).
+    butil::EndPoint listen_point;
+    bool reuseport_enabled = false;
+#ifdef SO_REUSEPORT
+    if (config::enable_http_server_so_reuseport) {
+        if (butil::str2endpoint(_host.c_str(), _real_port, &listen_point) == 0) {
+            reuseport_enabled = true;
+        } else {
+            LOG(WARNING) << "Failed to resolve listen endpoint " << _host << ":" << _real_port
+                         << " for SO_REUSEPORT mode; falling back to shared-fd accept";
+        }
+    }
+#endif
+
     for (int i = 0; i < _num_workers; ++i) {
-        auto worker = [this]() {
+        auto worker = [this, listen_point, reuseport_enabled, i]() {
             struct event_base* base = event_base_new();
             if (base == nullptr) {
                 LOG(WARNING) << "Couldn't create an event_base.";
@@ -171,7 +243,31 @@ Status EvHttpServer::start() {
             // so cap pre-read bodies before any handler-specific header checks.
             evhttp_set_max_body_size(http, static_cast<ev_ssize_t>(config::streaming_load_max_mb) * 1024 * 1024);
 #endif
-            auto res = evhttp_accept_socket(http, _server_fd);
+
+            // Worker 0 reuses _server_fd from _bind(); workers 1..N-1 create
+            // their own SO_REUSEPORT listeners so the kernel load-balances
+            // accepts in-kernel rather than waking all workers on every
+            // connection (the cause of native_queued_spin_lock_slowpath
+            // contention seen in perf when be_http_num_workers is large).
+            int worker_fd = _server_fd;
+            if (reuseport_enabled && i > 0) {
+                int new_fd = listen_with_reuseport(listen_point);
+                if (new_fd < 0) {
+                    LOG(WARNING) << "Worker " << i << ": SO_REUSEPORT listen failed, "
+                                 << "falling back to shared fd: " << errno_to_string(errno);
+                } else if (butil::make_non_blocking(new_fd) < 0) {
+                    LOG(WARNING) << "Worker " << i << ": failed to set non-blocking on reuseport fd, "
+                                 << "falling back to shared fd: " << errno_to_string(errno);
+                    ::close(new_fd);
+                } else {
+                    pthread_rwlock_wrlock(&_rw_lock);
+                    _worker_fds.push_back(new_fd);
+                    pthread_rwlock_unlock(&_rw_lock);
+                    worker_fd = new_fd;
+                }
+            }
+
+            auto res = evhttp_accept_socket(http, worker_fd);
             if (res < 0) {
                 LOG(WARNING) << "evhttp accept socket failed"
                              << ", error:" << errno_to_string(errno);
@@ -197,6 +293,12 @@ void EvHttpServer::stop() {
 
     // shutdown the socket to wake up the epoll_wait
     shutdown(_server_fd, SHUT_RDWR);
+    // Per-worker SO_REUSEPORT listeners need their own shutdown, otherwise
+    // their event_base_dispatch will not unblock from epoll_wait and join()
+    // will hang.
+    for (int fd : _worker_fds) {
+        ::shutdown(fd, SHUT_RDWR);
+    }
 }
 
 void EvHttpServer::join() {
@@ -208,6 +310,10 @@ void EvHttpServer::join() {
 
     // close the socket at last
     close(_server_fd);
+    for (int fd : _worker_fds) {
+        ::close(fd);
+    }
+    _worker_fds.clear();
 
     // free the evhttp and event_base
     for (auto http : _https) {
@@ -242,7 +348,23 @@ Status EvHttpServer::_bind() {
         if (rc == 0) {
             _real_port = ntohs(addr.sin_port);
         }
+    } else {
+        _real_port = _port;
     }
+#ifdef SO_REUSEPORT
+    // Mark _server_fd as SO_REUSEPORT before any worker tries to bind another
+    // listener to the same {addr, real_port}. The kernel only permits multiple
+    // listening sockets on the same address when *all* of them carry
+    // SO_REUSEPORT — without setting it on the primary fd, every worker's
+    // bind() would fail with EADDRINUSE.
+    if (config::enable_http_server_so_reuseport) {
+        int yes = 1;
+        if (::setsockopt(_server_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) != 0) {
+            LOG(WARNING) << "Failed to set SO_REUSEPORT on primary listener; per-worker listen sockets "
+                         << "will be skipped: " << errno_to_string(errno);
+        }
+    }
+#endif
     res = butil::make_non_blocking(_server_fd);
     if (res < 0) {
         std::stringstream ss;

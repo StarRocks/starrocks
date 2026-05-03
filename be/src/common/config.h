@@ -533,6 +533,13 @@ CONF_Int32(be_http_port, "8040");
 CONF_Alias(be_http_port, webserver_port);
 // Number of http workers in BE
 CONF_Int32(be_http_num_workers, "48");
+// When true, each HTTP worker creates its own listening socket with
+// SO_REUSEPORT so the kernel load-balances incoming connections in-kernel,
+// instead of all workers epoll-waiting on a single shared listen fd and
+// thundering-herd-racing on accept(). Eliminates the kernel
+// inet_csk_accept / native_queued_spin_lock_slowpath contention that
+// dominates HTTP-server CPU when be_http_num_workers is large.
+CONF_Bool(enable_http_server_so_reuseport, "true");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 

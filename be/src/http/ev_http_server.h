@@ -66,6 +66,9 @@ private:
     int _real_port;
 
     int _server_fd = -1;
+    // Per-worker listening fds bound with SO_REUSEPORT. Empty when reuseport
+    // mode is disabled — in that case all workers share `_server_fd`.
+    std::vector<int> _worker_fds;
     std::vector<std::thread> _workers;
 
     pthread_rwlock_t _rw_lock;
