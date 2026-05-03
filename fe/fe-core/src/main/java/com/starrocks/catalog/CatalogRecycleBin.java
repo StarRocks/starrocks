@@ -708,6 +708,22 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } // end for partitions
     }
 
+    /**
+     * Marks all existing same-name partitions (matching {@code dbId}, {@code tableId}, and
+     * {@code partitionName}) as non-recoverable when a new partition with the same name is
+     * recycled.
+     *
+     * <p>Two invariants are maintained:
+     * <ol>
+     *   <li><b>All matches are processed</b> — every existing same-name partition is visited so
+     *       that none remains recoverable (there is intentionally no early-exit {@code break}).
+     *   <li><b>Retention clock is never reset for already-non-recoverable partitions</b> — only
+     *       transitions from recoverable→non-recoverable update {@code idToRecycleTime}.
+     *       Skipping non-recoverable partitions preserves their original retention deadline,
+     *       preventing them from becoming permanently stuck in the recycle bin when a
+     *       same-name partition is added within the retention window.
+     * </ol>
+     */
     private synchronized void disableRecoverPartitionWithSameName(long dbId, long tableId, String partitionName) {
         for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
             RecyclePartitionInfo partitionInfo = entry.getValue();
@@ -715,9 +731,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     !partitionInfo.getPartition().getName().equalsIgnoreCase(partitionName)) {
                 continue;
             }
-            partitionInfo.setRecoverable(false);
-            idToRecycleTime.replace(partitionInfo.getPartition().getId(), System.currentTimeMillis());
-            break;
+            if (partitionInfo.isRecoverable()) {
+                partitionInfo.setRecoverable(false);
+                idToRecycleTime.replace(partitionInfo.getPartition().getId(), System.currentTimeMillis());
+            }
         }
     }
 
