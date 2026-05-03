@@ -85,11 +85,12 @@ int init_test_env(int argc, char** argv) {
 
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
-    ProcessMetricsRegistry process_metrics_registry("starrocks_be");
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
 
     auto* global_env = GlobalEnv::GetInstance();
     config::disable_storage_page_cache = true;
-    auto st = global_env->init(process_metrics_registry.root_registry());
+    auto st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
@@ -99,7 +100,7 @@ int init_test_env(int argc, char** argv) {
     options.store_paths = paths;
     options.compaction_mem_tracker = compaction_mem_tracker.get();
     options.update_mem_tracker = update_mem_tracker.get();
-    options.table_metrics_mgr = process_metrics_registry.table_metrics_mgr();
+    options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     Status s = StorageEngine::open(options, &engine);
     if (!s.ok()) {
         butil::DeleteFile(storage_root, true);
@@ -115,11 +116,11 @@ int init_test_env(int argc, char** argv) {
     // for managing it.
     auto* cache_env = DataCache::GetInstance();
     config::datacache_enable = false;
-    st = cache_env->init(paths, process_metrics_registry.root_registry());
+    st = cache_env->init(paths, process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
 
     auto* exec_env = ExecEnv::GetInstance();
-    st = exec_env->init(paths, &process_metrics_registry);
+    st = exec_env->init(paths, process_metrics_registry);
     CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();
