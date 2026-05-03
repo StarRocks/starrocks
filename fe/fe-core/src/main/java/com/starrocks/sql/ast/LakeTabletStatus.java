@@ -14,16 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.utframe.UtFrameUtils;
-import org.junit.jupiter.api.Test;
-
-public class AdminShowReplicaStatusStmtTest {
-    private ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-
-    @Test
-    public void testNormal() throws Exception {
-        String sql = "ADMIN SHOW REPLICA STATUS FROM db1.tbl1 WHERE STATUS = 'DEAD'";
-        AdminShowReplicaStatusStmt stmt = (AdminShowReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-    }
+public enum LakeTabletStatus {
+    NORMAL,       // health
+    MISSING_META, // missing meta file
+    MISSING_DATA  // missing data file
 }
