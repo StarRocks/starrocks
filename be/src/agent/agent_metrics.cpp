@@ -138,6 +138,11 @@ void AgentMetrics::install(MetricRegistry* registry) {
                               &clone_task_inter_node_copy_duration_ms);
     registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
                               &clone_task_intra_node_copy_duration_ms);
+
+    for (const auto& pending : _pending_thread_pool_metrics) {
+        _register_thread_pool_metrics(pending.name, pending.threadpool);
+    }
+    _pending_thread_pool_metrics.clear();
 }
 
 void AgentMetrics::install_disk_path_metrics(MetricRegistry* registry, const std::vector<std::string>& paths) {
@@ -163,7 +168,17 @@ void AgentMetrics::set_disk_metrics(const std::string& path, int64_t total_capac
 }
 
 void AgentMetrics::register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
+    DCHECK(threadpool != nullptr);
+    if (_registry == nullptr) {
+        _pending_thread_pool_metrics.emplace_back(PendingThreadPoolMetrics{name, threadpool});
+        return;
+    }
+    _register_thread_pool_metrics(name, threadpool);
+}
+
+void AgentMetrics::_register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
     DCHECK(_registry != nullptr);
+    DCHECK(threadpool != nullptr);
 
 #define REGISTER_AGENT_THREAD_POOL_METRICS(threadpool_name)                                                         \
     if (name == #threadpool_name) {                                                                                 \

@@ -115,4 +115,24 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetrics) {
     assert_metric_value(&registry, "clone_queue_count", "0");
 }
 
+TEST(AgentMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
+    std::unique_ptr<ThreadPool> threadpool;
+    AgentMetrics metrics;
+    auto status = ThreadPoolBuilder("agent_metrics_test")
+                          .set_min_threads(0)
+                          .set_max_threads(3)
+                          .set_max_queue_size(5)
+                          .build(&threadpool);
+    ASSERT_TRUE(status.ok()) << status;
+
+    metrics.register_thread_pool_metrics("clone", threadpool.get());
+
+    MetricRegistry registry("test_registry");
+    metrics.install(&registry);
+    registry.trigger_hook();
+
+    assert_metric_value(&registry, "clone_threadpool_size", "3");
+    assert_metric_value(&registry, "clone_queue_count", "0");
+}
+
 } // namespace starrocks
