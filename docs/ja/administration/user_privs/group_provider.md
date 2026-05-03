@@ -287,25 +287,15 @@ ALTER SECURITY INTEGRATION LDAP SET
 );
 ```
 
-## ユーザーグループにロールまたは特権を付与する
+## ユーザーグループにロールを付与する
 
-[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) を使用してユーザーグループにロールや権限を付与できます。
+[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) を使用してユーザーグループにロールを付与できます。
 
-- ユーザーグループにロールを付与する。
+次の例は、ユーザーグループ `analysts` にロール `example_role` を付与します：
 
-  次の例は、ユーザーグループ `analysts` にロール `example_role` を付与します：
-
-  ```SQL
-  GRANT example_role TO EXTERNAL GROUP analysts;
-  ```
-
-- ユーザーグループに特権を付与する。
-
-  次の例は、テーブル `sr_member` に対する SELECT 権限をユーザーグループ `analysts` に付与します：
-
-  ```SQL
-  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
-  ```
+```SQL
+GRANT example_role TO EXTERNAL GROUP analysts;
+```
 
 ## Group Provider を外部認可システム (Apache Ranger) と組み合わせる
 

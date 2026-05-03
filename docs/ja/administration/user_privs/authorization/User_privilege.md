@@ -193,14 +193,6 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
   GRANT SELECT ON TABLE sr_member TO ROLE example_role;
   ```
 
-- ユーザーグループに特権を付与します。[Group Provider](../group_provider.md) を介して、外部認証システムからユーザーグループを識別できます。
-
-  次の例は、テーブル `sr_member` に対する SELECT 権限をユーザーグループ `analysts` に付与します：
-
-  ```SQL
-  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
-  ```
-
 ### 権限の取り消し
 
 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して、ユーザーまたはロールから権限を取り消すことができます。
