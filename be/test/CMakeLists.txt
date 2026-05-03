@@ -247,6 +247,7 @@ set(EXEC_FILES
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/default_path_handlers_test.cpp
+        ./http/http_metrics_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
@@ -276,6 +277,7 @@ set(EXEC_FILES
         ./runtime/load_channel_test.cpp
         ./runtime/load_channel_mgr_test.cpp
         ./runtime/runtime_metrics_test.cpp
+        ./runtime/stream_load_metrics_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp

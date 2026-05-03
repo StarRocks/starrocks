@@ -70,7 +70,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/stream_load/stream_load_metrics.h"
 #include "serde/protobuf_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -774,8 +774,9 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
     // the real 'num_rows_load_total' will be set when sink being closed.
     _number_input_rows += num_rows;
     state->update_num_bytes_load_sink(serialize_size);
-    StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
-    StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
+    auto* metrics = StreamLoadMetrics::instance();
+    metrics->load_rows_total.increment(num_rows);
+    metrics->load_bytes_total.increment(serialize_size);
 
     SCOPED_TIMER(_ts_profile->send_data_timer);
     return _tablet_sink_sender->send_chunk(_schema.get(), _partitions, _record_hashes, _validate_select_idx,

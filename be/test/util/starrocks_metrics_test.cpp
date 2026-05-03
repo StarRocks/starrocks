@@ -43,7 +43,9 @@
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
+#include "http/http_metrics.h"
 #include "runtime/runtime_metrics.h"
+#include "runtime/stream_load/stream_load_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "storage/storage_metrics.h"
 #include "util/global_metrics_registry.h"
@@ -140,8 +142,8 @@ private:
 
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
-    auto instance = StarRocksMetrics::instance();
     auto agent_metrics = AgentMetrics::instance();
+    auto http_metrics = HttpMetrics::instance();
     auto query_scan_metrics = QueryScanMetrics::instance();
     auto runtime_metrics = RuntimeMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
@@ -161,13 +163,13 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("101", metric->to_string().c_str());
     }
     {
-        instance->http_requests_total.increment(102);
+        http_metrics->http_requests_total.increment(102);
         auto metric = metrics->get_metric("http_requests_total");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("102", metric->to_string().c_str());
     }
     {
-        instance->http_request_send_bytes.increment(104);
+        http_metrics->http_request_send_bytes.increment(104);
         auto metric = metrics->get_metric("http_request_send_bytes");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("104", metric->to_string().c_str());
@@ -401,6 +403,24 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("automatic_partition", instance);
     assert_threadpool_metrics_register("lake_metadata_fetch", instance);
     ASSERT_NE(nullptr, instance->get_metric("disks_total_capacity", MetricLabels().add("path", kTestDiskPath)));
+    ASSERT_NE(nullptr, instance->get_metric("http_requests_total"));
+    ASSERT_NE(nullptr, instance->get_metric("http_request_send_bytes"));
+    ASSERT_NE(nullptr, instance->get_metric("txn_request", MetricLabels().add("type", "begin")));
+    ASSERT_NE(nullptr, instance->get_metric("txn_request", MetricLabels().add("type", "commit")));
+    ASSERT_NE(nullptr, instance->get_metric("txn_request", MetricLabels().add("type", "rollback")));
+    ASSERT_NE(nullptr, instance->get_metric("txn_request", MetricLabels().add("type", "exec")));
+    ASSERT_NE(nullptr, instance->get_metric("stream_load", MetricLabels().add("type", "receive_bytes")));
+    ASSERT_NE(nullptr, instance->get_metric("stream_load", MetricLabels().add("type", "load_rows")));
+    ASSERT_NE(nullptr, instance->get_metric("load_rows"));
+    ASSERT_NE(nullptr, instance->get_metric("load_bytes"));
+    ASSERT_NE(nullptr, instance->get_metric("streaming_load_requests_total"));
+    ASSERT_NE(nullptr, instance->get_metric("streaming_load_bytes"));
+    ASSERT_NE(nullptr, instance->get_metric("streaming_load_duration_ms"));
+    ASSERT_NE(nullptr, instance->get_metric("streaming_load_current_processing"));
+    ASSERT_NE(nullptr, instance->get_metric("transaction_streaming_load_requests_total"));
+    ASSERT_NE(nullptr, instance->get_metric("transaction_streaming_load_bytes"));
+    ASSERT_NE(nullptr, instance->get_metric("transaction_streaming_load_duration_ms"));
+    ASSERT_NE(nullptr, instance->get_metric("transaction_streaming_load_current_processing"));
     ASSERT_NE(nullptr, instance->get_metric("pipe_driver_schedule_count"));
     ASSERT_NE(nullptr, instance->get_metric("files_scan_num_files_read",
                                             MetricLabels().add("file_format", "avro").add("scan_type", "insert")));

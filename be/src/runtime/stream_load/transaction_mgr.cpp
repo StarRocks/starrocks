@@ -26,7 +26,6 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "base/metrics.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -50,23 +49,17 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/stream_load/stream_load_metrics.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
-#include "util/global_metrics_registry.h"
 #include "util/json_util.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
-
-METRIC_DEFINE_INT_COUNTER(transaction_streaming_load_requests_total, MetricUnit::REQUESTS);
-METRIC_DEFINE_INT_COUNTER(transaction_streaming_load_bytes, MetricUnit::BYTES);
-METRIC_DEFINE_INT_COUNTER(transaction_streaming_load_duration_ms, MetricUnit::MILLISECONDS);
-METRIC_DEFINE_INT_GAUGE(transaction_streaming_load_current_processing, MetricUnit::REQUESTS);
 
 #ifndef BE_TEST
 static uint32_t interval = 30;
@@ -75,14 +68,6 @@ static uint32_t interval = 1;
 #endif
 
 TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_requests_total",
-                                                                  &transaction_streaming_load_requests_total);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_bytes",
-                                                                  &transaction_streaming_load_bytes);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_duration_ms",
-                                                                  &transaction_streaming_load_duration_ms);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_current_processing",
-                                                                  &transaction_streaming_load_current_processing);
     _transaction_clean_thread = std::thread([this] {
 #ifdef GOOGLE_PROFILER
         ProfilerRegisterThread();
@@ -178,7 +163,8 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {
-        ctx = new StreamLoadContext(_exec_env, &transaction_streaming_load_current_processing);
+        ctx = new StreamLoadContext(_exec_env,
+                                    &StreamLoadMetrics::instance()->transaction_streaming_load_current_processing);
         ctx->ref();
         std::lock_guard<std::mutex> l(ctx->lock);
         st = _begin_transaction(req, ctx);
@@ -335,7 +321,7 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     // 4. put load stream context
     RETURN_IF_ERROR(_exec_env->stream_context_mgr()->put(ctx->label, ctx));
 
-    transaction_streaming_load_requests_total.increment(1);
+    StreamLoadMetrics::instance()->transaction_streaming_load_requests_total.increment(1);
 
     return Status::OK();
 }
@@ -375,8 +361,9 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
 
     ctx->last_active_ts = UnixSeconds();
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
-    transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
-    transaction_streaming_load_bytes.increment(ctx->receive_bytes);
+    auto* metrics = StreamLoadMetrics::instance();
+    metrics->transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
+    metrics->transaction_streaming_load_bytes.increment(ctx->receive_bytes);
 
     return Status::OK();
 }
