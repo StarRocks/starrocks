@@ -17,6 +17,7 @@ set(SPILL_CORE_TEST_FILES
     operator_mem_resource_manager_test.cpp
     query_spill_manager_test.cpp
     spill_block_manager_test.cpp
+    spill_metrics_test.cpp
 )
 
 set(SPILL_CORE_TEST_LINK_LIBS

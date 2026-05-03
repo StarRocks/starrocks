@@ -42,7 +42,9 @@
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
+#include "exec/catalog_scan_metrics.h"
 #include "exec/pipeline/pipeline_metrics.h"
+#include "exec/query_scan_metrics.h"
 #include "http/http_metrics.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
@@ -50,8 +52,6 @@
 #include "service/backend_metrics_initializer.h"
 #include "service/service_metrics.h"
 #include "storage/storage_metrics.h"
-#include "util/metrics/catalog_scan_metrics.h"
-#include "util/metrics/query_scan_metrics.h"
 
 namespace starrocks {
 

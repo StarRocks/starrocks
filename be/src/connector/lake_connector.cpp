@@ -31,6 +31,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -43,6 +44,7 @@
 #include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
@@ -51,8 +53,6 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
-#include "util/metrics/flat_json_metrics.h"
-#include "util/metrics/query_scan_metrics.h"
 
 namespace starrocks::connector {
 

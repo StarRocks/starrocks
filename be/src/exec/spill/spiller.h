@@ -35,12 +35,12 @@
 #include "exec/spill/partition.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spill_components.h"
+#include "exec/spill/spill_metrics.h"
 #include "exec/spill/spiller_factory.h"
 #include "fs/fs.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
-#include "util/metrics/spill_metrics.h"
 
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
 

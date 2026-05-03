@@ -138,7 +138,9 @@
         "be/src/exec/spill/global_spill_manager.h",
         "be/src/exec/spill/operator_mem_resource_manager.h",
         "be/src/exec/spill/operator_mem_resource_manager.cpp",
-        "be/src/exec/spill/partition.h"
+        "be/src/exec/spill/partition.h",
+        "be/src/exec/spill/spill_metrics.h",
+        "be/src/exec/spill/spill_metrics.cpp"
       ],
       "allowed_include_prefixes": ["exec/spill/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "exprs/", "runtime/", "storage/", "util/"],

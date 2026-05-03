@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
+#include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
@@ -33,7 +34,6 @@
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/metrics/query_scan_metrics.h"
 
 namespace starrocks {
 

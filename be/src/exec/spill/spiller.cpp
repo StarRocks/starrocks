@@ -34,11 +34,11 @@
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
+#include "exec/spill/spill_metrics.h"
 #include "exec/spill/spiller.hpp"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
-#include "util/metrics/spill_metrics.h"
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);

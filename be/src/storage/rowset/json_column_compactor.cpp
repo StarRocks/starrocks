@@ -25,10 +25,10 @@
 #include "column/nullable_column.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
 #include "util/json_flattener.h"
-#include "util/metrics/flat_json_metrics.h"
 
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {

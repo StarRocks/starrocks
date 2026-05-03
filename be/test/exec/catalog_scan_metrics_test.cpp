@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/metrics/catalog_scan_metrics.h"
+#include "exec/catalog_scan_metrics.h"
 
 #include <gtest/gtest.h>
 

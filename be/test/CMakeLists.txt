@@ -21,6 +21,7 @@ set(EXEC_FILES
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
         ./connector/benchmark_connector_test.cpp
+        ./connector/file_scan_metrics_test.cpp
         ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
@@ -103,6 +104,7 @@ set(EXEC_FILES
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
+        ./exec/catalog_scan_metrics_test.cpp
         ./exec/exec_factory_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
@@ -111,6 +113,7 @@ set(EXEC_FILES
         ./exec/lake_meta_scanner_test.cpp
         ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
+        ./exec/query_scan_metrics_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/data_sinks/tablet_sink_index_channel_test.cpp
@@ -310,12 +313,9 @@ set(EXEC_FILES
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
         ./util/fail_point_test.cpp
+        ./storage/flat_json_metrics_test.cpp
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
-        ./util/metrics/flat_json_metrics_test.cpp
-        ./util/metrics/file_scan_metrics_test.cpp
-        ./util/metrics/catalog_scan_metrics_test.cpp
-        ./util/metrics/query_scan_metrics_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
         ./base/types/int96_test.cpp

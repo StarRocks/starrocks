@@ -62,6 +62,7 @@
 #include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/global_spill_manager.h"
+#include "exec/spill/spill_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -114,7 +115,6 @@
 #include "types/hll.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/metrics/spill_metrics.h"
 #include "util/priority_thread_pool.hpp"
 
 #ifdef STARROCKS_JIT_ENABLE

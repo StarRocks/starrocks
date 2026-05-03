@@ -66,6 +66,7 @@
 #include "common/util/debug_util.h"
 #include "common/util/misc.h"
 #include "common/util/thrift_util.h"
+#include "exec/query_scan_metrics.h"
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
@@ -79,7 +80,6 @@
 #include "types/time_types.h"
 #include "util/logging.h"
 #include "util/memory_lock.h"
-#include "util/metrics/query_scan_metrics.h"
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");

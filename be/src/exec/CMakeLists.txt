@@ -53,6 +53,7 @@ set(SPILL_CORE_FILES
     spill/hybird_block_manager.cpp
     spill/query_spill_manager.cpp
     spill/operator_mem_resource_manager.cpp
+    spill/spill_metrics.cpp
 )
 
 ADD_BE_LIB(SpillCore
@@ -341,8 +342,10 @@ set(PIPELINE_EXTENSIONS_SRCS
 
 set(EXEC_NON_PIPELINE_FILES
     spill/spill_dir_manager_bootstrap.cpp
+    catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp
+    query_scan_metrics.cpp
     capture_version_node.cpp
     empty_set_node.cpp
     exec_factory.cpp

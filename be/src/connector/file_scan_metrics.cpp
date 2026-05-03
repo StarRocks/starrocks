@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/metrics/file_scan_metrics.h"
+#include "connector/file_scan_metrics.h"
 
 #include "exec/file_scanner/file_scanner.h"
 
