@@ -382,6 +382,8 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     auto* runtime_metrics = RuntimeMetrics::instance();
     runtime_metrics->install(registry);
     registry->register_hook(kRuntimeMetricsHookName, [runtime_metrics] { update_runtime_metrics(runtime_metrics); });
+    QueryScanMetrics::instance()->install(registry);
+    FlatJsonMetrics::instance()->install(registry);
 
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
@@ -398,8 +400,6 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
 
     FileScanMetrics::instance()->install(registry);
     CatalogScanMetrics::instance()->install(registry);
-    QueryScanMetrics::instance()->install(registry);
-    FlatJsonMetrics::instance()->install(registry);
     SpillMetrics::instance()->install(registry);
     DataCacheMetrics::instance()->install(registry);
     StorageMetrics::instance()->install(registry);
