@@ -152,7 +152,7 @@ public class LoadStmtTest {
                 "\"azure.adls1.oauth2_credential\" = \"some_credential\",\n" +
                 "\"azure.adls1.oauth2_endpoint\" = \"some_endpoint\")");
         Assertions.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
-                "(\"azure.adls1.oauth2_credential\"  =  \"***\", \"azure.adls1.oauth2_endpoint\"  =  \"some_endpoint\", \"azure.adls1.oauth2_client_id\"  =  \"some_client_id\")", AstToStringBuilder.toString(stmt));
+                "(\"azure.adls1.oauth2_credential\"  =  \"***\", \"azure.adls1.oauth2_endpoint\"  =  \"some_endpoint\", \"azure.adls1.oauth2_client_id\"  =  \"***\")", AstToStringBuilder.toString(stmt));
 
         stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
                 "(\"azure.adls2.storage_account\" = \"some_account\",\n" +
@@ -165,6 +165,6 @@ public class LoadStmtTest {
                 "\"azure.adls2.oauth2_client_secret\" = \"some_secret\",\n" +
                 "\"azure.adls2.oauth2_client_endpoint\" = \"some_endpoint\")");
         Assertions.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
-                "(\"azure.adls2.oauth2_client_id\"  =  \"some_client_id\", \"azure.adls2.oauth2_client_endpoint\"  =  \"some_endpoint\", \"azure.adls2.oauth2_client_secret\"  =  \"***\")", AstToStringBuilder.toString(stmt));
+                "(\"azure.adls2.oauth2_client_id\"  =  \"***\", \"azure.adls2.oauth2_client_endpoint\"  =  \"some_endpoint\", \"azure.adls2.oauth2_client_secret\"  =  \"***\")", AstToStringBuilder.toString(stmt));
     }
 }
