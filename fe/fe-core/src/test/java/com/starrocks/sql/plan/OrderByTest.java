@@ -605,6 +605,11 @@ class OrderByTest extends PlanTestBase {
         assertContains(plan, "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (1: t1a)");
 
+        // ORDER BY is only a subset of GROUP BY keys, so don't insert TopN between local/global agg.
+        sql = "select t1a from test_all_type_not_null group by t1a, t1b order by t1a limit 10;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "streaming preaggregation mode: force_preaggregation");
+
         // shouldn't generate filter for agg column
         sql = "select count(*) cnt from test_all_type_not_null group by t1a order by cnt limit 10;";
         plan = getVerboseExplain(sql);

@@ -75,8 +75,8 @@ public class SplitTopNRule extends TransformationRule {
         return Lists.newArrayList(finalSortExpression);
     }
 
-    // Pushes a PARTIAL TopN through one or more stacked identity-like Project nodes so that
-    // PushDownTopNToPreAggRule can later see TopN(PARTIAL) → Agg(GLOBAL) → Agg(LOCAL) directly.
+    // Pushes split TopN through one or more stacked identity-like Project nodes so that
+    // PushDownTopNToPreAggRule can later see TopN(PARTIAL) -> Agg(GLOBAL) -> Agg(LOCAL) directly.
     private Optional<OptExpression> splitThroughProject(OptExpression input, LogicalTopNOperator src,
                                                         LogicalTopNOperator finalSort, long limit) {
         if (input.getInputs().size() != 1 || !(input.inputAt(0).getOp() instanceof LogicalProjectOperator)) {
@@ -95,7 +95,7 @@ public class SplitTopNRule extends TransformationRule {
             cur = cur.inputAt(0);
         }
 
-        // Map each ordering column ref through the entire project chain (outermost → innermost).
+        // Map each ordering column ref through the entire project chain (outermost -> innermost).
         List<Ordering> rewrittenOrderings = new ArrayList<>();
         for (Ordering ordering : src.getOrderByElements()) {
             ColumnRefOperator colRef = ordering.getColumnRef();
@@ -110,14 +110,19 @@ public class SplitTopNRule extends TransformationRule {
             rewrittenOrderings.add(new Ordering(colRef, ordering.isAscending(), ordering.isNullsFirst()));
         }
 
-        // Place PARTIAL TopN below all projects, then rebuild the chain bottom-up.
-        // Result: TopN(FINAL,split) → P1 → ... → Pn → TopN(PARTIAL) → <rest>
+        // Place the split TopN pair below all projects, then rebuild the chain bottom-up.
+        // Result: P1 -> ... -> Pn -> TopN(FINAL,split) -> TopN(PARTIAL) -> <rest>
+        //
+        // A split final TopN must consume a partial TopN directly when building plan fragments.
+        LogicalTopNOperator rewrittenFinalSort = LogicalTopNOperator.builder().withOperator(finalSort)
+                .setOrderByElements(rewrittenOrderings)
+                .build();
         LogicalTopNOperator partialSort = new LogicalTopNOperator(
                 rewrittenOrderings, limit, Operator.DEFAULT_OFFSET, SortPhase.PARTIAL);
-        OptExpression rebuilt = OptExpression.create(partialSort, cur);
+        OptExpression rebuilt = OptExpression.create(rewrittenFinalSort, OptExpression.create(partialSort, cur));
         for (int i = projectChain.size() - 1; i >= 0; i--) {
             rebuilt = OptExpression.create(projectChain.get(i).getOp(), rebuilt);
         }
-        return Optional.of(OptExpression.create(finalSort, rebuilt));
+        return Optional.of(rebuilt);
     }
 }

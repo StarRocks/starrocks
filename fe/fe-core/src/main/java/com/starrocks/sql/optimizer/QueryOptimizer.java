@@ -29,6 +29,7 @@ import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
@@ -36,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
@@ -1164,9 +1166,15 @@ public class QueryOptimizer extends Optimizer {
         if (agg.getPredicate() != null) {
             return false;
         }
+        // Native OLAP tables already have their own TopN/Aggregate split path. Only run this extra rewrite chain
+        // for non-OLAP scans, where producing a partial TopN here can later enable scan-side runtime filters.
+        if (!containsNonOlapScan(cur)) {
+            return false;
+        }
 
         List<ColumnRefOperator> groupingKeys = agg.getGroupingKeys();
-        return topN.getOrderByElements().stream().allMatch(ordering -> {
+        List<ColumnRefOperator> mappedOrderByColumns = new ArrayList<>();
+        for (Ordering ordering : topN.getOrderByElements()) {
             ColumnRefOperator colRef = ordering.getColumnRef();
             for (LogicalProjectOperator proj : projectChain) {
                 ScalarOperator mapped = proj.getColumnRefMap().get(colRef);
@@ -1175,8 +1183,19 @@ public class QueryOptimizer extends Optimizer {
                 }
                 colRef = (ColumnRefOperator) mapped;
             }
-            return groupingKeys.contains(colRef);
-        });
+            mappedOrderByColumns.add(colRef);
+        }
+        return groupingKeys.containsAll(mappedOrderByColumns) && mappedOrderByColumns.containsAll(groupingKeys);
+    }
+
+    private boolean containsNonOlapScan(OptExpression tree) {
+        Operator operator = tree.getOp();
+        if (operator instanceof LogicalScanOperator &&
+                !(operator instanceof LogicalOlapScanOperator) &&
+                !(operator instanceof LogicalViewScanOperator)) {
+            return true;
+        }
+        return tree.getInputs().stream().anyMatch(this::containsNonOlapScan);
     }
 
     private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {
