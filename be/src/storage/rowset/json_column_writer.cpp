@@ -37,7 +37,6 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/json_column_compactor.h"
@@ -45,6 +44,7 @@
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "util/json_flattener.h"
+#include "util/metrics/flat_json_metrics.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -82,12 +82,12 @@ Status FlatJsonColumnWriter::append(const Column& column) {
     // schema change will reuse column, must copy in there.
     _json_datas.emplace_back(column.clone());
     _estimate_size += column.byte_size();
-    StarRocksMetrics::instance()->flat_json_write_rows_total.increment(column.size());
+    FlatJsonMetrics::instance()->flat_json_write_rows_total.increment(column.size());
     return Status::OK();
 }
 
 Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
-    StarRocksMetrics::instance()->flat_json_segment_write_total.increment(1);
+    FlatJsonMetrics::instance()->flat_json_segment_write_total.increment(1);
     // all json datas must full json
     JsonPathDeriver deriver;
     deriver.init_flat_json_config(_flat_json_config);
@@ -98,13 +98,13 @@ Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
         vc.emplace_back(js.get());
     }
     deriver.derived(vc);
-    StarRocksMetrics::instance()->flat_json_paths_discovered_total.increment(deriver.flat_paths().size());
+    FlatJsonMetrics::instance()->flat_json_paths_discovered_total.increment(deriver.flat_paths().size());
 
     _flat_paths = deriver.flat_paths();
     _flat_types = deriver.flat_types();
     _has_remain = deriver.has_remain_json();
     _remain_filter = deriver.remain_fitler();
-    StarRocksMetrics::instance()->flat_json_paths_extracted_total.increment(_flat_paths.size());
+    FlatJsonMetrics::instance()->flat_json_paths_extracted_total.increment(_flat_paths.size());
 
     VLOG(2) << "FlatJsonColumnWriter flat_column flat json: "
             << JsonFlatPath::debug_flat_json(_flat_paths, _flat_types, _has_remain);

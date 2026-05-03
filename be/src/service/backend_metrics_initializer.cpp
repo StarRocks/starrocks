@@ -46,6 +46,8 @@
 #include "util/logging.h"
 #include "util/metrics/catalog_scan_metrics.h"
 #include "util/metrics/file_scan_metrics.h"
+#include "util/metrics/flat_json_metrics.h"
+#include "util/metrics/query_scan_metrics.h"
 #include "util/metrics/spill_metrics.h"
 #include "util/system_metrics.h"
 
@@ -224,8 +226,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
 
     REGISTER_STARROCKS_METRIC(http_requests_total);
     REGISTER_STARROCKS_METRIC(http_request_send_bytes);
-    REGISTER_STARROCKS_METRIC(query_scan_bytes);
-    REGISTER_STARROCKS_METRIC(query_scan_rows);
 
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
@@ -329,8 +329,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     registry->register_metric("load_rows", &(fast_metrics->load_rows_total));
     registry->register_metric("load_bytes", &(fast_metrics->load_bytes_total));
 
-    REGISTER_STARROCKS_METRIC(query_scan_bytes_per_second);
-
     REGISTER_STARROCKS_METRIC(readable_blocks_total);
     REGISTER_STARROCKS_METRIC(writable_blocks_total);
     REGISTER_STARROCKS_METRIC(blocks_created_total);
@@ -343,18 +341,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
 
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
-
-    REGISTER_STARROCKS_METRIC(flat_json_segment_write_total);
-    REGISTER_STARROCKS_METRIC(flat_json_write_rows_total);
-    REGISTER_STARROCKS_METRIC(flat_json_paths_discovered_total);
-    REGISTER_STARROCKS_METRIC(flat_json_paths_extracted_total);
-    REGISTER_STARROCKS_METRIC(flat_json_access_hit_total);
-    REGISTER_STARROCKS_METRIC(flat_json_access_miss_total);
-    REGISTER_STARROCKS_METRIC(flat_json_cast_duration_ns_total);
-    REGISTER_STARROCKS_METRIC(flat_json_merge_duration_ns_total);
-    REGISTER_STARROCKS_METRIC(flat_json_flatten_duration_ns_total);
-    REGISTER_STARROCKS_METRIC(flat_json_compaction_total);
-    REGISTER_STARROCKS_METRIC(flat_json_compaction_schema_change_total);
 
 #undef REGISTER_STARROCKS_METRIC
 }
@@ -396,6 +382,8 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     auto* runtime_metrics = RuntimeMetrics::instance();
     runtime_metrics->install(registry);
     registry->register_hook(kRuntimeMetricsHookName, [runtime_metrics] { update_runtime_metrics(runtime_metrics); });
+    QueryScanMetrics::instance()->install(registry);
+    FlatJsonMetrics::instance()->install(registry);
 
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;

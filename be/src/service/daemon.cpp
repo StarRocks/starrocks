@@ -80,6 +80,7 @@
 #include "util/global_metrics_registry.h"
 #include "util/logging.h"
 #include "util/memory_lock.h"
+#include "util/metrics/query_scan_metrics.h"
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
@@ -111,7 +112,7 @@ void calculate_metrics(void* arg_this) {
         if (last_ts == -1L) {
             last_ts = MonotonicSeconds();
             lst_push_bytes = StorageMetrics::instance()->push_request_write_bytes.value();
-            lst_query_bytes = StarRocksMetrics::instance()->query_scan_bytes.value();
+            lst_query_bytes = QueryScanMetrics::instance()->query_scan_bytes.value();
             SystemMetrics::instance()->get_disks_io_time(&lst_disks_io_time);
             SystemMetrics::instance()->get_network_traffic(&lst_net_send_bytes, &lst_net_receive_bytes);
         } else {
@@ -126,9 +127,9 @@ void calculate_metrics(void* arg_this) {
             lst_push_bytes = current_push_bytes;
 
             // 2. query bytes per second.
-            int64_t current_query_bytes = StarRocksMetrics::instance()->query_scan_bytes.value();
+            int64_t current_query_bytes = QueryScanMetrics::instance()->query_scan_bytes.value();
             int64_t qps = (current_query_bytes - lst_query_bytes) / (interval == 0 ? 1 : interval);
-            StarRocksMetrics::instance()->query_scan_bytes_per_second.set_value(qps < 0 ? 0 : qps);
+            QueryScanMetrics::instance()->query_scan_bytes_per_second.set_value(qps < 0 ? 0 : qps);
             lst_query_bytes = current_query_bytes;
 
             // 3. max disk io util.
