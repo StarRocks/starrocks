@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -79,6 +80,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingW
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowOuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNToPreAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
@@ -92,6 +94,8 @@ import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitJoinORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitWindowSkewToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
@@ -155,6 +159,7 @@ import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_TRANSPARENT_R
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
+
 /**
  * QueryOptimizer's entrance class
  */
@@ -616,6 +621,11 @@ public class QueryOptimizer extends Optimizer {
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
+        if (hasTopNOnGroupKeyAgg(tree)) {
+            scheduler.rewriteOnce(tree, rootTaskContext, SplitTopNRule.getInstance());
+            scheduler.rewriteOnce(tree, rootTaskContext, SplitTwoPhaseAggRule.getInstance());
+            scheduler.rewriteOnce(tree, rootTaskContext, PushDownTopNToPreAggRule.getInstance());
+        }
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
 
@@ -873,7 +883,8 @@ public class QueryOptimizer extends Optimizer {
             if (pushAggFlag || pushDistinctBelowWindowFlag) {
                 deriveLogicalProperty(tree);
             }
-            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
+            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to
+            // push down distinct.
             if (!joinReorder && context.getSessionVariable().isEnableJoinReorderBeforeDeduplicate()) {
                 logicalJoinReorder(tree, rootTaskContext);
             }
@@ -1112,6 +1123,51 @@ public class QueryOptimizer extends Optimizer {
         List<PhysicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOperator(tree, list, op -> op instanceof PhysicalOlapScanOperator);
         return list;
+    }
+
+    private boolean hasTopNOnGroupKeyAgg(OptExpression tree) {
+        if (isTopNOnGroupKeyAgg(tree)) {
+            return true;
+        }
+        return tree.getInputs().stream().anyMatch(this::hasTopNOnGroupKeyAgg);
+    }
+
+    private boolean isTopNOnGroupKeyAgg(OptExpression tree) {
+        Operator operator = tree.getOp();
+        if (!(operator instanceof LogicalTopNOperator)) {
+            return false;
+        }
+        LogicalTopNOperator topN = (LogicalTopNOperator) operator;
+        if (!topN.hasLimit() || topN.hasOffset() || topN.getPredicate() != null || tree.getInputs().size() != 1) {
+            return false;
+        }
+
+        OptExpression aggExpression = skipLogicalProject(tree.inputAt(0));
+        Operator aggOperator = aggExpression.getOp();
+        if (!(aggOperator instanceof LogicalAggregationOperator)) {
+            return false;
+        }
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) aggOperator;
+        if (agg.getPredicate() != null) {
+            return false;
+        }
+
+        return topN.getOrderByElements().stream()
+                .allMatch(ordering -> agg.getGroupingKeys().contains(ordering.getColumnRef()));
+    }
+
+    private OptExpression skipLogicalProject(OptExpression tree) {
+        OptExpression result = tree;
+        while (result.getInputs().size() == 1) {
+            switch (result.getOp().getOpType()) {
+                case LOGICAL_PROJECT:
+                    result = result.inputAt(0);
+                    break;
+                default:
+                    return result;
+            }
+        }
+        return result;
     }
 
     private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {

@@ -601,6 +601,12 @@ class OrderByTest extends PlanTestBase {
         assertContains(plan, "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (1: t1a)");
 
+        // TopN -> Project -> AGG should still split partial TopN through the project.
+        sql = "select t1a as k, count(*) from test_all_type_not_null group by t1a order by k limit 10;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: t1a)");
+
         // shouldn't generate filter for agg column
         sql = "select count(*) cnt from test_all_type_not_null group by t1a order by cnt limit 10;";
         plan = getVerboseExplain(sql);

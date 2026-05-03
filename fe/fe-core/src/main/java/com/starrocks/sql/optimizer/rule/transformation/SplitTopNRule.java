@@ -19,15 +19,21 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class SplitTopNRule extends TransformationRule {
     private SplitTopNRule() {
@@ -55,12 +61,46 @@ public class SplitTopNRule extends TransformationRule {
                 String.format("limit(%d) + offset(%d) is too large and yields an overflow result(%d)", src.getLimit(),
                         src.getOffset(), src.getLimit() + src.getOffset()));
         long limit = src.getLimit() + src.getOffset();
+        LogicalTopNOperator finalSort = LogicalTopNOperator.builder().withOperator(src).setIsSplit(true).build();
+
+        Optional<OptExpression> splitThroughProject = splitThroughProject(input, src, finalSort, limit);
+        if (splitThroughProject.isPresent()) {
+            return Lists.newArrayList(splitThroughProject.get());
+        }
+
         LogicalTopNOperator partialSort = new LogicalTopNOperator(
                 src.getOrderByElements(), limit, Operator.DEFAULT_OFFSET, SortPhase.PARTIAL);
 
-        LogicalTopNOperator finalSort = LogicalTopNOperator.builder().withOperator(src).setIsSplit(true).build();
         OptExpression partialSortExpression = OptExpression.create(partialSort, input.getInputs());
         OptExpression finalSortExpression = OptExpression.create(finalSort, partialSortExpression);
         return Lists.newArrayList(finalSortExpression);
+    }
+
+    private Optional<OptExpression> splitThroughProject(OptExpression input, LogicalTopNOperator src,
+                                                        LogicalTopNOperator finalSort, long limit) {
+        if (input.getInputs().size() != 1 || !(input.inputAt(0).getOp() instanceof LogicalProjectOperator)) {
+            return Optional.empty();
+        }
+        OptExpression projectExpression = input.inputAt(0);
+        LogicalProjectOperator project = projectExpression.getOp().cast();
+        if (project.hasLimit() || projectExpression.getInputs().size() != 1) {
+            return Optional.empty();
+        }
+
+        List<Ordering> rewrittenOrderings = new ArrayList<>();
+        for (Ordering ordering : src.getOrderByElements()) {
+            ScalarOperator mapped = project.getColumnRefMap().get(ordering.getColumnRef());
+            if (!(mapped instanceof ColumnRefOperator)) {
+                return Optional.empty();
+            }
+            rewrittenOrderings.add(new Ordering((ColumnRefOperator) mapped, ordering.isAscending(),
+                    ordering.isNullsFirst()));
+        }
+
+        LogicalTopNOperator partialSort = new LogicalTopNOperator(
+                rewrittenOrderings, limit, Operator.DEFAULT_OFFSET, SortPhase.PARTIAL);
+        OptExpression partialSortExpression = OptExpression.create(partialSort, projectExpression.getInputs());
+        OptExpression projectOverPartialSort = OptExpression.create(project, partialSortExpression);
+        return Optional.of(OptExpression.create(finalSort, projectOverPartialSort));
     }
 }
