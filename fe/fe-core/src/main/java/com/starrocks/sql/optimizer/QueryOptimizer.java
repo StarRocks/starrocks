@@ -79,6 +79,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingW
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowOuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNToPreAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
@@ -92,6 +93,8 @@ import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitJoinORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTopNOnGroupKeyAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitWindowSkewToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
@@ -616,6 +619,9 @@ public class QueryOptimizer extends Optimizer {
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
+        if (sessionVariable.getTopNPushDownAggMode() >= 0) {
+            rewriteTopNOnGroupKeyAggForNonOlapScan(tree, 0, rootTaskContext);
+        }
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
 
@@ -1112,6 +1118,24 @@ public class QueryOptimizer extends Optimizer {
         List<PhysicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOperator(tree, list, op -> op instanceof PhysicalOlapScanOperator);
         return list;
+    }
+
+    private void rewriteTopNOnGroupKeyAggForNonOlapScan(OptExpression parent, int childIndex,
+                                                        TaskContext rootTaskContext) {
+        OptExpression tree = parent.inputAt(childIndex);
+        SplitTopNOnGroupKeyAggRule splitTopNOnGroupKeyAggRule = SplitTopNOnGroupKeyAggRule.getInstance();
+        if (splitTopNOnGroupKeyAggRule.canRewrite(tree, rootTaskContext.getOptimizerContext())) {
+            OptExpression subtreeAnchor = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+            scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, splitTopNOnGroupKeyAggRule);
+            scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, SplitTwoPhaseAggRule.getInstance());
+            scheduler.rewriteAtMostOnce(subtreeAnchor, rootTaskContext, PushDownTopNToPreAggRule.getInstance());
+            parent.getInputs().set(childIndex, subtreeAnchor.inputAt(0));
+            return;
+        }
+
+        for (int i = 0; i < tree.getInputs().size(); i++) {
+            rewriteTopNOnGroupKeyAggForNonOlapScan(tree, i, rootTaskContext);
+        }
     }
 
     private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {
