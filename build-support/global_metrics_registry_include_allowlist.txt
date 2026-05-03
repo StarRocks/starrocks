@@ -1,6 +1,5 @@
 # Existing production includes of util/global_metrics_registry.h.
 # This list is shrink-only during the BE metrics ownership migration.
-be/src/agent/agent_server.cpp
 be/src/cache/mem_cache/page_cache.cpp
 be/src/exec/pipeline/query_context.cpp
 be/src/exec/pipeline/scan/olap_chunk_source.cpp

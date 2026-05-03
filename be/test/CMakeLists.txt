@@ -1,4 +1,5 @@
 set(EXEC_FILES
+        ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp

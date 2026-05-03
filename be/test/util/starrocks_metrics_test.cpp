@@ -38,6 +38,7 @@
 
 #include <mutex>
 
+#include "agent/agent_metrics.h"
 #include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
@@ -140,6 +141,7 @@ private:
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto instance = StarRocksMetrics::instance();
+    auto agent_metrics = AgentMetrics::instance();
     auto query_scan_metrics = QueryScanMetrics::instance();
     auto runtime_metrics = RuntimeMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
@@ -214,42 +216,42 @@ TEST_F(StarRocksMetricsTest, Normal) {
     }
     // engine request
     {
-        instance->create_tablet_requests_total.increment(15);
+        agent_metrics->create_tablet_requests_total.increment(15);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "create_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("15", metric->to_string().c_str());
     }
     {
-        instance->drop_tablet_requests_total.increment(16);
+        agent_metrics->drop_tablet_requests_total.increment(16);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "drop_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("16", metric->to_string().c_str());
     }
     {
-        instance->report_all_tablets_requests_total.increment(17);
+        agent_metrics->report_all_tablets_requests_total.increment(17);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "report_all_tablets").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("17", metric->to_string().c_str());
     }
     {
-        instance->report_tablet_requests_total.increment(18);
+        agent_metrics->report_tablet_requests_total.increment(18);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "report_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("18", metric->to_string().c_str());
     }
     {
-        instance->schema_change_requests_total.increment(19);
+        agent_metrics->schema_change_requests_total.increment(19);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "schema_change").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("19", metric->to_string().c_str());
     }
     {
-        instance->create_rollup_requests_total.increment(20);
+        agent_metrics->create_rollup_requests_total.increment(20);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "create_rollup").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
@@ -270,7 +272,7 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("22", metric->to_string().c_str());
     }
     {
-        instance->clone_requests_total.increment(23);
+        agent_metrics->clone_requests_total.increment(23);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "clone").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);

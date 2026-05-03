@@ -34,7 +34,6 @@
 
 #pragma once
 
-#include "runtime/starrocks_metrics.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"

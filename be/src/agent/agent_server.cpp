@@ -40,6 +40,7 @@
 #include <string>
 #include <vector>
 
+#include "agent/agent_metrics.h"
 #include "agent/agent_task.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
@@ -56,7 +57,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -195,7 +195,7 @@ Status AgentServer::Impl::init() {
                                 .set_max_queue_size(queue_size)                                                  \
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                     \
                                 .build(&pool));                                                                  \
-        REGISTER_THREAD_POOL_METRICS(name, pool);                                                                \
+        AgentMetrics::instance()->register_thread_pool_metrics(#name, pool.get());                               \
     } while (false)
 
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.

@@ -26,6 +26,7 @@
 #include <sstream>
 #include <utility>
 
+#include "agent/agent_metrics.h"
 #include "base/compression/compression_context_pool_metrics.h"
 #include "base/network/network_util.h"
 #include "cache/datacache_metrics.h"
@@ -255,47 +256,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
     REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
 
-    registry->register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
-                              &(fast_metrics->clone_task_inter_node_copy_bytes));
-    registry->register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTRA_NODE"),
-                              &(fast_metrics->clone_task_intra_node_copy_bytes));
-    registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTER_NODE"),
-                              &(fast_metrics->clone_task_inter_node_copy_duration_ms));
-    registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
-                              &(fast_metrics->clone_task_intra_node_copy_duration_ms));
-
-#define REGISTER_ENGINE_REQUEST_METRIC(type, status, metric)                                                     \
-    registry->register_metric("engine_requests_total", MetricLabels().add("type", #type).add("status", #status), \
-                              &(fast_metrics->metric))
-
-    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, total, create_tablet_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, failed, create_tablet_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(drop_tablet, total, drop_tablet_requests_total);
-
-    REGISTER_ENGINE_REQUEST_METRIC(report_all_tablets, total, report_all_tablets_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(report_all_tablets, failed, report_all_tablets_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(report_tablet, total, report_tablet_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(report_tablet, failed, report_tablet_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(report_disk, total, report_disk_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(report_disk, failed, report_disk_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(report_task, total, report_task_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(report_task, failed, report_task_requests_failed);
-
-    REGISTER_ENGINE_REQUEST_METRIC(schema_change, total, schema_change_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(schema_change, failed, schema_change_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, total, create_rollup_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, failed, create_rollup_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(clone, total, clone_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(clone, failed, clone_requests_failed);
-
-    REGISTER_ENGINE_REQUEST_METRIC(finish_task, total, finish_task_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(finish_task, failed, finish_task_requests_failed);
-
-    REGISTER_ENGINE_REQUEST_METRIC(publish, total, publish_task_request_total);
-    REGISTER_ENGINE_REQUEST_METRIC(publish, failed, publish_task_failed_total);
-
-#undef REGISTER_ENGINE_REQUEST_METRIC
-
     registry->register_metric("meta_request_total", MetricLabels().add("type", "write"),
                               &(fast_metrics->meta_write_request_total));
     registry->register_metric("meta_request_total", MetricLabels().add("type", "read"),
@@ -345,20 +305,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
 #undef REGISTER_STARROCKS_METRIC
 }
 
-void install_disk_path_metrics(MetricRegistry* registry, StarRocksMetrics* fast_metrics,
-                               const std::vector<std::string>& paths) {
-    for (auto& path : paths) {
-        IntGauge* gauge = fast_metrics->disks_total_capacity.add_metric(path, MetricUnit::BYTES);
-        registry->register_metric("disks_total_capacity", MetricLabels().add("path", path), gauge);
-        gauge = fast_metrics->disks_avail_capacity.add_metric(path, MetricUnit::BYTES);
-        registry->register_metric("disks_avail_capacity", MetricLabels().add("path", path), gauge);
-        gauge = fast_metrics->disks_data_used_capacity.add_metric(path, MetricUnit::BYTES);
-        registry->register_metric("disks_data_used_capacity", MetricLabels().add("path", path), gauge);
-        gauge = fast_metrics->disks_state.add_metric(path, MetricUnit::NOUNIT);
-        registry->register_metric("disks_state", MetricLabels().add("path", path), gauge);
-    }
-}
-
 } // namespace
 
 BackendMetricsInitOptions BackendMetricsInitializer::from_config(std::vector<std::string> storage_paths) {
@@ -379,6 +325,8 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     auto* registry = process_metrics_registry->root_registry();
     registry->set_collect_hook_enabled(options.collect_hook_enabled);
     install_starrocks_metrics(registry, fast_metrics);
+    auto* agent_metrics = AgentMetrics::instance();
+    agent_metrics->install(registry);
     auto* runtime_metrics = RuntimeMetrics::instance();
     runtime_metrics->install(registry);
     registry->register_hook(kRuntimeMetricsHookName, [runtime_metrics] { update_runtime_metrics(runtime_metrics); });
@@ -392,7 +340,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     }
 
     pipeline::PipelineExecutorMetrics::instance()->register_all_metrics(registry);
-    install_disk_path_metrics(registry, fast_metrics, options.storage_paths);
+    agent_metrics->install_disk_path_metrics(registry, options.storage_paths);
 
     if (options.init_system_metrics) {
         SystemMetrics::instance()->install(registry, disk_devices, network_interfaces);

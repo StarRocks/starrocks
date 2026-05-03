@@ -14,31 +14,9 @@
 
 #pragma once
 
-#include <memory>
-#include <string>
-#include <unordered_map>
-
 #include "base/metrics.h"
 
 namespace starrocks {
-
-class IntGaugeMetricsMap {
-public:
-    void set_metric(const std::string& key, int64_t val) {
-        auto metric = metrics.find(key);
-        if (metric != metrics.end()) {
-            metric->second->set_value(val);
-        }
-    }
-
-    IntGauge* add_metric(const std::string& key, const MetricUnit unit) {
-        metrics.emplace(key, new IntGauge(unit));
-        return metrics.find(key)->second.get();
-    }
-
-private:
-    std::unordered_map<std::string, std::unique_ptr<IntGauge>> metrics;
-};
 
 #define REGISTER_GAUGE_STARROCKS_METRIC(name, func)                                                            \
     GlobalMetricsRegistry::instance()->metrics()->register_metric(#name, &StarRocksMetrics::instance()->name); \
@@ -69,43 +47,6 @@ public:
     // counters
     METRIC_DEFINE_INT_COUNTER(http_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(http_request_send_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(create_tablet_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(create_tablet_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(drop_tablet_requests_total, MetricUnit::REQUESTS);
-
-    METRIC_DEFINE_INT_COUNTER(report_all_tablets_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_all_tablets_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_tablet_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_tablet_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_disk_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_disk_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_task_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_task_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_workgroup_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_workgroup_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_resource_usage_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_resource_usage_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_datacache_metrics_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(report_datacache_metrics_requests_failed, MetricUnit::REQUESTS);
-
-    METRIC_DEFINE_INT_COUNTER(schema_change_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(schema_change_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(create_rollup_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(create_rollup_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(clone_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(clone_requests_failed, MetricUnit::REQUESTS);
-
-    METRIC_DEFINE_INT_COUNTER(finish_task_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(finish_task_requests_failed, MetricUnit::REQUESTS);
-
-    // clone
-    METRIC_DEFINE_INT_COUNTER(clone_task_inter_node_copy_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(clone_task_intra_node_copy_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(clone_task_inter_node_copy_duration_ms, MetricUnit::MILLISECONDS);
-    METRIC_DEFINE_INT_COUNTER(clone_task_intra_node_copy_duration_ms, MetricUnit::MILLISECONDS);
-
-    METRIC_DEFINE_INT_COUNTER(publish_task_request_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(publish_task_failed_total, MetricUnit::REQUESTS);
 
     METRIC_DEFINE_INT_COUNTER(meta_write_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(meta_write_request_duration_us, MetricUnit::MICROSECONDS);
@@ -190,12 +131,6 @@ public:
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
 
-    // Gauges
-    IntGaugeMetricsMap disks_total_capacity;
-    IntGaugeMetricsMap disks_avail_capacity;
-    IntGaugeMetricsMap disks_data_used_capacity;
-    IntGaugeMetricsMap disks_state;
-
     // Metrics related with BlockManager
     METRIC_DEFINE_INT_COUNTER(readable_blocks_total, MetricUnit::BLOCKS);
     METRIC_DEFINE_INT_COUNTER(writable_blocks_total, MetricUnit::BLOCKS);
@@ -212,7 +147,6 @@ public:
     METRIC_DEFINE_UINT_GAUGE(unused_rowsets_count, MetricUnit::ROWSETS);
 
     // thread pool metrics
-    METRICS_DEFINE_THREAD_POOL(publish_version);
     METRICS_DEFINE_THREAD_POOL(async_delta_writer);
     METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
     METRICS_DEFINE_THREAD_POOL(memtable_flush);
@@ -228,27 +162,6 @@ public:
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
     METRICS_DEFINE_THREAD_POOL(pip_prepare);
     METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
-
-    // agent server thread pools
-    METRICS_DEFINE_THREAD_POOL(drop);
-    METRICS_DEFINE_THREAD_POOL(create_tablet);
-    METRICS_DEFINE_THREAD_POOL(alter_tablet);
-    METRICS_DEFINE_THREAD_POOL(clear_transaction);
-    METRICS_DEFINE_THREAD_POOL(storage_medium_migrate);
-    METRICS_DEFINE_THREAD_POOL(check_consistency);
-    METRICS_DEFINE_THREAD_POOL(manual_compaction);
-    METRICS_DEFINE_THREAD_POOL(compaction_control);
-    METRICS_DEFINE_THREAD_POOL(update_schema);
-    METRICS_DEFINE_THREAD_POOL(upload);
-    METRICS_DEFINE_THREAD_POOL(download);
-    METRICS_DEFINE_THREAD_POOL(make_snapshot);
-    METRICS_DEFINE_THREAD_POOL(release_snapshot);
-    METRICS_DEFINE_THREAD_POOL(move_dir);
-    METRICS_DEFINE_THREAD_POOL(update_tablet_meta_info);
-    METRICS_DEFINE_THREAD_POOL(drop_auto_increment_map_dir);
-    METRICS_DEFINE_THREAD_POOL(clone);
-    METRICS_DEFINE_THREAD_POOL(remote_snapshot);
-    METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
 
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
