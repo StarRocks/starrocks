@@ -101,7 +101,7 @@ struct ArrayAggAggregateState {
 
 // Specialization: string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet>
-struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGaurd<PT>> {
+struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT>> {
     virtual ~ArrayAggAggregateState() = default;
     using ColumnType = RunTimeColumnType<PT>;
     using CppType = RunTimeCppType<PT>;
