@@ -34,6 +34,7 @@ set(RUNTIME_CORE_FILES
     record_batch_queue.cpp
     starrocks_metrics.cpp
     runtime_metrics.cpp
+    stream_load/stream_load_metrics.cpp
     global_dict/decoder.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp
@@ -88,7 +89,6 @@ set(RUNTIME_FILES
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
-    stream_load/stream_load_metrics.cpp
     stream_load/stream_load_pipe.cpp
     stream_load/time_bounded_stream_load_pipe.cpp
     batch_write/isomorphic_batch_write.cpp

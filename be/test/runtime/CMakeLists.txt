@@ -53,7 +53,7 @@ add_executable(runtime_core_test $<TARGET_OBJECTS:starrocks_runtime_core_test_ob
 target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
 
 set(STREAM_LOAD_METRICS_TEST_LINK_LIBS
-    Runtime
+    RuntimeCore
     Common
     Base
     Gutil
