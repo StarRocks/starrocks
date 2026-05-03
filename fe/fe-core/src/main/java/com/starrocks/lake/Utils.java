@@ -135,6 +135,7 @@ public class Utils {
                                            ComputeResource computeResource,
                                            Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
+        long entryMs = System.currentTimeMillis();
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
@@ -146,7 +147,8 @@ public class Utils {
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
         Map<ComputeNode, PublishTabletsInfo> nodeToPublishTabletsInfo = processTablets(tablets, computeResource,
                 warehouseManager, rebuildPindexTabletIds, baseVersion, newVersion);
-        
+        long processTabletsEndMs = System.currentTimeMillis();
+
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
         List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
         for (Map.Entry<ComputeNode, PublishTabletsInfo> entry : nodeToPublishTabletsInfo.entrySet()) {
@@ -168,27 +170,39 @@ public class Utils {
             responseList.add(future);
             nodeList.add(node);
         }
+        long submitEndMs = System.currentTimeMillis();
 
-        for (int i = 0; i < responseList.size(); i++) {
-            try {
-                PublishVersionResponse response = responseList.get(i).get();
-                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    throw new RpcException("Fail to publish version for tablets " + response.failedTablets + ": " +
-                            response.status.errorMsgs.get(0));
-                }
-                if (compactionScores != null && response != null && response.compactionScores != null) {
-                    compactionScores.putAll(response.compactionScores);
-                }
-                if (tabletRanges != null && response != null && response.tabletRanges != null) {
-                    for (Map.Entry<Long, TabletRangePB> entry : response.tabletRanges.entrySet()) {
-                        tabletRanges.put(entry.getKey(), TabletRange.fromProto(entry.getValue()));
+        try {
+            for (int i = 0; i < responseList.size(); i++) {
+                try {
+                    PublishVersionResponse response = responseList.get(i).get();
+                    if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                        throw new RpcException("Fail to publish version for tablets " + response.failedTablets + ": " +
+                                response.status.errorMsgs.get(0));
                     }
+                    if (compactionScores != null && response != null && response.compactionScores != null) {
+                        compactionScores.putAll(response.compactionScores);
+                    }
+                    if (tabletRanges != null && response != null && response.tabletRanges != null) {
+                        for (Map.Entry<Long, TabletRangePB> entry : response.tabletRanges.entrySet()) {
+                            tabletRanges.put(entry.getKey(), TabletRange.fromProto(entry.getValue()));
+                        }
+                    }
+                    if (baseVersion == 1 && tabletRowNum != null && response != null && response.tabletRowNums != null) {
+                        tabletRowNum.putAll(response.tabletRowNums);
+                    }
+                } catch (Exception e) {
+                    throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
                 }
-                if (baseVersion == 1 && tabletRowNum != null && response != null && response.tabletRowNums != null) {
-                    tabletRowNum.putAll(response.tabletRowNums);
-                }
-            } catch (Exception e) {
-                throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
+            }
+        } finally {
+            long endMs = System.currentTimeMillis();
+            long totalMs = endMs - entryMs;
+            if (totalMs >= 500) {
+                LOG.warn("Slow publishVersionBatch nodes={} tablets={} total_ms={} process_tablets_ms={} " +
+                                "rpc_submit_ms={} rpc_wait_ms={}",
+                        nodeToPublishTabletsInfo.size(), tablets.size(), totalMs,
+                        processTabletsEndMs - entryMs, submitEndMs - processTabletsEndMs, endMs - submitEndMs);
             }
         }
 
