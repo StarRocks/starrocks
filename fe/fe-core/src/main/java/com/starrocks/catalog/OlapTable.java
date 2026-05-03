@@ -2189,7 +2189,7 @@ public class OlapTable extends Table {
         }
 
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(nameToColumn);
+            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(idToColumn);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ((ListPartitionInfo) partitionInfo).updateLiteralExprValues(idToColumn);
         }
