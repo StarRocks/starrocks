@@ -1000,8 +1000,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return CompletableFuture.completedFuture(false);
         }
 
+        long submitTimeMs = System.currentTimeMillis();
         return CompletableFuture.supplyAsync(() -> {
-            boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
+            long lambdaEntryMs = System.currentTimeMillis();
+            boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState,
+                    submitTimeMs, lambdaEntryMs);
             partitionCommitInfo.setVersionTime(success ? System.currentTimeMillis() : -System.currentTimeMillis());
             return success;
         }, getTaskExecutor()).exceptionally(ex -> {
@@ -1013,7 +1016,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
-                                     @NotNull TransactionState txnState) {
+                                     @NotNull TransactionState txnState,
+                                     long submitTimeMs, long lambdaEntryMs) {
         long tableId = tableCommitInfo.getTableId();
         long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
@@ -1026,6 +1030,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        long lockAcquiredMs = System.currentTimeMillis();
         boolean useAggregatePublish = Config.enable_file_bundling;
         try {
             OlapTable table =
@@ -1066,6 +1071,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
+        long brpcStartMs = System.currentTimeMillis();
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
@@ -1096,6 +1102,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
             LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                     txnId, e.getMessage());
             return false;
+        } finally {
+            long brpcEndMs = System.currentTimeMillis();
+            long totalMs = brpcEndMs - submitTimeMs;
+            if (totalMs >= 500) {
+                LOG.warn("Slow publishPartition txn={} partition={} table={} total_ms={} executor_acquire_ms={} " +
+                                "lock_wait_ms={} fe_prep_ms={} brpc_ms={}",
+                        txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
+                        totalMs, lambdaEntryMs - submitTimeMs,
+                        lockAcquiredMs - lambdaEntryMs, brpcStartMs - lockAcquiredMs, brpcEndMs - brpcStartMs);
+            }
         }
     }
 
