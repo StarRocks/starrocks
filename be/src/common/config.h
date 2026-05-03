@@ -303,7 +303,14 @@ CONF_mInt64(column_dictionary_key_size_threshold, "0");
 CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
 CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 
-CONF_mInt32(update_cache_expire_sec, "360");
+// Time-based eviction window for the PK-index / update-state caches in
+// `UpdateManager`. The previous 6-minute default was aggressive enough that any
+// brief lull (idle gap, deploy, traffic dip) drained the entire `_index_cache`,
+// causing every tablet to cold-load its PK index in parallel on resume — a
+// thunder-herd that saturates local block-cache disk and inflates publish
+// latency by 10×+. Memory pressure is already handled separately by
+// `UpdateManager::evict_cache`, so a longer time bound here cannot cause OOM.
+CONF_mInt32(update_cache_expire_sec, "7200");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
 CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(profile_report_interval, "30");
