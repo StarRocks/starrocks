@@ -205,7 +205,7 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
-    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
+    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor, boolean force) {
     }
 
     default void invalidatePartitionCache(String dbName, String tableName) {
@@ -350,14 +350,14 @@ public interface IcebergCatalog extends MemoryTrackable {
             try {
                 lastUpdated = row.get(columnIndex, Long.class);
             } catch (Exception e) {
-                logger.error("Failed to get last_updated_at for partition [{}] of table [{}] " +
+                logger.debug("Failed to get last_updated_at for partition [{}] of table [{}] " +
                                 "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
             }
         }
         if (lastUpdated ==  -1) {
             // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
             lastUpdated = getTableLastestSnapshotTime(icebergTable, logger);
-            logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
+            logger.debug("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
                     "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
         }
         return lastUpdated;
@@ -368,7 +368,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         Table nativeTable = icebergTable.getNativeTable();
         Snapshot snapshot = nativeTable.currentSnapshot();
         if (snapshot == null) {
-            logger.warn("The table [{}] has no current snapshot, using -1 as last updated time",
+            logger.debug("The table [{}] has no current snapshot, using -1 as last updated time",
                     nativeTable.name());
             return -1;
         }

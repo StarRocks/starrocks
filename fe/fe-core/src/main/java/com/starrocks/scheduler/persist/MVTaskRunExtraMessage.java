@@ -32,6 +32,7 @@ import java.io.DataInput;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class MVTaskRunExtraMessage implements Writable {
 
@@ -106,8 +107,7 @@ public class MVTaskRunExtraMessage implements Writable {
         if (mvPartitionsToRefresh == null) {
             return;
         }
-        this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh,
-                Config.max_mv_task_run_meta_message_values_length));
+        this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh));
     }
 
     public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
@@ -120,8 +120,14 @@ public class MVTaskRunExtraMessage implements Writable {
 
 
     public void setRefBasePartitionsToRefreshMap(Map<String, Set<String>> refBasePartitionsToRefreshMap) {
-        this.refBasePartitionsToRefreshMap = MvUtils.shrinkToSize(refBasePartitionsToRefreshMap,
-                Config.max_mv_task_run_meta_message_values_length);
+        if (refBasePartitionsToRefreshMap == null) {
+            return;
+        }
+        this.refBasePartitionsToRefreshMap = refBasePartitionsToRefreshMap.entrySet()
+                .stream()
+                .limit(Config.max_mv_task_run_meta_message_values_length)
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> Sets.newHashSet(MvUtils.shrinkToSize(entry.getValue()))));
     }
 
     public String getMvPartitionsToRefreshString() {
@@ -143,8 +149,14 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setBasePartitionsToRefreshMap(Map<String, Set<String>> basePartitionsToRefreshMap) {
-        this.basePartitionsToRefreshMap = MvUtils.shrinkToSize(basePartitionsToRefreshMap,
-                Config.max_mv_task_run_meta_message_values_length);
+        if (basePartitionsToRefreshMap == null) {
+            return;
+        }
+        this.basePartitionsToRefreshMap = basePartitionsToRefreshMap.entrySet()
+                .stream()
+                .limit(Config.max_mv_task_run_meta_message_values_length)
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> Sets.newHashSet(MvUtils.shrinkToSize(entry.getValue()))));
     }
 
     public static MVTaskRunExtraMessage read(DataInput in) throws IOException {

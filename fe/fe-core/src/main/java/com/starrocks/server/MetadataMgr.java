@@ -838,6 +838,11 @@ public class MetadataMgr {
         return true;
     }
 
+    /**
+     * Refresh table metadata from remote catalog.
+     *
+     * @param onlyCachedPartitions if true, only refresh cached partitions; if false, clear all cache and reload from remote
+     */
     public void refreshTable(String catalogName, String srDbName, Table table,
                              List<String> partitionNames, boolean onlyCachedPartitions) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);

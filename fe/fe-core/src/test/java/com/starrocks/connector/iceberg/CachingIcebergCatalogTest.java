@@ -297,9 +297,9 @@ public class CachingIcebergCatalogTest {
         
         System.out.println("cache test");
         catalog.getTable(dbName, tblName);
-        catalog.refreshTable(dbName, tblName, null);
+        catalog.refreshTable(dbName, tblName, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp1).currentSnapshot().snapshotId());
-        catalog.refreshTable(dbName, tblName, null);
+        catalog.refreshTable(dbName, tblName, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp2).currentSnapshot().snapshotId());
 
         try {
@@ -338,7 +338,7 @@ public class CachingIcebergCatalogTest {
                 " should found in cache if present:" + 
                 tables.getIfPresent(new IcebergTableName(dbName, tblName)));
 
-        catalog.refreshTable(dbName, tblName, null);
+        catalog.refreshTable(dbName, tblName, null, false);
 
         Table t4 = catalog.getTable(dbName, tblName);
         System.out.println("Table SnapshotId:" + String.valueOf(((BaseTable) t4).currentSnapshot().snapshotId()) +
@@ -425,9 +425,9 @@ public class CachingIcebergCatalogTest {
         
         System.out.println("cache test");
         catalog.getTable(dbName, tblName);
-        catalog.refreshTable(dbName, tblName, null);
+        catalog.refreshTable(dbName, tblName, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp1).currentSnapshot().snapshotId());
-        catalog.refreshTable(dbName, tblName, null);
+        catalog.refreshTable(dbName, tblName, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp2).currentSnapshot().snapshotId());
 
         try {
@@ -438,7 +438,7 @@ public class CachingIcebergCatalogTest {
         System.out.println("[main] first get key val begin");
         Table t1 = catalog.getTable(dbName, tblName);
         System.out.println("[main] begin put key val begin snap 3");
-        catalog.refreshTable(dbName, dbName, null);
+        catalog.refreshTable(dbName, dbName, null, false);
         tables.invalidateAll();
         System.out.println("[main] finish put key val and invalidate all snap 3");
         System.out.println("[main] first get key val res:" + ((BaseTable) t1).currentSnapshot().snapshotId());
@@ -448,9 +448,9 @@ public class CachingIcebergCatalogTest {
         } catch (InterruptedException ie) {
         }
         System.out.println("[main] begin put key val begin snap 4, 5");
-        catalog.refreshTable(dbName, dbName, null);
+        catalog.refreshTable(dbName, dbName, null, false);
         catalog.getTable(dbName, tblName);
-        catalog.refreshTable(dbName, dbName, exector);
+        catalog.refreshTable(dbName, dbName, exector, false);
         System.out.println("[main] begin put key val begin snap 4, 5");
         try {
             Thread.sleep(6100);
@@ -472,7 +472,7 @@ public class CachingIcebergCatalogTest {
                 " should found in cache if present:" + 
                 tables.getIfPresent(new IcebergTableName(dbName, tblName)));
 
-        catalog.refreshTable(dbName, tblName, null);
+        catalog.refreshTable(dbName, tblName, null, false);
 
         Table t4 = catalog.getTable(dbName, tblName);
         System.out.println("Table SnapshotId:" + String.valueOf(((BaseTable) t4).currentSnapshot().snapshotId()) +
