@@ -1,0 +1,114 @@
+-- name: test_non_partitioned_mv_with_dropped_partitions
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
+set enable_materialized_view_transparent_union_rewrite = true;
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_iceberg_db_${uuid0};
+-- result:
+-- !result
+use mv_iceberg_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 (
+    num int,
+    dt string
+)
+PARTITION BY (dt);
+-- result:
+-- !result
+INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES
+    (1,"2020-06-15"),(2,"2020-06-15"),
+    (2,"2020-06-18"),(3,"2020-06-18"),
+    (3,"2020-06-21"),(4,"2020-06-21");
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW non_partitioned_mv 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+GROUP BY dt;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW non_partitioned_mv WITH SYNC MODE;
+-- result:
+-- !result
+SELECT * FROM non_partitioned_mv ORDER BY dt;
+-- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
+-- !result
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "non_partitioned_mv")
+-- result:
+True
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+DELETE FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 WHERE dt = '2020-06-15';
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "non_partitioned_mv")
+-- result:
+False
+-- !result
+[UC]REFRESH MATERIALIZED VIEW non_partitioned_mv WITH SYNC MODE;
+-- result:
+-- !result
+SELECT * FROM non_partitioned_mv ORDER BY dt;
+-- result:
+2020-06-18	5
+2020-06-21	7
+-- !result
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "non_partitioned_mv")
+-- result:
+True
+-- !result
+DROP MATERIALIZED VIEW non_partitioned_mv;
+-- result:
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+DROP DATABASE mv_iceberg_db_${uuid0};
+-- result:
+-- !result
+DROP CATALOG mv_iceberg_${uuid0};
+-- result:
+-- !result

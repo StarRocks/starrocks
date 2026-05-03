@@ -327,9 +327,15 @@ public abstract class MVTimelinessArbiter {
             }
         }
         Map<String, PCell> adds = diff.getAdds();
+        Map<String, PCell> deletes = diff.getDeletes();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
             adds.keySet().stream().forEach(mvPartitionName ->
+                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+        }
+        // Add deleted partitions to refresh list to ensure they are excluded from transparent rewrite
+        if (!CollectionUtils.sizeIsEmpty(deletes)) {
+            deletes.keySet().stream().forEach(mvPartitionName ->
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
@@ -393,10 +399,16 @@ public abstract class MVTimelinessArbiter {
             }
         }
         Map<String, PCell> adds = diff.getAdds();
+        Map<String, PCell> deletes = diff.getDeletes();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
             adds.keySet().stream().forEach(mvPartitionName ->
+                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+        }
+        // Add deleted partitions to refresh list to ensure they are excluded from transparent rewrite
+        if (!CollectionUtils.sizeIsEmpty(deletes)) {
+            deletes.keySet().stream().forEach(mvPartitionName ->
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         return mvUpdateInfo;
