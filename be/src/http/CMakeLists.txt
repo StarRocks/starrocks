@@ -18,6 +18,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
 set(HTTP_CORE_FILES
+  http_metrics.cpp
   http_headers.cpp
   http_method.cpp
   http_request.cpp

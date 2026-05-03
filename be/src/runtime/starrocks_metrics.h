@@ -44,10 +44,6 @@ public:
     METRIC_DEFINE_INT_GAUGE(runtime_filter_event_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_drivers, MetricUnit::NOUNIT);
 
-    // counters
-    METRIC_DEFINE_INT_COUNTER(http_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(http_request_send_bytes, MetricUnit::BYTES);
-
     METRIC_DEFINE_INT_COUNTER(meta_write_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(meta_write_request_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(meta_read_request_total, MetricUnit::REQUESTS);
@@ -64,18 +60,8 @@ public:
     // total number of rows selected by zone map index
     METRIC_DEFINE_INT_COUNTER(segment_rows_read_by_zone_map, MetricUnit::ROWS);
 
-    METRIC_DEFINE_INT_COUNTER(txn_begin_request_total, MetricUnit::OPERATIONS);
-    METRIC_DEFINE_INT_COUNTER(txn_commit_request_total, MetricUnit::OPERATIONS);
-    METRIC_DEFINE_INT_COUNTER(txn_rollback_request_total, MetricUnit::OPERATIONS);
-    METRIC_DEFINE_INT_COUNTER(txn_exec_plan_total, MetricUnit::OPERATIONS);
-
     METRIC_DEFINE_INT_COUNTER(txn_persist_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(txn_persist_duration_us, MetricUnit::MICROSECONDS);
-
-    METRIC_DEFINE_INT_COUNTER(stream_receive_bytes_total, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(stream_load_rows_total, MetricUnit::ROWS);
-    METRIC_DEFINE_INT_COUNTER(load_rows_total, MetricUnit::ROWS);
-    METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
 
     // Shared-data combined_txn_log collection dispatch counters. Each eos on a
     // LakeTabletsChannel that enters the collection path bumps exactly one of

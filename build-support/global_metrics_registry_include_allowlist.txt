@@ -7,7 +7,6 @@ be/src/exec/schema_scanner/schema_be_metrics_scanner.cpp
 be/src/exec/workgroup/mem_tracker_manager.cpp
 be/src/exec/workgroup/work_group.cpp
 be/src/fs/key_cache.cpp
-be/src/http/action/stream_load.cpp
 be/src/runtime/batch_write/batch_write_mgr.cpp
 be/src/runtime/broker_mgr.cpp
 be/src/runtime/data_stream_mgr.cpp
@@ -22,7 +21,6 @@ be/src/runtime/result_queue_mgr.cpp
 be/src/runtime/routine_load/routine_load_task_executor.cpp
 be/src/runtime/small_file_mgr.cpp
 be/src/runtime/stream_load/load_stream_mgr.h
-be/src/runtime/stream_load/transaction_mgr.cpp
 be/src/service/daemon.cpp
 be/src/service/service_be/http_service.cpp
 be/src/service/staros_worker.cpp

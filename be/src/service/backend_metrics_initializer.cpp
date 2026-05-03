@@ -38,8 +38,10 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "http/http_metrics.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/starrocks_metrics.h"
+#include "runtime/stream_load/stream_load_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
@@ -225,9 +227,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
 
 #define REGISTER_STARROCKS_METRIC(name) registry->register_metric(#name, &(fast_metrics->name))
 
-    REGISTER_STARROCKS_METRIC(http_requests_total);
-    REGISTER_STARROCKS_METRIC(http_request_send_bytes);
-
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
@@ -274,21 +273,6 @@ void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_
     registry->register_metric("segment_read", MetricLabels().add("type", "segment_rows_read_by_zone_map"),
                               &(fast_metrics->segment_rows_read_by_zone_map));
 
-    registry->register_metric("txn_request", MetricLabels().add("type", "begin"),
-                              &(fast_metrics->txn_begin_request_total));
-    registry->register_metric("txn_request", MetricLabels().add("type", "commit"),
-                              &(fast_metrics->txn_commit_request_total));
-    registry->register_metric("txn_request", MetricLabels().add("type", "rollback"),
-                              &(fast_metrics->txn_rollback_request_total));
-    registry->register_metric("txn_request", MetricLabels().add("type", "exec"), &(fast_metrics->txn_exec_plan_total));
-
-    registry->register_metric("stream_load", MetricLabels().add("type", "receive_bytes"),
-                              &(fast_metrics->stream_receive_bytes_total));
-    registry->register_metric("stream_load", MetricLabels().add("type", "load_rows"),
-                              &(fast_metrics->stream_load_rows_total));
-    registry->register_metric("load_rows", &(fast_metrics->load_rows_total));
-    registry->register_metric("load_bytes", &(fast_metrics->load_bytes_total));
-
     REGISTER_STARROCKS_METRIC(readable_blocks_total);
     REGISTER_STARROCKS_METRIC(writable_blocks_total);
     REGISTER_STARROCKS_METRIC(blocks_created_total);
@@ -325,10 +309,12 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     auto* registry = process_metrics_registry->root_registry();
     registry->set_collect_hook_enabled(options.collect_hook_enabled);
     install_starrocks_metrics(registry, fast_metrics);
+    HttpMetrics::instance()->install(registry);
     auto* agent_metrics = AgentMetrics::instance();
     agent_metrics->install(registry);
     auto* runtime_metrics = RuntimeMetrics::instance();
     runtime_metrics->install(registry);
+    StreamLoadMetrics::instance()->install(registry);
     registry->register_hook(kRuntimeMetricsHookName, [runtime_metrics] { update_runtime_metrics(runtime_metrics); });
     QueryScanMetrics::instance()->install(registry);
     FlatJsonMetrics::instance()->install(registry);
