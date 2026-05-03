@@ -168,7 +168,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
-        delta_writer->close();
+        // Only perform blocking I/O (wait for flush, close tablet writer) here.
+        // Do NOT reset/destroy internal state (_mem_table_sink, _flush_token, etc.)
+        // because a MergeBlockTask may still be running in the merge thread pool
+        // and accessing that state. Resource cleanup is deferred to
+        // AsyncDeltaWriterImpl::close() after all tasks have been drained.
+        delta_writer->flush_and_wait();
         return 0;
     }
     int num_tasks = 0;
@@ -347,12 +352,11 @@ inline void AsyncDeltaWriterImpl::close() {
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
         // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
-        // This must happen BEFORE execution_queue_stop() because stop() triggers the
-        // is_queue_stopped() handler (on a bthread) which calls delta_writer->close()
-        // and destroys SpillMemTableSink. We need all merge tasks to complete before that.
-        // The token remains allocated (not null) so if execute() is still running and
-        // calls _block_merge_token->submit(), it gets a ServiceUnavailable error instead
-        // of SIGSEGV.
+        // This must happen BEFORE execution_queue_stop() to ensure all merge tasks
+        // (which access writer state like _mem_table_sink) complete before the queue
+        // is torn down. The token remains allocated (not null) so if execute() is still
+        // running and calls _block_merge_token->submit(), it gets a ServiceUnavailable
+        // error instead of SIGSEGV.
         if (_block_merge_token != nullptr) {
             _block_merge_token->shutdown();
         }
@@ -368,6 +372,13 @@ inline void AsyncDeltaWriterImpl::close() {
 
         // Safe to destroy token now since both execution queue and merge tasks are done.
         _block_merge_token.reset();
+
+        // Release writer resources (reset _mem_table_sink, _flush_token, etc.) AFTER all
+        // tasks have completed. The blocking I/O (flush wait + tablet writer close) was
+        // already done in the execution queue's stop handler via flush_and_wait().
+        // We only do the non-blocking resource cleanup here, which is safe because all
+        // concurrent accessors (MergeBlockTask, profile readers) have been drained.
+        _writer->release_resources();
     }
 }
 
