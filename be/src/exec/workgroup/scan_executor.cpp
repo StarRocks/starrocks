@@ -17,7 +17,6 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
 
 namespace starrocks::workgroup {
 

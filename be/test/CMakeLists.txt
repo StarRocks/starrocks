@@ -63,6 +63,7 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/pipeline_metrics_test.cpp
         ./exec/pipeline/multi_level_concurrent_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
@@ -329,6 +330,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/mem_hook_test.cpp
+        ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp

@@ -24,10 +24,10 @@
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -85,7 +85,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         }
     }
     if (!open_st.ok()) {
-        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
         LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
         return open_st;
     }
@@ -131,7 +131,7 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
         RETURN_IF_ERROR(builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString())));
     }
     if (auto st = builder.Finish(); !st.ok()) {
-        StarRocksMetrics::instance()->pk_index_sst_write_error_total.increment(1);
+        StorageMetrics::instance()->pk_index_sst_write_error_total.increment(1);
         LOG(WARNING) << "Failed to finish PersistentIndex SST, error: " << st;
         return st;
     }
@@ -175,7 +175,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         }
     }
     if (!multiget_st.ok()) {
-        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
         LOG(WARNING) << "Failed to multi_get from PersistentIndex SST file: " << _sstable_pb.filename()
                      << ", error: " << multiget_st;
         return multiget_st;

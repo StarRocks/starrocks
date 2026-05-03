@@ -96,7 +96,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/small_file_mgr.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
@@ -498,7 +497,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
     // register the metrics to monitor the task queue len
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, [] {
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([] {
         auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
         return (pool == nullptr) ? 0U : pool->get_queue_size();
     });
@@ -551,7 +550,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [] {
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_drivers_hook([] {
         auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
         return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
     });
@@ -659,7 +658,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(_fragment_mgr, _query_context_mgr);
-    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, [] {
+    RuntimeMetrics::instance()->register_runtime_filter_event_queue_len_hook([] {
         auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
         return (pool == nullptr) ? 0U : pool->queue_size();
     });

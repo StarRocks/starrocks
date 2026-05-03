@@ -18,7 +18,6 @@
 
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
 #include "work_group.h"
 

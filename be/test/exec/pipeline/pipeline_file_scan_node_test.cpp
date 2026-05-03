@@ -49,7 +49,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "util/global_metrics_registry.h"
 

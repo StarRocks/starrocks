@@ -92,4 +92,29 @@ TEST(RuntimeMetricsTest, InstallRegistersProcessMetrics) {
     assert_metric_value(&registry, "exec_runtime_memory_size", "19");
 }
 
+TEST(RuntimeMetricsTest, InstallRegistersLakeTxnLogMetrics) {
+    MetricRegistry registry("test_registry");
+    RuntimeMetrics metrics(&registry);
+
+    metrics.lake_txn_log_collect_legacy_total.increment(20);
+    assert_metric_value(&registry, "lake_txn_log_collect_legacy_total", "20");
+
+    metrics.lake_txn_log_collect_per_partition_total.increment(21);
+    assert_metric_value(&registry, "lake_txn_log_collect_per_partition_total", "21");
+
+    metrics.lake_txn_log_collect_orphan_partition_total.increment(22);
+    assert_metric_value(&registry, "lake_txn_log_collect_orphan_partition_total", "22");
+}
+
+TEST(RuntimeMetricsTest, RegisterRuntimeFilterQueueHookBeforeInstall) {
+    RuntimeMetrics metrics;
+    metrics.register_runtime_filter_event_queue_len_hook([] { return 23; });
+
+    MetricRegistry registry("test_registry");
+    metrics.install(&registry);
+    registry.trigger_hook();
+
+    assert_metric_value(&registry, "runtime_filter_event_queue_len", "23");
+}
+
 } // namespace starrocks

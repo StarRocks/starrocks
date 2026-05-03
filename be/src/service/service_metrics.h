@@ -14,26 +14,28 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
+#include "base/metrics.h"
 
 namespace starrocks {
 
-class ProcessMetricsRegistry;
-
-struct BackendMetricsInitOptions {
-    std::vector<std::string> storage_paths;
-    bool collect_hook_enabled = true;
-    bool init_system_metrics = false;
-    bool init_jvm_metrics = false;
-    bool bind_ipv6 = false;
-};
-
-class BackendMetricsInitializer {
+class ServiceMetrics {
 public:
-    static BackendMetricsInitOptions from_config(std::vector<std::string> storage_paths);
+    ServiceMetrics() = default;
+    explicit ServiceMetrics(MetricRegistry* registry) { install(registry); }
+    ~ServiceMetrics() = default;
 
-    static void initialize(ProcessMetricsRegistry* process_metrics_registry, const BackendMetricsInitOptions& options);
+    static ServiceMetrics* instance();
+
+    void install(MetricRegistry* registry);
+
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
+
+    METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
+
+private:
+    MetricRegistry* _registry = nullptr;
 };
 
 } // namespace starrocks

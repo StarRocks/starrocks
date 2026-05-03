@@ -40,7 +40,6 @@
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/starrocks_metrics.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -73,6 +72,7 @@
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "storage/virtual_column_utils.h"
@@ -857,7 +857,7 @@ Status SegmentIterator::_init() {
     if (st.is_not_found()) {
         // NOTE: this may cause the metric increasing twice the call path is from segment::open.
         // It is fine for now since the metric is only used for alerting.
-        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+        StorageMetrics::instance()->segment_file_not_found_total.increment(1);
     }
     return st;
 }
@@ -888,7 +888,7 @@ Status SegmentIterator::_init_internal() {
     _selection.resize(_reserve_chunk_size);
     _selected_idx.resize(_reserve_chunk_size);
 
-    StarRocksMetrics::instance()->segment_read_total.increment(1);
+    StorageMetrics::instance()->segment_read_total.increment(1);
 
     /// the calling order matters, do not change unless you know why.
 
@@ -1664,7 +1664,7 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
     if (_opts.is_first_split_of_segment) {
-        StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
+        StorageMetrics::instance()->segment_row_total.increment(num_rows());
     }
     SCOPED_RAW_TIMER(&_opts.stats->rows_key_range_filter_ns);
 
@@ -1698,7 +1698,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         }
     }
     _opts.stats->rows_after_key_range += _scan_range.span_size();
-    StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
+    StorageMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
 
     return Status::OK();
 }
@@ -1914,7 +1914,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
         zm_range &= hit_row_ranges.value();
     }
 
-    StarRocksMetrics::instance()->segment_rows_read_by_zone_map.increment(zm_range.span_size());
+    StorageMetrics::instance()->segment_rows_read_by_zone_map.increment(zm_range.span_size());
     size_t prev_size = _scan_range.span_size();
     _scan_range = _scan_range.intersection(zm_range);
     _opts.stats->rows_stats_filtered += (prev_size - _scan_range.span_size());

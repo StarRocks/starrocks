@@ -53,7 +53,6 @@
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/binlog_builder.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"

@@ -20,7 +20,6 @@
 #include <vector>
 
 #include "common/thread/threadpool.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/olap_common.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"

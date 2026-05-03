@@ -48,7 +48,6 @@
 #include "common/thread/threadpool.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
@@ -473,8 +472,8 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         }
     }
 
-    StarRocksMetrics::instance()->txn_persist_total.increment(1);
-    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->txn_persist_total.increment(1);
+    StorageMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
@@ -502,8 +501,8 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
         }
     }
 
-    StarRocksMetrics::instance()->txn_persist_total.increment(1);
-    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->txn_persist_total.increment(1);
+    StorageMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
 }
 
 // txn could be rollbacked if it does not have related rowset

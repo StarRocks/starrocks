@@ -227,7 +227,6 @@
         "be/src/runtime/runtime_state.h",
         "be/src/runtime/runtime_state_fwd.h",
         "be/src/runtime/service_contexts.h",
-        "be/src/runtime/starrocks_metrics.h",
         "be/src/runtime/memory/*.h"
       ],
       "allowed_include_prefixes": ["runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],

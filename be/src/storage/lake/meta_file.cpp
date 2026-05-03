@@ -28,7 +28,6 @@
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -36,6 +35,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -612,7 +612,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
             std::string err_msg =
                     fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
             LOG(ERROR) << err_msg;
-            StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
+            StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
             if (!config::experimental_lake_ignore_pk_consistency_check) {
                 set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
                 return Status::InternalError(err_msg);

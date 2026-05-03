@@ -22,9 +22,19 @@ check_allowlist() {
     trap 'rm -f "${current_file}" "${allowlist_tmp_file}"' RETURN
 
     if command -v rg >/dev/null 2>&1; then
-        rg -l "${include_pattern}" "${BE_SRC}" --glob '*.{h,hpp,cc,cpp}' \
-            | sed "s#^${REPO_ROOT}/##" \
-            | sort -u > "${current_file}"
+        local rg_output_file
+        local rg_status
+        rg_output_file="$(mktemp)"
+        trap 'rm -f "${current_file}" "${allowlist_tmp_file}" "${rg_output_file}"' RETURN
+        set +e
+        rg -l "${include_pattern}" "${BE_SRC}" --glob '*.{h,hpp,cc,cpp}' > "${rg_output_file}"
+        rg_status=$?
+        set -e
+        if [[ "${rg_status}" != "0" && "${rg_status}" != "1" ]]; then
+            cat "${rg_output_file}" >&2
+            exit "${rg_status}"
+        fi
+        sed "s#^${REPO_ROOT}/##" "${rg_output_file}" | sort -u > "${current_file}"
     else
         find "${BE_SRC}" -type f \
             \( -name '*.h' -o -name '*.hpp' -o -name '*.cc' -o -name '*.cpp' \) -print0 \

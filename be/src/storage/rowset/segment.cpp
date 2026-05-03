@@ -53,7 +53,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -64,6 +63,7 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "util/json_flattener.h"
@@ -254,7 +254,7 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 
     auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
     if (res.status().is_not_found()) {
-        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+        StorageMetrics::instance()->segment_file_not_found_total.increment(1);
     }
 
     // move the cache size update out of the `success_once`,

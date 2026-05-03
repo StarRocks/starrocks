@@ -24,15 +24,7 @@ be/src/runtime/stream_load/load_stream_mgr.h
 be/src/service/daemon.cpp
 be/src/service/service_be/http_service.cpp
 be/src/service/staros_worker.cpp
-be/src/storage/compaction_manager.cpp
-be/src/storage/lake/lake_persistent_index_parallel_compact_mgr.cpp
-be/src/storage/load_spill_block_manager.cpp
-be/src/storage/persistent_index_compaction_manager.cpp
-be/src/storage/persistent_index_load_executor.cpp
-be/src/storage/rowset/unique_rowset_id_generator.cpp
-be/src/storage/storage_engine.cpp
 be/src/storage/tablet.cpp
-be/src/storage/update_manager.cpp
 be/src/tools/meta_tool.cpp
 be/src/util/brpc_stub_cache.cpp
 be/src/util/global_metrics_registry.cpp

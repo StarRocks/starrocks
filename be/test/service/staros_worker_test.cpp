@@ -28,7 +28,7 @@
 
 #include "base/utility/defer_op.h"
 #include "common/shutdown_hook.h"
-#include "runtime/starrocks_metrics.h"
+#include "service/service_metrics.h"
 
 namespace starrocks {
 
@@ -239,7 +239,7 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
 // Verify that a cache hit in retrieve_shard_info() does not trigger the fallback path
 // and therefore does not increment the fallback counters.
 TEST_F(StarOSWorkerTest, test_fallback_metric_not_incremented_on_cache_hit) {
-    auto* metrics = StarRocksMetrics::instance();
+    auto* metrics = ServiceMetrics::instance();
     int64_t before_total = metrics->staros_shard_info_fallback_total.value();
     int64_t before_failed = metrics->staros_shard_info_fallback_failed_total.value();
 
@@ -301,7 +301,7 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     g_starlet->set_star_mgr_addr("127.0.0.1:" + std::to_string(port));
     ASSERT_TRUE(g_starlet->is_ready());
 
-    auto* metrics = StarRocksMetrics::instance();
+    auto* metrics = ServiceMetrics::instance();
     int64_t before_total = metrics->staros_shard_info_fallback_total.value();
     int64_t before_failed = metrics->staros_shard_info_fallback_failed_total.value();
 

@@ -32,8 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/starrocks_metrics.h"
-
 #include <gtest/gtest.h>
 
 #include <mutex>
@@ -43,10 +41,12 @@
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "http/http_metrics.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"
 #include "service/backend_metrics_initializer.h"
+#include "service/service_metrics.h"
 #include "storage/storage_metrics.h"
 #include "util/global_metrics_registry.h"
 #include "util/metrics/catalog_scan_metrics.h"
@@ -66,17 +66,16 @@ void init_backend_metrics_for_test() {
         options.collect_hook_enabled = true;
         options.init_system_metrics = false;
         options.init_jvm_metrics = false;
-        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(),
-                                              StarRocksMetrics::instance(), options);
+        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(), options);
     });
 }
 
 } // namespace
 
-class StarRocksMetricsTest : public testing::Test {
+class BackendMetricsTest : public testing::Test {
 public:
-    StarRocksMetricsTest() = default;
-    ~StarRocksMetricsTest() override = default;
+    BackendMetricsTest() = default;
+    ~BackendMetricsTest() override = default;
 
 protected:
     void SetUp() override {
@@ -140,12 +139,13 @@ private:
     std::stringstream _ss;
 };
 
-TEST_F(StarRocksMetricsTest, Normal) {
+TEST_F(BackendMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto agent_metrics = AgentMetrics::instance();
     auto http_metrics = HttpMetrics::instance();
     auto query_scan_metrics = QueryScanMetrics::instance();
     auto runtime_metrics = RuntimeMetrics::instance();
+    auto service_metrics = ServiceMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
     auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
@@ -163,6 +163,12 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("101", metric->to_string().c_str());
     }
     {
+        runtime_metrics->lake_txn_log_collect_legacy_total.increment(1);
+        auto metric = metrics->get_metric("lake_txn_log_collect_legacy_total");
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("1", metric->to_string().c_str());
+    }
+    {
         http_metrics->http_requests_total.increment(102);
         auto metric = metrics->get_metric("http_requests_total");
         ASSERT_TRUE(metric != nullptr);
@@ -173,6 +179,12 @@ TEST_F(StarRocksMetricsTest, Normal) {
         auto metric = metrics->get_metric("http_request_send_bytes");
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("104", metric->to_string().c_str());
+    }
+    {
+        service_metrics->short_circuit_request_total.increment(1);
+        auto metric = metrics->get_metric("short_circuit_request_total");
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("1", metric->to_string().c_str());
     }
     {
         query_scan_metrics->query_scan_bytes.increment(104);
@@ -314,7 +326,7 @@ TEST_F(StarRocksMetricsTest, Normal) {
     }
 }
 
-TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
+TEST_F(BackendMetricsTest, PageCacheMetrics) {
     TestMetricsVisitor visitor;
     auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
@@ -359,7 +371,7 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
     ASSERT_TRUE(instance->get_metric(pool_name + "_queue_count") != nullptr);
 }
 
-TEST_F(StarRocksMetricsTest, test_metrics_register) {
+TEST_F(BackendMetricsTest, test_metrics_register) {
     auto instance = GlobalMetricsRegistry::instance()->metrics();
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
@@ -422,6 +434,7 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("transaction_streaming_load_duration_ms"));
     ASSERT_NE(nullptr, instance->get_metric("transaction_streaming_load_current_processing"));
     ASSERT_NE(nullptr, instance->get_metric("pipe_driver_schedule_count"));
+    ASSERT_NE(nullptr, instance->get_metric("pipe_driver_overloaded"));
     ASSERT_NE(nullptr, instance->get_metric("files_scan_num_files_read",
                                             MetricLabels().add("file_format", "avro").add("scan_type", "insert")));
     ASSERT_NE(nullptr, instance->get_metric("query_spill_trigger_total", MetricLabels().add("storage_type", "local")));
@@ -447,6 +460,19 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_memtable_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_writer_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_replica_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("lake_txn_log_collect_legacy_total"));
+    ASSERT_NE(nullptr, instance->get_metric("lake_txn_log_collect_per_partition_total"));
+    ASSERT_NE(nullptr, instance->get_metric("lake_txn_log_collect_orphan_partition_total"));
+    ASSERT_NE(nullptr, instance->get_metric("short_circuit_request_total"));
+    ASSERT_NE(nullptr, instance->get_metric("short_circuit_request_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("staros_shard_info_fallback_total"));
+    ASSERT_NE(nullptr, instance->get_metric("staros_shard_info_fallback_failed_total"));
+    ASSERT_NE(nullptr, instance->get_metric("meta_request_total", MetricLabels().add("type", "write")));
+    ASSERT_NE(nullptr, instance->get_metric("meta_request_duration", MetricLabels().add("type", "read")));
+    ASSERT_NE(nullptr, instance->get_metric("segment_read", MetricLabels().add("type", "segment_total_read_times")));
+    ASSERT_NE(nullptr, instance->get_metric("segment_file_not_found_total"));
+    ASSERT_NE(nullptr, instance->get_metric("primary_key_table_error_state_total"));
+    ASSERT_NE(nullptr, instance->get_metric("pk_index_sst_read_error_total"));
     ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_execute_total"));
     ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_execute_duration_us"));

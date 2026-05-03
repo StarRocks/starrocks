@@ -40,8 +40,8 @@
 #include "fs/fs_util.h"
 #include "http/http_metrics.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"
+#include "service/service_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
@@ -222,73 +222,6 @@ void update_runtime_metrics(RuntimeMetrics* runtime_metrics) {
     update_process_fd_num(runtime_metrics);
 }
 
-void install_starrocks_metrics(MetricRegistry* registry, StarRocksMetrics* fast_metrics) {
-    compression::install_compression_context_pool_metrics(registry);
-
-#define REGISTER_STARROCKS_METRIC(name) registry->register_metric(#name, &(fast_metrics->name))
-
-    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
-    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
-    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
-
-    REGISTER_STARROCKS_METRIC(segment_file_not_found_total);
-
-    REGISTER_STARROCKS_METRIC(update_primary_index_num);
-    REGISTER_STARROCKS_METRIC(update_primary_index_bytes_total);
-    REGISTER_STARROCKS_METRIC(update_del_vector_num);
-    REGISTER_STARROCKS_METRIC(update_del_vector_dels_num);
-    REGISTER_STARROCKS_METRIC(update_del_vector_bytes_total);
-    REGISTER_STARROCKS_METRIC(update_del_vector_deletes_total);
-    REGISTER_STARROCKS_METRIC(update_del_vector_deletes_new);
-    REGISTER_STARROCKS_METRIC(column_partial_update_apply_total);
-    REGISTER_STARROCKS_METRIC(column_partial_update_apply_duration_us);
-    REGISTER_STARROCKS_METRIC(delta_column_group_get_total);
-    REGISTER_STARROCKS_METRIC(delta_column_group_get_hit_cache);
-    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_total);
-    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_hit_cache);
-    REGISTER_STARROCKS_METRIC(primary_key_table_error_state_total);
-    REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_duration_ms);
-    REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_total);
-    REGISTER_STARROCKS_METRIC(pk_index_sst_read_error_total);
-    REGISTER_STARROCKS_METRIC(pk_index_sst_write_error_total);
-
-    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
-    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
-
-    registry->register_metric("meta_request_total", MetricLabels().add("type", "write"),
-                              &(fast_metrics->meta_write_request_total));
-    registry->register_metric("meta_request_total", MetricLabels().add("type", "read"),
-                              &(fast_metrics->meta_read_request_total));
-    registry->register_metric("meta_request_duration", MetricLabels().add("type", "write"),
-                              &(fast_metrics->meta_write_request_duration_us));
-    registry->register_metric("meta_request_duration", MetricLabels().add("type", "read"),
-                              &(fast_metrics->meta_read_request_duration_us));
-
-    registry->register_metric("segment_read", MetricLabels().add("type", "segment_total_read_times"),
-                              &(fast_metrics->segment_read_total));
-    registry->register_metric("segment_read", MetricLabels().add("type", "segment_total_row_num"),
-                              &(fast_metrics->segment_row_total));
-    registry->register_metric("segment_read", MetricLabels().add("type", "segment_rows_by_short_key"),
-                              &(fast_metrics->segment_rows_by_short_key));
-    registry->register_metric("segment_read", MetricLabels().add("type", "segment_rows_read_by_zone_map"),
-                              &(fast_metrics->segment_rows_read_by_zone_map));
-
-    REGISTER_STARROCKS_METRIC(readable_blocks_total);
-    REGISTER_STARROCKS_METRIC(writable_blocks_total);
-    REGISTER_STARROCKS_METRIC(blocks_created_total);
-    REGISTER_STARROCKS_METRIC(blocks_deleted_total);
-    REGISTER_STARROCKS_METRIC(bytes_read_total);
-    REGISTER_STARROCKS_METRIC(bytes_written_total);
-    REGISTER_STARROCKS_METRIC(disk_sync_total);
-    REGISTER_STARROCKS_METRIC(blocks_open_reading);
-    REGISTER_STARROCKS_METRIC(blocks_open_writing);
-
-    REGISTER_STARROCKS_METRIC(short_circuit_request_total);
-    REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
-
-#undef REGISTER_STARROCKS_METRIC
-}
-
 } // namespace
 
 BackendMetricsInitOptions BackendMetricsInitializer::from_config(std::vector<std::string> storage_paths) {
@@ -302,14 +235,14 @@ BackendMetricsInitOptions BackendMetricsInitializer::from_config(std::vector<std
 }
 
 void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metrics_registry,
-                                           StarRocksMetrics* fast_metrics, const BackendMetricsInitOptions& options) {
+                                           const BackendMetricsInitOptions& options) {
     DCHECK(process_metrics_registry != nullptr);
-    DCHECK(fast_metrics != nullptr);
 
     auto* registry = process_metrics_registry->root_registry();
     registry->set_collect_hook_enabled(options.collect_hook_enabled);
-    install_starrocks_metrics(registry, fast_metrics);
+    compression::install_compression_context_pool_metrics(registry);
     HttpMetrics::instance()->install(registry);
+    ServiceMetrics::instance()->install(registry);
     auto* agent_metrics = AgentMetrics::instance();
     agent_metrics->install(registry);
     auto* runtime_metrics = RuntimeMetrics::instance();

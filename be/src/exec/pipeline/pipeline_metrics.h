@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -115,6 +116,7 @@ struct PollerMetrics {
 
 struct DriverExecutorMetrics {
     METRIC_DEFINE_INT_COUNTER(driver_schedule_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(driver_overloaded, MetricUnit::NOUNIT);
     QueryTypeTimeMetric driver_execution_time;
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(exec_running_tasks, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(exec_finished_tasks, MetricUnit::NOUNIT);
@@ -143,9 +145,23 @@ public:
     ExecStateReporterMetrics* get_exec_state_reporter_metrics() { return &exec_state_reporter_metrics; }
 
     void register_all_metrics(MetricRegistry* registry);
+    void register_pipe_prepare_pool_queue_len_hook(std::function<int64_t()> value_fn);
+    void register_pipe_drivers_hook(std::function<int64_t()> value_fn);
+
+    METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_drivers, MetricUnit::NOUNIT);
 
 private:
+    struct PendingIntGaugeHook {
+        std::string name;
+        IntGauge* metric;
+        std::function<int64_t()> value_fn;
+    };
+
+    void _register_int_gauge_hook(const std::string& name, IntGauge* metric, std::function<int64_t()> value_fn);
+
     MetricRegistry* _registry = nullptr;
+    std::vector<PendingIntGaugeHook> _pending_int_gauge_hooks;
 };
 } // namespace pipeline
 } // namespace starrocks

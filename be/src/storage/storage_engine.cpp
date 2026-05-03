@@ -67,7 +67,6 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -88,7 +87,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
-#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -133,10 +131,10 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     if (_s_instance == nullptr) {
         _s_instance = this;
     }
-    REGISTER_GAUGE_STARROCKS_METRIC(unused_rowsets_count, [this]() {
+    StorageMetrics::instance()->register_unused_rowsets_count_hook([this]() {
         std::lock_guard lock(_gc_mutex);
         return _unused_rowsets.size();
-    })
+    });
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
 #ifdef USE_STAROS
     _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
@@ -145,8 +143,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
     const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
     MetadataCache::create_cache(lru_cache_limit);
-    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
-                                    [&]() { return MetadataCache::instance()->get_memory_usage(); });
+    StorageMetrics::instance()->register_metadata_cache_bytes_total_hook(
+            [] { return MetadataCache::instance()->get_memory_usage(); });
 #endif
 }
 
@@ -235,30 +233,35 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-    REGISTER_THREAD_POOL_METRICS(
-            async_delta_writer,
+    StorageMetrics::instance()->register_thread_pool_metrics(
+            "async_delta_writer",
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
 
     _load_spill_block_merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
     RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
-    REGISTER_THREAD_POOL_METRICS(load_spill_block_merge, _load_spill_block_merge_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("load_spill_block_merge",
+                                                             _load_spill_block_merge_executor->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(memtable_flush, _memtable_flush_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("memtable_flush",
+                                                             _memtable_flush_executor->get_thread_pool());
 
     _lake_memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_lake_memtable_flush_executor->init_for_lake_table(dirs),
                               "init lake MemTableFlushExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(lake_memtable_flush, _lake_memtable_flush_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("lake_memtable_flush",
+                                                             _lake_memtable_flush_executor->get_thread_pool());
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(segment_flush, _segment_flush_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("segment_flush",
+                                                             _segment_flush_executor->get_thread_pool());
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(segment_replicate, _segment_replicate_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("segment_replicate",
+                                                             _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 
@@ -1527,7 +1530,7 @@ void StorageEngine::search_delta_column_groups_by_version(const DeltaColumnGroup
 
 Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
                                              int64_t version, DeltaColumnGroupList* dcgs) {
-    StarRocksMetrics::instance()->delta_column_group_get_non_pk_total.increment(1);
+    StorageMetrics::instance()->delta_column_group_get_non_pk_total.increment(1);
     // Currently non-Primary Key tablet can generate cols file only through
     // schema change which will change tablet_id. Every time we do schema change
     // we will get cache miss and guarantee that we always can get the newest
@@ -1542,7 +1545,7 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
         auto itr = _delta_column_group_cache.find(dcg_key);
         if (itr != _delta_column_group_cache.end()) {
             search_delta_column_groups_by_version(itr->second, version, dcgs);
-            StarRocksMetrics::instance()->delta_column_group_get_non_pk_hit_cache.increment(1);
+            StorageMetrics::instance()->delta_column_group_get_non_pk_hit_cache.increment(1);
             return Status::OK();
         }
     }

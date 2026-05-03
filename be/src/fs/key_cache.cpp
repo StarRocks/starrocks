@@ -24,7 +24,6 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 

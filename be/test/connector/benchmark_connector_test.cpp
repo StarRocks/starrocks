@@ -28,7 +28,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "types/type_descriptor.h"
 #include "util/global_metrics_registry.h"
 

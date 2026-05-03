@@ -70,7 +70,6 @@
 #include "jemalloc/jemalloc.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/user_function_cache.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/mem_hook.h"
@@ -252,8 +251,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
         paths.emplace_back(store_path.path);
     }
     auto options = BackendMetricsInitializer::from_config(std::move(paths));
-    BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(),
-                                          StarRocksMetrics::instance(), options);
+    BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(), options);
 }
 
 Slice get_process_comm(pid_t pid, char* buffer, int max_size) {

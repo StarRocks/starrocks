@@ -42,7 +42,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/lake/async_delta_writer.h"
@@ -754,9 +753,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                 }
             } else if (i_collect) {
                 if (snap.per_partition_mode) {
-                    StarRocksMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
+                    RuntimeMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
                 } else {
-                    StarRocksMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
+                    RuntimeMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
                 }
                 auto all_logs = _txn_log_collector.logs();
                 if (snap.per_partition_mode) {
@@ -786,8 +785,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         }
                     }
                     if (orphan_count > 0) {
-                        StarRocksMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(
-                                orphan_count);
+                        RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
                 } else {

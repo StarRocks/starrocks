@@ -16,7 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <string>
+
+#include "common/thread/threadpool.h"
 
 namespace starrocks {
 
@@ -119,6 +122,81 @@ TEST(StorageMetricsTest, InstallRegistersFlushAndSpillMetrics) {
 
     metrics.update_rowset_commit_apply_duration_us.increment(23);
     assert_metric_value(&registry, "update_rowset_commit_apply_duration_us", "23");
+}
+
+TEST(StorageMetricsTest, InstallRegistersMetaSegmentTxnAndUpdateMetrics) {
+    MetricRegistry registry("test_registry");
+    StorageMetrics metrics(&registry);
+
+    metrics.meta_write_request_total.increment(24);
+    assert_metric_value(&registry, "meta_request_total", MetricLabels().add("type", "write"), "24");
+
+    metrics.meta_read_request_duration_us.increment(25);
+    assert_metric_value(&registry, "meta_request_duration", MetricLabels().add("type", "read"), "25");
+
+    metrics.segment_read_total.increment(26);
+    assert_metric_value(&registry, "segment_read", MetricLabels().add("type", "segment_total_read_times"), "26");
+
+    metrics.segment_rows_read_by_zone_map.increment(27);
+    assert_metric_value(&registry, "segment_read", MetricLabels().add("type", "segment_rows_read_by_zone_map"), "27");
+
+    metrics.txn_persist_total.increment(28);
+    assert_metric_value(&registry, "txn_persist_total", "28");
+
+    metrics.primary_key_table_error_state_total.increment(29);
+    assert_metric_value(&registry, "primary_key_table_error_state_total", "29");
+
+    metrics.pk_index_sst_read_error_total.increment(30);
+    assert_metric_value(&registry, "pk_index_sst_read_error_total", "30");
+}
+
+TEST(StorageMetricsTest, InstallRegistersBlockManagerMetrics) {
+    MetricRegistry registry("test_registry");
+    StorageMetrics metrics(&registry);
+
+    metrics.readable_blocks_total.increment(31);
+    assert_metric_value(&registry, "readable_blocks_total", "31");
+
+    metrics.bytes_written_total.increment(32);
+    assert_metric_value(&registry, "bytes_written_total", "32");
+
+    metrics.blocks_open_writing.set_value(33);
+    assert_metric_value(&registry, "blocks_open_writing", "33");
+}
+
+TEST(StorageMetricsTest, RegisterGaugeHooksBeforeInstall) {
+    StorageMetrics metrics;
+    metrics.register_metadata_cache_bytes_total_hook([] { return 34; });
+    metrics.register_unused_rowsets_count_hook([] { return 35; });
+    metrics.register_rowset_count_generated_and_in_use_hook([] { return 36; });
+
+    MetricRegistry registry("test_registry");
+    metrics.install(&registry);
+    registry.trigger_hook();
+
+    assert_metric_value(&registry, "metadata_cache_bytes_total", "34");
+    assert_metric_value(&registry, "unused_rowsets_count", "35");
+    assert_metric_value(&registry, "rowset_count_generated_and_in_use", "36");
+}
+
+TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
+    std::unique_ptr<ThreadPool> threadpool;
+    auto status = ThreadPoolBuilder("storage_metrics_test")
+                          .set_min_threads(0)
+                          .set_max_threads(3)
+                          .set_max_queue_size(5)
+                          .build(&threadpool);
+    ASSERT_TRUE(status.ok()) << status;
+
+    StorageMetrics metrics;
+    metrics.register_thread_pool_metrics("pindex_load", threadpool.get());
+
+    MetricRegistry registry("test_registry");
+    metrics.install(&registry);
+    registry.trigger_hook();
+
+    assert_metric_value(&registry, "pindex_load_threadpool_size", "3");
+    assert_metric_value(&registry, "pindex_load_queue_count", "0");
 }
 
 } // namespace starrocks
