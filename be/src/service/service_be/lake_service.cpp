@@ -205,6 +205,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
+    // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
+    // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
+    int64_t brpc_queue_us = cntl->latency_us();
 
     if (!request->has_base_version()) {
         cntl->SetFailed("missing base version");
@@ -549,7 +552,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     if (is_slow) {
         LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
-                  << "us, trace: " << trace->MetricsAsJSON();
+                  << "us brpc_queue_us=" << brpc_queue_us << ", trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
