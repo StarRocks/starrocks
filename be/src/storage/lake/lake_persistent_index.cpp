@@ -935,7 +935,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         auto st = serde::ColumnArraySerde::deserialize(data, end, pkc.get());
         if (!st.ok()) {
             std::lock_guard<std::mutex> l(shared_mutex);
-            shared_status.update(st);
+            shared_status.update(st.status());
             return;
         }
         pkcs[del_idx] = std::move(pkc);
