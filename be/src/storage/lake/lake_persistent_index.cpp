@@ -388,10 +388,17 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     // on the same pool from one of its workers triggers ThreadPool::check_not_pool_thread_unlocked()
     // and aborts (iter-031). The dedicated inner-io pool isolates the wait so the cold-start hot
     // path can fan out across filesets without re-entrance risk.
+    // Diagnostic: count distinct sstables actually walked into across all filesets in
+    // this call, so we can compare it against pindex_init_sst_cnt (which counts every
+    // sstable opened eagerly at init). The ratio answers whether a lazy-SST-open
+    // refactor would skip real work — pindex_sstables_queried_cnt is cumulative across
+    // chunk×fileset and double-counts the same sstable when revisited.
+    std::unordered_set<const PersistentIndexSstable*> touched_sstables;
     if (config::enable_pk_index_parallel_execution && _sstable_filesets.size() > 1) {
         const size_t F = _sstable_filesets.size();
         std::vector<std::vector<IndexValue>> local_values(F, std::vector<IndexValue>(n));
         std::vector<KeyIndexSet> local_founds(F);
+        std::vector<std::unordered_set<const PersistentIndexSstable*>> local_touched(F);
         const KeyIndexSet snapshot = *key_indexes;
         std::mutex status_mu;
         Status shared_status;
@@ -402,12 +409,13 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
             auto* fset = iter->get();
             auto* lv = local_values[idx].data();
             auto* lf = &local_founds[idx];
+            auto* lt = &local_touched[idx];
             const KeyIndexSet* snap = &snapshot;
             Trace* trace = Trace::CurrentTrace();
-            auto submit_st =
-                    token->submit_func([fset, keys, snap, version, lv, lf, &shared_status, &status_mu, trace]() {
+            auto submit_st = token->submit_func(
+                    [fset, keys, snap, version, lv, lf, lt, &shared_status, &status_mu, trace]() {
                         ADOPT_TRACE(trace);
-                        auto s = fset->multi_get(keys, *snap, version, lv, lf);
+                        auto s = fset->multi_get(keys, *snap, version, lv, lf, lt);
                         if (!s.ok()) {
                             std::lock_guard<std::mutex> lg(status_mu);
                             shared_status.update(s);
@@ -415,7 +423,7 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
                     });
             if (!submit_st.ok()) {
                 // Fallback: run inline so we still produce a result for this fileset.
-                auto s = fset->multi_get(keys, snapshot, version, lv, lf);
+                auto s = fset->multi_get(keys, snapshot, version, lv, lf, lt);
                 if (!s.ok()) {
                     std::lock_guard<std::mutex> lg(status_mu);
                     shared_status.update(s);
@@ -432,18 +440,22 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
                     values[k_idx] = local_values[i][k_idx];
                 }
             }
+            touched_sstables.insert(local_touched[i].begin(), local_touched[i].end());
         }
         set_difference(key_indexes, found_master);
+        TRACE_COUNTER_INCREMENT("pindex_unique_sstables_touched_cnt", touched_sstables.size());
         return Status::OK();
     }
     for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
-        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
+        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes,
+                                           &touched_sstables));
         set_difference(key_indexes, found_key_indexes);
         if (key_indexes->empty()) {
             break;
         }
     }
+    TRACE_COUNTER_INCREMENT("pindex_unique_sstables_touched_cnt", touched_sstables.size());
     return Status::OK();
 }
 

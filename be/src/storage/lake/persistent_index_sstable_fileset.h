@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "common/status.h"
@@ -51,9 +52,14 @@ public:
     // Check whether it's standalone sstable before call function.
     const std::string& standalone_sstable_filename() const;
 
-    // multi get from sstable fileset
+    // multi get from sstable fileset.
+    // touched_sstables (optional, diagnostic): if non-null, every sstable this call walks
+    // into is inserted. The caller can use the set's size across multiple multi_get calls
+    // to derive the count of unique sstables actually touched per cold-start event,
+    // independent of how many times each was visited.
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
-                     KeyIndexSet* found_key_indexes) const;
+                     KeyIndexSet* found_key_indexes,
+                     std::unordered_set<const PersistentIndexSstable*>* touched_sstables = nullptr) const;
 
     void get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const;
 
