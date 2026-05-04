@@ -13,6 +13,7 @@
 # limitations under the License.
 
 set(CACHE_DATA_PLANE_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
     data_cache_hit_rate_counter_test.cpp
     mem_cache/lrucache_engine_test.cpp
     mem_cache/page_cache_test.cpp
