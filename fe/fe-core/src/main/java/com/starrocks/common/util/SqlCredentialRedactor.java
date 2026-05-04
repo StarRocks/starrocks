@@ -15,16 +15,14 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.re2j.Matcher;
-import com.google.re2j.Pattern;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 
-import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Utility class to redact sensitive credentials from SQL strings.
@@ -44,12 +42,9 @@ public class SqlCredentialRedactor {
             .add(CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN)
             .add(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY)
             .add(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)
-            .add(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID)
             .add(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET)
-            .add(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CLIENT_ID)
             .add(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL)
             .add(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY)
-            .add(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID)
             .add(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)
             .add(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET)
             .add(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY)
@@ -85,16 +80,7 @@ public class SqlCredentialRedactor {
             .add("broker.password")
             .build();
 
-    // Lowercase set for O(1) lookup (case-insensitive matching)
-    private static final Set<String> CREDENTIAL_KEYS_LOWERCASE = new HashSet<>();
-
-    static {
-        for (String key : CREDENTIAL_KEYS) {
-            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase(Locale.ROOT));
-        }
-    }
-
-    // Simplified pattern to match any key-value pair in SQL
+    // Pattern to match key-value pairs in SQL
     // This pattern handles cases like:
     // "key"="value"
     // 'key'='value'
@@ -108,36 +94,38 @@ public class SqlCredentialRedactor {
     // key'='value
     // key"="value
     // Values can contain spaces and span multiple lines, separated by commas
-    private static final int MAX_KEY_LENGTH =
-            CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1);
-    // NOTE: MAX_KEY_LENGTH is used to avoid matching too many characters of a long string
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
-            "([\"'])" +                                    // quote
-                    "([^\"'=\\s,()]{1," + MAX_KEY_LENGTH + "})" + // key
-                    "([\"'])" +                                  // quote
-                    "\\s*=\\s*" +                                 // =
-                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\"|([^,()\\n]*))",
-            Pattern.DOTALL | Pattern.MULTILINE
+            "(?:([\"']?)(" + String.join("|", CREDENTIAL_KEYS.stream()
+                    .map(Pattern::quote)
+                    .toArray(String[]::new)) + ")([\"']?))\\s*=\\s*" +
+            "(?:([\"'])((?:[^\\\\]|\\\\.)*?)\\4|([^,]*?))" +
+            "(?=\\s*,|\\s*$|\\s*\\)|\\s*\\n)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
+    );
+
+    private static final Pattern IDENTIFIED_BY_PATTERN = Pattern.compile(
+            "(IDENTIFIED\\s+BY\\s+(?:PASSWORD\\s+)?)" +
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
+    );
+
+    private static final Pattern IDENTIFIED_WITH_PATTERN = Pattern.compile(
+            "(IDENTIFIED\\s+WITH\\s+)" +
+                    "([^\\s]+)" +
+                    "(\\s+(?:BY|AS)\\s+)" +
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
+    );
+
+    private static final Pattern SET_PASSWORD_PATTERN = Pattern.compile(
+            "(SET\\s+PASSWORD(?:\\s+FOR\\s+.+?)?\\s*=\\s*(?:PASSWORD\\s*\\()?)" +
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")" +
+                    "(\\s*\\))?",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
     private static final String REDACTED_VALUE = "***";
-
-    /**
-     * Cheap check for whether {@link #redact(String)} might change the SQL. Used on hot paths (e.g. query profiles)
-     * to skip full redaction when the text has no credential-related markers.
-     */
-    public static boolean mayNeedCredentialRedaction(String sql) {
-        if (sql == null || sql.isEmpty()) {
-            return false;
-        }
-        String lower = sql.toLowerCase(Locale.ROOT);
-        for (String key : CREDENTIAL_KEYS_LOWERCASE) {
-            if (lower.indexOf(key) >= 0) {
-                return true;
-            }
-        }
-        return false;
-    }
+    private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
      * Redact sensitive credentials from SQL string.
@@ -150,43 +138,94 @@ public class SqlCredentialRedactor {
             return sql;
         }
 
-        return redactKeyValueCredentials(sql);
+        sql = redactKeyValueCredentials(sql);
+        sql = redactSqlCredentialClause(sql, IDENTIFIED_BY_PATTERN, 1, 2, 3);
+        sql = redactIdentifiedWithClause(sql);
+        sql = redactSqlCredentialClause(sql, SET_PASSWORD_PATTERN, 1, 2, 3, 4);
+        return sql;
     }
 
     private static String redactKeyValueCredentials(String sql) {
         Matcher matcher = KEY_VALUE_PATTERN.matcher(sql);
-        StringBuilder result = new StringBuilder(sql.length() + 100);
+        StringBuffer result = new StringBuffer();
 
-        int lastEnd = 0;
         while (matcher.find()) {
+            String replacement;
             String keyPrefix = matcher.group(1) != null ? matcher.group(1) : "";
             String key = matcher.group(2);
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
-            // Check if this key should be redacted (case-insensitive)
-            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase(Locale.ROOT))) {
-                // Append text before the match
-                result.append(sql, lastEnd, matcher.start());
-
-                // Build replacement for redacted value
-                String replacement;
-                if (matcher.group(4) != null && matcher.group(5) != null) {
-                    // Quoted value case
-                    String valueQuote = matcher.group(4);
-                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
-                } else {
-                    // Unquoted value case
-                    replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
-                }
-                result.append(replacement);
+            // Determine if value is quoted or unquoted
+            if (matcher.group(4) != null && matcher.group(5) != null) {
+                // Quoted value case
+                String valueQuote = matcher.group(4);
+                replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
             } else {
-                // Not a credential key, append original match
-                result.append(sql, lastEnd, matcher.end());
+                // Unquoted value case
+                replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
+            }
+
+            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+        }
+
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private static String redactIdentifiedWithClause(String sql) {
+        Matcher matcher = IDENTIFIED_WITH_PATTERN.matcher(sql);
+        StringBuilder result = new StringBuilder(sql.length() + 32);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            result.append(sql, lastEnd, matcher.start());
+
+            String plugin = matcher.group(2);
+            if (LDAP_SIMPLE_AUTH_PLUGIN.equalsIgnoreCase(plugin)) {
+                result.append(sql, matcher.start(), matcher.end());
+            } else {
+                result.append(matcher.group(1)).append(plugin).append(matcher.group(3));
+                if (matcher.group(4) != null) {
+                    result.append('\'').append(REDACTED_VALUE).append('\'');
+                } else if (matcher.group(5) != null) {
+                    result.append('"').append(REDACTED_VALUE).append('"');
+                } else {
+                    result.append(REDACTED_VALUE);
+                }
             }
             lastEnd = matcher.end();
         }
 
-        // Append remaining text
+        result.append(sql, lastEnd, sql.length());
+        return result.toString();
+    }
+
+    private static String redactSqlCredentialClause(String sql, Pattern pattern,
+                                                    int prefixGroup, int singleQuotedGroup, int doubleQuotedGroup) {
+        return redactSqlCredentialClause(sql, pattern, prefixGroup, singleQuotedGroup, doubleQuotedGroup, 0);
+    }
+
+    private static String redactSqlCredentialClause(String sql, Pattern pattern, int prefixGroup,
+                                                    int singleQuotedGroup, int doubleQuotedGroup, int suffixGroup) {
+        Matcher matcher = pattern.matcher(sql);
+        StringBuilder result = new StringBuilder(sql.length() + 32);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            result.append(sql, lastEnd, matcher.start());
+
+            result.append(matcher.group(prefixGroup));
+            if (matcher.group(singleQuotedGroup) != null) {
+                result.append('\'').append(REDACTED_VALUE).append('\'');
+            } else if (matcher.group(doubleQuotedGroup) != null) {
+                result.append('"').append(REDACTED_VALUE).append('"');
+            } else {
+                result.append(REDACTED_VALUE);
+            }
+            if (suffixGroup > 0 && matcher.group(suffixGroup) != null) {
+                result.append(matcher.group(suffixGroup));
+            }
+            lastEnd = matcher.end();
+        }
+
         result.append(sql, lastEnd, sql.length());
         return result.toString();
     }

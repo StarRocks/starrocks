@@ -64,7 +64,7 @@ public class AlterUserStmtTest {
         sql = "ALTER USER 'user' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals("user", stmt.getUserIdentity().getUser());
-        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
+        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY PASSWORD '*XXX'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8),
                 "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
@@ -78,7 +78,7 @@ public class AlterUserStmtTest {
 
         sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
+        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY '*XXX'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8),
                 "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
@@ -87,7 +87,7 @@ public class AlterUserStmtTest {
         sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals(
-                "ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
+                "ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*XXX'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8),
                 "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
