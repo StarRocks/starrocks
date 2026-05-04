@@ -1153,7 +1153,7 @@ class StarrocksSQLApiLib(object):
 
             old_this_res_len = len(this_res)
             actual_res, actual_res_log, var, order = self.execute_single_statement(
-                _each_cmd, _cmd_id_str, record_mode, this_res, var_key=exec_id, conn=conn
+                _each_cmd, _cmd_id_str, record_mode and not uncheck, this_res, var_key=exec_id, conn=conn
             )
 
             if record_mode:
