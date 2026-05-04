@@ -86,7 +86,12 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
 
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        // Dispatch SST opens on a dedicated I/O-oversubscribed pool, NOT
+        // pk_index_execution_thread_pool. Each Table::Open issues 4 sequential OSS
+        // round-trips; with the execution pool sized at num_cores/2 (= 16/CN) and
+        // also serving parallel-publish workers, ~150 cold-start opens used to queue
+        // head-of-chain. The dedicated pool defaults to num_cores * 4 (= 128/CN).
+        token = ExecEnv::GetInstance()->pk_index_sst_open_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
     for (int i = 0; i < num_sstables; i++) {

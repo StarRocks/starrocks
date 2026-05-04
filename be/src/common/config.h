@@ -518,6 +518,13 @@ CONF_mInt32(pk_index_parallel_chunk_min_keys, "32");
 CONF_mInt32(pk_index_parallel_chunk_target_keys, "64");
 // Hard upper bound on chunks per multi_get to protect the chunk_io pool's queue.
 CONF_mInt32(pk_index_parallel_chunk_max_chunks, "16");
+// Threadpool dedicated to LakePersistentIndex::_open_sstables_parallel. Each task does
+// 4 sequential OSS round-trips (footer + index + metaindex + filter blocks) inside
+// Table::Open, so it is purely I/O-bound. Splitting it off pk_index_execution_thread_pool
+// avoids the cold-start head-of-chain throttle where ~150 SST-open tasks queue behind a
+// 16-thread (num_cores/2) pool that is also shared with parallel-publish workers.
+CONF_mInt32(pk_index_sst_open_threadpool_max_threads, "0");
+CONF_mInt32(pk_index_sst_open_threadpool_size, "1048576");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
