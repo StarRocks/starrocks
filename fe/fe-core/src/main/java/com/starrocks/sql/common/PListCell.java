@@ -210,9 +210,7 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
 
     @Override
     public String toString() {
-        return "PListCell{" +
-                "items=" + partitionItems +
-                '}';
+        return partitionItems == null ? "" : partitionItems.toString();
     }
 
     /**

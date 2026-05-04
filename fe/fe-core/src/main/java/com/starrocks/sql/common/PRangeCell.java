@@ -97,9 +97,7 @@ public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
 
     @Override
     public String toString() {
-        return "PRangeCell{" +
-                "range=" + range +
-                '}';
+        return range == null ? "" : range.toString();
     }
 
     public static Map<String, Range<PartitionKey>> toRangeMap(Map<String, PCell> input) {
