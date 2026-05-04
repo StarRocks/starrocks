@@ -16,14 +16,18 @@
 
 #include <butil/time.h> // NOLINT
 
+#include <mutex>
+
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
 #include "testutil/sync_point.h"
 #include "util/starrocks_metrics.h"
+#include "util/threadpool.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -162,11 +166,112 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
     // will always meet the condition.
     auto start_ts = butil::gettimeofday_us();
-    auto multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
+    Status multiget_st;
+    bool used_chunk_parallel = false;
+    int64_t multiget_chunks = 0;
+    if (config::enable_pk_index_parallel_chunk_multi_get && config::enable_pk_index_parallel_execution &&
+        static_cast<int64_t>(key_indexes.size()) >= config::pk_index_parallel_chunk_min_keys &&
+        ExecEnv::GetInstance() != nullptr &&
+        ExecEnv::GetInstance()->pk_index_chunk_io_thread_pool() != nullptr) {
+        const int target_keys = std::max(1, static_cast<int>(config::pk_index_parallel_chunk_target_keys));
+        const int max_chunks = std::max(1, static_cast<int>(config::pk_index_parallel_chunk_max_chunks));
+        int chunks = static_cast<int>((key_indexes.size() + target_keys - 1) / target_keys);
+        chunks = std::min(chunks, max_chunks);
+        if (chunks > 1) {
+            // Chunk the key_indexes set into `chunks` contiguous, balanced ranges. Each chunk
+            // gets its own RandomAccessFile (the underlying SeekableInputStream is not safe
+            // for concurrent use; per-task files share the AWS S3Client which IS thread-safe).
+            //
+            // The chunk_io ThreadPool is dedicated and distinct from the inner_io pool that
+            // dispatches per-fileset multi_gets in LakePersistentIndex::get_from_sstables —
+            // re-entering inner_io from inside one of its workers would deadlock via
+            // ThreadPool::wait()'s check_not_pool_thread_unlocked() (the same trap PR #72579
+            // / iter-031 fell into for pk_index_execution_thread_pool).
+            std::vector<KeyIndexSet::const_iterator> bounds;
+            bounds.reserve(static_cast<size_t>(chunks) + 1);
+            bounds.push_back(key_indexes.begin());
+            const size_t per = key_indexes.size() / static_cast<size_t>(chunks);
+            const size_t rem = key_indexes.size() % static_cast<size_t>(chunks);
+            auto cur = key_indexes.begin();
+            for (int c = 0; c < chunks; ++c) {
+                size_t step = per + (static_cast<size_t>(c) < rem ? 1 : 0);
+                std::advance(cur, step);
+                bounds.push_back(cur);
+            }
+            std::vector<std::vector<std::string>> chunk_outs(chunks);
+            std::vector<sstable::ReadIOStat> chunk_stats(chunks);
+            std::vector<std::unique_ptr<RandomAccessFile>> chunk_files(chunks);
+            for (int c = 0; c < chunks; ++c) {
+                const size_t sz = static_cast<size_t>(std::distance(bounds[c], bounds[c + 1]));
+                chunk_outs[c].assign(sz, std::string());
+                RandomAccessFileOptions opts2;
+                if (!_sstable_pb.encryption_meta().empty()) {
+                    ASSIGN_OR_RETURN(auto info,
+                                     KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+                    opts2.encryption_info = std::move(info);
+                }
+                ASSIGN_OR_RETURN(chunk_files[c], fs::new_random_access_file(opts2, _rf->filename()));
+            }
+
+            std::mutex status_mu;
+            Status shared_status;
+            auto* pool = ExecEnv::GetInstance()->pk_index_chunk_io_thread_pool();
+            auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+            Trace* trace = Trace::CurrentTrace();
+            auto run_chunk = [&](int c) {
+                sstable::ReadOptions local_opts;
+                local_opts.file = chunk_files[c].get();
+                local_opts.stat = &chunk_stats[c];
+                auto s = _sst->MultiGet(local_opts, keys, bounds[c], bounds[c + 1], &chunk_outs[c]);
+                if (!s.ok()) {
+                    std::lock_guard<std::mutex> lg(status_mu);
+                    shared_status.update(s);
+                }
+            };
+            for (int c = 0; c < chunks; ++c) {
+                auto submit_st = token->submit_func([c, &run_chunk, trace]() {
+                    ADOPT_TRACE(trace);
+                    run_chunk(c);
+                });
+                if (!submit_st.ok()) {
+                    // Pool busy / queue full — execute inline so we still produce a result for
+                    // this chunk. We don't ADOPT_TRACE here because we are already on the
+                    // calling thread which has the trace context.
+                    run_chunk(c);
+                }
+            }
+            token->wait();
+            multiget_st = shared_status;
+
+            // Concatenate per-chunk outputs back into index_value_with_vers in key_indexes
+            // iteration order (the chunks are contiguous slices of key_indexes, so simple
+            // concat preserves the alignment with the post-loop below that iterates
+            // key_indexes and indexes into index_value_with_vers by sequential i).
+            size_t out_pos = 0;
+            for (int c = 0; c < chunks; ++c) {
+                for (auto& v : chunk_outs[c]) {
+                    index_value_with_vers[out_pos++] = std::move(v);
+                }
+            }
+            for (const auto& s : chunk_stats) {
+                stat.bytes_from_file += s.bytes_from_file;
+                stat.bytes_from_cache += s.bytes_from_cache;
+                stat.block_cnt_from_file += s.block_cnt_from_file;
+                stat.block_cnt_from_cache += s.block_cnt_from_cache;
+            }
+            used_chunk_parallel = true;
+            multiget_chunks = chunks;
+        }
+    }
+    if (!used_chunk_parallel) {
+        multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
+    }
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:error", &multiget_st);
     if (multiget_st.is_corruption()) {
         auto drop_status = drop_corrupted_sstable_cache(_rf->filename());
         if (drop_status.ok()) {
+            // Retry on the simple sequential path so retry semantics stay identical to the
+            // pre-iter-034 behaviour on transient corruption.
             multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:retry_error", &multiget_st);
         }
@@ -181,6 +286,9 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
     TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
     TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", stat.block_cnt_from_file);
+    if (multiget_chunks > 0) {
+        TRACE_COUNTER_INCREMENT("multi_get_chunk_count", multiget_chunks);
+    }
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.

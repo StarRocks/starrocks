@@ -490,6 +490,27 @@ CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 // without same-pool re-entrance.
 CONF_mInt32(pk_index_inner_io_threadpool_max_threads, "0");
 CONF_mInt32(pk_index_inner_io_threadpool_size, "1048576");
+// Threadpool for splitting a single PersistentIndexSstable::multi_get into key-chunk tasks
+// so the per-Table::MultiGet sequential cache-miss block-read loop runs on multiple threads.
+// MUST be a different pool from pk_index_inner_io_thread_pool: get_from_sstables already
+// dispatches per-fileset multi_get on inner_io, and re-entering inner_io from inside
+// PersistentIndexSstable::multi_get would deadlock the worker via ThreadPool::wait().
+// Default size is num_cores * 4 because each chunk task is dominated by sleeping on OSS
+// HTTP responses; sizing by cores alone leaves available HTTP concurrency unused.
+CONF_mInt32(pk_index_chunk_io_threadpool_max_threads, "0");
+CONF_mInt32(pk_index_chunk_io_threadpool_size, "1048576");
+// Master kill-switch for the per-multi_get key-chunk parallelism. Tunable so the
+// optimization can be disabled at runtime if it turns pathological under load (e.g.
+// pool starvation, pathological cache contention).
+CONF_mBool(enable_pk_index_parallel_chunk_multi_get, "true");
+// Minimum number of keys in one PersistentIndexSstable::multi_get for the chunk-parallel
+// path to engage. Below this, run the legacy sequential path so we don't pay open-file
+// + dispatch overhead for tiny lookups.
+CONF_mInt32(pk_index_parallel_chunk_min_keys, "32");
+// Target keys per chunk. Effective chunk count = clamp(ceil(N/target), 1, max_chunks).
+CONF_mInt32(pk_index_parallel_chunk_target_keys, "64");
+// Hard upper bound on chunks per multi_get to protect the chunk_io pool's queue.
+CONF_mInt32(pk_index_parallel_chunk_max_chunks, "16");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
