@@ -102,6 +102,21 @@ Core shared infrastructure above Base/Gutil only. Higher-level BE modules must n
 - Core tests: `common_test`
 - Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated headers.
 
+### CacheCore (`cachecore`)
+Neutral cache contracts and value types without concrete engines, process bootstrap, storage, service, or runtime integration.
+- Targets: `CacheCore`
+- Allowed internal include prefixes: `cache/cache_options.h`, `cache/cache_metrics.h`, `cache/data_cache_hit_rate_counter.hpp`, `cache/status.h`, `cache/disk_cache/io_buffer.h`, `cache/disk_cache/local_disk_cache_engine.h`, `cache/mem_cache/local_mem_cache_engine.h`, `cache/remote_cache_engine.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep CacheCore limited to neutral cache contracts; move concrete engines, DataCache bootstrap, peer RPC, and process integration into higher cache modules.
+
+### CacheDataPlane (`cachedataplane`)
+Block cache and storage page cache behavior without concrete engine bootstrap, process facade, storage, service, or ExecEnv coupling.
+- Targets: `CacheDataPlane`
+- Allowed internal include prefixes: `cache/disk_cache/block_cache.h`, `cache/mem_cache/lrucache_engine.h`, `cache/mem_cache/page_cache.h`, `cache/disk_cache/local_disk_cache_engine.h`, `cache/mem_cache/local_mem_cache_engine.h`, `cache/remote_cache_engine.h`, `cache/disk_cache/io_buffer.h`, `cache/cache_metrics.h`, `runtime/current_thread.h`, `base/container/lru_cache.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `CacheCore`, `RuntimeCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `cache_data_plane_test`
+- Remediation: Keep CacheDataPlane limited to BlockCache and StoragePageCache mechanics; put singleton compatibility, bootstrap, concrete engines, and peer RPC in higher cache modules.
+
 ### HttpCore (`httpcore`)
 Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.
 - Targets: `HttpCore`

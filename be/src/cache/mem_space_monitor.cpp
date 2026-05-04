@@ -17,10 +17,10 @@
 #include "base/concurrency/await.h"
 #include "base/gc/gc_helper.h"
 #include "base/statusor.h"
+#include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_cache_fwd.h"
 #include "common/thread/thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -78,7 +78,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         if (!config::datacache_enable) {
             continue;
         }
-        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
+        MemTracker* memtracker = _process_mem_tracker;
         if (memtracker == nullptr || !memtracker->has_limit()) {
             continue;
         }

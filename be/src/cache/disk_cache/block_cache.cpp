@@ -16,7 +16,6 @@
 
 #include <fmt/format.h>
 
-#include "cache/datacache.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 
@@ -27,10 +26,6 @@ namespace fs = std::filesystem;
 // For starcache, in theory we don't have a hard limitation for block size, but a very large
 // block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
-
-BlockCache* BlockCache::instance() {
-    return DataCache::GetInstance()->block_cache();
-}
 
 BlockCache::~BlockCache() {
     (void)shutdown();

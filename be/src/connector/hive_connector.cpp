@@ -16,6 +16,10 @@
 
 #include <filesystem>
 
+#include "cache/disk_cache/block_cache.h"
+#ifdef WITH_STARCACHE
+#include "cache/datacache.h"
+#endif
 #include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"

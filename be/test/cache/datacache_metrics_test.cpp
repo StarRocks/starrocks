@@ -18,16 +18,11 @@
 
 #include <mutex>
 
-#include "cache/datacache.h"
-#include "cache/disk_cache/test_cache_utils.h"
 #include "common/metrics/process_metrics_registry.h"
-#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
-#include "service/backend_metrics_initializer.h"
 
 #ifdef WITH_STARCACHE
-#include "base/testutil/assert.h"
-#include "cache/disk_cache/starcache_engine.h"
+#include "cache/datacache.h"
 #endif
 
 namespace starrocks {
@@ -48,13 +43,7 @@ MetricRegistry* backend_metrics_registry_for_test() {
 
 void init_backend_metrics_for_test() {
     static std::once_flag once;
-    std::call_once(once, [] {
-        BackendMetricsInitOptions options;
-        options.collect_hook_enabled = true;
-        options.init_system_metrics = false;
-        options.init_jvm_metrics = false;
-        BackendMetricsInitializer::initialize(backend_process_metrics_registry_for_test(), options);
-    });
+    std::call_once(once, [] { DataCacheMetrics::instance()->install(backend_metrics_registry_for_test()); });
 }
 
 } // namespace

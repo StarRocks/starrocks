@@ -73,6 +73,7 @@
 #include "http/web_page_handler.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 

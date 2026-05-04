@@ -17,10 +17,6 @@
 #include "common/status.h"
 #include "gen_cpp/DataCache_types.h"
 
-#ifdef WITH_STARCACHE
-#include "starcache/star_cache.h"
-#endif
-
 namespace starrocks {
 
 enum class DataCacheStatus { NORMAL, UPDATING, ABNORMAL, LOADING };

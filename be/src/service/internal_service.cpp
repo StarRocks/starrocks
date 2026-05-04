@@ -51,6 +51,7 @@
 #include "base/uid_util.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
+#include "cache/disk_cache/block_cache.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"

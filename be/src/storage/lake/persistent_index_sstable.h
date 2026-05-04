@@ -29,6 +29,7 @@
 
 namespace starrocks {
 
+class Cache;
 class WritableFile;
 class PersistentIndexSstablePB;
 
