@@ -484,6 +484,12 @@ CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
+// Threadpool for inner cache-miss block reads inside LakePersistentIndex::get_from_sstables.
+// Separate from pk_index_execution_thread_pool so parallel-publish workers (which themselves
+// run on pk_index_execution_thread_pool) can submit fileset multi_get tasks here and wait
+// without same-pool re-entrance.
+CONF_mInt32(pk_index_inner_io_threadpool_max_threads, "0");
+CONF_mInt32(pk_index_inner_io_threadpool_size, "1048576");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.

@@ -603,6 +603,16 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(config::pk_index_memtable_flush_threadpool_size)
                             .build(&_pk_index_memtable_flush_thread_pool));
     REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
+    max_thread_count = config::pk_index_inner_io_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores();
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_inner_io")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(config::pk_index_inner_io_threadpool_size)
+                            .build(&_pk_index_inner_io_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_inner_io, _pk_index_inner_io_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -628,6 +638,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_memtable_flush_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_inner_io")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_pk_index_inner_io_thread_pool));
 #endif
 
     RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
@@ -749,6 +764,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _pk_index_memtable_flush_thread_pool->shutdown();
         component_times.emplace_back("pk_index_memtable_flush_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_pk_index_inner_io_thread_pool) {
+        start = MonotonicMillis();
+        _pk_index_inner_io_thread_pool->shutdown();
+        component_times.emplace_back("pk_index_inner_io_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
@@ -946,6 +967,7 @@ void ExecEnv::destroy() {
     _parallel_compact_mgr.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();
+    _pk_index_inner_io_thread_pool.reset();
     _metrics = nullptr;
 }
 
