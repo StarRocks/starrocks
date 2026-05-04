@@ -58,3 +58,4 @@ The parameters are grouped in these categories:
 - [Storage](./FE_parameters/stats_storage.md)
 - [Shared-data](./FE_parameters/shared_lake_other.md)
 - [Data Lake](./FE_parameters/shared_lake_other.md)
+- [Other](./FE_parameters/shared_lake_other.md)
