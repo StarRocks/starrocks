@@ -358,6 +358,30 @@ class ParserTest {
         // :: with hints should not confuse the hint pre-pass
         SqlParser.parse("select /*+ SET_VAR(query_timeout=10) */ x::int from t", sessionVariable);
 
+        // :: must bind tighter than || under PIPES_AS_CONCAT
+        SessionVariable concatSession = new SessionVariable();
+        concatSession.setSqlDialect("sr");
+        concatSession.setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
+        String[][] concatPairs = {
+                {"select 'a' || 'b'::int", "select 'a' || cast('b' as int)"},
+                {"select x::int || y::int from t",
+                        "select cast(x as int) || cast(y as int) from t"},
+                {"select a || b || c::int from t",
+                        "select a || b || cast(c as int) from t"},
+        };
+        for (String[] pair : concatPairs) {
+            QueryStatement shorthand = (QueryStatement) SqlParser.parse(pair[0], concatSession).get(0);
+            QueryStatement classic = (QueryStatement) SqlParser.parse(pair[1], concatSession).get(0);
+            SelectList shortList = ((SelectRelation) shorthand.getQueryRelation()).getSelectList();
+            SelectList classicList = ((SelectRelation) classic.getQueryRelation()).getSelectList();
+            for (int i = 0; i < shortList.getItems().size(); i++) {
+                String shortSql = ExprToSql.toSql(shortList.getItems().get(i).getExpr());
+                String classicSql = ExprToSql.toSql(classicList.getItems().get(i).getExpr());
+                assertEquals(classicSql, shortSql,
+                        "select item " + i + " differs for: " + pair[0]);
+            }
+        }
+
         // Negative cases: each must fail to parse
         String[] invalid = {
                 "select x::",            // missing type
