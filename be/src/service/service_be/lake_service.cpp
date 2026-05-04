@@ -26,6 +26,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/status.h"
@@ -53,7 +54,6 @@
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "storage/lake/vector_index_build_task.h"
-#include "util/brpc_stub_cache.h"
 
 namespace starrocks {
 

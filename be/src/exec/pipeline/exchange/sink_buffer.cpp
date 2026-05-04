@@ -23,13 +23,13 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
-#include "util/brpc_stub_cache.h"
 
 namespace starrocks::pipeline {
 

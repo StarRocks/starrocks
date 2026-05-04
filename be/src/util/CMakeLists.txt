@@ -22,7 +22,6 @@ set(UTIL_FILES
   arrow/starrocks_column_to_arrow.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp
-  brpc_stub_cache.cpp
   download_util.cpp
   json_util.cpp
   json_flattener.cpp
@@ -36,8 +35,6 @@ set(UTIL_FILES
   thrift_rpc_helper.cpp
   debug/query_trace_impl.cpp
   memory_lock.cpp
-  internal_service_recoverable_stub.cpp
-  lake_service_recoverable_stub.cpp
   byte_buffer.cpp
   hdfs_util.cpp
   jvm_metrics.cpp

@@ -95,12 +95,12 @@ Standalone utility substrate. Do not couple it to BE modules.
 - Remediation: Keep Gutil independent; move BE-specific logic out instead of importing BE modules.
 
 ### Common (`common`)
-Core shared infrastructure above Base/Gutil only. Higher-level BE modules must not leak back into it.
+Core shared infrastructure above Base/Gutil and generated code only. Higher-level BE modules must not leak back into it.
 - Targets: `Common`
 - Allowed internal include prefixes: `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Base`, `Gutil`
+- Allowed target deps: `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `common_test`
-- Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated headers.
+- Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code.
 
 ### CacheCore (`cachecore`)
 Neutral cache contracts and value types without concrete engines, process bootstrap, storage, service, or runtime integration.

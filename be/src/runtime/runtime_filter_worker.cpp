@@ -21,6 +21,8 @@
 #include <utility>
 
 #include "base/time/time.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_runtime_fwd.h"
@@ -41,8 +43,6 @@
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_filter_serde.h"
 #include "runtime/runtime_state.h"
-#include "util/brpc_stub_cache.h"
-#include "util/internal_service_recoverable_stub.h"
 #include "util/time_guard.h"
 
 namespace starrocks {

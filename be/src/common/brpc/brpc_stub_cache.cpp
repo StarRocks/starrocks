@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/brpc_stub_cache.h"
+#include "common/brpc/brpc_stub_cache.h"
 
+#include "base/failpoint/fail_point.h"
+#include "base/metrics.h"
 #include "common/config_network_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"
 #endif
-#include "base/failpoint/fail_point.h"
-#include "runtime/runtime_metrics.h"
 
 namespace starrocks {
 
 namespace {
+
+const char* const kBrpcEndpointStubCountMetric = "brpc_endpoint_stub_count";
 
 template <typename Cache>
 Cache*& singleton_cache() {
@@ -40,17 +42,36 @@ std::mutex& singleton_cache_mutex() {
 
 } // namespace
 
-BrpcStubCache::BrpcStubCache(BthreadTimer* timer, MetricRegistry* metrics) : _timer(timer) {
-    _stub_map.init(239);
-    if (metrics != nullptr) {
-        REGISTER_GAUGE_RUNTIME_METRIC(metrics, brpc_endpoint_stub_count, [this]() {
-            std::lock_guard<SpinLock> l(_lock);
-            return _stub_map.size();
+struct BrpcStubCache::Metrics {
+    Metrics(MetricRegistry* metric_registry, BrpcStubCache* cache) : registry(metric_registry), cache(cache) {
+        DCHECK(registry != nullptr);
+        registry->register_metric(kBrpcEndpointStubCountMetric, &brpc_endpoint_stub_count);
+        registry->register_hook(kBrpcEndpointStubCountMetric, [this] {
+            std::lock_guard<SpinLock> l(this->cache->_lock);
+            brpc_endpoint_stub_count.set_value(this->cache->_stub_map.size());
         });
+    }
+
+    ~Metrics() {
+        registry->deregister_hook(kBrpcEndpointStubCountMetric);
+        brpc_endpoint_stub_count.hide();
+    }
+
+    MetricRegistry* registry;
+    BrpcStubCache* cache;
+    UIntGauge brpc_endpoint_stub_count{MetricUnit::NOUNIT};
+};
+
+BrpcStubCache::BrpcStubCache(BthreadTimer* timer, MetricRegistry* metric_registry) : _timer(timer) {
+    _stub_map.init(239);
+    if (metric_registry != nullptr) {
+        _metrics = std::make_unique<Metrics>(metric_registry, this);
     }
 }
 
 BrpcStubCache::~BrpcStubCache() {
+    _metrics.reset();
+
     std::vector<std::shared_ptr<StubPool>> pools_to_cleanup;
     {
         std::lock_guard<SpinLock> l(_lock);

@@ -29,6 +29,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
 #include "column/chunk.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
@@ -55,7 +56,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/brpc_stub_cache.h"
 
 namespace starrocks {
 

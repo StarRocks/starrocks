@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/brpc_stub_cache.h"
+#include "common/brpc/brpc_stub_cache.h"
 
 #include <base/testutil/assert.h>
 #include <gtest/gtest.h>
