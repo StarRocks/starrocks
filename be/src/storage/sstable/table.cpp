@@ -367,6 +367,10 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     return s;
 }
 
+void Table::set_file(RandomAccessFile* file) {
+    rep_->file = file;
+}
+
 size_t Table::memory_usage() const {
     const size_t index_block_sz = (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
     const size_t filter_data_sz = rep_->filter_data_size;

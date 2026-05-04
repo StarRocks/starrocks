@@ -57,6 +57,13 @@ public:
     // Loading the index block, one key is sampled for every sample_interval_bytes worth of data.
     Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
 
+    // Replace the underlying RandomAccessFile used for subsequent block reads.
+    // Lets a caller open the table with one file (e.g. one that bypasses the
+    // local disk cache for the small footer / index / filter reads) and then
+    // swap in a different long-lived file for runtime data-block reads.
+    // The new file must remain live for the rest of the table's lifetime.
+    void set_file(RandomAccessFile* file);
+
 private:
     struct Rep;
 

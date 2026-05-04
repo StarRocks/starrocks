@@ -64,8 +64,30 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         options.filter_policy = _filter_policy.get();
     }
     options.block_cache = cache;
+
+    // Open the footer / index / metaindex / filter blocks via a temporary file
+    // handle that bypasses the local disk cache. These small blocks are kept
+    // resident in Table::Rep for the lifetime of the sstable, so disk-caching
+    // them only consumes vdb bandwidth without serving any later read. Cold
+    // start on this run reads them across ~17 PK-index SSTs/tablet × 1000
+    // tablets and saturates the local SSD bandwidth ceiling. Runtime data
+    // block reads continue to use the long-lived `rf` (or the per-call file
+    // built in PersistentIndexSstable::multi_get when parallel execution is
+    // enabled) and so still populate the local disk cache.
+    auto make_init_rf = [&](const std::string& path) -> StatusOr<std::unique_ptr<RandomAccessFile>> {
+        RandomAccessFileOptions init_opts;
+        init_opts.skip_fill_local_cache = true;
+        init_opts.skip_disk_cache = true;
+        if (!sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            init_opts.encryption_info = std::move(info);
+        }
+        return fs::new_random_access_file(init_opts, path);
+    };
+    ASSIGN_OR_RETURN(auto init_rf, make_init_rf(rf->filename()));
+
     sstable::Table* table;
-    auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+    auto open_st = sstable::Table::Open(options, init_rf.get(), sstable_pb.filesize(), &table);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
     if (open_st.is_corruption()) {
         auto drop_status = drop_corrupted_sstable_cache(rf->filename());
@@ -74,14 +96,15 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             if (tablet_mgr == nullptr) {
                 return Status::InvalidArgument("tablet_mgr is null when loading sst file");
             }
+            const std::string sst_path = tablet_mgr->sst_location(metadata->id(), sstable_pb.filename());
             RandomAccessFileOptions opts;
             if (!sstable_pb.encryption_meta().empty()) {
                 ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
             }
-            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(
-                                         opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
-            open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, sst_path));
+            ASSIGN_OR_RETURN(init_rf, make_init_rf(sst_path));
+            open_st = sstable::Table::Open(options, init_rf.get(), sstable_pb.filesize(), &table);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
         }
     }
@@ -91,6 +114,10 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         return open_st;
     }
     _sst.reset(table);
+    // Swap the long-lived file in for runtime block reads (compaction
+    // iterators, non-parallel multi_get) so they keep populating the local
+    // disk cache. The init_rf is dropped at the end of this scope.
+    _sst->set_file(rf.get());
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
     // load delvec
