@@ -15,6 +15,8 @@
 package com.starrocks.server;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.SqlBlacklistedException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
@@ -44,6 +46,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SqlBlacklistTest {
     GlobalStateMgr state;
@@ -224,5 +227,14 @@ public class SqlBlacklistTest {
                 return editLog;
             }
         };
+    }
+
+    @Test
+    public void testVerifyingSQLExistsInBlackList() {
+        Pattern p = Pattern.compile("qwert");
+        sqlBlackList.put(p);
+        AnalysisException exception = assertThrows(SqlBlacklistedException.class, () -> sqlBlackList.verifying("qwert"));
+        Assertions.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                exception.getMessage());
     }
 }
