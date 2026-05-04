@@ -17,12 +17,15 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.hudi.HudiConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -47,5 +50,33 @@ public class HudiScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         HudiScanNode scanNode = new HudiScanNode(new PlanNodeId(0), desc, "XXX");
+    }
+
+    @Test
+    public void testPrepareRetry(@Mocked GlobalStateMgr globalStateMgr,
+                                 @Mocked CatalogConnector connector,
+                                 @Mocked HudiTable table,
+                                 @Mocked HudiConnectorScanRangeSource mockSource) {
+        String catalog = "hudi_cat";
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+            result = connector;
+            connector.getMetadata().getCloudConfiguration();
+            result = cc;
+            table.getCatalogName();
+            result = catalog;
+        }};
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        HudiScanNode scanNode = new HudiScanNode(new PlanNodeId(0), desc, "XXX");
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+
+        scanNode.prepareRetry();
+
+        new Verifications() {{
+            mockSource.reset();
+            times = 1;
+        }};
     }
 }
