@@ -2077,7 +2077,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_merge_condition(bool
         CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (size_t i = 0; i < keys.size(); i++) {
             cols[0]->append_datum(Datum(keys[i]));
             cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
