@@ -431,11 +431,7 @@ The examples of output listed below are implemented based on the optional module
    execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
    execute("SET query_mem_limit = 2147483648;")
    execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
-   execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
-   execute("SET arrow_flight_proxy_enabled = true;")
-   execute("SET arrow_flight_proxy = 'fe-proxy.example.com';")
-   execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
-   
+
    # Step 6: Aggregation query
    print_header("Step 6: Aggregation Query")
    execute("""
@@ -519,48 +515,6 @@ The examples of output listed below are implemented based on the optional module
    
    ⏱️  Execution time: 0.005 seconds
 
-   🟡 SQL:
-   SHOW VARIABLES LIKE '%arrow_flight_proxy%';
-   
-   🟢 Result:
-
-     Variable_name Value
-     arrow_flight_proxy      
-     arrow_flight_proxy_enabled  true
-
-   ⏱️  Execution time: 0.006 seconds
-
-   🟡 SQL:
-   SET arrow_flight_proxy_enabled = true;
-
-   🟢 Result:
-
-   StatusResult
-              0
-
-   ⏱️  Execution time: 0.008 seconds
-
-   🟡 SQL:
-   SET arrow_flight_proxy = 'fe-proxy.example.com';
-
-   🟢 Result:
-
-   StatusResult
-              0
-
-   ⏱️  Execution time: 0.007 seconds
-
-   🟡 SQL:
-   SHOW VARIABLES LIKE '%arrow_flight_proxy%';
-
-   🟢 Result:
-
-         Variable_name    Value
-         arrow_flight_proxy   fe-proxy.example.com
-         arrow_flight_proxy_enabled   true
-
-    ⏱️  Execution time: 0.006 seconds
-   
    ================================================================================
    🟢 Step 6: Aggregation Query
    ================================================================================
@@ -1211,10 +1165,6 @@ print_header("Step 5: Session Variables")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
 execute("SET query_mem_limit = 2147483648;")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
-execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
-execute("SET arrow_flight_proxy_enabled = true;")
-execute("SET arrow_flight_proxy = 'fe-proxy.example.com';")
-execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
 
 # =============================================================================
 # Step 6: Aggregation Query
