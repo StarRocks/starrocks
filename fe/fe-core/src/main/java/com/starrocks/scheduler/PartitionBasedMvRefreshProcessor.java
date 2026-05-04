@@ -317,7 +317,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
             logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
                             "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
-                    partitionRefreshNumber, mvToRefreshedPartitions, MvUtils.shrinkToSize(mvPotentialPartitionNames),
+                    partitionRefreshNumber, mvToRefreshedPartitions, mvPotentialPartitionNames,
                     mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
@@ -357,7 +357,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         updateTaskRunStatus(status -> {
             MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
             extraMessage.setMvPartitionsToRefresh(finalMvToRefreshedPartitions);
-            extraMessage.setRefBasePartitionsToRefreshMap(MvUtils.shrinkToSize(finalRefTablePartitionNames));
+            extraMessage.setRefBasePartitionsToRefreshMap(finalRefTablePartitionNames);
         });
     }
 
@@ -770,9 +770,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // use it if refresh external table fails
         ConnectContext connectContext = context.getCtx();
         List<Pair<Table, BaseTableInfo>> toRepairTables = new ArrayList<>();
-
-        boolean forceRefresh = Config.enable_force_refresh_mv_base_table;
-
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Optional<Database> dbOpt =
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(connectContext, baseTableInfo);
@@ -800,20 +797,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
             TableSnapshotInfo snapshotInfo = new TableSnapshotInfo(baseTableInfo, table);
             Set<String> basePartitions = baseTableCandidatePartitions.get(snapshotInfo);
-
-            // Pass forceRefresh flag to metadata refresh
-            // When forceRefresh is true, we clear all cache and reload from remote catalog
             if (CollectionUtils.isNotEmpty(basePartitions)) {
                 // only refresh referenced partitions, to reduce metadata overhead
                 List<String> realPartitionNames = basePartitions.stream()
                         .flatMap(name -> mvContext.getExternalTableRealPartitionName(table, name).stream())
                         .collect(Collectors.toList());
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, realPartitionNames, !forceRefresh);
+                        baseTableInfo.getDbName(), table, realPartitionNames, false);
             } else {
                 // refresh the whole table, which may be costly in extreme case
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, Lists.newArrayList(), !forceRefresh);
+                        baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
             }
             // should clear query cache
             connectContext.getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
@@ -1361,7 +1355,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // It's ok to add empty set for a table, means no partition corresponding to this mv partition
                     needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
                 } else {
-                    logger.debug("ref-base-table {} is not found in `mvRefBaseTableIntersectedPartitions` " +
+                    logger.info("ref-base-table {} is not found in `mvRefBaseTableIntersectedPartitions` " +
                             "because of empty update", snapshotTable.getName());
                 }
             }
