@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "common/statusor.h"
@@ -42,6 +44,9 @@ StatusOr<SparseRange<>> new_segment_iterator_for_execution_pruning(const std::sh
 StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
                                                                  const Schema& schema,
                                                                  const SegmentReadOptions& options);
+StatusOr<std::pair<SparseRange<>, bool>> new_segment_iterator_for_prepare_pruning_auto_page_filter(
+        const std::shared_ptr<Segment>& segment, const Schema& schema, const SegmentReadOptions& options,
+        size_t split_rows, size_t fanout_threshold);
 
 StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
                                                              const std::vector<SeekRange>& ranges,

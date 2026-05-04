@@ -302,20 +302,6 @@ private:
     RuntimeProfile::Counter* _lake_prepared_state_reject_disabled_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_state_reject_adaptive_pending_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_state_targeted_read_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_seed_local_tasks_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_seed_local_rows_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_pending_tasks_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_pending_rows_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_pending_opened_prepared_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_pending_opened_unprepared_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_pending_opened_prepared_rows_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_pending_opened_unprepared_rows_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_refined_tasks_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_refined_rows_counter = nullptr;
-    RuntimeProfile::Counter* _lake_adaptive_segment_switch_counter = nullptr;
-    bool _lake_adaptive_last_segment_valid = false;
-    size_t _lake_adaptive_last_rowset_index = 0;
-    size_t _lake_adaptive_last_segment_index = 0;
 };
 
 // ================================

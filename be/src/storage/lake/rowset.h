@@ -55,6 +55,7 @@ struct PreparedSegmentReadState {
     Status prepare_status;
 
     SparseRangePtr execution_pruned_range;
+    bool execution_pruned_range_includes_page_filters = false;
 
     std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_bounds;
     std::optional<Range<rowid_t>> tablet_range_rowid_range;

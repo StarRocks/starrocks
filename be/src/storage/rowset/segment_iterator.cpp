@@ -142,6 +142,9 @@ protected:
     friend StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
                                                                             const Schema& schema,
                                                                             const SegmentReadOptions& options);
+    friend StatusOr<std::pair<SparseRange<>, bool>> new_segment_iterator_for_prepare_pruning_auto_page_filter(
+            const std::shared_ptr<Segment>& segment, const Schema& schema, const SegmentReadOptions& options,
+            size_t split_rows, size_t fanout_threshold);
 
 private:
     struct ScanContext {
@@ -345,6 +348,8 @@ private:
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
     StatusOr<SparseRange<>> _get_execution_pruned_row_ranges(bool include_page_level_filters);
+    StatusOr<std::pair<SparseRange<>, bool>> _get_execution_pruned_row_ranges_auto_page_filter(
+            size_t split_rows, size_t fanout_threshold);
 
     Status _apply_tablet_range();
     Status _apply_shared_execution_pruned_range();
@@ -889,6 +894,8 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 Status SegmentIterator::reset(const SegmentReadOptions& options) {
     _opts.rowid_range_option = options.rowid_range_option;
     _opts.shared_execution_pruned_scan_range = options.shared_execution_pruned_scan_range;
+    _opts.shared_execution_pruned_scan_range_needs_page_filters =
+            options.shared_execution_pruned_scan_range_needs_page_filters;
     _opts.is_first_split_of_segment = options.is_first_split_of_segment;
     _opts.ranges = options.ranges;
     _opts.runtime_range_pruner = options.runtime_range_pruner;
@@ -960,6 +967,10 @@ Status SegmentIterator::_init_internal() {
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     if (_opts.shared_execution_pruned_scan_range != nullptr) {
         RETURN_IF_ERROR(_apply_shared_execution_pruned_range());
+        if (_opts.shared_execution_pruned_scan_range_needs_page_filters) {
+            RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+            RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+        }
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_keys());
         RETURN_IF_ERROR(_apply_tablet_range());
@@ -1024,6 +1035,10 @@ Status SegmentIterator::_reset_for_reuse() {
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     if (_opts.shared_execution_pruned_scan_range != nullptr) {
         RETURN_IF_ERROR(_apply_shared_execution_pruned_range());
+        if (_opts.shared_execution_pruned_scan_range_needs_page_filters) {
+            RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+            RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+        }
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_keys());
         RETURN_IF_ERROR(_apply_tablet_range());
@@ -1099,6 +1114,56 @@ StatusOr<SparseRange<>> SegmentIterator::_get_execution_pruned_row_ranges(bool i
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
     RETURN_IF_ERROR(_apply_data_sampling());
     return _scan_range;
+}
+
+StatusOr<std::pair<SparseRange<>, bool>> SegmentIterator::_get_execution_pruned_row_ranges_auto_page_filter(
+        size_t split_rows, size_t fanout_threshold) {
+    if (!_get_del_vec_st.ok()) {
+        return _get_del_vec_st;
+    }
+    if (!_get_dcg_st.ok()) {
+        return _get_dcg_st;
+    }
+    if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && _segment->num_rows() == _del_vec->cardinality()) {
+        return std::make_pair(SparseRange<>(), false);
+    }
+
+    _segment->turn_on_batch_update_cache_size();
+    DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
+
+    _init_column_access_paths();
+    RETURN_IF_ERROR(_check_low_cardinality_optimization());
+    RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
+    RETURN_IF_ERROR(_init_ann_reader());
+
+    _scan_range.add(Range<>(0, num_rows()));
+    RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_apply_tablet_range());
+
+    bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+    if (!apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+    RETURN_IF_ERROR(_apply_bitmap_index());
+
+    bool include_page_filters = false;
+    if (split_rows > 0 && fanout_threshold > 0) {
+        const size_t rows = _scan_range.span_size();
+        const size_t estimated_fanout = rows == 0 ? 0 : (rows + split_rows - 1) / split_rows;
+        include_page_filters = estimated_fanout > fanout_threshold;
+    }
+    if (include_page_filters) {
+        RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+        RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    }
+
+    RETURN_IF_ERROR(_apply_inverted_index());
+    if (apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
+    return std::make_pair(_scan_range, include_page_filters);
 }
 
 Status SegmentIterator::_apply_shared_execution_pruned_range() {
@@ -3919,6 +3984,15 @@ StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shar
     auto* iter = dynamic_cast<SegmentIterator*>(seg_iter.get());
     DCHECK(iter != nullptr);
     return iter->_get_execution_pruned_row_ranges(false);
+}
+
+StatusOr<std::pair<SparseRange<>, bool>> new_segment_iterator_for_prepare_pruning_auto_page_filter(
+        const std::shared_ptr<Segment>& segment, const Schema& schema, const SegmentReadOptions& options,
+        size_t split_rows, size_t fanout_threshold) {
+    auto seg_iter = new_raw_segment_iterator(segment, schema, options);
+    auto* iter = dynamic_cast<SegmentIterator*>(seg_iter.get());
+    DCHECK(iter != nullptr);
+    return iter->_get_execution_pruned_row_ranges_auto_page_filter(split_rows, fanout_threshold);
 }
 
 Status reset_raw_segment_iterator(const ChunkIteratorPtr& iter, const SegmentReadOptions& options) {

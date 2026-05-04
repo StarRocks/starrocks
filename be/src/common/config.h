@@ -1074,6 +1074,18 @@ CONF_mBool(enable_lake_index_pruned_physical_split, "true");
 // previous eager prepared split path.
 CONF_mBool(enable_lake_adaptive_split_morsel_queue, "true");
 
+// Whether Lake adaptive segment prepare includes page-level zonemap/bloom pruning in the shared prepared range.
+// Disable this to defer those two page filters to child morsel execution for A/B testing.
+CONF_mBool(enable_lake_prepare_page_filter_pruning, "false");
+
+// Whether Lake adaptive segment prepare automatically runs page-level zonemap/bloom pruning when the non-page-pruned
+// range would generate too many child morsels.
+CONF_mBool(enable_lake_prepare_page_filter_pruning_auto, "true");
+
+// Auto page-filter pruning threshold. Prepare runs page-level pruning when estimated fanout is greater than
+// scan_dop * this multiplier.
+CONF_mInt64(lake_prepare_page_filter_pruning_fanout_multiplier, "8");
+
 // Whether physical split siblings on the same slot reuse the same Lake chunk source and reader shell after the
 // top-level prepared split path has already been chosen. This is a secondary implementation-detail switch and does
 // not participate in the planner's prepared-vs-baseline path selection.

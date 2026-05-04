@@ -509,6 +509,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
                     pruning_state->lifecycle.load(std::memory_order_acquire) ==
                             static_cast<uint32_t>(PreparedSegmentReadState::Lifecycle::PREPARED)) {
                     seg_options.shared_execution_pruned_scan_range = pruning_state->execution_pruned_range;
+                    seg_options.shared_execution_pruned_scan_range_needs_page_filters =
+                            !pruning_state->execution_pruned_range_includes_page_filters;
                 }
             }
         }

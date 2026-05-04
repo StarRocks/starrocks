@@ -421,6 +421,7 @@ public:
 
     virtual size_t num_original_morsels() const { return _num_morsels; }
     virtual size_t max_degree_of_parallelism() const { return _num_morsels; }
+    virtual int64_t splitted_scan_rows() const { return 1; }
     virtual bool empty() const = 0;
     virtual StatusOr<MorselPtr> try_get() = 0;
     virtual void unget(MorselPtr&& morsel);
@@ -722,6 +723,7 @@ public:
     Type type() const override { return LAKE_ADAPTIVE_SPLIT; }
     void set_max_degree_of_parallelism(size_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
+    int64_t splitted_scan_rows() const override { return _splitted_scan_rows; }
 
 private:
     struct PendingCandidate {

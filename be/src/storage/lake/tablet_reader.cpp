@@ -127,45 +127,21 @@ LakeSplitPlan make_lake_split_plan(bool could_split_physically, const std::vecto
     return plan;
 }
 
-const char* adaptive_segment_prepare_decision_name(AdaptiveSegmentPrepareDecision decision) {
-    switch (decision) {
-    case AdaptiveSegmentPrepareDecision::USE:
-        return "use";
-    case AdaptiveSegmentPrepareDecision::SKIP_NO_SEGMENT:
-        return "skip_no_segment";
-    }
-    return "unknown";
-}
-
 void record_adaptive_segment_prepare_profile(RuntimeProfile* profile, AdaptiveSegmentPrepareDecision decision,
                                              size_t segment_count, size_t segment_prepare_tasks) {
-    if (profile == nullptr) {
-        return;
-    }
-
-    COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSegmentCount", TUnit::UNIT),
-                   static_cast<int64_t>(segment_count));
-    COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareScheduledTasks", TUnit::UNIT),
-                   static_cast<int64_t>(segment_prepare_tasks));
-
-    switch (decision) {
-    case AdaptiveSegmentPrepareDecision::USE:
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareUsed", TUnit::UNIT), 1);
-        break;
-    case AdaptiveSegmentPrepareDecision::SKIP_NO_SEGMENT:
-        COUNTER_UPDATE(ADD_COUNTER(profile, "LakeAdaptiveSegmentPrepareSkipNoSegment", TUnit::UNIT), 1);
-        break;
-    }
-
-    profile->add_info_string("LakeAdaptiveSegmentPrepareLastDecision",
-                             adaptive_segment_prepare_decision_name(decision));
+    (void)profile;
+    (void)decision;
+    (void)segment_count;
+    (void)segment_prepare_tasks;
 }
 
-Schema build_execution_pruning_schema(const TabletSchemaCSPtr& tablet_schema, const SegmentReadOptions& options) {
+Schema build_prepare_pruning_schema(const TabletSchemaCSPtr& tablet_schema, const SegmentReadOptions& options,
+                                    bool include_page_filters) {
     std::set<ColumnId> column_ids;
     if (tablet_schema != nullptr) {
         for (ColumnId cid = 0; cid < tablet_schema->num_columns(); ++cid) {
-            if (options.pred_tree_for_zone_map.contains_column(cid)) {
+            if (options.pred_tree.contains_column(cid) ||
+                (include_page_filters && options.pred_tree_for_zone_map.contains_column(cid))) {
                 column_ids.emplace(cid);
             }
         }
@@ -177,9 +153,9 @@ Schema build_execution_pruning_schema(const TabletSchemaCSPtr& tablet_schema, co
     return ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>(column_ids.begin(), column_ids.end()));
 }
 
-Status prepare_segment_execution_pruned_scan_range(const TabletSchemaCSPtr& tablet_schema, const SegmentPtr& segment,
-                                                   SegmentReadOptions* options,
-                                                   const PreparedSegmentReadStatePtr& pruning_state) {
+Status prepare_segment_pruned_scan_range(const TabletSchemaCSPtr& tablet_schema, const SegmentPtr& segment,
+                                         SegmentReadOptions* options, size_t splitted_scan_rows, int32_t scan_dop,
+                                         const PreparedSegmentReadStatePtr& pruning_state) {
     DCHECK(options != nullptr);
     DCHECK(pruning_state != nullptr);
     if (pruning_state == nullptr || options == nullptr || !options->short_key_ranges.empty()) {
@@ -205,9 +181,27 @@ Status prepare_segment_execution_pruned_scan_range(const TabletSchemaCSPtr& tabl
     options->cached_seek_range_rowid_bounds = &pruning_state->seek_range_rowid_bounds;
     options->cached_tablet_range_rowid = &pruning_state->tablet_range_rowid_range;
 
-    const Schema schema = build_execution_pruning_schema(tablet_schema, *options);
-    ASSIGN_OR_RETURN(auto range, new_segment_iterator_for_prepare_pruning(segment, schema, *options));
+    bool include_page_filters = config::enable_lake_prepare_page_filter_pruning;
+    SparseRange<> range;
+    if (include_page_filters) {
+        const Schema schema = build_prepare_pruning_schema(tablet_schema, *options, true);
+        ASSIGN_OR_RETURN(range, new_segment_iterator_for_execution_pruning(segment, schema, *options));
+    } else if (config::enable_lake_prepare_page_filter_pruning_auto) {
+        const int64_t fanout_multiplier =
+                std::max<int64_t>(1, config::lake_prepare_page_filter_pruning_fanout_multiplier);
+        const size_t effective_scan_dop = scan_dop > 0 ? static_cast<size_t>(scan_dop) : 1;
+        const size_t fanout_threshold = effective_scan_dop * static_cast<size_t>(fanout_multiplier);
+        const Schema schema = build_prepare_pruning_schema(tablet_schema, *options, true);
+        ASSIGN_OR_RETURN(auto result, new_segment_iterator_for_prepare_pruning_auto_page_filter(
+                                              segment, schema, *options, splitted_scan_rows, fanout_threshold));
+        range = std::move(result.first);
+        include_page_filters = result.second;
+    } else {
+        const Schema schema = build_prepare_pruning_schema(tablet_schema, *options, false);
+        ASSIGN_OR_RETURN(range, new_segment_iterator_for_prepare_pruning(segment, schema, *options));
+    }
     pruning_state->execution_pruned_range = std::make_shared<SparseRange<>>(std::move(range));
+    pruning_state->execution_pruned_range_includes_page_filters = include_page_filters;
     return Status::OK();
 }
 
@@ -366,6 +360,7 @@ void reset_adaptive_segment_issue_state(const PreparedSegmentReadStatePtr& prepa
     prepared_segment_state->adaptive_pending_issue_closed = false;
     prepared_segment_state->adaptive_first_issued_split = true;
     prepared_segment_state->execution_pruned_range.reset();
+    prepared_segment_state->execution_pruned_range_includes_page_filters = false;
     prepared_segment_state->seek_range_rowid_bounds.clear();
     prepared_segment_state->tablet_range_rowid_range.reset();
     prepared_segment_state->seek_range_rowid_bounds_ready.store(false, std::memory_order_release);
@@ -609,7 +604,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         if (_could_split_physically) {
             auto split_plan = make_lake_split_plan(_could_split_physically, _rowsets);
             if (read_params.enable_lake_adaptive_split_morsel_queue && split_plan.use_prepared_physical_split()) {
-                return _build_lake_adaptive_split_seed_tasks(read_params, split_plan.segment_count);
+                return _build_prepared_physical_split_tasks(read_params, split_plan.segment_count);
             }
             if (config::enable_lake_index_pruned_physical_split) {
                 if (split_plan.use_prepared_physical_split()) {
@@ -851,7 +846,9 @@ Status TabletReader::_prepare_segment_split_task(const TabletReaderParams& read_
                                                        read_params, rs_opts, lake_io_opts, rowset,
                                                        split_context->segment_index, delete_preds, &seg_options));
 
-        auto st = prepare_segment_execution_pruned_scan_range(_tablet_schema, segment, &seg_options, segment_state);
+        auto st = prepare_segment_pruned_scan_range(_tablet_schema, segment, &seg_options,
+                                                    read_params.splitted_scan_rows, read_params.scan_dop,
+                                                    segment_state);
         if (!st.ok()) {
             return fail_prepare(st);
         }
