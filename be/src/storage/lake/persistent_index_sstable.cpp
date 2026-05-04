@@ -174,8 +174,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     int64_t multiget_chunks = 0;
     if (config::enable_pk_index_parallel_chunk_multi_get && config::enable_pk_index_parallel_execution &&
         static_cast<int64_t>(key_indexes.size()) >= config::pk_index_parallel_chunk_min_keys &&
-        ExecEnv::GetInstance() != nullptr &&
-        ExecEnv::GetInstance()->pk_index_chunk_io_thread_pool() != nullptr) {
+        ExecEnv::GetInstance() != nullptr && ExecEnv::GetInstance()->pk_index_chunk_io_thread_pool() != nullptr) {
         const int target_keys = std::max(1, static_cast<int>(config::pk_index_parallel_chunk_target_keys));
         const int max_chunks = std::max(1, static_cast<int>(config::pk_index_parallel_chunk_max_chunks));
         int chunks = static_cast<int>((key_indexes.size() + target_keys - 1) / target_keys);
