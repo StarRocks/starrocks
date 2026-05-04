@@ -17,9 +17,26 @@ package com.starrocks.sql.optimizer.skew;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 public class DataSkewInfo {
+
+    /**
+     * Shared mutable state across all stages of the same skew elimination plan.
+     */
+    public static class SharedSkewState {
+        private boolean groupBySkewDetected;
+
+        public boolean isGroupBySkewDetected() {
+            return groupBySkewDetected;
+        }
+
+        public void setGroupBySkewDetected(boolean detected) {
+            this.groupBySkewDetected = detected;
+        }
+    }
+
     private ColumnRefOperator skewColumnRef;
     private double penaltyFactor;
     private int stage;
+    private final SharedSkewState sharedState;
 
     public ColumnRefOperator getSkewColumnRef() {
         return skewColumnRef;
@@ -45,9 +62,19 @@ public class DataSkewInfo {
         this.skewColumnRef = skewColumnRef;
     }
 
-    public DataSkewInfo(ColumnRefOperator skewColumnRef, double penaltyFactor, int stage) {
+    public boolean isGroupBySkewDetected() {
+        return sharedState.isGroupBySkewDetected();
+    }
+
+    public void setGroupBySkewDetected(boolean detected) {
+        sharedState.setGroupBySkewDetected(detected);
+    }
+
+    public DataSkewInfo(ColumnRefOperator skewColumnRef, double penaltyFactor, int stage,
+                        SharedSkewState sharedState) {
         this.skewColumnRef = skewColumnRef;
         this.penaltyFactor = penaltyFactor;
         this.stage = stage;
+        this.sharedState = sharedState;
     }
 }
