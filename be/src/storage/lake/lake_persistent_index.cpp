@@ -412,8 +412,8 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
             auto* lt = &local_touched[idx];
             const KeyIndexSet* snap = &snapshot;
             Trace* trace = Trace::CurrentTrace();
-            auto submit_st = token->submit_func(
-                    [fset, keys, snap, version, lv, lf, lt, &shared_status, &status_mu, trace]() {
+            auto submit_st =
+                    token->submit_func([fset, keys, snap, version, lv, lf, lt, &shared_status, &status_mu, trace]() {
                         ADOPT_TRACE(trace);
                         auto s = fset->multi_get(keys, *snap, version, lv, lf, lt);
                         if (!s.ok()) {
@@ -448,8 +448,7 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     }
     for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
-        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes,
-                                           &touched_sstables));
+        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes, &touched_sstables));
         set_difference(key_indexes, found_key_indexes);
         if (key_indexes->empty()) {
             break;
