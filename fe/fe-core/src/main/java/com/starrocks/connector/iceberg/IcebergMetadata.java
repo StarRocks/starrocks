@@ -404,7 +404,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             Database db = getDb(context, dbName);
             IcebergTable table =
                     IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
-            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             tables.put(identifier, icebergTable);
             updateTableProperty(db, table);
             return table;
