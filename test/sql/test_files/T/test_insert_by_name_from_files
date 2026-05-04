@@ -1,0 +1,54 @@
+-- name: test_insert_by_name_from_files
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/parquet_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+insert into files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select "a" as k2, 1 as k1;
+
+desc files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+
+create table t1 (k1 int, k2 varchar(10));
+
+insert into t1 by name select * from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+select * from t1;
+
+
+-- Test BY NAME with cross-column aliases: SELECT k2 AS k1, k1 AS k2 FROM files(...)
+-- The parquet file has k2(varchar='a') and k1(int=1).
+-- With cross-aliases the schema push-down must use the output name (alias) to resolve the
+-- target column type, not the raw source column name.  If it used the source name it would
+-- push INT onto file column k2 and reject 'a', or push VARCHAR onto file column k1 and
+-- then fail to cast '1' to the INT target, depending on strict mode.
+create table t2 (k1 varchar(10), k2 int);
+
+insert into t2 by name select k2 as k1, k1 as k2 from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+select * from t2;
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null
