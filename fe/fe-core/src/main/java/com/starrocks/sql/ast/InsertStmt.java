@@ -232,6 +232,11 @@ public class InsertStmt extends DmlStmt {
         return queryStatement.getExplainLevel();
     }
 
+    @Override
+    public boolean isExplainAnalyze() {
+        return queryStatement.isExplainAnalyze();
+    }
+
     public String getLabel() {
         return label;
     }
