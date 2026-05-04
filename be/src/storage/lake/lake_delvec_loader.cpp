@@ -53,10 +53,10 @@ Status LakeDelvecLoader::load_from_file(const TabletSegmentId& tsid, int64_t ver
         // TabletMetadataPB without an unconditional deep copy (the tablet_id
         // overload's std::make_shared<TabletMetadata>(*ptr) used to dominate
         // VerticalCompactionTask CPU on cold-start cluster traces).
-        const std::string filepath = (_lake_io_opts.location_provider != nullptr)
-                                             ? _lake_io_opts.location_provider->tablet_metadata_location(tsid.tablet_id,
-                                                                                                         version)
-                                             : _tablet_manager->tablet_metadata_location(tsid.tablet_id, version);
+        const std::string filepath =
+                (_lake_io_opts.location_provider != nullptr)
+                        ? _lake_io_opts.location_provider->tablet_metadata_location(tsid.tablet_id, version)
+                        : _tablet_manager->tablet_metadata_location(tsid.tablet_id, version);
         ASSIGN_OR_RETURN(metadata, _tablet_manager->get_tablet_metadata(filepath, _fill_cache, 0, _lake_io_opts.fs));
     }
 
