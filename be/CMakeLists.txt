@@ -562,8 +562,8 @@ set(STARROCKS_LINK_LIBS
     orc
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    $<TARGET_FILE:Cache>
     RuntimeCore
-    Cache
     $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
