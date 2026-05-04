@@ -36,6 +36,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "util/thread.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -375,7 +376,17 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     // (preserving the original rbegin->rend ordering semantics). The set_difference shortcut is
     // dropped, but in cold-start most candidate keys are filtered out cheaply by per-fileset bloom
     // filters, so the extra work is negligible compared to the wall-time win.
-    if (config::enable_pk_index_parallel_execution && _sstable_filesets.size() > 1) {
+    //
+    // Skip the parallel path when this thread is itself a worker of
+    // pk_index_execution_thread_pool — submitting tasks to + waiting on the same pool from
+    // one of its workers triggers ThreadPool::check_not_pool_thread_unlocked() and aborts.
+    // This happens on the parallel-publish upsert path, where ParallelPublishContext::token
+    // lives on pk_index_execution_thread_pool and the caller IS a worker of that pool. The
+    // sync caller paths (init/erase/non-ctx upsert) are unaffected and still parallelize.
+    auto* cur_thread = Thread::current_thread();
+    const bool on_pk_index_execution_pool =
+            (cur_thread != nullptr && cur_thread->name() == "cloud_native_pk_index_execution");
+    if (config::enable_pk_index_parallel_execution && _sstable_filesets.size() > 1 && !on_pk_index_execution_pool) {
         const size_t F = _sstable_filesets.size();
         std::vector<std::vector<IndexValue>> local_values(F, std::vector<IndexValue>(n));
         std::vector<KeyIndexSet> local_founds(F);
