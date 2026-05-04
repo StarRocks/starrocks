@@ -43,7 +43,6 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
-#include "util/thread.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -378,29 +377,27 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     }
     // On cold-start, each fileset's multi_get is dominated by sequential cache-miss block reads
     // from object storage (~99 ms p50 per miss). Walking _sstable_filesets sequentially compounds
-    // the latency. With the flag enabled, dispatch each fileset's multi_get on the existing
-    // pk_index_execution_thread_pool and merge results so the most-recent fileset's value wins
+    // the latency. With the flag enabled, dispatch each fileset's multi_get on the dedicated
+    // pk_index_inner_io_thread_pool and merge results so the most-recent fileset's value wins
     // (preserving the original rbegin->rend ordering semantics). The set_difference shortcut is
     // dropped, but in cold-start most candidate keys are filtered out cheaply by per-fileset bloom
     // filters, so the extra work is negligible compared to the wall-time win.
     //
-    // Skip the parallel path when this thread is itself a worker of
-    // pk_index_execution_thread_pool — submitting tasks to + waiting on the same pool from
-    // one of its workers triggers ThreadPool::check_not_pool_thread_unlocked() and aborts.
-    // This happens on the parallel-publish upsert path, where ParallelPublishContext::token
-    // lives on pk_index_execution_thread_pool and the caller IS a worker of that pool. The
-    // sync caller paths (init/erase/non-ctx upsert) are unaffected and still parallelize.
-    auto* cur_thread = Thread::current_thread();
-    const bool on_pk_index_execution_pool =
-            (cur_thread != nullptr && cur_thread->name() == "cloud_native_pk_index_execution");
-    if (config::enable_pk_index_parallel_execution && _sstable_filesets.size() > 1 && !on_pk_index_execution_pool) {
+    // We dispatch on a SEPARATE pool from pk_index_execution_thread_pool: on the parallel-publish
+    // upsert path, this function is invoked from a lambda already running on a
+    // pk_index_execution_thread_pool worker (ParallelPublishContext::token, see
+    // lake_primary_index.cpp:424,605 and update_manager.cpp:931,1069). Submitting tasks to + waiting
+    // on the same pool from one of its workers triggers ThreadPool::check_not_pool_thread_unlocked()
+    // and aborts (iter-031). The dedicated inner-io pool isolates the wait so the cold-start hot
+    // path can fan out across filesets without re-entrance risk.
+    if (config::enable_pk_index_parallel_execution && _sstable_filesets.size() > 1) {
         const size_t F = _sstable_filesets.size();
         std::vector<std::vector<IndexValue>> local_values(F, std::vector<IndexValue>(n));
         std::vector<KeyIndexSet> local_founds(F);
         const KeyIndexSet snapshot = *key_indexes;
         std::mutex status_mu;
         Status shared_status;
-        auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        auto token = ExecEnv::GetInstance()->pk_index_inner_io_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
         size_t idx = 0;
         for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter, ++idx) {
