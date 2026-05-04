@@ -19,6 +19,7 @@
 #include <mutex>
 
 #include "common/metrics/process_metrics_registry.h"
+#include "runtime/exec_env.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/datacache.h"
@@ -29,6 +30,9 @@ namespace starrocks {
 namespace {
 
 ProcessMetricsRegistry* backend_process_metrics_registry_for_test() {
+    if (auto* registry = ExecEnv::GetInstance()->process_metrics_registry(); registry != nullptr) {
+        return registry;
+    }
     static auto* registry = new ProcessMetricsRegistry("starrocks_be");
     return registry;
 }
