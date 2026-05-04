@@ -62,6 +62,8 @@ public class PostgresSchemaResolverTest {
         columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29));
         columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6));
         columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"));
+        columnResult.addColumn("REMARKS", Arrays.asList("comment-a", null, null, null, null, null, null, null, null,
+                null, null));
         columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "org.postgresql.Driver");
@@ -171,6 +173,8 @@ public class PostgresSchemaResolverTest {
             Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
             Assertions.assertEquals(11, table.getColumns().size());
             Assertions.assertTrue(table.getColumn("h").getType().isStringType());
+            Assertions.assertEquals("comment-a", table.getColumn("a").getComment());
+            Assertions.assertEquals("", table.getColumn("b").getComment());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assertions.fail();
