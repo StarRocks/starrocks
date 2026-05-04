@@ -246,14 +246,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
+        if (!icebergProperties.isEnableIcebergMetadataCache() || delegate.isVendedCredentialsEnabled()) {
+            return delegate.getTable(dbName, tableName);
+        }
+
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
-
-        if (!icebergProperties.isEnableIcebergMetadataCache()) {
-            return delegate.getTable(dbName, tableName);
-        }
-        
         try {
             return tables.get(icebergTableName);
         } catch (NoSuchTableException e) {

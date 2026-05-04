@@ -23,6 +23,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.utframe.UtFrameUtils;
@@ -294,6 +295,66 @@ public class CachingIcebergCatalogTest {
         // Second call - should hit delegate again because cache was invalidated
         Table t2 = cachingIcebergCatalog.getTable("db1", "tbl1");
         Assertions.assertEquals(nativeTable, t2);
+    }
+
+    @Test
+    public void testGetTableBypassCacheWhenVendedCredentialsEnabled(@Mocked IcebergRESTCatalog restCatalog) {
+        // When vended credentials is enabled, caching should be bypassed to avoid
+        // using expired credentials.
+        ConnectContext ctx = new ConnectContext();
+        Table nativeTable1 = createBaseTableWithManifests(1, 1);
+        Table nativeTable2 = createBaseTableWithManifests(1, 1);
+
+        new Expectations() {
+            {
+                restCatalog.isVendedCredentialsEnabled();
+                result = true;
+                minTimes = 0;
+
+                restCatalog.getTable("db4", "tbl4");
+                result = nativeTable1;
+                result = nativeTable2;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        Table result1 = cachingIcebergCatalog.getTable("db4", "tbl4");
+        Table result2 = cachingIcebergCatalog.getTable("db4", "tbl4");
+
+        // Should return different instances (no caching)
+        Assertions.assertSame(nativeTable1, result1);
+        Assertions.assertSame(nativeTable2, result2);
+    }
+
+    @Test
+    public void testGetTableWithCacheWhenVendedCredentialsDisabled(@Mocked IcebergRESTCatalog restCatalog) {
+        // When vended credentials is disabled, normal caching should work.
+        ConnectContext ctx = new ConnectContext();
+        Table nativeTable = createBaseTableWithManifests(1, 1);
+
+        new Expectations() {
+            {
+                restCatalog.isVendedCredentialsEnabled();
+                result = false;
+                minTimes = 0;
+
+                restCatalog.getTable("db5", "tbl5");
+                result = nativeTable;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        Table result1 = cachingIcebergCatalog.getTable("db5", "tbl5");
+        Table result2 = cachingIcebergCatalog.getTable("db5", "tbl5");
+
+        // Should return the same instance (cached)
+        Assertions.assertSame(nativeTable, result1);
+        Assertions.assertSame(nativeTable, result2);
+        Assertions.assertSame(result1, result2);
     }
 
     @Test
