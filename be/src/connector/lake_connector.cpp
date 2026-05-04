@@ -1256,11 +1256,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
 
-LakeDataSourceProvider::~LakeDataSourceProvider() {
-    if (!_partition_conjunct_ctxs.empty() && _runtime_state != nullptr) {
-        ExprExecutor::close(_partition_conjunct_ctxs, _runtime_state);
-    }
-}
+// _partition_conjunct_ctxs share this provider's ObjectPool and self-close in their destructor.
+LakeDataSourceProvider::~LakeDataSourceProvider() = default;
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
@@ -1311,7 +1308,8 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
     // Dynamic partition pruning. The partition conjunct contexts were prepared and opened once
-    // in LakeDataSourceProvider::init and will be closed in the provider destructor.
+    // in LakeDataSourceProvider::init and are closed automatically when the owning ObjectPool
+    // tears them down (ExprContext::~ExprContext invokes close()).
     std::vector<TScanRangeParams> pruned_scan_ranges;
     const std::vector<TScanRangeParams>* effective_scan_ranges = &scan_ranges;
     if (!_partition_conjunct_ctxs.empty() && _runtime_state != nullptr) {
