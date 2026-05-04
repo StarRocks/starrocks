@@ -40,8 +40,7 @@ std::mutex& singleton_cache_mutex() {
 
 } // namespace
 
-BrpcStubCache::BrpcStubCache(pipeline::PipelineTimer* pipeline_timer, MetricRegistry* metrics)
-        : _pipeline_timer(pipeline_timer) {
+BrpcStubCache::BrpcStubCache(BthreadTimer* timer, MetricRegistry* metrics) : _timer(timer) {
     _stub_map.init(239);
     if (metrics != nullptr) {
         REGISTER_GAUGE_RUNTIME_METRIC(metrics, brpc_endpoint_stub_count, [this]() {
@@ -62,7 +61,7 @@ BrpcStubCache::~BrpcStubCache() {
     }
 
     for (auto& pool : pools_to_cleanup) {
-        (void)_pipeline_timer->unschedule(pool->_cleanup_task.get());
+        (void)_timer->unschedule(pool->_cleanup_task.get());
     }
     std::lock_guard<SpinLock> l(_lock);
     _stub_map.clear();
@@ -79,9 +78,9 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
         stub_pool = _stub_map.seek(endpoint);
     }
 
-    if (_pipeline_timer->unschedule((*stub_pool)->_cleanup_task.get()) != TIMER_TASK_RUNNING) {
+    if (_timer->unschedule((*stub_pool)->_cleanup_task.get()) != TIMER_TASK_RUNNING) {
         timespec tm = butil::seconds_from_now(config::brpc_stub_expire_s);
-        auto status = _pipeline_timer->schedule((*stub_pool)->_cleanup_task.get(), tm);
+        auto status = _timer->schedule((*stub_pool)->_cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
         }
@@ -146,22 +145,22 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_o
     return _stubs[_idx];
 }
 
-void HttpBrpcStubCache::initialize(pipeline::PipelineTimer* pipeline_timer) {
-    DCHECK(pipeline_timer != nullptr);
+void HttpBrpcStubCache::initialize(BthreadTimer* timer) {
+    DCHECK(timer != nullptr);
     std::lock_guard<std::mutex> l(singleton_cache_mutex<HttpBrpcStubCache>());
     auto*& cache = singleton_cache<HttpBrpcStubCache>();
     if (cache == nullptr) {
-        cache = new HttpBrpcStubCache(pipeline_timer);
+        cache = new HttpBrpcStubCache(timer);
         return;
     }
-    cache->bind_pipeline_timer(pipeline_timer);
+    cache->bind_timer(timer);
 }
 
 HttpBrpcStubCache* HttpBrpcStubCache::getInstance() {
     return singleton_cache<HttpBrpcStubCache>();
 }
 
-HttpBrpcStubCache::HttpBrpcStubCache(pipeline::PipelineTimer* pipeline_timer) : _pipeline_timer(pipeline_timer) {
+HttpBrpcStubCache::HttpBrpcStubCache(BthreadTimer* timer) : _timer(timer) {
     _stub_map.init(500);
 }
 
@@ -169,30 +168,30 @@ HttpBrpcStubCache::~HttpBrpcStubCache() {
     shutdown();
 }
 
-void HttpBrpcStubCache::bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer) {
-    DCHECK(pipeline_timer != nullptr);
+void HttpBrpcStubCache::bind_timer(BthreadTimer* timer) {
+    DCHECK(timer != nullptr);
     std::lock_guard<SpinLock> l(_lock);
-    DCHECK(_stub_map.empty() || _pipeline_timer == pipeline_timer);
-    _pipeline_timer = pipeline_timer;
+    DCHECK(_stub_map.empty() || _timer == timer);
+    _timer = timer;
 }
 
 void HttpBrpcStubCache::shutdown() {
     std::vector<std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>>> task_to_cleanup;
-    pipeline::PipelineTimer* pipeline_timer = nullptr;
+    BthreadTimer* timer = nullptr;
 
     {
         std::lock_guard<SpinLock> l(_lock);
-        pipeline_timer = _pipeline_timer;
-        _pipeline_timer = nullptr;
+        timer = _timer;
+        _timer = nullptr;
         for (auto& stub : _stub_map) {
             task_to_cleanup.push_back(stub.second.second);
         }
         _stub_map.clear();
     }
 
-    if (pipeline_timer != nullptr) {
+    if (timer != nullptr) {
         for (auto& task : task_to_cleanup) {
-            pipeline_timer->unschedule(task.get());
+            timer->unschedule(task.get());
         }
     }
 }
@@ -216,7 +215,7 @@ StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::g
     }
     // get is exist
     std::lock_guard<SpinLock> l(_lock);
-    if (_pipeline_timer == nullptr) {
+    if (_timer == nullptr) {
         return Status::ServiceUnavailable("HttpBrpcStubCache is not initialized");
     }
 
@@ -234,9 +233,9 @@ StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::g
     }
 
     // schedule clean up task
-    if (_pipeline_timer->unschedule((*stub_pair_ptr).second.get()) != TIMER_TASK_RUNNING) {
+    if (_timer->unschedule((*stub_pair_ptr).second.get()) != TIMER_TASK_RUNNING) {
         timespec tm = butil::seconds_from_now(config::brpc_stub_expire_s);
-        auto status = _pipeline_timer->schedule((*stub_pair_ptr).second.get(), tm);
+        auto status = _timer->schedule((*stub_pair_ptr).second.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule http brpc cleanup task: " << endpoint;
         }
@@ -254,23 +253,22 @@ void HttpBrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
 
 #ifndef __APPLE__
 
-void LakeServiceBrpcStubCache::initialize(pipeline::PipelineTimer* pipeline_timer) {
-    DCHECK(pipeline_timer != nullptr);
+void LakeServiceBrpcStubCache::initialize(BthreadTimer* timer) {
+    DCHECK(timer != nullptr);
     std::lock_guard<std::mutex> l(singleton_cache_mutex<LakeServiceBrpcStubCache>());
     auto*& cache = singleton_cache<LakeServiceBrpcStubCache>();
     if (cache == nullptr) {
-        cache = new LakeServiceBrpcStubCache(pipeline_timer);
+        cache = new LakeServiceBrpcStubCache(timer);
         return;
     }
-    cache->bind_pipeline_timer(pipeline_timer);
+    cache->bind_timer(timer);
 }
 
 LakeServiceBrpcStubCache* LakeServiceBrpcStubCache::getInstance() {
     return singleton_cache<LakeServiceBrpcStubCache>();
 }
 
-LakeServiceBrpcStubCache::LakeServiceBrpcStubCache(pipeline::PipelineTimer* pipeline_timer)
-        : _pipeline_timer(pipeline_timer) {
+LakeServiceBrpcStubCache::LakeServiceBrpcStubCache(BthreadTimer* timer) : _timer(timer) {
     _stub_map.init(500);
 }
 
@@ -278,30 +276,30 @@ LakeServiceBrpcStubCache::~LakeServiceBrpcStubCache() {
     shutdown();
 }
 
-void LakeServiceBrpcStubCache::bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer) {
-    DCHECK(pipeline_timer != nullptr);
+void LakeServiceBrpcStubCache::bind_timer(BthreadTimer* timer) {
+    DCHECK(timer != nullptr);
     std::lock_guard<SpinLock> l(_lock);
-    DCHECK(_stub_map.empty() || _pipeline_timer == pipeline_timer);
-    _pipeline_timer = pipeline_timer;
+    DCHECK(_stub_map.empty() || _timer == timer);
+    _timer = timer;
 }
 
 void LakeServiceBrpcStubCache::shutdown() {
     std::vector<std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>>> task_to_cleanup;
-    pipeline::PipelineTimer* pipeline_timer = nullptr;
+    BthreadTimer* timer = nullptr;
 
     {
         std::lock_guard<SpinLock> l(_lock);
-        pipeline_timer = _pipeline_timer;
-        _pipeline_timer = nullptr;
+        timer = _timer;
+        _timer = nullptr;
         for (auto& stub : _stub_map) {
             task_to_cleanup.push_back(stub.second.second);
         }
         _stub_map.clear();
     }
 
-    if (pipeline_timer != nullptr) {
+    if (timer != nullptr) {
         for (auto& task : task_to_cleanup) {
-            pipeline_timer->unschedule(task.get());
+            timer->unschedule(task.get());
         }
     }
 }
@@ -322,7 +320,7 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
     }
     // get if exist
     std::lock_guard<SpinLock> l(_lock);
-    if (_pipeline_timer == nullptr) {
+    if (_timer == nullptr) {
         return Status::ServiceUnavailable("LakeServiceBrpcStubCache is not initialized");
     }
 
@@ -340,9 +338,9 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
     }
 
     // schedule clean up task
-    if (_pipeline_timer->unschedule((*stub_pair_ptr).second.get()) != TIMER_TASK_RUNNING) {
+    if (_timer->unschedule((*stub_pair_ptr).second.get()) != TIMER_TASK_RUNNING) {
         timespec tm = butil::seconds_from_now(config::brpc_stub_expire_s);
-        auto status = _pipeline_timer->schedule((*stub_pair_ptr).second.get(), tm);
+        auto status = _timer->schedule((*stub_pair_ptr).second.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule lake brpc cleanup task: " << endpoint;
         }

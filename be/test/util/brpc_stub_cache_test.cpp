@@ -30,20 +30,20 @@ public:
     BrpcStubCacheTest() = default;
     ~BrpcStubCacheTest() override = default;
     void SetUp() override {
-        _pipeline_timer = std::make_unique<pipeline::PipelineTimer>();
-        ASSERT_OK(_pipeline_timer->start());
+        _timer = std::make_unique<BthreadTimer>();
+        ASSERT_OK(_timer->start());
     }
     void TearDown() override {
-        _pipeline_timer.reset();
+        _timer.reset();
         config::brpc_stub_expire_s = 3600;
     }
 
 private:
-    std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
+    std::unique_ptr<BthreadTimer> _timer;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {
-    BrpcStubCache cache(_pipeline_timer.get());
+    BrpcStubCache cache(_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -59,7 +59,7 @@ TEST_F(BrpcStubCacheTest, normal) {
 }
 
 TEST_F(BrpcStubCacheTest, invalid) {
-    BrpcStubCache cache(_pipeline_timer.get());
+    BrpcStubCache cache(_timer.get());
     TNetworkAddress address;
     address.hostname = "invalid.cm.invalid";
     address.port = 123;
@@ -68,7 +68,7 @@ TEST_F(BrpcStubCacheTest, invalid) {
 }
 
 TEST_F(BrpcStubCacheTest, reset) {
-    BrpcStubCache cache(_pipeline_timer.get());
+    BrpcStubCache cache(_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -84,7 +84,7 @@ TEST_F(BrpcStubCacheTest, reset) {
 
 #ifndef __APPLE__
 TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
-    LakeServiceBrpcStubCache cache(_pipeline_timer.get());
+    LakeServiceBrpcStubCache cache(_timer.get());
     TNetworkAddress address;
     std::string hostname = "127.0.0.1";
     int32_t port1 = 123;
@@ -103,7 +103,7 @@ TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
 #endif
 
 TEST_F(BrpcStubCacheTest, test_http_stub) {
-    HttpBrpcStubCache cache(_pipeline_timer.get());
+    HttpBrpcStubCache cache(_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -125,7 +125,7 @@ TEST_F(BrpcStubCacheTest, test_http_stub) {
 
 TEST_F(BrpcStubCacheTest, test_cleanup) {
     config::brpc_stub_expire_s = 1;
-    BrpcStubCache cache(_pipeline_timer.get());
+    BrpcStubCache cache(_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -142,7 +142,7 @@ TEST_F(BrpcStubCacheTest, test_cleanup) {
 #ifndef __APPLE__
 TEST_F(BrpcStubCacheTest, test_lake_cleanup) {
     config::brpc_stub_expire_s = 1;
-    LakeServiceBrpcStubCache cache(_pipeline_timer.get());
+    LakeServiceBrpcStubCache cache(_timer.get());
     std::string hostname = "127.0.0.1";
     int32_t port = 123;
     auto stub1 = cache.get_stub(hostname, port);
@@ -160,7 +160,7 @@ TEST_F(BrpcStubCacheTest, test_lake_cleanup) {
 
 TEST_F(BrpcStubCacheTest, test_http_cleanup) {
     config::brpc_stub_expire_s = 1;
-    HttpBrpcStubCache cache(_pipeline_timer.get());
+    HttpBrpcStubCache cache(_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -175,13 +175,13 @@ TEST_F(BrpcStubCacheTest, test_http_cleanup) {
 }
 
 TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
-    auto pipeline_timer2 = std::make_unique<pipeline::PipelineTimer>();
-    ASSERT_OK(pipeline_timer2->start());
+    auto timer2 = std::make_unique<BthreadTimer>();
+    ASSERT_OK(timer2->start());
 
-    HttpBrpcStubCache::initialize(_pipeline_timer.get());
+    HttpBrpcStubCache::initialize(_timer.get());
     auto* cache = HttpBrpcStubCache::getInstance();
     ASSERT_NE(nullptr, cache);
-    ASSERT_EQ(_pipeline_timer.get(), cache->_pipeline_timer);
+    ASSERT_EQ(_timer.get(), cache->_timer);
 
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
@@ -191,10 +191,10 @@ TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
     ASSERT_NE(nullptr, *stub);
 
     cache->shutdown();
-    ASSERT_EQ(nullptr, cache->_pipeline_timer);
+    ASSERT_EQ(nullptr, cache->_timer);
 
-    HttpBrpcStubCache::initialize(pipeline_timer2.get());
-    ASSERT_EQ(pipeline_timer2.get(), cache->_pipeline_timer);
+    HttpBrpcStubCache::initialize(timer2.get());
+    ASSERT_EQ(timer2.get(), cache->_timer);
 
     auto rebound_stub = cache->get_http_stub(address);
     ASSERT_TRUE(rebound_stub.ok());
@@ -205,23 +205,23 @@ TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
 
 #ifndef __APPLE__
 TEST_F(BrpcStubCacheTest, lake_singleton_reinitialize_rebinds_pipeline_timer) {
-    auto pipeline_timer2 = std::make_unique<pipeline::PipelineTimer>();
-    ASSERT_OK(pipeline_timer2->start());
+    auto timer2 = std::make_unique<BthreadTimer>();
+    ASSERT_OK(timer2->start());
 
-    LakeServiceBrpcStubCache::initialize(_pipeline_timer.get());
+    LakeServiceBrpcStubCache::initialize(_timer.get());
     auto* cache = LakeServiceBrpcStubCache::getInstance();
     ASSERT_NE(nullptr, cache);
-    ASSERT_EQ(_pipeline_timer.get(), cache->_pipeline_timer);
+    ASSERT_EQ(_timer.get(), cache->_timer);
 
     auto stub = cache->get_stub("127.0.0.1", 123);
     ASSERT_TRUE(stub.ok());
     ASSERT_NE(nullptr, *stub);
 
     cache->shutdown();
-    ASSERT_EQ(nullptr, cache->_pipeline_timer);
+    ASSERT_EQ(nullptr, cache->_timer);
 
-    LakeServiceBrpcStubCache::initialize(pipeline_timer2.get());
-    ASSERT_EQ(pipeline_timer2.get(), cache->_pipeline_timer);
+    LakeServiceBrpcStubCache::initialize(timer2.get());
+    ASSERT_EQ(timer2.get(), cache->_timer);
 
     auto rebound_stub = cache->get_stub("127.0.0.1", 123);
     ASSERT_TRUE(rebound_stub.ok());

@@ -12,74 +12,74 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/schedule/pipeline_timer.h"
+#include "common/bthread_timer.h"
 
-#include <atomic>
 #include <memory>
-#include <mutex>
+#include <utility>
 
 #include "bthread/timer_thread.h"
-#include "common/status.h"
 #include "fmt/format.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
 
-void PipelineTimerTask::waitUtilFinished() {
+void BthreadTimerTask::waitUtilFinished() {
     _latch.wait();
 }
 
-void PipelineTimerTask::unschedule(PipelineTimer* timer) {
+void BthreadTimerTask::unschedule(BthreadTimer* timer) {
     int rc = timer->unschedule(this);
     if (rc == 1) {
         waitUtilFinished();
     }
 }
 
-Status PipelineTimer::start() {
+BthreadTimer::BthreadTimer(std::string bvar_prefix) : _bvar_prefix(std::move(bvar_prefix)) {}
+
+Status BthreadTimer::start() {
     _thr = std::make_shared<bthread::TimerThread>();
     bthread::TimerThreadOptions options;
-    options.bvar_prefix = "pipeline_timer";
+    options.bvar_prefix = _bvar_prefix;
     int rc = _thr->start(&options);
     if (rc != 0) {
-        return Status::InternalError(fmt::format("init pipeline timer error:{}", berror(errno)));
+        return Status::InternalError(fmt::format("init bthread timer error:{}", berror(errno)));
     }
     return Status::OK();
 }
 
 static void RunTimerTask(void* arg) {
-    auto* task = static_cast<PipelineTimerTask*>(arg);
+    auto* task = static_cast<BthreadTimerTask*>(arg);
     task->doRun();
 }
 
-Status PipelineTimer::schedule(PipelineTimerTask* task, const timespec& abstime) {
-    TaskId tid = _thr->schedule(RunTimerTask, task, abstime);
+Status BthreadTimer::schedule(BthreadTimerTask* task, const timespec& abstime) {
+    BthreadTimerTaskId tid = _thr->schedule(RunTimerTask, task, abstime);
     if (tid == 0) {
-        return Status::InternalError(fmt::format("pipeline timer schedule task error:{}", berror(errno)));
+        return Status::InternalError(fmt::format("bthread timer schedule task error:{}", berror(errno)));
     }
     task->set_tid(tid);
     return Status::OK();
 }
 
-int PipelineTimer::unschedule(PipelineTimerTask* task) {
+int BthreadTimer::unschedule(BthreadTimerTask* task) {
     return _thr->unschedule(task->tid());
 }
 
 static void RunLightTimerTask(void* arg) {
-    auto* task = static_cast<LightTimerTask*>(arg);
+    auto* task = static_cast<BthreadLightTimerTask*>(arg);
     task->Run();
 }
 
-Status PipelineTimer::schedule(LightTimerTask* task, const timespec& abstime) {
-    TaskId tid = _thr->schedule(RunLightTimerTask, task, abstime);
+Status BthreadTimer::schedule(BthreadLightTimerTask* task, const timespec& abstime) {
+    BthreadTimerTaskId tid = _thr->schedule(RunLightTimerTask, task, abstime);
     if (tid == 0) {
-        return Status::InternalError(fmt::format("pipeline timer schedule task error:{}", berror(errno)));
+        return Status::InternalError(fmt::format("bthread timer schedule task error:{}", berror(errno)));
     }
     task->set_tid(tid);
     return Status::OK();
 }
 
-int PipelineTimer::unschedule(LightTimerTask* task) {
+int BthreadTimer::unschedule(BthreadLightTimerTask* task) {
     return _thr->unschedule(task->tid());
 }
 
-} // namespace starrocks::pipeline
+} // namespace starrocks
