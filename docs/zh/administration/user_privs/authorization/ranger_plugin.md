@@ -5,6 +5,8 @@ sidebar_position: 40
 
 # 使用 Apache Ranger 管理权限
 
+import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
+
 [Apache Ranger](https://ranger.apache.org/) 提供了一个集中式的安全管理框架，用户可以通过可视化的 Web 页面来定制各种访问策略，决定哪些角色能访问哪些数据，对 Hadoop 生态的各个组件和服务进行细粒度的数据访问控制，确保数据的安全性和合规性。
 
 Apache Ranger 提供以下核心模块：
@@ -87,11 +89,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 本步骤的目的是在 Ranger Admin 上配置 StarRocks 服务，通过 Ranger 对 StarRocks 的对象进行权限管控。
 :::
 
-1. 拷贝 [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
-
-   ```SQL
-   wget https://raw.githubusercontent.com/StarRocks/starrocks/main/conf/ranger/ranger-servicedef-starrocks.json
-   ```
+<ServiceDefLink />
 
    :::note
    如果不需要开启 Ranger 的自动补全功能，即在上一步中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
