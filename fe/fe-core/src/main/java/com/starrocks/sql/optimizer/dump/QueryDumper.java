@@ -41,6 +41,16 @@ public class QueryDumper {
             .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
             .create();
 
+    /**
+     * Serializes {@code dumpInfo} to JSON using the proper dump serializer and injects {@code queryId}
+     * as a top-level field so log entries can be correlated with other logs.
+     */
+    public static String toJson(QueryDumpInfo dumpInfo, String queryId) {
+        com.google.gson.JsonObject obj = GSON.toJsonTree(dumpInfo, QueryDumpInfo.class).getAsJsonObject();
+        obj.addProperty("query_id", queryId);
+        return obj.toString();
+    }
+
     public static Pair<HttpResponseStatus, String> dumpQuery(String catalogName, String dbName, String query,
                                                              boolean enableMock) {
         ConnectContext context = ConnectContext.get();
