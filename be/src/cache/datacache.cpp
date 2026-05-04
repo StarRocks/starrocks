@@ -80,6 +80,21 @@ Status DataCache::init(const DataCacheInitOptions& options) {
     return Status::OK();
 }
 
+void DataCache::attach_peer_cache_stub_cache(BrpcStubCache* brpc_stub_cache) {
+#if defined(WITH_STARCACHE)
+    if (_remote_cache == nullptr) {
+        return;
+    }
+    auto* peer_cache = dynamic_cast<PeerCacheEngine*>(_remote_cache.get());
+    if (peer_cache == nullptr) {
+        return;
+    }
+    peer_cache->set_stub_cache(brpc_stub_cache);
+#else
+    (void)brpc_stub_cache;
+#endif
+}
+
 void DataCache::destroy() {
     if (_disk_space_monitor != nullptr) {
         _disk_space_monitor->stop();

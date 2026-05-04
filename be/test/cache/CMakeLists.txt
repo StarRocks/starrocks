@@ -12,17 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(CACHE_DATA_PLANE_TEST_FILES
+set(CACHE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     data_cache_hit_rate_counter_test.cpp
+    datacache_metrics_test.cpp
+    datacache_utils_test.cpp
     mem_cache/lrucache_engine_test.cpp
     mem_cache/page_cache_test.cpp
 )
 
-set(CACHE_DATA_PLANE_TEST_LINK_LIBS
-    CacheDataPlane
-    CacheCore
+if ("${WITH_STARCACHE}" STREQUAL "ON")
+    list(APPEND CACHE_TEST_FILES
+        disk_cache/block_cache_test.cpp
+        disk_cache/starcache_engine_test.cpp
+        disk_space_monitor_test.cpp
+        peer_cache_test.cpp
+    )
+endif()
+
+set(CACHE_TEST_LINK_LIBS
+    Cache
+)
+
+list(APPEND CACHE_TEST_LINK_LIBS
     RuntimeCore
+    FSCore
     Common
     Base
     Gutil
@@ -36,8 +50,8 @@ set(CACHE_DATA_PLANE_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_cache_data_plane_test_objs OBJECT ${CACHE_DATA_PLANE_TEST_FILES})
-target_link_libraries(starrocks_cache_data_plane_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_cache_data_plane_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(cache_data_plane_test $<TARGET_OBJECTS:starrocks_cache_data_plane_test_objs>)
-target_link_libraries(cache_data_plane_test ${CACHE_DATA_PLANE_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_cache_test_objs OBJECT ${CACHE_TEST_FILES})
+target_link_libraries(starrocks_cache_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_cache_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(cache_test $<TARGET_OBJECTS:starrocks_cache_test_objs>)
+target_link_libraries(cache_test ${CACHE_TEST_LINK_LIBS} gtest_main)

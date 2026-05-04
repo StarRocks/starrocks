@@ -18,31 +18,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 
-set(CACHE_CORE_FILES
+set(CACHE_FILES
   data_cache_hit_rate_counter.hpp
   disk_cache/io_buffer.cpp
-)
-
-ADD_BE_LIB(CacheCore
-    ${CACHE_CORE_FILES}
-)
-
-set(CACHE_DATA_PLANE_FILES
   disk_cache/block_cache.cpp
   mem_cache/lrucache_engine.cpp
   mem_cache/page_cache.cpp
-)
-
-ADD_BE_LIB(CacheDataPlane
-    ${CACHE_DATA_PLANE_FILES}
-)
-
-target_link_libraries(CacheDataPlane
-    PUBLIC CacheCore
-    PRIVATE RuntimeCore
-)
-
-set(CACHE_FILES
   disk_space_monitor.cpp
   mem_space_monitor.cpp
   datacache.cpp
@@ -52,12 +33,16 @@ set(CACHE_FILES
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")
-    list(APPEND CACHE_FILES disk_cache/starcache_engine.cpp)
-    list(APPEND CACHE_FILES peer_cache_engine.cpp)
+    list(APPEND CACHE_FILES
+      disk_cache/starcache_engine.cpp
+      peer_cache_engine.cpp
+    )
 endif()
 
 ADD_BE_LIB(Cache
     ${CACHE_FILES}
 )
 
-target_link_libraries(Cache PUBLIC CacheCore CacheDataPlane)
+target_link_libraries(Cache
+    PUBLIC RuntimeCore FSCore Common Base Gutil StarRocksGen
+)

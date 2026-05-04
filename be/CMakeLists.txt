@@ -559,11 +559,11 @@ set(STARROCKS_LINK_LIBS
     TestUtil
     Tools
     Geo
-    Cache
     orc
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     RuntimeCore
+    Cache
     $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>

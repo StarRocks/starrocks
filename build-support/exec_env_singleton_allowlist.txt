@@ -4,7 +4,6 @@ src/agent/heartbeat_server.cpp
 src/agent/publish_version.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
-src/cache/peer_cache_engine.cpp
 src/exec/pipeline/fragment_context.cpp
 src/exec/pipeline/fragment_executor.cpp
 src/exec/pipeline/lookup/tablet_adaptor.cpp
