@@ -19,9 +19,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.jdbc.MockedJDBCMetadata;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -34,8 +38,10 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -59,6 +65,7 @@ import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -76,10 +83,11 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class InformationSchemaDataSourceTest {
+public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
     @Mocked
     ExecuteEnv exeEnv;
+    private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeAll
@@ -87,6 +95,8 @@ public class InformationSchemaDataSourceTest {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        connectContext.setThreadLocalInfo();
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
     }
 
@@ -709,5 +719,49 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = 0 or " +
                         "WAREHOUSE_NAME = 'default_warehouse'")
                 .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testExternalJdbcTableCommentVisibleInInformationSchemaTables() throws Exception {
+        boolean originFlag = Config.enable_external_catalog_information_schema_tables_access_full_metadata;
+        try {
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = true;
+
+            // Prepare mocked JDBC catalog and metadata
+            ConnectorPlanTestBase.mockCatalog(connectContext, MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            MockedJDBCMetadata mockedJDBCMetadata =
+                    (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(
+                            MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+
+            Table extTable = mockedJDBCMetadata.getTable(connectContext,
+                    MockedJDBCMetadata.MOCKED_PARTITIONED_DB_NAME,
+                    MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+            extTable.setComment("external jdbc table comment");
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+            TAuthInfo authInfo = new TAuthInfo();
+            TUserIdentity userIdentity = new TUserIdentity();
+            userIdentity.setUsername("root");
+            userIdentity.setHost("%");
+            userIdentity.setIs_domain(false);
+            authInfo.setCurrent_user_ident(userIdentity);
+            authInfo.setCatalog_name(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            authInfo.setPattern(MockedJDBCMetadata.MOCKED_PARTITIONED_DB_NAME);
+            request.setAuth_info(authInfo);
+
+            TGetTablesInfoResponse response = impl.getTablesInfo(request);
+            TTableInfo tableInfo = response.getTables_infos().stream()
+                    .filter(t -> t.getTable_schema().equals(MockedJDBCMetadata.MOCKED_PARTITIONED_DB_NAME)
+                            && t.getTable_name().equals(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0))
+                    .findFirst()
+                    .orElse(null);
+
+            Assertions.assertNotNull(tableInfo);
+            Assertions.assertEquals("external jdbc table comment", tableInfo.getTable_comment());
+        } finally {
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = originFlag;
+        }
     }
 }
