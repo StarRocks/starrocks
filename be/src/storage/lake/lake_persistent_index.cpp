@@ -374,6 +374,60 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     if (key_indexes->empty() || _sstable_filesets.empty()) {
         return Status::OK();
     }
+    // On cold-start, each fileset's multi_get is dominated by sequential cache-miss block reads
+    // from object storage (~99 ms p50 per miss). Walking _sstable_filesets sequentially compounds
+    // the latency. With the flag enabled, dispatch each fileset's multi_get on the existing
+    // pk_index_execution_thread_pool and merge results so the most-recent fileset's value wins
+    // (preserving the original rbegin->rend ordering semantics). The set_difference shortcut is
+    // dropped, but in cold-start most candidate keys are filtered out cheaply by per-fileset bloom
+    // filters, so the extra work is negligible compared to the wall-time win.
+    if (config::enable_pk_index_parallel_execution && _sstable_filesets.size() > 1) {
+        const size_t F = _sstable_filesets.size();
+        std::vector<std::vector<IndexValue>> local_values(F, std::vector<IndexValue>(n));
+        std::vector<KeyIndexSet> local_founds(F);
+        const KeyIndexSet snapshot = *key_indexes;
+        std::mutex status_mu;
+        Status shared_status;
+        auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+        size_t idx = 0;
+        for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter, ++idx) {
+            auto* fset = iter->get();
+            auto* lv = local_values[idx].data();
+            auto* lf = &local_founds[idx];
+            const KeyIndexSet* snap = &snapshot;
+            Trace* trace = Trace::CurrentTrace();
+            auto submit_st = token->submit_func([fset, keys, snap, version, lv, lf, &shared_status, &status_mu, trace]() {
+                ADOPT_TRACE(trace);
+                auto s = fset->multi_get(keys, *snap, version, lv, lf);
+                if (!s.ok()) {
+                    std::lock_guard<std::mutex> lg(status_mu);
+                    shared_status.update(s);
+                }
+            });
+            if (!submit_st.ok()) {
+                // Fallback: run inline so we still produce a result for this fileset.
+                auto s = fset->multi_get(keys, snapshot, version, lv, lf);
+                if (!s.ok()) {
+                    std::lock_guard<std::mutex> lg(status_mu);
+                    shared_status.update(s);
+                }
+            }
+        }
+        token->wait();
+        RETURN_IF_ERROR(shared_status);
+        // Merge in rbegin->rend order (most-recent fileset first wins).
+        KeyIndexSet found_master;
+        for (size_t i = 0; i < F; ++i) {
+            for (auto k_idx : local_founds[i]) {
+                if (found_master.insert(k_idx).second) {
+                    values[k_idx] = local_values[i][k_idx];
+                }
+            }
+        }
+        set_difference(key_indexes, found_master);
+        return Status::OK();
+    }
     for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
         RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
