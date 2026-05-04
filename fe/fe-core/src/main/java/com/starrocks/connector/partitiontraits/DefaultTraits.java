@@ -179,22 +179,28 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
 
                 if (table.getType() == Table.TableType.ICEBERG) {
                     long basePartitionVersion = basePartitionInfo.getVersion();
-                    long basePartitionModifiedTime = basePartitionInfo.getLastRefreshTime();
                     long latestPartitionVersion = latestPartition.getVersion();
-                    long latestPartitionModifiedTime = latestPartition.getModifiedTime();
                     long normalizedBasePartitionModifiedTime =
-                            normalizeIcebergModifiedTimeToMicros(basePartitionModifiedTime);
+                            normalizeIcebergModifiedTimeToMicros(basePartitionInfo.getLastRefreshTime());
                     long normalizedLatestPartitionModifiedTime =
-                            normalizeIcebergModifiedTimeToMicros(latestPartitionModifiedTime);
-                    if (basePartitionVersion == -1 || basePartitionVersion == basePartitionModifiedTime) {
-                        // 1. for historical iceberg mv, the version is the modified time
-                        if (normalizedLatestPartitionModifiedTime >= 0
-                                && normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
+                            normalizeIcebergModifiedTimeToMicros(latestPartition.getModifiedTime());
+                    if (normalizedLatestPartitionModifiedTime > 0) {
+                        // last_updated_at is available: use modifiedTime as the primary signal.
+                        // Covers both live-snapshot partitions and historical MVs whose basePartitionVersion
+                        // was stored as a timestamp.
+                        if (normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
                             result.add(basePartitionName);
                         }
                     } else {
-                        // 2. for new iceberg mv, the version is the snapshot sequence number
-                        if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionVersion) {
+                        // last_updated_at is null: the partition's snapshot has been GC'd.
+                        // Historical MVs stored basePartitionVersion as a millisecond timestamp (~10^12),
+                        // which is always larger than Integer.MAX_VALUE. Stats fingerprints are in [0, 2^31-1].
+                        // If basePartitionVersion looks like a timestamp, skip the comparison to avoid a
+                        // spurious refresh — we have no reliable signal to compare against.
+                        boolean isLegacyTimestampVersion = basePartitionVersion == -1
+                                || basePartitionVersion > Integer.MAX_VALUE;
+                        if (!isLegacyTimestampVersion && latestPartitionVersion >= 0
+                                && latestPartitionVersion != basePartitionVersion) {
                             result.add(basePartitionName);
                         }
                     }
