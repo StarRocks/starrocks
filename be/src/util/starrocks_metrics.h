@@ -413,6 +413,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_inner_io);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
