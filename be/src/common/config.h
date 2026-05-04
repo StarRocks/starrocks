@@ -459,8 +459,9 @@ CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 CONF_mInt32(pk_index_parallel_compaction_threadpool_size, "1048576");
 // The splitting threshold for PK index compaction tasks — when the total size of the files involved in a task is
 // smaller than this threshold, the task will not be split.
-// Default is 32MB.
-CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "33554432");
+// Default is 64MB. Each compaction emits at most one task per threshold-sized chunk; a larger threshold
+// produces fewer-but-larger SSTs, which reduces the number of SST opens at cold-start init.
+CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "67108864");
 // Target file size for primary key index in shared-data mode.
 // Default is 64MB.
 CONF_mInt64(pk_index_target_file_size, "67108864");
