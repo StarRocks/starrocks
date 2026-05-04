@@ -374,14 +374,22 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     if (key_indexes->empty() || _sstable_filesets.empty()) {
         return Status::OK();
     }
+    // Diagnostic: count distinct sstables actually walked into across all filesets in this
+    // call, so we can compare it against pindex_init_sst_cnt (which counts every sstable
+    // opened eagerly at init). The ratio answers whether a lazy-SST-open refactor would
+    // skip real work — pindex_sstables_queried_cnt is cumulative across fileset and
+    // double-counts the same sstable when revisited; this counter dedups.
+    std::unordered_set<const PersistentIndexSstable*> touched_sstables;
     for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
-        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
+        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes,
+                                           &touched_sstables));
         set_difference(key_indexes, found_key_indexes);
         if (key_indexes->empty()) {
             break;
         }
     }
+    TRACE_COUNTER_INCREMENT("pindex_unique_sstables_touched_cnt", touched_sstables.size());
     return Status::OK();
 }
 
