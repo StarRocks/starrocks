@@ -14,31 +14,42 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
 #include <vector>
 
-#include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
 #include "common/status.h"
-#include "storage/store_path.h"
 
 namespace starrocks {
 
+class BlockCache;
+struct BlockCacheOptions;
 class Status;
 class RemoteCacheEngine;
-class DiskCacheOptions;
-class GlobalEnv;
+struct RemoteCacheOptions;
+struct DiskCacheOptions;
+struct MemCacheOptions;
 class DiskSpaceMonitor;
 class MetricRegistry;
+class MemTracker;
 class MemSpaceMonitor;
 class StoragePageCache;
 class Cache;
+
+struct DataCacheInitOptions {
+    std::vector<std::string> storage_root_paths;
+    MetricRegistry* metrics = nullptr;
+    int64_t process_mem_limit = -1;
+    MemTracker* process_mem_tracker = nullptr;
+};
 
 class DataCache {
 public:
     static DataCache* GetInstance();
 
-    Status init(const std::vector<StorePath>& store_paths, MetricRegistry* metrics = nullptr);
+    Status init(const DataCacheInitOptions& options);
     void destroy();
 
     void try_release_resource_before_core_dump();
@@ -75,8 +86,9 @@ private:
     Status _init_lrucache_engine(const MemCacheOptions& cache_options);
     Status _init_page_cache(MetricRegistry* metrics);
 
-    GlobalEnv* _global_env;
-    std::vector<StorePath> _store_paths;
+    std::vector<std::string> _storage_root_paths;
+    int64_t _process_mem_limit = -1;
+    MemTracker* _process_mem_tracker = nullptr;
 
     // cache engine
     std::shared_ptr<LocalMemCacheEngine> _local_mem_cache;

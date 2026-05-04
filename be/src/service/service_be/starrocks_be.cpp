@@ -120,7 +120,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     // because apply task is triggered in init_storage_engine and needs cache env.
 #ifndef __APPLE__
     auto* cache_env = DataCache::GetInstance();
-    EXIT_IF_ERROR(cache_env->init(paths, process_metrics_registry->root_registry()));
+    std::vector<std::string> cache_storage_root_paths;
+    cache_storage_root_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        cache_storage_root_paths.emplace_back(path.path);
+    }
+    DataCacheInitOptions cache_init_options;
+    cache_init_options.storage_root_paths = std::move(cache_storage_root_paths);
+    cache_init_options.metrics = process_metrics_registry->root_registry();
+    cache_init_options.process_mem_limit = global_env->process_mem_limit();
+    cache_init_options.process_mem_tracker = global_env->process_mem_tracker();
+    EXIT_IF_ERROR(cache_env->init(cache_init_options));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 #else
     // On macOS, skip DataCache initialization

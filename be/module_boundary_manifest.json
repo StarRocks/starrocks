@@ -37,6 +37,103 @@
       "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated headers."
     },
     {
+      "id": "cachecore",
+      "doc_label": "CacheCore",
+      "summary": "Neutral cache contracts and value types without concrete engines, process bootstrap, storage, service, or runtime integration.",
+      "owned_targets": ["CacheCore"],
+      "owned_globs": [
+        "be/src/cache/cache_options.h",
+        "be/src/cache/cache_metrics.h",
+        "be/src/cache/data_cache_hit_rate_counter.hpp",
+        "be/src/cache/status.h",
+        "be/src/cache/disk_cache/io_buffer.*",
+        "be/src/cache/disk_cache/local_disk_cache_engine.h",
+        "be/src/cache/mem_cache/local_mem_cache_engine.h",
+        "be/src/cache/remote_cache_engine.h"
+      ],
+      "allowed_include_prefixes": [
+        "cache/cache_options.h",
+        "cache/cache_metrics.h",
+        "cache/data_cache_hit_rate_counter.hpp",
+        "cache/status.h",
+        "cache/disk_cache/io_buffer.h",
+        "cache/disk_cache/local_disk_cache_engine.h",
+        "cache/mem_cache/local_mem_cache_engine.h",
+        "cache/remote_cache_engine.h",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "cache/",
+        "runtime/",
+        "storage/",
+        "service/",
+        "http/",
+        "agent/",
+        "exec/",
+        "connector/",
+        "fs/",
+        "util/"
+      ],
+      "allowed_target_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": [],
+      "allowed_test_link_deps": [],
+      "remediation": "Keep CacheCore limited to neutral cache contracts; move concrete engines, DataCache bootstrap, peer RPC, and process integration into higher cache modules."
+    },
+    {
+      "id": "cachedataplane",
+      "doc_label": "CacheDataPlane",
+      "summary": "Block cache and storage page cache behavior without concrete engine bootstrap, process facade, storage, service, or ExecEnv coupling.",
+      "owned_targets": ["CacheDataPlane"],
+      "owned_globs": [
+        "be/src/cache/disk_cache/block_cache.*",
+        "be/src/cache/mem_cache/lrucache_engine.*",
+        "be/src/cache/mem_cache/page_cache.*"
+      ],
+      "allowed_include_prefixes": [
+        "cache/disk_cache/block_cache.h",
+        "cache/mem_cache/lrucache_engine.h",
+        "cache/mem_cache/page_cache.h",
+        "cache/disk_cache/local_disk_cache_engine.h",
+        "cache/mem_cache/local_mem_cache_engine.h",
+        "cache/remote_cache_engine.h",
+        "cache/disk_cache/io_buffer.h",
+        "cache/cache_metrics.h",
+        "runtime/current_thread.h",
+        "base/container/lru_cache.h",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "cache/",
+        "runtime/exec_env.h",
+        "storage/",
+        "service/",
+        "http/",
+        "agent/",
+        "exec/",
+        "connector/",
+        "fs/",
+        "util/"
+      ],
+      "allowed_target_deps": ["CacheCore", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["cache_data_plane_test"],
+      "allowed_test_link_deps": [
+        "CacheDataPlane",
+        "CacheCore",
+        "RuntimeCore",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "remediation": "Keep CacheDataPlane limited to BlockCache and StoragePageCache mechanics; put singleton compatibility, bootstrap, concrete engines, and peer RPC in higher cache modules."
+    },
+    {
       "id": "httpcore",
       "doc_label": "HttpCore",
       "summary": "Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.",

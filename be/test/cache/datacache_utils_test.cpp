@@ -201,8 +201,8 @@ TEST_F(DataCacheUtilsTest, get_corresponding_starlet_cache_dir) {
         std::string storage_dir = "./storage";
         ASSERT_TRUE(fs::create_directories(starlet_dir).ok());
         ASSERT_TRUE(fs::create_directories(storage_dir).ok());
-        std::vector<StorePath> store_paths;
-        store_paths.push_back(StorePath(storage_dir));
+        std::vector<std::string> store_paths;
+        store_paths.push_back(storage_dir);
         auto vec_or = DataCacheUtils::get_corresponding_starlet_cache_dir(store_paths, starlet_dir);
         ASSERT_TRUE(vec_or.ok());
         auto vec = *vec_or;
@@ -245,9 +245,9 @@ TEST_F(DataCacheUtilsTest, get_corresponding_starlet_cache_dir) {
         ASSERT_TRUE(fs::create_directories(starlet_dir).ok());
         ASSERT_TRUE(fs::create_directories(storage_dir).ok());
         ASSERT_TRUE(fs::create_directories(storage_dir2).ok());
-        std::vector<StorePath> store_paths;
-        store_paths.push_back(StorePath(storage_dir));
-        store_paths.push_back(StorePath(storage_dir2));
+        std::vector<std::string> store_paths;
+        store_paths.push_back(storage_dir);
+        store_paths.push_back(storage_dir2);
         auto vec_or = DataCacheUtils::get_corresponding_starlet_cache_dir(store_paths, starlet_dir);
         ASSERT_TRUE(vec_or.ok());
         auto vec = *vec_or;

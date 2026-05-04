@@ -38,7 +38,7 @@
 #include <utility>
 
 #include "base/metrics.h"
-#include "cache/datacache.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
 
 namespace starrocks {
 
@@ -96,7 +96,7 @@ public:
 
     // Return global instance.
     // Client should call create_global_cache before.
-    static StoragePageCache* instance() { return DataCache::GetInstance()->page_cache(); }
+    static StoragePageCache* instance();
 
     StoragePageCache(LocalMemCacheEngine* cache_engine) : _cache(cache_engine), _initialized(true) {}
 

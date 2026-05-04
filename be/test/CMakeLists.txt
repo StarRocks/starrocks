@@ -336,8 +336,6 @@ set(EXEC_FILES
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/datacache_metrics_test.cpp
-        ./cache/data_cache_hit_rate_counter_test.cpp
-        ./cache/mem_cache/page_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
@@ -373,6 +371,7 @@ add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(http)
+add_subdirectory(cache)
 add_subdirectory(spill)
 
 if (APPLE)
@@ -589,7 +588,6 @@ if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND DW_TEST_FILES ./cache/disk_space_monitor_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_cache/starcache_engine_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_cache/block_cache_test.cpp)
-    list(APPEND DW_TEST_FILES ./cache/mem_cache/lrucache_engine_test.cpp)
     list(APPEND DW_TEST_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 

@@ -12,31 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <atomic>
-#include <thread>
+#include "cache/datacache.h"
+#include "cache/disk_cache/block_cache.h"
+#include "cache/mem_cache/page_cache.h"
 
 namespace starrocks {
 
-class DataCache;
-class MemTracker;
+BlockCache* BlockCache::instance() {
+    return DataCache::GetInstance()->block_cache();
+}
 
-class MemSpaceMonitor {
-public:
-    MemSpaceMonitor(DataCache* datacache, MemTracker* process_mem_tracker)
-            : _datacache(datacache), _process_mem_tracker(process_mem_tracker) {}
+StoragePageCache* StoragePageCache::instance() {
+    return DataCache::GetInstance()->page_cache();
+}
 
-    void start();
-    void stop();
-
-private:
-    void _adjust_datacache_callback();
-    void _evict_datacache(int64_t bytes_to_dec);
-
-    DataCache* _datacache = nullptr;
-    MemTracker* _process_mem_tracker = nullptr;
-    std::thread _adjust_datacache_thread;
-    std::atomic<bool> _stopped = false;
-};
 } // namespace starrocks
