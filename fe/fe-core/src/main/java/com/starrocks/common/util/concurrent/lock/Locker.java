@@ -287,16 +287,12 @@ public class Locker {
     public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-<<<<<<< HEAD
         if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
-=======
-        if (Config.lock_manager_enabled) {
             LockType intentionType = (lockType == LockType.WRITE)
                     ? LockType.INTENTION_EXCLUSIVE
                     : LockType.INTENTION_SHARED;
             boolean dbLockHeld = false;
             List<Long> ridLockedList = new ArrayList<>();
->>>>>>> f32f70b5ca ([BugFix] Locker: rollback partial intensive-lock acquisition (#72423))
             try {
                 this.lock(dbId, intentionType, 0);
                 dbLockHeld = true;
@@ -424,15 +420,11 @@ public class Locker {
      */
     public void lockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
-<<<<<<< HEAD
         if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
-=======
-        if (Config.lock_manager_enabled) {
             LockType intentionType = (lockType == LockType.WRITE)
                     ? LockType.INTENTION_EXCLUSIVE
                     : LockType.INTENTION_SHARED;
             boolean dbLockHeld = false;
->>>>>>> f32f70b5ca ([BugFix] Locker: rollback partial intensive-lock acquisition (#72423))
             try {
                 this.lock(dbId, intentionType, 0);
                 dbLockHeld = true;
