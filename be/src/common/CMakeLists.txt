@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
 set(COMMON_FILES
+  bthread_timer.cpp
   brpc_helper.cpp
   configbase.cpp
   config.cpp

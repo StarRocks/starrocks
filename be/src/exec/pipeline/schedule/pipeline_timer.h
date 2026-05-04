@@ -14,79 +14,32 @@
 
 #pragma once
 
-#include <cstdint>
-#include <latch>
-#include <memory>
-
-#include "common/status.h"
-
-namespace bthread {
-class TimerThread;
-}
+#include "common/bthread_timer.h"
 
 namespace starrocks::pipeline {
-using TaskId = int64_t;
+using TaskId = BthreadTimerTaskId;
+
 class PipelineTimer;
 
-class LightTimerTask {
+class LightTimerTask : public BthreadLightTimerTask {
 public:
     virtual ~LightTimerTask() = default;
-
-    virtual void Run() = 0;
-
-    void set_tid(TaskId tid) { _tid = tid; }
-    TaskId tid() const { return _tid; }
-
-private:
-    TaskId _tid{};
 };
 
-class PipelineTimerTask : public std::enable_shared_from_this<PipelineTimerTask> {
+class PipelineTimerTask : public BthreadTimerTask {
 public:
     virtual ~PipelineTimerTask() = default;
 
-    void doRun() {
-        auto self = shared_from_this();
-        Run();
-        _latch.count_down();
-    }
-
     void unschedule(PipelineTimer* timer);
-
-    void set_tid(TaskId tid) { _tid = tid; }
-    TaskId tid() const { return _tid; }
-
-private:
-    // only call when unschedule == 1
-    void waitUtilFinished();
-
-protected:
-    // implement interface
-    virtual void Run() = 0;
-
-protected:
-    std::latch _latch{1};
-    TaskId _tid{};
 };
 
-class PipelineTimer {
+class PipelineTimer : public BthreadTimer {
 public:
-    PipelineTimer() = default;
+    PipelineTimer() : BthreadTimer("pipeline_timer") {}
     ~PipelineTimer() noexcept = default;
-
-    Status start();
-
-    Status schedule(PipelineTimerTask* task, const timespec& abstime);
-    //   0   -  Removed the task which does not run yet
-    //  -1   -  The task does not exist.
-    //   1   -  The task is just running.
-    int unschedule(PipelineTimerTask* task);
-
-    Status schedule(LightTimerTask* task, const timespec& abstime);
-
-    int unschedule(LightTimerTask* task);
-
-private:
-    std::shared_ptr<bthread::TimerThread> _thr;
 };
+
+inline void PipelineTimerTask::unschedule(PipelineTimer* timer) {
+    BthreadTimerTask::unschedule(timer);
+}
 } // namespace starrocks::pipeline

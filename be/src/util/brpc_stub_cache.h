@@ -41,8 +41,8 @@
 #include "base/brpc/brpc.h"
 #include "base/concurrency/spinlock.h"
 #include "base/network/network_util.h"
+#include "common/bthread_timer.h"
 #include "common/statusor.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "util/internal_service_recoverable_stub.h"
 
@@ -57,7 +57,7 @@ class MetricRegistry;
 constexpr int TIMER_TASK_RUNNING = 1;
 
 template <typename StubCacheT>
-class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
+class EndpointCleanupTask : public BthreadLightTimerTask {
 public:
     EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint){};
     void Run() override { _cache->cleanup_expired(_endpoint); }
@@ -69,7 +69,7 @@ private:
 
 class BrpcStubCache {
 public:
-    explicit BrpcStubCache(pipeline::PipelineTimer* pipeline_timer, MetricRegistry* metrics = nullptr);
+    explicit BrpcStubCache(BthreadTimer* timer, MetricRegistry* metrics = nullptr);
     ~BrpcStubCache();
 
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint);
@@ -90,7 +90,7 @@ private:
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<StubPool>> _stub_map;
-    pipeline::PipelineTimer* _pipeline_timer;
+    BthreadTimer* _timer;
 };
 
 class HttpBrpcStubCache {
@@ -98,22 +98,22 @@ public:
     HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
 
-    static void initialize(pipeline::PipelineTimer* pipeline_timer);
+    static void initialize(BthreadTimer* timer);
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
     void cleanup_expired(const butil::EndPoint& endpoint);
     void shutdown();
 
 private:
-    explicit HttpBrpcStubCache(pipeline::PipelineTimer* pipeline_timer);
+    explicit HttpBrpcStubCache(BthreadTimer* timer);
     ~HttpBrpcStubCache();
-    void bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer);
+    void bind_timer(BthreadTimer* timer);
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<PInternalService_RecoverableStub>,
                                               std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>>>>
             _stub_map;
-    pipeline::PipelineTimer* _pipeline_timer;
+    BthreadTimer* _timer;
 };
 
 #ifndef __APPLE__
@@ -122,22 +122,22 @@ public:
     LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
     LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
 
-    static void initialize(pipeline::PipelineTimer* pipeline_timer);
+    static void initialize(BthreadTimer* timer);
     static LakeServiceBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
     void cleanup_expired(const butil::EndPoint& endpoint);
     void shutdown();
 
 private:
-    explicit LakeServiceBrpcStubCache(pipeline::PipelineTimer* pipeline_timer);
+    explicit LakeServiceBrpcStubCache(BthreadTimer* timer);
     ~LakeServiceBrpcStubCache();
-    void bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer);
+    void bind_timer(BthreadTimer* timer);
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<LakeService_RecoverableStub>,
                                               std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>>>>
             _stub_map;
-    pipeline::PipelineTimer* _pipeline_timer;
+    BthreadTimer* _timer;
 };
 #endif
 

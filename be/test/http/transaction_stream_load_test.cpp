@@ -27,6 +27,7 @@
 #include "base/testutil/sync_point.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
