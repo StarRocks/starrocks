@@ -391,14 +391,15 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
             auto* lf = &local_founds[idx];
             const KeyIndexSet* snap = &snapshot;
             Trace* trace = Trace::CurrentTrace();
-            auto submit_st = token->submit_func([fset, keys, snap, version, lv, lf, &shared_status, &status_mu, trace]() {
-                ADOPT_TRACE(trace);
-                auto s = fset->multi_get(keys, *snap, version, lv, lf);
-                if (!s.ok()) {
-                    std::lock_guard<std::mutex> lg(status_mu);
-                    shared_status.update(s);
-                }
-            });
+            auto submit_st =
+                    token->submit_func([fset, keys, snap, version, lv, lf, &shared_status, &status_mu, trace]() {
+                        ADOPT_TRACE(trace);
+                        auto s = fset->multi_get(keys, *snap, version, lv, lf);
+                        if (!s.ok()) {
+                            std::lock_guard<std::mutex> lg(status_mu);
+                            shared_status.update(s);
+                        }
+                    });
             if (!submit_st.ok()) {
                 // Fallback: run inline so we still produce a result for this fileset.
                 auto s = fset->multi_get(keys, snapshot, version, lv, lf);
