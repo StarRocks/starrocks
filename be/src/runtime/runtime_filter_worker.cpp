@@ -537,21 +537,43 @@ private:
     DISALLOW_COPY_AND_MOVE(BatchClosuresJoinAndClean);
 };
 
-struct SingleClosureJoinAndClean {
-public:
-    SingleClosureJoinAndClean(RuntimeFilterRpcClosure* closure) : _closure(closure) {}
-    ~SingleClosureJoinAndClean() {
-        _closure->join();
-        WARN_IF_RF_RPC_ERROR(_closure);
-        if (_closure->unref()) {
-            delete _closure;
+// Fire-and-forget closure dispatched from RuntimeFilterWorker's drain thread.
+// brpc owns the only reference; on RPC completion the closure logs any error
+// and self-deletes, so the worker thread is no longer blocked by bthread_id_join
+// while forwarding broadcast/total runtime filters.
+struct AsyncRuntimeFilterRpcClosure : public RuntimeFilterRpcClosure {
+    void Run() override {
+        WARN_IF_RF_RPC_ERROR(this);
+        if (unref()) {
+            delete this;
         }
     }
-
-private:
-    RuntimeFilterRpcClosure* _closure;
-    DISALLOW_COPY_AND_MOVE(SingleClosureJoinAndClean);
 };
+
+static void submit_async_runtime_filter_rpc(const RpcServices* rpc_services, const TNetworkAddress& dest,
+                                            int timeout_ms, int64_t http_min_size,
+                                            const PTransmitRuntimeFilterParams& request, const char* debug_info) {
+    // The closure and brpc's internal serialization buffers are released by a
+    // brpc bthread after this function returns, where no thread-local mem
+    // tracker is set. Callers usually run under a query mem tracker
+    // (RuntimeFilterMerger / _receive_total_runtime_filter set one at the top
+    // of the function), so allocating here would charge the query tracker but
+    // free untracked. Detach from the query tracker to keep alloc/free
+    // accounting on the same (process default) tracker.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+
+    auto* closure = new AsyncRuntimeFilterRpcClosure();
+    closure->result.set_filter_id(request.filter_id());
+    closure->debug_info = debug_info;
+    // Hold one ref while dispatching. send_rpc_runtime_filter adds another ref
+    // when it successfully hands the closure to brpc; if the stub is null it
+    // returns without ref'ing, so dropping our ref deletes the closure here.
+    closure->ref();
+    send_rpc_runtime_filter(rpc_services, dest, closure, timeout_ms, http_min_size, request);
+    if (closure->unref()) {
+        delete closure;
+    }
+}
 
 void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t filter_id) {
     auto status_it = _statuses.find(filter_id);
@@ -685,9 +707,6 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     size_t index = 0;
     size_t size = targets.size();
 
-    RuntimeFilterRpcClosures rpc_closures;
-    rpc_closures.reserve(size);
-    BatchClosuresJoinAndClean join_and_clean(rpc_closures);
     while (index < size) {
         auto& t = targets[index];
         bool is_local = (local == t.first);
@@ -730,12 +749,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         index += (1 + half);
         _runtime_services->runtime_filter_cache->add_rf_event(
                 {request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC"});
-        rpc_closures.push_back(new RuntimeFilterRpcClosure);
-        auto* closure = rpc_closures.back();
-        closure->result.set_filter_id(request.filter_id());
-        closure->debug_info = "send total runtime filter";
-        closure->ref();
-        send_rpc_runtime_filter(_rpc_services, t.first, closure, timeout_ms, rpc_http_min_size, request);
+        submit_async_runtime_filter_rpc(_rpc_services, t.first, timeout_ms, rpc_http_min_size, request,
+                                        "send total runtime filter");
     }
 
     // we don't need to hold rf any more.
@@ -990,10 +1005,6 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     }
 
     size_t index = 0;
-    RuntimeFilterRpcClosures rpc_closures;
-    rpc_closures.reserve(size);
-    BatchClosuresJoinAndClean join_and_clean(rpc_closures);
-
     while (index < size) {
         auto& t = targets[index];
         TNetworkAddress addr;
@@ -1023,12 +1034,8 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         index += (1 + half);
         _runtime_services->runtime_filter_cache->add_rf_event(
                 {request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
-        rpc_closures.push_back(new RuntimeFilterRpcClosure());
-        auto* closure = rpc_closures.back();
-        closure->debug_info = "forward total runtime filter";
-        closure->result.set_filter_id(request.filter_id());
-        closure->ref();
-        send_rpc_runtime_filter(_rpc_services, addr, closure, timeout_ms, rpc_http_min_size, request);
+        submit_async_runtime_filter_rpc(_rpc_services, addr, timeout_ms, rpc_http_min_size, request,
+                                        "forward total runtime filter");
     }
 }
 
@@ -1100,14 +1107,10 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
         }
     }
 
-    auto* rpc_closure = new RuntimeFilterRpcClosure();
-    SingleClosureJoinAndClean join_and_join(rpc_closure);
     _runtime_services->runtime_filter_cache->add_rf_event(
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
-    rpc_closure->result.set_filter_id(request.filter_id());
-    rpc_closure->debug_info = "deliver broadcast runtime filter relay";
-    rpc_closure->ref();
-    send_rpc_runtime_filter(_rpc_services, first_dest.address, rpc_closure, timeout_ms, rpc_http_min_size, request);
+    submit_async_runtime_filter_rpc(_rpc_services, first_dest.address, timeout_ms, rpc_http_min_size, request,
+                                    "deliver broadcast runtime filter relay");
 }
 
 void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
@@ -1166,18 +1169,12 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
 void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                                        PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
                                                        int64_t rpc_http_min_size, const std::string& msg) {
-    RuntimeFilterRpcClosures rpc_closures;
-    rpc_closures.reserve(transmit_addrs.size());
-    BatchClosuresJoinAndClean join_and_clean(rpc_closures);
+    const std::string debug_info = "deliver part runtime filter. " + msg;
     for (const auto& addr : transmit_addrs) {
         _runtime_services->runtime_filter_cache->add_rf_event(
                 {params.query_id(), params.filter_id(), addr.hostname, msg});
-        rpc_closures.push_back(new RuntimeFilterRpcClosure());
-        auto* closure = rpc_closures.back();
-        closure->result.set_filter_id(params.filter_id());
-        closure->debug_info = "deliver part runtime filter. " + msg;
-        closure->ref();
-        send_rpc_runtime_filter(_rpc_services, addr, closure, transmit_timeout_ms, rpc_http_min_size, params);
+        submit_async_runtime_filter_rpc(_rpc_services, addr, transmit_timeout_ms, rpc_http_min_size, params,
+                                        debug_info.c_str());
     }
 }
 
