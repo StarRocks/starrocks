@@ -87,12 +87,12 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     auto version = index_value_ver.values(0).version();
     auto index_value = build_index_value(index_value_ver.values(0));
     if (Slice(_key) == key) {
-        if (_index_value_vers.empty()) {
+        if (!_current_value.has_value()) {
             _max_rss_rowid = max_rss_rowid;
-            _index_value_vers.emplace_front(version, index_value);
-        } else if ((version > _index_value_vers.front().first) ||
-                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid) ||
-                   (version == _index_value_vers.front().first && max_rss_rowid == _max_rss_rowid &&
+            _current_value.emplace(version, index_value);
+        } else if ((version > _current_value->first) ||
+                   (version == _current_value->first && max_rss_rowid > _max_rss_rowid) ||
+                   (version == _current_value->first && max_rss_rowid == _max_rss_rowid &&
                     index_value.get_value() == NullIndexValue)) {
             // NOTICE: we need both version and max_rss_rowid here to decide the order of keys.
             // Consider the following 3 scenarios:
@@ -133,39 +133,34 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
             //   max_rss_rowid, when the second one is only contains delete flag keys.
             //   k3 with delete flag will replace previous one.
             _max_rss_rowid = max_rss_rowid;
-            std::list<std::pair<int64_t, IndexValue>> t;
-            t.emplace_front(version, index_value);
-            _index_value_vers.swap(t);
+            _current_value.emplace(version, index_value);
         }
     } else {
         RETURN_IF_ERROR(flush());
         _key.assign(key.data, key.size);
         _max_rss_rowid = max_rss_rowid;
-        _index_value_vers.emplace_front(version, index_value);
+        _current_value.emplace(version, index_value);
     }
     return Status::OK();
 }
 
 Status KeyValueMerger::flush() {
-    if (_index_value_vers.empty()) {
+    if (!_current_value.has_value()) {
         return Status::OK();
     }
 
-    // Reuse scratch protobuf and serialization buffer to avoid allocating fresh
-    // RepeatedField storage and a new std::string on every flushed key.
-    IndexValuesWithVerPB& index_value_pb = _flush_pb_scratch;
-    index_value_pb.Clear();
-    for (const auto& index_value_with_ver : _index_value_vers) {
-        if (_merge_base_level && index_value_with_ver.second == IndexValue(NullIndexValue)) {
-            // deleted
-            continue;
-        }
+    const auto& current = *_current_value;
+    const bool skip_tombstone = _merge_base_level && current.second == IndexValue(NullIndexValue);
+    if (!skip_tombstone) {
+        // Reuse scratch protobuf and serialization buffer to avoid allocating fresh
+        // RepeatedField storage and a new std::string on every flushed key.
+        IndexValuesWithVerPB& index_value_pb = _flush_pb_scratch;
+        index_value_pb.Clear();
         auto* value = index_value_pb.add_values();
-        value->set_version(index_value_with_ver.first);
-        value->set_rssid(index_value_with_ver.second.get_rssid());
-        value->set_rowid(index_value_with_ver.second.get_rowid());
-    }
-    if (index_value_pb.values_size() > 0) {
+        value->set_version(current.first);
+        value->set_rssid(current.second.get_rssid());
+        value->set_rowid(current.second.get_rowid());
+
         if (_output_builders.empty() ||
             (_enable_multiple_output_files &&
              _output_builders.back().table_builder->FileSize() >= config::pk_index_target_file_size)) {
@@ -176,7 +171,7 @@ Status KeyValueMerger::flush() {
         index_value_pb.SerializeToString(&_flush_serialized_scratch);
         RETURN_IF_ERROR(_output_builders.back().table_builder->Add(Slice(_key), Slice(_flush_serialized_scratch)));
     }
-    _index_value_vers.clear();
+    _current_value.reset();
 
     return Status::OK();
 }
