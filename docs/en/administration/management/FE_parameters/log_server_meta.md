@@ -614,6 +614,15 @@ This topic introduces the following types of FE configurations:
 
 <EditionSpecificFEItem />
 
+### `brpc_connection_pool_retry_wait_time_ms`
+
+- Default: 10
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: The wait time before retrying when a bRPC connection pool exception occurs (e.g. SYN packet loss during TCP handshake). When `ChannelPool.getChannel()` throws a `NoSuchElementException` (directly or wrapped in a `RuntimeException`), the retry logic sleeps for this duration before attempting to reconnect.
+- Introduced in: -
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000

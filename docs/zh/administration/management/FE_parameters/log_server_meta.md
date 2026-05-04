@@ -613,6 +613,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `brpc_connection_pool_retry_wait_time_ms`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 当发生 bRPC 连接池异常（例如 TCP 握手期间的 SYN 数据包丢失）时，重试前的等待时间。当 `ChannelPool.getChannel()` 抛出 `NoSuchElementException`（直接或包装在 `RuntimeException` 中）时，重试逻辑在尝试重新连接之前会休眠该时长。
+- 引入版本: -
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000

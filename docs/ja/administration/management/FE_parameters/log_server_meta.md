@@ -614,6 +614,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `brpc_connection_pool_retry_wait_time_ms`
+
+- デフォルト：10
+- タイプ：Int
+- 単位：ms
+- 変更可能：Yes
+- 説明：bRPC 接続プールの例外 (TCP ハンドシェイク中の SYN パケットロスなど) が発生した場合に再試行するまでの待機時間。`ChannelPool.getChannel()` が `NoSuchElementException` を直接またはそれをラップした `RuntimeException` としてスローした場合、再試行ロジックはこの時間休眠してから再接続を試みます。
+- 導入時期：-
+
 ### `brpc_idle_wait_max_time`
 
 - デフォルト：10000
