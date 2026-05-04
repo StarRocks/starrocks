@@ -605,7 +605,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
     max_thread_count = config::pk_index_inner_io_threadpool_max_threads;
     if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores();
+        // Each fileset task waits on chunk-parallel OSS reads via the chunk_io pool,
+        // so this pool is also I/O-bound. Oversubscribe cores to keep fileset fan-out
+        // unblocked under cold-start storms (matches chunk_io rationale).
+        max_thread_count = CpuInfo::num_cores() * 4;
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_inner_io")
                             .set_min_threads(1)
