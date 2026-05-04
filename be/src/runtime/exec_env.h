@@ -386,6 +386,8 @@ public:
 
     ThreadPool* pk_index_inner_io_thread_pool() { return _pk_index_inner_io_thread_pool.get(); }
 
+    ThreadPool* pk_index_chunk_io_thread_pool() { return _pk_index_chunk_io_thread_pool.get(); }
+
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
@@ -467,6 +469,7 @@ private:
     std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _lake_partial_update_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _pk_index_inner_io_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _pk_index_chunk_io_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr = nullptr;

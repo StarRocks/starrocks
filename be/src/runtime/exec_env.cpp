@@ -752,6 +752,18 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
                             .set_max_queue_size(config::pk_index_inner_io_threadpool_size)
                             .build(&_pk_index_inner_io_thread_pool));
     REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, cloud_native_pk_index_inner_io, _pk_index_inner_io_thread_pool);
+    max_thread_count = config::pk_index_chunk_io_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        // Each chunk task is dominated by sleeping on OSS HTTP responses; oversubscribe
+        // cores to keep available HTTP concurrency saturated under cold-start storms.
+        max_thread_count = CpuInfo::num_cores() * 4;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_chunk_io")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(config::pk_index_chunk_io_threadpool_size)
+                            .build(&_pk_index_chunk_io_thread_pool));
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, cloud_native_pk_index_chunk_io, _pk_index_chunk_io_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -787,6 +799,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_inner_io_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_chunk_io")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_pk_index_chunk_io_thread_pool));
 #endif
 
     _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager, _metrics, _table_metrics_mgr);
@@ -954,6 +971,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _pk_index_inner_io_thread_pool->shutdown();
         component_times.emplace_back("pk_index_inner_io_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_pk_index_chunk_io_thread_pool) {
+        start = MonotonicMillis();
+        _pk_index_chunk_io_thread_pool->shutdown();
+        component_times.emplace_back("pk_index_chunk_io_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
@@ -1155,6 +1178,7 @@ void ExecEnv::destroy() {
     _pk_index_memtable_flush_thread_pool.reset();
     _lake_partial_update_thread_pool.reset();
     _pk_index_inner_io_thread_pool.reset();
+    _pk_index_chunk_io_thread_pool.reset();
     _metrics = nullptr;
 }
 
