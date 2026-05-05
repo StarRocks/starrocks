@@ -863,7 +863,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
-    private boolean shouldProcessAggFunction(CallOperator agg) {
+    private boolean shouldProcessAggFunction(CallOperator agg, ColumnRefSet supportColumns, boolean isFirstStage) {
         final boolean enableArrayAgg = sessionVariable.isEnableArrayAggLowCardinalityOptimize()
                 && sessionVariable.isEnableArrayLowCardinalityOptimize()
                 && sessionVariable.isEnableStructLowCardinalityOptimize();
@@ -875,11 +875,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return false;
         }
         if (isArrayAgg) {
-            // dictify array_agg only when the first child can be dictified.
+            ColumnRefSet candidateColumns = agg.getUsedColumns();
+            if (isFirstStage && agg.getArguments().get(0).isColumnRef()
+                    && !agg.getArguments().get(0).getType().isStringType()) {
+                candidateColumns.except(List.of(agg.getArguments().get(0).cast()));
+            }
             return agg.getChildren().stream().allMatch(c -> c.isColumnRef() || c.isConstantRef())
-                    && agg.getChild(0).isColumnRef() && agg.getFunction().getArgs()[0].isStringType();
+                    && supportColumns.containsAny(candidateColumns);
         }
-        return agg.getChildren().size() == 1 && agg.getChildren().get(0).isColumnRef();
+        return agg.getChildren().size() == 1 && agg.getChildren().get(0).isColumnRef()
+                && supportColumns.containsAll(agg.getUsedColumns());
     }
 
     @Override
@@ -893,9 +898,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         ColumnRefSet disableColumns = new ColumnRefSet();
         for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
             CallOperator agg = aggregate.getAggregations().get(key);
-            if (!shouldProcessAggFunction(agg)) {
+            final boolean isFirstStage = !agg.getArguments().isEmpty() &&
+                    (!(agg.getArguments().get(0) instanceof ColumnRefOperator ref) || ref.getId() != key.getId());
+            if (!shouldProcessAggFunction(agg, info.inputStringColumns, isFirstStage)) {
                 disableColumns.union(agg.getUsedColumns());
                 disableColumns.union(key);
+            }
+            if (isFirstStage && FunctionSet.ARRAY_AGG.equals(agg.getFnName()) && agg.getArguments().get(0).isColumnRef()
+                    && !agg.getArguments().get(0).getType().isStringType()) {
+                disableColumns.union((ColumnRefOperator) agg.getArguments().get(0));
             }
         }
 
@@ -911,41 +922,33 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
             CallOperator value = aggregate.getAggregations().get(key);
-            if (FunctionSet.ARRAY_AGG.equals(value.getFnName())) {
-                if (!value.getChild(0).isColumnRef() ||
-                        !info.inputStringColumns.contains(value.getChild(0).cast())) {
-                    continue;
-                }
-            } else if (!info.inputStringColumns.containsAll(value.getUsedColumns())) {
-                continue;
-            }
             // aggregate ref -> aggregate expr
             stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+            AggregateFunction aggFn = (AggregateFunction) value.getFunction();
+            if (aggFn.getIntermediateTypeOrReturnType().isStructType()
+                    && !structRefToFieldUseStringRef.containsKey(key.getId())) {
+                final Map<String, ColumnRefOperator> fieldsData;
+                if (FunctionSet.ARRAY_AGG.equals(aggFn.functionName())) {
+                    fieldsData = Maps.newHashMap();
+                    StructType structType = (StructType) aggFn.getIntermediateTypeOrReturnType();
+                    Preconditions.checkState(structType.getFields().size() == value.getArguments().size());
+                    for (int i = 0; i < value.getArguments().size(); i++) {
+                        if (value.getArguments().get(i).isColumnRef() && value.getArguments().get(i).getType().isStringType()
+                                && info.inputStringColumns.contains(value.getArguments().get(i).cast())) {
+                            fieldsData.put(structType.getField(i).getName(), value.getArguments().get(i).cast());
+                        }
+                    }
+                } else if (FunctionSet.ANY_VALUE.equals(aggFn.functionName())) {
+                    fieldsData = getFieldUseStringRefMap(value.getArguments().get(0));
+                } else {
+                    throw new UnsupportedOperationException(
+                            String.format("Unsupported function: %s with Struct Type", aggFn.functionName()));
+                }
+                Preconditions.checkNotNull(fieldsData);
+                structOpToFieldUseStringRef.put(value, fieldsData);
+            }
             if (supportLowCardinality(value.getType())) {
                 info.outputStringColumns.union(key.getId());
-                AggregateFunction aggFn = (AggregateFunction) value.getFunction();
-                if (aggFn.getIntermediateTypeOrReturnType().isStructType()
-                        && !structRefToFieldUseStringRef.containsKey(key.getId())) {
-                    final Map<String, ColumnRefOperator> fieldsData;
-                    if (FunctionSet.ARRAY_AGG.equals(aggFn.functionName())) {
-                        fieldsData = Maps.newHashMap();
-                        StructType structType = (StructType) aggFn.getIntermediateTypeOrReturnType();
-                        Preconditions.checkState(structType.getFields().size() == value.getArguments().size());
-                        for (int i = 0; i < value.getArguments().size(); i++) {
-                            if (value.getArguments().get(i).isColumnRef()
-                                    && info.inputStringColumns.contains(value.getArguments().get(i).cast())) {
-                                fieldsData.put(structType.getField(i).getName(), value.getArguments().get(i).cast());
-                            }
-                        }
-                    } else if (FunctionSet.ANY_VALUE.equals(aggFn.functionName())) {
-                        fieldsData = getFieldUseStringRefMap(value.getArguments().get(0));
-                    } else {
-                        throw new UnsupportedOperationException(
-                                String.format("Unsupported function: %s with Struct Type", aggFn.functionName()));
-                    }
-                    Preconditions.checkNotNull(fieldsData);
-                    structOpToFieldUseStringRef.put(value, fieldsData);
-                }
                 setDefineExpr(key, value, 1);
             } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinct()) {
                 // count/count distinct, need output dict-set in 1st stage
