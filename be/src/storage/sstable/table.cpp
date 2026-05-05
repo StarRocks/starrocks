@@ -297,6 +297,18 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     int64_t multiget_t3_block_read_miss_us = 0;
     int64_t multiget_t3_search_us = 0;
     int64_t multiget_block_read_miss_cnt = 0;
+    // Iter-contiguous miss-run instrumentation: count maximal runs of
+    // back-to-back cache-miss BlockReader calls, and whether each next
+    // miss in a run begins exactly where the previous miss's block ended
+    // (offset + size + trailer). These two counters let downstream
+    // analysis derive (a) mean run length = miss_cnt / run_cnt and
+    // (b) byte-contig pair fraction = pairs / (miss_cnt - run_cnt),
+    // which sizes the coalesce horizon empirically and avoids the
+    // iter-015 prefetch trap of guessing a constant.
+    int64_t multiget_miss_run_cnt = 0;
+    int64_t multiget_byte_contig_miss_pairs_cnt = 0;
+    int64_t cur_miss_run_len = 0;
+    uint64_t prev_miss_end = 0;
     ReadIOStat* stat = options.stat;
     size_t i = 0;
     bool founded = false;
@@ -339,6 +351,27 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                     // Cache miss path: BlockReader did an actual file (OSS) read.
                     multiget_t3_block_read_miss_us += br_us;
                     multiget_block_read_miss_cnt++;
+                    // Track miss-run length and byte-contiguity. The handle was
+                    // decoded in the filter check above when filter != nullptr;
+                    // when filter is null we re-decode here.
+                    BlockHandle h_for_run;
+                    Slice hv_for_run = iiter->value();
+                    bool decoded = (filter != nullptr) ? true : h_for_run.DecodeFrom(&hv_for_run).ok();
+                    if (decoded) {
+                        const BlockHandle& used = (filter != nullptr) ? handle : h_for_run;
+                        uint64_t this_offset = used.offset();
+                        uint64_t this_end = this_offset + used.size() + kBlockTrailerSize;
+                        if (cur_miss_run_len == 0) {
+                            multiget_miss_run_cnt++;
+                        } else if (this_offset == prev_miss_end) {
+                            multiget_byte_contig_miss_pairs_cnt++;
+                        }
+                        cur_miss_run_len++;
+                        prev_miss_end = this_end;
+                    }
+                } else if (stat != nullptr) {
+                    // Cache hit ends the current miss run.
+                    cur_miss_run_len = 0;
                 }
                 ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
                 int64_t ts_end = butil::gettimeofday_us();
@@ -364,6 +397,8 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     TRACE_COUNTER_INCREMENT("multiget_t3_block_read_miss_us", multiget_t3_block_read_miss_us);
     TRACE_COUNTER_INCREMENT("multiget_t3_search_us", multiget_t3_search_us);
     TRACE_COUNTER_INCREMENT("multiget_block_read_miss_cnt", multiget_block_read_miss_cnt);
+    TRACE_COUNTER_INCREMENT("multiget_miss_run_cnt", multiget_miss_run_cnt);
+    TRACE_COUNTER_INCREMENT("multiget_byte_contig_miss_pairs_cnt", multiget_byte_contig_miss_pairs_cnt);
     return s;
 }
 
