@@ -18,13 +18,27 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "common/config_scan_io_fwd.h"
 #include "io_test_base.h"
 
 namespace starrocks::io {
 
+class ScopedAdaptiveLazyActive {
+public:
+    ScopedAdaptiveLazyActive() : _saved(config::io_coalesce_adaptive_lazy_active) {
+        config::io_coalesce_adaptive_lazy_active = true;
+    }
+
+    ~ScopedAdaptiveLazyActive() { config::io_coalesce_adaptive_lazy_active = _saved; }
+
+private:
+    bool _saved;
+};
+
 class SharedBufferedInputStreamTest : public ::testing::Test {};
 
 PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
+    ScopedAdaptiveLazyActive scoped_adaptive_lazy_active;
     size_t len = 1 * 1024 * 1024; // 1MB
     const std::string rand_string = random_string(len);
     auto in = std::make_shared<TestInputStream>(rand_string, len);
@@ -49,6 +63,7 @@ PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
 }
 
 TEST_F(SharedBufferedInputStreamTest, test_orc) {
+    ScopedAdaptiveLazyActive scoped_adaptive_lazy_active;
     size_t len = 100 * 1024 * 1024; // 1MB
     const std::string rand_string = random_string(len);
     auto in = std::make_shared<TestInputStream>(rand_string, len);

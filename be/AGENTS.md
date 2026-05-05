@@ -134,6 +134,14 @@ Minimal filesystem core on top of IOCore.
 - Core tests: `fs_core_test`
 - Remediation: Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem.
 
+### IO (`io`)
+Runtime-aware IO adapters above IOCore/FSCore for buffering, compression, cache-backed reads, async file output, current S3 streams, and formatted output while follow-up PRs move concrete FS/format ownership to narrower modules.
+- Targets: `IO`
+- Allowed internal include prefixes: `io/`, `cache/`, `fs/`, `runtime/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `IOCore`, `Cache`, `FSCore`, `RuntimeCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `io_adapter_test`
+- Remediation: Keep IO limited to stream adapters over IOCore/FSCore/RuntimeCore/Cache during this migration; move concrete filesystem implementations to FileSystem and format serialization to Formats in follow-up PRs.
+
 ### SpillCore (`spillcore`)
 Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.
 - Targets: `SpillCore`

@@ -39,4 +39,14 @@ ADD_BE_LIB(IO
         formatted_output_stream_file.cpp
 )
 
-target_link_libraries(IO PUBLIC IOCore)
+target_link_libraries(IO PUBLIC
+        IOCore
+        Cache
+        FSCore
+        RuntimeCore
+        TypesCore
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
