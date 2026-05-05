@@ -90,7 +90,7 @@ This topic introduces the following types of FE configurations:
 
 ### enable_json_flat
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
@@ -291,7 +291,7 @@ This topic introduces the following types of FE configurations:
 - Default: 10
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values &gt; 0 and &lt; 1000 enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
 - Introduced in: v3.2.0
 
@@ -303,6 +303,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum number of HDFS file descriptors that can be opened.
 - Introduced in: -
+
+### max_hdfs_scanner_num
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Maximum number of concurrent remote scanners (HDFS, object storage, etc.) that ConnectorScanNode can run simultaneously. This value caps estimated concurrency at startup and also limits pending-scanner scheduling at runtime, controlling thread, memory, and file-handle pressure.
+- Introduced in: v3.2.0
 
 ### max_memory_sink_batch_count
 
@@ -363,7 +372,7 @@ This topic introduces the following types of FE configurations:
 - Default: -1
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: Timeout duration to establish HTTP connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
 - Introduced in: v3.0.9
 
@@ -372,7 +381,7 @@ This topic introduces the following types of FE configurations:
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
 - Introduced in: -
 
@@ -484,13 +493,13 @@ This topic introduces the following types of FE configurations:
 - Description: Controls whether `ScanExecutor` uses `LockFreeWorkGroupScanTaskQueue` for OLAP scan and connector scan task scheduling. When enabled, scan tasks are scheduled through a lock-free per-workgroup queue plus a workgroup-level coordinator, which reduces contention compared with the legacy mutex-based `WorkGroupScanTaskQueue`. Set this item to `false` to fall back to the legacy scan task queue implementation during troubleshooting or rollback.
 - Introduced in: v4.1.0
 
-### pk_index_parallel_get_threadpool_size
+### pk_index_parallel_execution_threadpool_size
 
 - Default: 1048576
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Sets the maximum queue size (number of pending tasks) for the "cloud_native_pk_index_get" thread pool used by PK index parallel get operations in shared-data (cloud-native/lake) mode. The actual thread count for that pool is controlled by `pk_index_parallel_get_threadpool_max_threads`; this setting only limits how many tasks may be queued awaiting execution. The very large default (2^20) effectively makes the queue unbounded; lowering it prevents excessive memory growth from queued tasks but may cause task submissions to block or fail when the queue is full. Tune together with `pk_index_parallel_get_threadpool_max_threads` based on workload concurrency and memory constraints.
+- Description: Sets the maximum queue size (number of pending tasks) for the PK index parallel execution thread pool used in shared-data (cloud-native/lake) mode. The actual thread count for that pool is controlled by `pk_index_parallel_execution_threadpool_max_threads`; this setting only limits how many tasks may be queued awaiting execution. The very large default (2^20) effectively makes the queue unbounded; lowering it prevents excessive memory growth from queued tasks but may cause task submissions to block or fail when the queue is full. Tune together with `pk_index_parallel_execution_threadpool_max_threads` based on workload concurrency and memory constraints.
 - Introduced in: -
 
 ### priority_exec_state_report_max_threads
@@ -638,6 +647,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
 - Introduced in: v3.5.10, v4.0.2
+
+### partial_update_memory_limit_per_worker
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum memory per worker thread for partial update operations. Controls the memory footprint of individual worker threads when processing partial updates.
+- Introduced in: -
 
 ### enable_load_spill_parallel_merge
 
@@ -803,6 +821,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The RPC timeout for Stream Load.
 - Introduced in: -
 
+### transaction_publish_version_thread_pool_num_min
+
+- Default: 0
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Minimum number of threads in the Publish Version thread pool. The pool can shrink to this value when idle. `0` means no fixed lower bound.
+- Introduced in: -
+
 ### transaction_publish_version_thread_pool_idle_time_ms
 
 - Default: 60000
@@ -820,6 +847,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
+
+### use_mmap_allocate_chunk
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use anonymous mmap (`MAP_ANONYMOUS | MAP_PRIVATE`) for chunk allocation. When enabled, many VM mappings are created; you must raise `vm.max_map_count` (e.g., `echo 262144 > /proc/sys/vm/max_map_count`) and set a large `chunk_reserved_bytes_limit`, otherwise frequent map/unmap operations will cause severe performance degradation.
+- Introduced in: v3.2.0
 
 ### write_buffer_size
 
