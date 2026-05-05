@@ -231,6 +231,25 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                 const size_t sz = static_cast<size_t>(std::distance(bounds[c], bounds[c + 1]));
                 chunk_outs[c].assign(sz, std::string());
                 RandomAccessFileOptions opts2;
+                // Skip filling the local on-disk cache for the chunked-parallel
+                // fan-out path. Cold-start storms drive vdb peak BW to the
+                // ESSD ceiling (562-667 MB/s on this template, IOPS 9-12 K
+                // well below ceiling — i.e. bandwidth-bound, not IOPS-bound).
+                // Each cache-fill write contends with the BE process for the
+                // same disk bandwidth that the cold-start fan-out OSS reads
+                // depend on. Bypassing the disk-cache write removes that
+                // self-contention. Memory `block_cache` (table-level LRU in
+                // `sstable::Options::block_cache`) is unaffected, so hot-key
+                // re-reads inside the same multi_get / subsequent multi_gets
+                // still hit RAM. Existing cached blocks are still SERVED from
+                // disk — `skip_fill_local_cache` only blocks the WRITE side.
+                // The sequential / non-chunked fallback path on line ~293
+                // continues to use the long-lived `_rf` which still fills the
+                // disk cache (steady-state single-key upserts and small
+                // batches go through that path; the chunked path is gated by
+                // `key_indexes.size() >= pk_index_parallel_chunk_min_keys=32`,
+                // which is the cold-start fan-out signature).
+                opts2.skip_fill_local_cache = true;
                 if (!_sstable_pb.encryption_meta().empty()) {
                     ASSIGN_OR_RETURN(auto info,
                                      KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
