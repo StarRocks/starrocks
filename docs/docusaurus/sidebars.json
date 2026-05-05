@@ -121,7 +121,8 @@
                         "deployment/upgrade",
                         "deployment/downgrade"
                     ]
-                }
+                },
+                "deployment/feature-support-shared-data"
             ]
         },
         {
