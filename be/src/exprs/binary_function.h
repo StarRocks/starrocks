@@ -256,7 +256,8 @@ public:
 
             NullColumnPtr null_flags;
             if (data->is_nullable()) {
-                null_flags = ColumnHelper::as_raw_column<NullableColumn>(data)->null_column();
+                null_flags = NullColumn::static_pointer_cast(
+                        Column::mutate(ColumnHelper::as_raw_column<NullableColumn>(data)->null_column()));
             } else {
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
                 null_flags->resize(data->size());
