@@ -23,9 +23,9 @@
 #include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/chunk_helper.h"
 #include "storage/table_reader.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

@@ -103,6 +103,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "service/staros_worker.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
@@ -1108,6 +1109,7 @@ void ExecEnv::destroy() {
     }
 #endif
     SAFE_DELETE(_pipeline_timer);
+    ThriftRpcHelper::clear();
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
     SAFE_DELETE(_backend_client_cache);

@@ -24,7 +24,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

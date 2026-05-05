@@ -33,7 +33,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

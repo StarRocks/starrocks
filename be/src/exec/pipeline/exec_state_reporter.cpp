@@ -31,7 +31,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "runtime/runtime_state_helper.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {

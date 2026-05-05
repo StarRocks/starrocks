@@ -26,7 +26,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/client_cache.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

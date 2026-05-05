@@ -40,6 +40,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/delete_handler.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/location_provider.h"
@@ -54,7 +55,6 @@
 #include "storage/segment_stream_converter.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::lake {
 

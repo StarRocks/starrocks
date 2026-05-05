@@ -33,6 +33,7 @@ set(RUNTIME_CORE_FILES
     query_statistics.cpp
     record_batch_queue.cpp
     runtime_metrics.cpp
+    thrift_rpc_helper.cpp
     stream_load/stream_load_metrics.cpp
     global_dict/decoder.cpp
     global_dict/miscs.cpp

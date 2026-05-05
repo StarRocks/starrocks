@@ -332,7 +332,6 @@ set(EXEC_FILES
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
-        ./util/thrift_rpc_helper_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp

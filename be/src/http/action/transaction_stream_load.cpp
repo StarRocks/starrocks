@@ -57,9 +57,9 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "util/byte_buffer.h"
 #include "util/json_util.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
