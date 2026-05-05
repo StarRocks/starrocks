@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
 set(EXEC_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     exec_node_exec_core_test.cpp
     runtime_filter_exec_core_test.cpp
 )
@@ -71,7 +76,7 @@ add_executable(data_sink_core_test $<TARGET_OBJECTS:starrocks_data_sink_core_tes
 target_link_libraries(data_sink_core_test ${DATA_SINK_CORE_TEST_LINK_LIBS} gtest_main)
 
 set(SCHEMA_SCANNER_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     schema_scanner/schema_scanner_core_test.cpp
 )
 
@@ -102,7 +107,7 @@ add_executable(schema_scanner_core_test $<TARGET_OBJECTS:starrocks_schema_scanne
 target_link_libraries(schema_scanner_core_test ${SCHEMA_SCANNER_CORE_TEST_LINK_LIBS} gtest_main)
 
 set(EXEC_SCHEMA_SCANNERS_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     schema_scanner/exec_schema_scanners_test.cpp
 )
 
@@ -133,7 +138,7 @@ add_executable(exec_schema_scanners_test $<TARGET_OBJECTS:starrocks_exec_schema_
 target_link_libraries(exec_schema_scanners_test ${EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS} gtest_main)
 
 set(SORTING_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     sorting/sorting_core_test.cpp
 )
 
@@ -164,7 +169,7 @@ add_executable(exec_sorting_core_test $<TARGET_OBJECTS:starrocks_sorting_core_te
 target_link_libraries(exec_sorting_core_test ${SORTING_CORE_TEST_LINK_LIBS} gtest_main)
 
 set(JOIN_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     join_hash_map_test.cpp
 )
 

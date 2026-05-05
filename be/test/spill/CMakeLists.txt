@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
 set(SPILL_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     operator_mem_resource_manager_test.cpp
     query_spill_manager_test.cpp
     spill_block_manager_test.cpp
