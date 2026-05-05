@@ -52,8 +52,7 @@ namespace starrocks {
 // the AWS SDK headers via fs_s3.h.
 static_assert(static_cast<int>(S3ClientFactory::OperationType::UNKNOWN) == S3ClientOpType::kUnknown);
 static_assert(static_cast<int>(S3ClientFactory::OperationType::RENAME_FILE) == S3ClientOpType::kRenameFile);
-static_assert(static_cast<int>(S3ClientFactory::OperationType::PK_INDEX_SST_OPEN) ==
-              S3ClientOpType::kPkIndexSstOpen);
+static_assert(static_cast<int>(S3ClientFactory::OperationType::PK_INDEX_SST_OPEN) == S3ClientOpType::kPkIndexSstOpen);
 
 static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
     switch (error) {
