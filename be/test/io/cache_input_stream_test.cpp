@@ -380,7 +380,7 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
         ASSERT_EQ(stats.read_block_cache_count, block_count);
     }
-    fs::remove_all(cache_dir);
+    std::filesystem::remove_all(cache_dir);
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
