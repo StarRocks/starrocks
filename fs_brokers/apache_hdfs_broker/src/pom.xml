@@ -102,20 +102,7 @@ under the License.
                     <id>cloudera</id>
                     <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
                 </repository>
-                <!-- for bdb je -->
-                <repository>
-                    <id>oracleReleases</id>
-                    <url>https://download.oracle.com/maven</url>
-                </repository>
             </repositories>
-
-            <pluginRepositories>
-                <!-- for cup-maven-plugin -->
-                <pluginRepository>
-                    <id>spring-plugins</id>
-                    <url>http://repo.spring.io/plugins-release/</url>
-                </pluginRepository>
-            </pluginRepositories>
         </profile>
     </profiles>
 
