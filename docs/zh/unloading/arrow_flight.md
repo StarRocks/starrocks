@@ -53,6 +53,8 @@ Arrow Flight SQL 的集成通过以下方式解决了这些问题：
 
 此外，StarRocks 提供了支持 Arrow Flight SQL 的通用 JDBC 驱动，应用程序可以在不牺牲 JDBC 兼容性或与其他 Arrow Flight 系统互操作性的前提下，轻松接入这一路径。
 
+对于客户端无法直接访问 BE 节点的部署场景（例如私有网络或 Kubernetes 集群），StarRocks 提供了 Arrow Flight 代理功能。启用该功能后，FE 可充当代理，将后端节点中的 Arrow 数据路由至客户端，在满足网络拓扑限制的同时，仍能保持列式传输的优势。此代理模式会带来轻微的性能开销，但可在无法直接连接 BE 的环境中实现 Arrow Flight SQL 访问。
+
 ### 性能对比
 
 大量测试表明，数据读取速度显著提升。在多种数据类型（整数、浮点、字符串、布尔值和混合列）下，Arrow Flight SQL 始终优于传统 PyMySQL 与 Pandas `read_sql` 接口。主要结果包括：
@@ -150,6 +152,34 @@ arrow_flight_port = 9408
 // be.conf
 arrow_flight_port = 9419
 ```
+
+#### 配置 Arrow Flight 代理（可选）
+
+如果客户端应用程序无法直接访问您的 BE 节点（例如，部署在私有网络或 Kubernetes 环境中时），您可以在 FE 上启用 Arrow Flight 代理功能，以便将来自 BE 节点的数据路由通过 FE。
+
+代理功能由两个全局变量控制： 
+
+- `arrow_flight_proxy_enabled`：控制是否启用代理模式。默认值为 `true`。启用后会带来轻微的性能开销。
+- `arrow_flight_proxy`：指定代理主机名。若为空（默认值），则当前 FE 节点充当代理。若使用其他代理端点，可将其设置为特定主机名。
+
+若要为所有会话全局配置这些变量：
+
+```sql
+-- 启用或禁用代理模式（默认启用）
+SET GLOBAL arrow_flight_proxy_enabled = true;
+
+-- 设置特定的代理主机名（可选，默认使用当前前端）
+SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
+```
+
+:::note
+
+- 代理功能默认处于启用状态，这可能会导致吞吐量比直接连接 BE 节点低 8-10%。如果您的客户端可以直接通过网络访问 BE 节点，或者 FE 侧的内存资源有限，您可以禁用代理以获得最佳性能：`SET GLOBAL arrow_flight_proxy_enabled = false;`。
+- 当 `arrow_flight_proxy` 为空时，Ticket 将自动通过客户端最初连接的 FE 节点进行路由。
+- **重要提示**：`arrow_flight_proxy` 和 `arrow_flight_proxy_enabled` 设置应通过 `SET GLOBAL` 进行全局配置。不支持会话级设置。
+- **需重启会话**：更改代理设置仅对新会话生效。现有的 Arrow Flight SQL 会话将保持原有设置，直至重新连接。
+
+:::
 
 #### 建立连接
 
