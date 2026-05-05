@@ -645,11 +645,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     if (max_thread_count <= 0) {
         // Each SST-open task is 4 sequential OSS round-trips (footer + index + metaindex
         // + filter) inside Table::Open. Pure I/O wait, so oversubscribe cores to keep
-        // OSS HTTP concurrency saturated under cold-start storms (mirrors chunk_io /
-        // inner_io rationale). Splitting from pk_index_execution_thread_pool eliminates
-        // the head-of-chain throttle where ~150 cold-start opens queue behind a 16-thread
-        // pool also shared with parallel-publish workers.
-        max_thread_count = CpuInfo::num_cores() * 4;
+        // OSS HTTP concurrency saturated under cold-start storms. The factor is 8x
+        // (vs 4x for chunk_io / inner_io / sst_walk) because cold-start fan-out reaches
+        // 200+ unique SSTs across all tablets simultaneously, observed saturating the
+        // pool at 128 with queue depth >800 on multiple BEs. Doubling to 8x lifts the
+        // ceiling without touching the disk-cache-write path (sst_open is vdb-neutral
+        // since #72674) — only OSS RPS exposure increases during the storm.
+        max_thread_count = CpuInfo::num_cores() * 8;
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_sst_open")
                             .set_min_threads(1)
