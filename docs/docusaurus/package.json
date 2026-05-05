@@ -18,25 +18,17 @@
   "dependencies": {
     "@algolia/client-search": "^5.45.0",
     "@docsearch/react": "3",
-    "@docusaurus/core": "^3.9.2",
-    "@docusaurus/faster": "^3.9.2",
-    "@docusaurus/plugin-client-redirects": "^3.9.2",
-    "@docusaurus/preset-classic": "^3.9.2",
-    "@docusaurus/theme-search-algolia": "^3.9.2",
+    "@docusaurus/core": "^3.10.0",
+    "@docusaurus/faster": "^3.10.0",
+    "@docusaurus/plugin-client-redirects": "^3.10.0",
+    "@docusaurus/preset-classic": "^3.10.0",
+    "@docusaurus/theme-search-algolia": "^3.10.0",
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
     "fs-extra": "^11.1.1",
     "prism-react-renderer": "^2.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
-  },
-  "resolutions": {
-    "qs": "6.14.1",
-    "minimatch": "^3.1.4",
-    "svgo": "^3.3.3",
-    "mdast-util-to-hast": "^13.2.1",
-    "lodash": "^4.17.23",
-    "picomatch": "^2.3.2"
   },
   "overrides": {
     "react-router": {
@@ -51,8 +43,8 @@
     "webpack-dev-middleware": "5.3.4"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.9.2",
-    "@docusaurus/types": "^3.9.2"
+    "@docusaurus/module-type-aliases": "^3.10.0",
+    "@docusaurus/types": "^3.10.0"
   },
   "browserslist": {
     "production": [
