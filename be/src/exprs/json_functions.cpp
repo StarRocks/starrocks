@@ -124,11 +124,11 @@ Status JsonFunctions::json_path_prepare(FunctionContext* context, FunctionContex
     } catch (const boost::escaped_list_error& e) {
         return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
     }
-    auto* parsed_paths = new std::vector<SimpleJsonPath>();
-    RETURN_IF_ERROR(_get_parsed_paths(path_exprs, parsed_paths));
+    auto parsed_paths = std::make_unique<std::vector<SimpleJsonPath>>();
+    RETURN_IF_ERROR(_get_parsed_paths(path_exprs, parsed_paths.get()));
 
-    context->set_function_state(scope, parsed_paths);
     VLOG(10) << "prepare json path. size: " << parsed_paths->size();
+    context->set_function_state(scope, parsed_paths.release());
     return Status::OK();
 }
 
