@@ -23,7 +23,7 @@
 #include "column/raw_data_visitor.h"
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/persistent_index_parallel_publish_context.h"

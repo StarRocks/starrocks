@@ -47,7 +47,7 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/prof/heap_prof.h"
 
 namespace starrocks {

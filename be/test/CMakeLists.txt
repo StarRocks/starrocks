@@ -261,7 +261,6 @@ set(EXEC_FILES
         ./http/action/proc_profile_e2e_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/formatted_output_stream_file_test.cpp
-        ./io/io_profiler_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp

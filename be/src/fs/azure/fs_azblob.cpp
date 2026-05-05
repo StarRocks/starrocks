@@ -28,8 +28,8 @@
 #include "fs/fs_registry.h"
 #include "fs/fs_scheme.h"
 #include "fs/output_stream_adapter.h"
+#include "io/core/io_profiler.h"
 #include "io/core/output_stream.h"
-#include "io/io_profiler.h"
 
 namespace starrocks {
 

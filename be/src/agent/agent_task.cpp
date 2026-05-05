@@ -26,7 +26,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gutil/strings/join.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
