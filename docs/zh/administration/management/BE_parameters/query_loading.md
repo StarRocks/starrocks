@@ -871,16 +871,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_channel_rpc_thread_pool_num
 
-- 默认值：64
+- 默认值：-1
 - 类型：Int
 - 单位：Threads
-- 是否动态：否
+- 是否动态：是
 - 描述：异步处理 load channel Open RPC 的线程池大小。过小可能导致提交失败，过大增加线程开销。
 - 引入版本：v3.5.0
 
 ### load_channel_rpc_thread_pool_queue_size
 
-- 默认值：2048
+- 默认值：1024000
 - 类型：Int
 - 单位：-
 - 是否动态：否
@@ -978,7 +978,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_segment_thread_pool_num_max
 
-- 默认值：16
+- 默认值：128
 - 类型：Int
 - 单位：Threads
 - 是否动态：否
@@ -987,7 +987,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_segment_thread_pool_queue_size
 
-- 默认值：2048
+- 默认值：10240
 - 类型：Int
 - 单位：-
 - 是否动态：否
