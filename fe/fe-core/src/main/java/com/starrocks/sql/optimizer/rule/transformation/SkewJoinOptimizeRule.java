@@ -181,7 +181,6 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 continue;
             }
             if (!skewInfoOpt.get().isSkewed()) {
-                RULE_USAGE_METRICS.notTriggered(NoTriggerReason.NOT_SKEWED);
                 return false;
             }
             skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), skewInfoOpt.get()));

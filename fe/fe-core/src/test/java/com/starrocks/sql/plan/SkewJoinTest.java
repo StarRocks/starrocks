@@ -457,7 +457,7 @@ public class SkewJoinTest extends PlanTestBase {
             connectContext.getGlobalStateMgr().setStatisticStorage(statisticsStorage);
             connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
             connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
-            connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
 
             // WHEN
             String sql = "select * from t0 left join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5";
