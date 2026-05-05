@@ -21,6 +21,7 @@
 #include "base/types/int128.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
+#include "common/stack_util.h"
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/core/io_profiler.h"
@@ -34,7 +35,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

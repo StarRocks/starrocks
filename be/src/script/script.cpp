@@ -20,6 +20,7 @@
 
 #include "base/url_coding.h"
 #include "common/logging.h"
+#include "common/stack_util.h"
 #include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/key_cache.h"
@@ -42,7 +43,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/stack_util.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
