@@ -60,6 +60,14 @@ select regexp_replace('a b c', " ", "-");
 -- result:
 a-b-c
 -- !result
+select regexp_replace('a b c', '(b)', '<\\1>');
+-- result:
+a <b> c
+-- !result
+select regexp_replace('abcd', '^a.*$', 'xx');
+-- result:
+xx
+-- !result
 select regexp_replace('           XXXX', '       ', '');
 -- result:
     XXXX
