@@ -184,6 +184,11 @@ Status CSVReader::more_rows() {
     bool is_escape_column = false;
     bool notGetLine = true;
     bool reachBuffEnd = false;
+    // Tracks a stray '\r' that was consumed inside ENCLOSE state because
+    // the row delimiter is "\n" and the bytes after the closing enclose
+    // form a "\r\n" sequence. The length accounting in NEWROW must debit
+    // one additional byte when this is set. See issue #51725.
+    bool enclose_trailing_cr_consumed = false;
     _columns.clear();
     while (true) {
         // At the end of a row, or the end of a column, no new data is read.
@@ -257,6 +262,25 @@ Status CSVReader::more_rows() {
                     curState = ENCLOSE_ESCAPE;
                     _escape_pos.insert(_buff.position_offset() - 1);
                 } else {
+                    // CRLF compatibility (issue #51725): when the row
+                    // delimiter is "\n" and the next two bytes are
+                    // "\r\n", consume the stray '\r' here so ORDINARY
+                    // does not retain it as column content.
+                    if (_row_delimiter_length == 1 && _parse_options.row_delimiter[0] == '\n' &&
+                        *(_buff.position()) == '\r') {
+                        if (_buff.available() < 2) {
+                            status = readMore(notGetLine);
+                            if (!status.ok()) { // LCOV_EXCL_START
+                                is_enclose_column = true;
+                                curState = NEWROW;
+                                goto newrow_label; // LCOV_EXCL_STOP
+                            }
+                        }
+                        if (_buff.available() >= 2 && *(_buff.position() + 1) == '\n') {
+                            _buff.skip(1);
+                            enclose_trailing_cr_consumed = true;
+                        }
+                    }
                     preState = curState;
                     curState = ORDINARY;
                 }
@@ -401,6 +425,7 @@ Status CSVReader::more_rows() {
                     curState = START;
                     is_enclose_column = false;
                     is_escape_column = false;
+                    enclose_trailing_cr_consumed = false;
                     if (status.is_end_of_file()) {
                         return status;
                     }
@@ -429,11 +454,14 @@ Status CSVReader::more_rows() {
                     }
 
                     if (UNLIKELY(is_enclose_column)) {
+                        // Remove the last enclose character, and the stray
+                        // '\r' that ENCLOSE consumed for CRLF inputs (issue
+                        // #51725).
+                        size_t extra = enclose_trailing_cr_consumed ? 1 : 0;
                         if (UNLIKELY(_parse_options.trim_space && white_space_start != std::string::npos)) {
-                            column_length = column_end - column_start - 1;
+                            column_length = column_end - column_start - 1 - extra;
                         } else {
-                            // Remove the last enclose character.
-                            column_length = column_end - _row_delimiter_length - column_start - 1;
+                            column_length = column_end - _row_delimiter_length - column_start - 1 - extra;
                         }
                     } else {
                         column_length = column_end - _row_delimiter_length - column_start;
@@ -455,6 +483,7 @@ Status CSVReader::more_rows() {
             curState = START;
             is_escape_column = false;
             is_enclose_column = false;
+            enclose_trailing_cr_consumed = false;
             white_space_start = std::string::npos;
             parsed_start = _buff.position_offset();
             if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
