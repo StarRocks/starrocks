@@ -326,6 +326,18 @@ bool any_reader_not_null(const std::map<std::string, std::unique_ptr<ColumnReade
 
 } // anonymous namespace
 
+Status VariantShreddedReadHints::add_path(std::string path) {
+    ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(std::string_view(path)));
+    shredded_paths.emplace_back(std::move(path));
+    parsed_shredded_paths.emplace_back(std::move(parsed_path));
+    return Status::OK();
+}
+
+void VariantShreddedReadHints::clear() {
+    shredded_paths.clear();
+    parsed_shredded_paths.clear();
+}
+
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
     // We will only set a complex type in ParquetField
@@ -440,7 +452,8 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> lake_schema_subfield(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, lake_schema_field, subfield_pos,
+        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, lake_schema_field,
+                                          opts.file_meta_data->schema().exist_filed_id(), subfield_pos,
                                           lake_schema_subfield);
 
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
@@ -509,7 +522,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
         }
     }
     return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields), hints.shredded_paths,
+                                                 std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
 }
 
@@ -595,7 +608,7 @@ void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& 
 
 void ColumnReaderFactory::get_subfield_pos_with_pruned_type(
         const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
-        const TIcebergSchemaField* lake_schema_field, std::vector<int32_t>& pos,
+        const TIcebergSchemaField* lake_schema_field, bool parquet_has_field_id, std::vector<int32_t>& pos,
         std::vector<const TIcebergSchemaField*>& lake_schema_subfield) {
     // For Struct type with schema change, we need to consider a subfield not existed situation.
     // When Iceberg adds a new struct subfield, the original parquet file does not contain the newly added subfield.
@@ -606,36 +619,52 @@ void ColumnReaderFactory::get_subfield_pos_with_pruned_type(
     }
 
     std::unordered_map<int32_t, size_t> field_id_2_pos{};
+    std::unordered_map<std::string, size_t> field_name_2_pos{};
     for (size_t i = 0; i < field.children.size(); i++) {
-        field_id_2_pos.emplace(field.children[i].field_id, i);
+        if (parquet_has_field_id) {
+            field_id_2_pos.emplace(field.children[i].field_id, i);
+        } else {
+            field_name_2_pos.emplace(Utils::format_name(field.children[i].name, case_sensitive), i);
+        }
     }
     for (size_t i = 0; i < col_type.children.size(); i++) {
-        const auto& format_subfield_name =
+        const auto schema_subfield_name =
                 case_sensitive ? col_type.field_names[i] : boost::algorithm::to_lower_copy(col_type.field_names[i]);
+        const auto parquet_subfield_name =
+                !col_type.field_physical_names.empty()
+                        ? Utils::format_name(col_type.field_physical_names[i], case_sensitive)
+                        : schema_subfield_name;
 
-        auto iceberg_it = subfield_name_2_field_schema.find(format_subfield_name);
+        auto iceberg_it = subfield_name_2_field_schema.find(schema_subfield_name);
         if (iceberg_it == subfield_name_2_field_schema.end()) {
             // This situation should not be happened, means table's struct subfield not existed in iceberg schema
             // Below code is defensive
-            DCHECK(false) << "Struct subfield name: " + format_subfield_name + " not found in iceberg schema.";
+            DCHECK(false) << "Struct subfield name: " + schema_subfield_name + " not found in iceberg schema.";
             pos[i] = -1;
             lake_schema_subfield[i] = nullptr;
             continue;
         }
 
-        int32_t field_id = iceberg_it->second->field_id;
-
-        auto parquet_field_it = field_id_2_pos.find(field_id);
-        if (parquet_field_it == field_id_2_pos.end()) {
-            // Means newly added struct subfield not existed in an original parquet file, we put nullptr
-            // column reader in children_reader, we will append the default value for this subfield later.
-            pos[i] = -1;
-            lake_schema_subfield[i] = nullptr;
-            continue;
+        if (parquet_has_field_id) {
+            int32_t field_id = iceberg_it->second->field_id;
+            auto parquet_field_it = field_id_2_pos.find(field_id);
+            if (parquet_field_it == field_id_2_pos.end()) {
+                pos[i] = -1;
+                lake_schema_subfield[i] = nullptr;
+                continue;
+            }
+            pos[i] = parquet_field_it->second;
+            lake_schema_subfield[i] = iceberg_it->second;
+        } else {
+            auto parquet_field_it = field_name_2_pos.find(parquet_subfield_name);
+            if (parquet_field_it == field_name_2_pos.end()) {
+                pos[i] = -1;
+                lake_schema_subfield[i] = nullptr;
+                continue;
+            }
+            pos[i] = parquet_field_it->second;
+            lake_schema_subfield[i] = iceberg_it->second;
         }
-
-        pos[i] = parquet_field_it->second;
-        lake_schema_subfield[i] = iceberg_it->second;
     }
 }
 

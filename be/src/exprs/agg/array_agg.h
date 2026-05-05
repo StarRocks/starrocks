@@ -18,8 +18,8 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
@@ -219,7 +219,7 @@ struct ArrayAggWindowState final : ArrayAggAggregateState<PT, is_distinct, MyHas
     }
 };
 
-template <LogicalType LT, bool is_distinct, template <LogicalType, bool, typename> typename State,
+template <LogicalType LT, bool is_distinct, template <LogicalType, bool, typename...> typename State,
           typename MyHashSet = std::set<int>>
 class ArrayAggAggregateFunctionBase final
         : public AggregateFunctionBatchHelper<State<LT, is_distinct, MyHashSet>,

@@ -30,6 +30,7 @@ import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -42,6 +43,7 @@ import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -57,6 +59,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -85,6 +88,8 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -2736,9 +2741,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(1, partitionExpr.size());
         Assertions.assertTrue(partitionExpr.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) partitionExpr.get(0);
-        Assertions.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
-        SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
-        Assertions.assertEquals(1, slotDescriptor.getId().asInt());
+        Assertions.assertEquals("k1", slotRef.getColumnName());
+        Assertions.assertFalse(slotRef.getType().isInvalid());
     }
 
     @Test
@@ -2917,7 +2921,33 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "distributed by hash(l_shipdate) " +
                 " as select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
-        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        Assertions.assertTrue(exception.getMessage().contains("Getting syntax error"));
+    }
+
+    @Test
+    public void testInjectedUnsupportedRefreshSchemeCreateRejectedBeforePersistence() throws Exception {
+        String mvName = "unsupported_refresh_scheme_create_guard_mv";
+        String sql = "create materialized view test." + mvName + "\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "as select k2, sum(v1) as total from test.tbl1 group by k2;";
+        try {
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            stmt.setRefreshSchemeDesc(new RefreshSchemeClause(NodePosition.ZERO,
+                    stmt.getRefreshSchemeDesc().getMoment()));
+
+            DdlException exception = Assertions.assertThrows(DdlException.class,
+                    () -> currentState.getLocalMetastore().createMaterializedView(stmt));
+            Assertions.assertEquals("Unsupported refresh scheme type", exception.getMessage());
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName));
+        } finally {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName) != null) {
+                starRocksAssert.dropMaterializedView("test." + mvName);
+            }
+        }
     }
 
     @Test
@@ -2941,6 +2971,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(),
                             "async_mv_1");
+            Assertions.assertFalse(mv.getRefreshScheme().isIncremental());
+            Method getJob = MaterializedViewMgr.class.getDeclaredMethod("getJob", MvId.class);
+            getJob.setAccessible(true);
+            Assertions.assertNull(getJob.invoke(GlobalStateMgr.getCurrentState().getMaterializedViewMgr(), mv.getMvId()));
             Assertions.assertTrue(mv.getFullSchema().get(0).isKey());
             Assertions.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {
@@ -6049,19 +6083,16 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Column column = new Column("c1", com.starrocks.type.IntegerType.INT);
         ColumnRefOperator colRef = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "c1", true);
 
-        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
         org.apache.iceberg.Schema schema =
                 new org.apache.iceberg.Schema(org.apache.iceberg.types.Types.NestedField.required(
                         1, "c1", org.apache.iceberg.types.Types.IntegerType.get()));
         org.apache.iceberg.PartitionSpec spec =
                 org.apache.iceberg.PartitionSpec.builderFor(schema).identity("c1").build();
-        org.apache.iceberg.TableMetadata meta = Mockito.mock(org.apache.iceberg.TableMetadata.class);
+        org.apache.iceberg.TableMetadata meta = org.apache.iceberg.TableMetadata.newTableMetadata(
+                schema, spec, "/tmp/iceberg-test", java.util.Collections.emptyMap());
         org.apache.iceberg.TableOperations ops = Mockito.mock(org.apache.iceberg.TableOperations.class);
-        Mockito.when(nativeTable.schema()).thenReturn(schema);
-        Mockito.when(nativeTable.spec()).thenReturn(spec);
-        Mockito.when(nativeTable.operations()).thenReturn(ops);
         Mockito.when(ops.current()).thenReturn(meta);
-        Mockito.when(meta.uuid()).thenReturn("uuid-1234");
+        org.apache.iceberg.BaseTable nativeTable = new org.apache.iceberg.BaseTable(ops, "t");
 
         IcebergTable icebergTable = IcebergTable.builder()
                 .setId(1)

@@ -59,8 +59,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -726,38 +724,6 @@ public class LogicalPlanPrinter {
         @Override
         public OperatorStr visitPhysicalNoCTE(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, Integer step) {
-            // TODO
-            return new OperatorStr("PhysicalStreamScan", step, Collections.emptyList());
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamJoin(OptExpression optExpression, Integer step) {
-            OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
-            OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
-
-            PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder().append("StreamJoin/").append(join.getJoinType()).append(" (");
-            sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
-            sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
-            sb.append(")");
-
-            return new OperatorStr(sb.toString(), step, Arrays.asList(leftChild, rightChild));
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamAgg(OptExpression optExpression, Integer step) {
-            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
-
-            PhysicalStreamAggOperator aggregate = (PhysicalStreamAggOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("StreamAgg ");
-            sb.append(" aggregate [" + aggregate.getAggregations() + "]");
-            sb.append(" group by [" + aggregate.getGroupBys() + "]");
-            sb.append(" having [" + aggregate.getPredicate() + "]");
-            return new OperatorStr(sb.toString(), step, Collections.singletonList(child));
         }
 
         @Override

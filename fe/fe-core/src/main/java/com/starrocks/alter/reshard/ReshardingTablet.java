@@ -32,6 +32,14 @@ public interface ReshardingTablet {
 
     long getFirstOldTabletId();
 
+    /**
+     * Returns the first new tablet id produced by this reshard. New tablet
+     * ids are freshly allocated via GlobalStateMgr.getNextId() and never
+     * reused, so the returned value is globally unique and uniquely
+     * identifies this reshard op. Symmetric with {@link #getFirstOldTabletId()}.
+     */
+    long getFirstNewTabletId();
+
     List<Long> getOldTabletIds();
 
     List<Long> getNewTabletIds();

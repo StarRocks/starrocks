@@ -22,7 +22,6 @@
 #include <array>
 #endif
 
-#include "agent/master_info.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
@@ -30,6 +29,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/client_cache.h"

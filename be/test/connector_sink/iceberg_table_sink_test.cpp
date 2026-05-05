@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/iceberg_table_sink.h"
+#include "exec/data_sinks/iceberg_table_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -24,8 +24,12 @@
 #include "common/config_exec_fwd.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/exec_env.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -36,6 +40,9 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
     }
 
     void TearDown() override {}
@@ -76,7 +83,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;
@@ -122,7 +129,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
     // Test case 1: data_location is set and not empty, should use data_location
     {
@@ -315,7 +322,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
     TDataSink data_sink;
     data_sink.__set_type(TDataSinkType::ICEBERG_DELETE_SINK); // Set to delete sink type
@@ -384,7 +391,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;
@@ -471,7 +478,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_al
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;
@@ -555,7 +562,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_col
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;

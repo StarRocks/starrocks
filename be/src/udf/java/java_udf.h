@@ -86,13 +86,19 @@ public:
     std::string to_cxx_string(jstring str);
     std::string dumpExceptionString(jthrowable throwable);
     jmethodID getToStringMethod(jclass clazz);
-    jstring to_jstring(const std::string& str);
+    StatusOr<jstring> to_jstring(const std::string& str);
     jmethodID getMethod(jclass clazz, const std::string& method, const std::string& sig);
     jmethodID getStaticMethod(jclass clazz, const std::string& method, const std::string& sig);
     // create a object array
     jobject create_array(int sz);
     // convert column data to Java Object Array
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
+    // Convert a DECIMAL column to a BigDecimal[] Java array. `type` is the LogicalType
+    // (TYPE_DECIMAL32/64/128) and `scale` is the DECIMAL scale. `null_buff` may be null
+    // for a non-nullable column; `data_buff` is the raw unscaled integer buffer
+    // (int32/int64/int128 little-endian).
+    StatusOr<jobject> create_boxed_decimal_array(int type, int scale, int num_rows, jobject null_buff,
+                                                 jobject data_buff);
     const std::unordered_map<int, jmethodID>& method_map() const { return _method_map; }
 
     template <class... Args>
@@ -137,6 +143,24 @@ public:
 
     Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
 
+    // DECIMAL-aware result conversion. Used when the UDF return type is DECIMAL32/64/128/256
+    // so that the BigDecimal[] produced on the Java side can be materialized into a native
+    // DECIMAL column (int32/int64/int128/int256 unscaled) using `scale` for rounding.
+    // `precision` is the declared DECIMAL precision used for overflow detection; when a
+    // value does not fit, `error_if_overflow` decides between raising an ArithmeticException
+    // (REPORT_ERROR) or nulling the row (OUTPUT_NULL).
+    Status get_decimal_result_from_boxed_array(int type, int precision, int scale, Column* col, jobject jcolumn,
+                                               int rows, bool error_if_overflow);
+
+    // Per-row helpers used by the BE for single-row DECIMAL writes. Both delegate the
+    // setScale + range check + unscaled extraction to UDFHelper (Java side) and surface
+    // overflow as a JNI exception which the caller is expected to clear.
+    //   unscaled_long       - DECIMAL32/64: returns BigDecimal -> long unscaled value.
+    //   unscaled_le_bytes   - DECIMAL128/256: returns `byte_width` LE sign-extended bytes;
+    //                          caller must DeleteLocalRef on the returned jbyteArray.
+    jlong unscaled_long(jobject big_decimal, int precision, int scale);
+    jbyteArray unscaled_le_bytes(jobject big_decimal, int precision, int scale, int byte_width);
+
     // convert int handle to jobject
     // return a local ref
     jobject convert_handle_to_jobject(FunctionContext* ctx, int state);
@@ -160,8 +184,30 @@ public:
 
     jobject newString(const char* data, size_t size);
 
+    // Construct a new java.math.BigDecimal from its string representation.
+    // Returns a local ref (nullptr on failure, error pushed via JNI exception).
+    jobject newBigDecimal(const std::string& s);
+
+    // Fast path: build a BigDecimal via BigDecimal.valueOf(unscaledVal, scale).
+    // Avoids the string-parsing cost used by the (String) constructor and is suitable
+    // for DECIMAL32 / DECIMAL64 whose unscaled value fits in int64_t.
+    jobject newBigDecimal(int64_t unscaled, int scale);
+
     Slice sliceVal(jstring jstr, std::string* buffer);
     jclass string_clazz() { return _string_class; }
+    jclass big_decimal_class() { return _big_decimal_class; }
+    jclass local_date_class() { return _local_date_class; }
+    jclass local_datetime_class() { return _local_datetime_class; }
+
+    // Box/unbox a StarRocks DateValue (int32 Julian day) as a java.time.LocalDate.
+    // Round-trips StarRocks's internal Julian-day encoding.
+    jobject newLocalDate(int32_t julian);
+    int32_t valLocalDate(jobject obj);
+
+    // Box/unbox a StarRocks TimestampValue (packed int64: julian << 40 | usOfDay)
+    // as a java.time.LocalDateTime.
+    jobject newLocalDateTime(int64_t packed_timestamp);
+    int64_t valLocalDateTime(jobject obj);
     // replace '.' as '/'
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);
@@ -197,8 +243,19 @@ private:
     jclass _string_class;
     jclass _jarrays_class;
     jclass _exception_util_class;
+    jclass _big_decimal_class;
+    jclass _local_date_class;
+    jclass _local_datetime_class;
 
     jmethodID _string_construct_with_bytes;
+    jmethodID _big_decimal_ctor_string;
+    jmethodID _big_decimal_value_of_ll;
+    // java.time.LocalDate.ofEpochDay(long) / java.time.LocalDate.toEpochDay()
+    jmethodID _local_date_of_epoch_day;
+    jmethodID _local_date_to_epoch_day;
+    // UDFHelper.localDateTimeFromPackedTimestamp(long) / packedTimestampFromLocalDateTime(LocalDateTime)
+    jmethodID _local_datetime_from_packed;
+    jmethodID _local_datetime_to_packed;
 
     ListMeta _list_meta;
     MapMeta _map_meta;
@@ -209,6 +266,10 @@ private:
 
     jclass _udf_helper_class;
     jmethodID _create_boxed_array;
+    jmethodID _create_boxed_decimal_array;
+    jmethodID _get_decimal_boxed_result;
+    jmethodID _bd_unscaled_long;
+    jmethodID _bd_unscaled_le_bytes;
     std::unordered_map<int, jmethodID> _method_map;
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
@@ -383,7 +444,7 @@ public:
 
 private:
     FunctionContext* _ctx;
-    // UDAF object handle, owned by FunctionContext
+    // UDAF object handle, owned by JavaUDAFUniqueContext
     jobject _caller;
     JVMClass _stub_clazz;
     JavaGlobalRef _stub_method;
@@ -472,7 +533,9 @@ public:
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
     // get batch call stub
-    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
+    // numActualVarArgs: actual number of varargs input columns; only meaningful when the method uses varargs
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type,
+                                   int numActualVarArgs = 0);
 
     Status init();
 
@@ -487,7 +550,7 @@ private:
 struct MethodTypeDescriptor {
     LogicalType type;
     bool is_box;
-    bool is_array;
+    bool is_array = false;
 };
 
 struct JavaMethodDescriptor {
@@ -533,12 +596,48 @@ struct JavaUDFContext {
     std::unique_ptr<JavaMethodDescriptor> close;
 };
 
-// Function
-struct JavaUDAFContext;
+// Shareable, cacheable UDAF class-level context.
+// Contains class references and method descriptors — no per-aggregation state.
+// Cached via UserFunctionCache::load_cacheable_java_udf.
+struct JavaUDAFSharedContext {
+    std::unique_ptr<ClassLoader> udf_classloader;
+
+    JVMClass udaf_class = nullptr;
+    JVMClass udaf_state_class = nullptr;
+
+    std::unique_ptr<JavaMethodDescriptor> create;
+    std::unique_ptr<JavaMethodDescriptor> destory;
+    std::unique_ptr<JavaMethodDescriptor> update;
+    std::unique_ptr<JavaMethodDescriptor> merge;
+    std::unique_ptr<JavaMethodDescriptor> finalize;
+    std::unique_ptr<JavaMethodDescriptor> serialize;
+    std::unique_ptr<JavaMethodDescriptor> serialize_size;
+
+    // Window function methods (optional)
+    std::unique_ptr<JavaMethodDescriptor> reset;
+    std::unique_ptr<JavaMethodDescriptor> window_update;
+    std::unique_ptr<JavaMethodDescriptor> get_values;
+
+    // Generated stub class/method — used to create a per-aggregator AggBatchCallStub
+    JVMClass update_stub_clazz = nullptr;
+    JavaGlobalRef update_stub_method = nullptr;
+
+    // FunctionStates method objects — looked up once, cloned per aggregator instance
+    JavaGlobalRef states_get_method = nullptr;
+    JavaGlobalRef states_batch_get_method = nullptr;
+    JavaGlobalRef states_add_method = nullptr;
+    JavaGlobalRef states_remove_method = nullptr;
+    JavaGlobalRef states_clear_method = nullptr;
+};
+
+// Per-aggregator UDAF context stored as FunctionContext::THREAD_LOCAL.
+// Holds a reference to the shared class-level JavaUDAFSharedContext plus
+// mutable per-aggregation state.
+struct JavaUDAFUniqueContext;
 
 class UDAFFunction {
 public:
-    UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFContext* ctx)
+    UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFUniqueContext* ctx)
             : _udaf_handle(udaf_handle), _function_context(function_ctx), _ctx(ctx) {}
     // create a new state for UDAF
     int create();
@@ -567,37 +666,27 @@ private:
     // not owned udaf function handle
     jobject _udaf_handle;
     FunctionContext* _function_context;
-    JavaUDAFContext* _ctx;
+    JavaUDAFUniqueContext* _ctx;
 };
 
-struct JavaUDAFContext {
-    JVMClass udaf_class = nullptr;
-    JVMClass udaf_state_class = nullptr;
-    std::unique_ptr<JavaMethodDescriptor> create;
-    std::unique_ptr<JavaMethodDescriptor> destory;
-    std::unique_ptr<UDAFStateList> states;
-    std::unique_ptr<JavaMethodDescriptor> update;
-    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
-    std::unique_ptr<JavaMethodDescriptor> merge;
-    std::unique_ptr<JavaMethodDescriptor> finalize;
-    std::unique_ptr<JavaMethodDescriptor> serialize;
-    std::unique_ptr<JavaMethodDescriptor> serialize_size;
+struct JavaUDAFUniqueContext {
+    // Shared, possibly cached class-level context
+    std::shared_ptr<JavaUDAFSharedContext> ctx;
 
-    std::unique_ptr<JavaMethodDescriptor> reset;
-    std::unique_ptr<JavaMethodDescriptor> window_update;
-    std::unique_ptr<JavaMethodDescriptor> get_values;
-
-    std::unique_ptr<DirectByteBuffer> buffer;
-    // handle for UDAF object
+    // Per-aggregator UDAF object instance and its batch-update stub
     JavaGlobalRef handle = nullptr;
-    std::vector<uint8_t> buffer_data;
+    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
 
+    // Per-aggregator mutable state
+    std::unique_ptr<UDAFStateList> states;
     std::unique_ptr<UDAFFunction> _func;
+    std::unique_ptr<DirectByteBuffer> buffer;
+    std::vector<uint8_t> buffer_data;
 };
 
 // Java UDAF lifecycle management based on FunctionContext::THREAD_LOCAL state.
-JavaUDAFContext* get_java_udaf_context(FunctionContext* ctx);
-void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFContext> udaf_ctx);
+JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx);
+void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx);
 void clear_java_udaf_states(FunctionContext* ctx);
 void destroy_java_udaf_context(FunctionContext* ctx);
 

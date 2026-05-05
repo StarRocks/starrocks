@@ -37,6 +37,83 @@ struct SchemaNameGenerator {
     std::string generate() { return std::to_string(id); }
 };
 
+// Recursively build a ConvertFuncTree mirroring the Arrow result type.
+// The Arrow schema returned by the Python worker is constructed from the same
+// StarRocks return type via convert_to_arrow_type, so nested shapes match by
+// construction — but we still validate for safety.
+static Status build_arrow_to_sr_convert_tree(const arrow::DataType& arrow_type, const TypeDescriptor& sr_type,
+                                             bool is_nullable, ConvertFuncTree* tree) {
+    auto at = arrow_type.id();
+    auto lt = sr_type.type;
+    tree->func = get_arrow_converter(at, lt, is_nullable, /*is_strict=*/true);
+    if (tree->func == nullptr) {
+        return Status::NotSupported(fmt::format("unsupported arrow type {} to starrocks type {}", arrow_type.ToString(),
+                                                type_to_string(lt)));
+    }
+    tree->children.clear();
+    tree->field_names.clear();
+
+    switch (lt) {
+    case TYPE_ARRAY: {
+        if (at != ArrowTypeId::LIST && at != ArrowTypeId::LARGE_LIST && at != ArrowTypeId::FIXED_SIZE_LIST) {
+            return Status::InternalError(
+                    fmt::format("Arrow type {} does not match StarRocks ARRAY", arrow_type.ToString()));
+        }
+        auto child = std::make_unique<ConvertFuncTree>();
+        const auto& element_arrow_type = *arrow_type.field(0)->type();
+        RETURN_IF_ERROR(build_arrow_to_sr_convert_tree(element_arrow_type, sr_type.children[0],
+                                                       /*is_nullable=*/true, child.get()));
+        tree->children.emplace_back(std::move(child));
+        break;
+    }
+    case TYPE_MAP: {
+        if (at != ArrowTypeId::MAP) {
+            return Status::InternalError(
+                    fmt::format("Arrow type {} does not match StarRocks MAP", arrow_type.ToString()));
+        }
+        const auto* map_type = down_cast<const arrow::MapType*>(&arrow_type);
+        const arrow::DataType* sub_types[2] = {map_type->key_type().get(), map_type->item_type().get()};
+        for (int i = 0; i < 2; ++i) {
+            auto child = std::make_unique<ConvertFuncTree>();
+            RETURN_IF_ERROR(build_arrow_to_sr_convert_tree(*sub_types[i], sr_type.children[i],
+                                                           /*is_nullable=*/true, child.get()));
+            tree->children.emplace_back(std::move(child));
+        }
+        break;
+    }
+    case TYPE_STRUCT: {
+        if (at != ArrowTypeId::STRUCT) {
+            return Status::InternalError(
+                    fmt::format("Arrow type {} does not match StarRocks STRUCT", arrow_type.ToString()));
+        }
+        tree->field_names = sr_type.field_names;
+        for (size_t i = 0; i < sr_type.children.size(); ++i) {
+            auto child = std::make_unique<ConvertFuncTree>();
+            // Arrow field order may not match StarRocks struct field order — look up by name.
+            int idx = -1;
+            for (int j = 0; j < arrow_type.num_fields(); ++j) {
+                if (arrow_type.field(j)->name() == sr_type.field_names[i]) {
+                    idx = j;
+                    break;
+                }
+            }
+            if (idx >= 0) {
+                const auto& child_arrow_type = *arrow_type.field(idx)->type();
+                RETURN_IF_ERROR(build_arrow_to_sr_convert_tree(child_arrow_type, sr_type.children[i],
+                                                               /*is_nullable=*/true, child.get()));
+            }
+            // If the field is missing, leave the child tree empty — the StructGuard converter
+            // appends nulls for that column.
+            tree->children.emplace_back(std::move(child));
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    return Status::OK();
+}
+
 StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, size_t row_num) {
     // convert to columns to arrow record batch
     RETURN_IF_DCHECK_EQ_FAILED(_func_ctx->get_num_args(), columns.size());
@@ -79,15 +156,15 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, 
 StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const arrowArray& result_ary,
                                                                         const arrowField& field_type) {
     size_t result_num_rows = result_ary.length();
+    const TypeDescriptor& return_type = _func_ctx->get_return_type();
 
-    ConvertFunc converter = get_arrow_converter(field_type.type()->id(), _func_ctx->get_return_type().type,
-                                                field_type.nullable(), true);
-    if (UNLIKELY(converter == nullptr)) {
-        return Status::NotSupported(fmt::format("unsupported arrow type {} to starrocks type {}",
-                                                field_type.type()->ToString(), _func_ctx->get_return_type().type));
-    }
+    // Build a recursive converter tree so that ARRAY / MAP / STRUCT (and arbitrarily
+    // nested combinations) dispatch into the correct child converters.
+    ConvertFuncTree tree;
+    RETURN_IF_ERROR(build_arrow_to_sr_convert_tree(*field_type.type(), return_type, field_type.nullable(), &tree));
+
     // UDF return result is always nullable
-    auto native_column = FunctionHelper::create_column(_func_ctx->get_return_type(), true);
+    auto native_column = FunctionHelper::create_column(return_type, true);
     auto nullable_column = down_cast<NullableColumn*>(native_column.get());
     auto null_column = nullable_column->null_column_raw_ptr();
     auto null_data = null_column->get_data().data();
@@ -101,7 +178,12 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const ar
 
     Filter filter;
     filter.resize(result_num_rows);
-    auto status = converter(&result_ary, 0, result_num_rows, data_column, 0, null_data, &filter, nullptr, nullptr);
+    // Pass nullptr ctx to match the legacy primitive path. Some primitive
+    // converters (e.g. the BINARY/STRING specialization) check `ctx != nullptr`
+    // but then unconditionally deref `ctx->current_slot`, so a stub context
+    // with a null slot would crash. UDF flow has no SlotDescriptor and never
+    // hits the timestamp / non-nullable branches that need a real ctx.
+    auto status = tree.func(&result_ary, 0, result_num_rows, data_column, 0, null_data, &filter, nullptr, &tree);
     RETURN_IF_ERROR(status);
     nullable_column->update_has_null();
 

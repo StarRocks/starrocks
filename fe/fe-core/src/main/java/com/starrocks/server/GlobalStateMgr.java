@@ -144,6 +144,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.leader.TabletCollector;
@@ -199,6 +200,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -210,7 +212,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.history.TableKeeper;
-import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -353,6 +354,12 @@ public class GlobalStateMgr {
 
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
+    private final AtomicLong leaderGeneration = new AtomicLong(0L);
+    private final AtomicBoolean leaderWorkAdmissionOpen = new AtomicBoolean(false);
+    private volatile LeaderLease activeLeaderLease = LeaderLease.INVALID;
+    private volatile LeaderRoleState leaderRoleState = LeaderRoleState.INACTIVE;
+    private volatile FrontendNodeType pendingDemotionTargetType;
+    private volatile long leaderRoleStateSinceMs = System.currentTimeMillis();
 
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
@@ -377,6 +384,7 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
+    private boolean deployerListenerRegistered = false;
 
     private HAProtocol haProtocol = null;
 
@@ -423,7 +431,6 @@ public class GlobalStateMgr {
     private final RoutineLoadScheduler routineLoadScheduler;
     private final RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
-    private final MVJobExecutor mvMVJobExecutor;
 
     private final SmallFileMgr smallFileMgr;
 
@@ -475,6 +482,9 @@ public class GlobalStateMgr {
 
     // For LakeTable
     private final CompactionMgr compactionMgr;
+
+    // For async vector index build
+    private VectorIndexBuildScheduler vectorIndexBuildScheduler;
 
     // For compaction forbidden policy
     private final CompactionControlScheduler compactionControlScheduler;
@@ -547,6 +557,20 @@ public class GlobalStateMgr {
     private JwkMgr jwkMgr;
 
     private final TabletReshardJobMgr tabletReshardJobMgr;
+
+    enum LeaderRoleState {
+        // This FE is not serving leader-only work. It may be a follower/observer,
+        // or a previous leader activation attempt may have been rolled back.
+        INACTIVE,
+        // Leader activation is in progress. Journal/open/fencing related steps are
+        // still being initialized, so leader-only work must not be admitted yet.
+        ACTIVATING,
+        // Leader activation has completed and this FE can admit new leader-only work.
+        ACTIVE,
+        // Leader demotion has started. New leader-only work must be rejected and
+        // in-flight work should treat the current lease as expired.
+        DEMOTING
+    }
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -623,6 +647,10 @@ public class GlobalStateMgr {
 
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
+    }
+
+    public VectorIndexBuildScheduler getVectorIndexBuildScheduler() {
+        return vectorIndexBuildScheduler;
     }
 
     public CompactionControlScheduler getCompactionControlScheduler() {
@@ -755,8 +783,6 @@ public class GlobalStateMgr {
         this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
-        this.mvMVJobExecutor = new MVJobExecutor();
-
         this.smallFileMgr = new SmallFileMgr();
 
         this.dynamicPartitionScheduler = new DynamicPartitionScheduler("DynamicPartitionScheduler",
@@ -793,6 +819,7 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
             this.fullVacuumDaemon = new FullVacuumDaemon();
+            this.vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -1305,6 +1332,8 @@ public class GlobalStateMgr {
             initDefaultWarehouse();
         }
 
+        beginLeaderActivation();
+
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
 
@@ -1332,6 +1361,8 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
+            publishLeaderLease(getEpoch());
+
             if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
                 nodeMgr.resetFrontends();
             }
@@ -1375,8 +1406,14 @@ public class GlobalStateMgr {
             checkCaseInsensitive();
         } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
+            if (!isReady.get()) {
+                rollbackLeaderActivation();
+                feType = oldType;
+                throw new RuntimeException("transfer to leader failed", e);
+            }
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
+            rollbackLeaderActivation();
             feType = oldType;
             throw t;
         }
@@ -1401,6 +1438,95 @@ public class GlobalStateMgr {
     public void setFrontendNodeType(FrontendNodeType newType) {
         // just for test, don't call it directly
         feType = newType;
+    }
+
+    @VisibleForTesting
+    void beginLeaderActivation() {
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVATING);
+    }
+
+    @VisibleForTesting
+    void publishLeaderLease(long haEpoch) {
+        Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
+        Preconditions.checkState(feType == FrontendNodeType.LEADER,
+                "can only publish leader lease when FE type is LEADER, actual: %s", feType);
+        Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
+                "can only publish leader lease during activation, actual state: %s", leaderRoleState);
+        long generation = leaderGeneration.incrementAndGet();
+        activeLeaderLease = new LeaderLease(haEpoch, generation);
+        leaderWorkAdmissionOpen.set(true);
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVE);
+    }
+
+    @VisibleForTesting
+    void rollbackLeaderActivation() {
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.INACTIVE);
+    }
+
+    @VisibleForTesting
+    void beginLeaderDemotion(FrontendNodeType targetType) {
+        leaderWorkAdmissionOpen.set(false);
+        leaderGeneration.incrementAndGet();
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = targetType;
+        updateLeaderRoleState(LeaderRoleState.DEMOTING);
+    }
+
+    public LeaderLease captureLeaderLease() {
+        return activeLeaderLease;
+    }
+
+    public LeaderLease captureLeaderLeaseOrThrow() {
+        LeaderLease lease = activeLeaderLease;
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is not available. feType=%s, state=%s, admissionOpen=%s, lease=%s",
+                feType, leaderRoleState, leaderWorkAdmissionOpen.get(), lease);
+        return lease;
+    }
+
+    public boolean isLeaderLeaseValid(LeaderLease lease) {
+        return lease != null
+                && lease.isValid()
+                && lease.equals(activeLeaderLease)
+                && leaderWorkAdmissionOpen.get()
+                && feType == FrontendNodeType.LEADER
+                && leaderRoleState == LeaderRoleState.ACTIVE;
+    }
+
+    public void checkLeaderLease(LeaderLease lease) {
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is stale. expected=%s, actual=%s, state=%s, admissionOpen=%s",
+                lease, activeLeaderLease, leaderRoleState, leaderWorkAdmissionOpen.get());
+    }
+
+    public boolean isLeaderWorkAdmissionOpen() {
+        return leaderWorkAdmissionOpen.get();
+    }
+
+    public boolean isLeaderDemoting() {
+        return leaderRoleState == LeaderRoleState.DEMOTING;
+    }
+
+    @VisibleForTesting
+    LeaderRoleState getLeaderRoleState() {
+        return leaderRoleState;
+    }
+
+    @VisibleForTesting
+    FrontendNodeType getPendingDemotionTargetType() {
+        return pendingDemotionTargetType;
+    }
+
+    private void updateLeaderRoleState(LeaderRoleState newState) {
+        leaderRoleState = newState;
+        leaderRoleStateSinceMs = System.currentTimeMillis();
     }
 
     // start all daemon threads only running on Master
@@ -1470,7 +1596,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
@@ -1491,6 +1616,8 @@ public class GlobalStateMgr {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
             fullVacuumDaemon.start();
+
+            vectorIndexBuildScheduler.start();
         }
 
         if (Config.enable_safe_mode) {
@@ -1514,6 +1641,42 @@ public class GlobalStateMgr {
 
         if (RunMode.isSharedDataMode()) {
             tabletReshardJobMgr.start();
+        }
+    }
+
+    /**
+     * Symmetric counterpart to {@link #startLeaderOnlyDaemonThreads()}. Stops the leader-only
+     * daemons that have been migrated to {@link com.starrocks.common.util.LeaderDaemon}, in reverse
+     * start order, so leader-session state is released promptly during demotion and the FE
+     * singletons become reusable when this node is re-elected.
+     *
+     * TODO: migrate the remaining {@code Daemon}-based leader tasks and add them here.
+     */
+    void stopLeaderOnlyDaemonThreads() {
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        // Reverse of startLeaderOnlyDaemonThreads(): stop downstream consumers first so that
+        // upstream producers (heartbeat) can wind down without piling work on a draining sink.
+        try {
+            reportHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop reportHandler failed", t);
+        }
+        try {
+            publishVersionDaemon.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop publishVersionDaemon failed", t);
+        }
+        if (!RunMode.isSharedDataMode()) {
+            try {
+                tabletScheduler.stopGracefully(timeoutMs);
+            } catch (Throwable t) {
+                LOG.warn("stop tabletScheduler failed", t);
+            }
+        }
+        try {
+            heartbeatMgr.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop heartbeatMgr failed", t);
         }
     }
 
@@ -1547,6 +1710,12 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
             StarMgrServer.getCurrentState().startCheckpointWorker();
+        }
+        // Register listeners that need a fully-constructed GlobalStateMgr (e.g. classes whose
+        // own static initializer transitively touches MetricRepo / getCurrentState()).
+        if (!deployerListenerRegistered) {
+            Deployer.registerConfigListener(configRefreshDaemon);
+            deployerListenerRegistered = true;
         }
         configRefreshDaemon.start();
 
@@ -1587,6 +1756,13 @@ public class GlobalStateMgr {
         if (!isDefaultWarehouseCreated) {
             // A brand-new cluster was up for the first time, the follower/observer node initializes its default warehouse here.
             initDefaultWarehouse();
+        }
+
+        // If this node was serving as LEADER, cleanly stop leader-only daemons before taking on
+        // the new role. Runs after the admission fence is closed by the demotion orchestrator so
+        // no new leader-side work can enter while cleanup is in flight.
+        if (feType == FrontendNodeType.LEADER) {
+            stopLeaderOnlyDaemonThreads();
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
@@ -2396,6 +2572,11 @@ public class GlobalStateMgr {
 
     public boolean isLeader() {
         return feType == FrontendNodeType.LEADER;
+    }
+
+    @VisibleForTesting
+    long getLeaderRoleStateSinceMs() {
+        return leaderRoleStateSinceMs;
     }
 
     public void setSynchronizedTime(long time) {

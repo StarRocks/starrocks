@@ -69,7 +69,7 @@ import com.starrocks.clone.TabletSchedCtx.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -126,7 +126,7 @@ import java.util.stream.Stream;
  * Case 2:
  * A new Backend is added to the cluster. Replicas should be transfer to that host to balance the cluster load.
  */
-public class TabletScheduler extends FrontendDaemon {
+public class TabletScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
 
     // the minimum interval of updating cluster statistics and priority of tablet info
@@ -451,7 +451,7 @@ public class TabletScheduler extends FrontendDaemon {
      * it should be removed.
      */
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (!updateWorkingSlots()) {
             return;
         }
@@ -481,6 +481,30 @@ public class TabletScheduler extends FrontendDaemon {
         handleForceCleanSchedQ();
 
         stat.counterTabletScheduleRound.incrementAndGet();
+    }
+
+    /**
+     * Drop all leader-session scheduling state. Followers do not schedule tablets and
+     * the next leader will rebuild this from TabletInvertedIndex on first iteration.
+     * Clone tasks already submitted to AgentTaskExecutor are idempotent: if the new leader
+     * resubmits the same clone, BE returns success when the destination tablet already exists
+     * with version >= requested.
+     */
+    @Override
+    protected synchronized void onStopped() {
+        pendingTablets.clear();
+        // shrink the backing array - PriorityQueue does not release capacity on clear()
+        pendingTablets = new PriorityQueue<>();
+        allTabletIds.clear();
+        runningTablets.clear();
+        schedHistory.clear();
+        backendsWorkingSlots.clear();
+        loadStatistic.set(null);
+        lastStatUpdateTime = 0;
+        lastClusterLoadLoggingTime = 0;
+        lastSlotAdjustTime = 0;
+        currentSlotPerPathConfig = 0;
+        forceCleanSchedQ.set(false);
     }
 
     private void updateClusterLoadStatisticsAndPriority() {
@@ -563,19 +587,19 @@ public class TabletScheduler extends FrontendDaemon {
     protected boolean checkIfTabletExpired(TabletSchedCtx ctx, CatalogRecycleBin recycleBin, long currentTimeMs) {
         // check if about to erase
         long dbId = ctx.getDbId();
-        if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, currentTimeMs)) {
+        if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, dbId, currentTimeMs)) {
             LOG.warn("discard ctx because db {} will erase soon: {}", dbId, ctx);
             return true;
         }
         long tableId = ctx.getTblId();
-        if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(tableId, currentTimeMs)) {
+        if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(dbId, tableId, currentTimeMs)) {
             LOG.warn("discard ctx because table {} will erase soon: {}", tableId, ctx);
             return true;
         }
         long partitionId = ctx.getPhysicalPartitionId();
         PhysicalPartition physicalPartition = recycleBin.getPhysicalPartition(partitionId);
         if (physicalPartition != null
-                && !recycleBin.ensureEraseLater(physicalPartition.getParentId(), currentTimeMs)) {
+                && !recycleBin.ensureEraseLater(dbId, physicalPartition.getParentId(), currentTimeMs)) {
             LOG.warn("discard ctx because partition {} will erase soon: {}", partitionId, ctx);
             return true;
         }
@@ -1097,7 +1121,7 @@ public class TabletScheduler extends FrontendDaemon {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1114,7 +1138,7 @@ public class TabletScheduler extends FrontendDaemon {
                 throw new SchedException(Status.FINISHED, "redundant replica is deleted");
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         }
         throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas. replicas: " +
                 tabletCtx.getTablet().getReplicaInfos());
@@ -1338,7 +1362,7 @@ public class TabletScheduler extends FrontendDaemon {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
@@ -1360,7 +1384,7 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas. replicas: " +
                     tabletCtx.getTablet().getReplicaInfos() + ", backend set: " + backendSet);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         }
     }
 

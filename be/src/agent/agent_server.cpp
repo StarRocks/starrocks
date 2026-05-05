@@ -40,8 +40,8 @@
 #include <string>
 #include <vector>
 
+#include "agent/agent_metrics.h"
 #include "agent/agent_task.h"
-#include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "base/phmap/phmap.h"
@@ -52,11 +52,11 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -94,6 +94,11 @@ static int32_t calc_real_num_threads(int32_t num_threads, int32_t cpu_cores_mult
         num_threads = 1;
     }
     return num_threads;
+}
+
+static int32_t calc_clone_thread_pool_size(size_t num_store_paths, int32_t parallel_clone_task_per_path) {
+    return std::max(static_cast<int32_t>(num_store_paths) * parallel_clone_task_per_path,
+                    static_cast<int32_t>(MIN_CLONE_TASK_THREADS_IN_POOL));
 }
 
 class AgentServer::Impl {
@@ -190,7 +195,7 @@ Status AgentServer::Impl::init() {
                                 .set_max_queue_size(queue_size)                                                  \
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                     \
                                 .build(&pool));                                                                  \
-        REGISTER_THREAD_POOL_METRICS(name, pool);                                                                \
+        AgentMetrics::instance()->register_thread_pool_metrics(#name, pool.get());                               \
     } while (false)
 
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
@@ -271,10 +276,10 @@ Status AgentServer::Impl::init() {
         // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
         // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
         // callback, so that we can match the dop of FE clone task scheduling.
-        BUILD_DYNAMIC_TASK_THREAD_POOL(clone, 0,
-                                       std::max(_exec_env->store_paths().size() * config::parallel_clone_task_per_path,
-                                                MIN_CLONE_TASK_THREADS_IN_POOL),
-                                       DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                clone, 0,
+                calc_clone_thread_pool_size(_exec_env->store_paths().size(), config::parallel_clone_task_per_path),
+                DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(
                 remote_snapshot, 0,
@@ -658,6 +663,16 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         st = _thread_pool_replicate_snapshot->update_max_threads(
                 calc_real_num_threads(new_val, REPLICATION_CPU_CORES_MULTIPLIER));
         break;
+    case TTaskType::CLONE: {
+        ThreadPool* thread_pool = get_thread_pool(type);
+        if (thread_pool) {
+            st = thread_pool->update_max_threads(calc_clone_thread_pool_size(_exec_env->store_paths().size(), new_val));
+        } else {
+            LOG(WARNING) << "Failed to update max thread, cannot get thread pool by task type: "
+                         << to_string((TTaskType::type)type);
+        }
+        break;
+    }
     default: {
         ThreadPool* thread_pool = get_thread_pool(type);
         if (thread_pool) {

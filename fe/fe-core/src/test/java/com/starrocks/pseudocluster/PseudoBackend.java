@@ -31,6 +31,8 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.BuildVectorIndexRequest;
+import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -60,7 +62,6 @@ import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
@@ -108,7 +109,6 @@ import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
-import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
@@ -1073,11 +1073,6 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
-            throw new org.apache.commons.lang.NotImplementedException("TODO");
-        }
-
-        @Override
         public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
         }
@@ -1233,6 +1228,17 @@ public class PseudoBackend {
         @Override
         public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
             return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<BuildVectorIndexResponse> buildVectorIndex(BuildVectorIndexRequest request) {
+            // Return a non-null OK response so VectorIndexBuildScheduler treats this as
+            // a successful build instead of looping/re-enqueuing on null and spamming logs.
+            BuildVectorIndexResponse response = new BuildVectorIndexResponse();
+            StatusPB pStatus = new StatusPB();
+            pStatus.statusCode = 0;
+            response.status = pStatus;
+            return CompletableFuture.completedFuture(response);
         }
     }
 

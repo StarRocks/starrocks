@@ -22,8 +22,10 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/variant_encoder.h"
 #include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/parquet/column_reader_factory.h"
@@ -31,6 +33,7 @@
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_expr_predicate.h"
 #include "testutil/exprs_test_helper.h"
@@ -170,6 +173,68 @@ public:
     }
 };
 
+class MockVariantSourceColumnReader : public ColumnReader {
+public:
+    explicit MockVariantSourceColumnReader(ColumnPtr source_column)
+            : ColumnReader(nullptr), _source_column(std::move(source_column)) {}
+    ~MockVariantSourceColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst_col) override {
+        dst_col = _source_column;
+        return Status::OK();
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override {
+        dst = src;
+        return Status::OK();
+    }
+
+    void set_need_parse_levels(bool need_parse_levels) override {}
+    void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {}
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+private:
+    ColumnPtr _source_column;
+};
+
+class MockIORangeColumnReader : public ColumnReader {
+public:
+    explicit MockIORangeColumnReader(std::vector<io::SharedBufferedInputStream::IORange> ranges)
+            : ColumnReader(nullptr), _ranges(std::move(ranges)) {}
+    ~MockIORangeColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst_col) override {
+        dst_col->as_mutable_ptr()->append_default(range.span_size());
+        return Status::OK();
+    }
+
+    void set_need_parse_levels(bool need_parse_levels) override {}
+    void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {
+        if (ranges == nullptr) {
+            return;
+        }
+        for (const auto& range : _ranges) {
+            ranges->emplace_back(range.offset, range.size, active);
+            if (end_offset != nullptr) {
+                *end_offset = std::max(*end_offset, range.offset + range.size);
+            }
+        }
+    }
+
+private:
+    std::vector<io::SharedBufferedInputStream::IORange> _ranges;
+};
+
 class GroupReaderTest : public ::testing::Test {
 protected:
     void SetUp() override {}
@@ -251,6 +316,93 @@ static StatusOr<const ColumnPredicate*> create_struct_subfield_eq_predicate(Obje
                      ColumnExprPredicate::make_column_expr_predicate(get_type_info(LogicalType::TYPE_VARCHAR),
                                                                      column_id, state, conjunct_ctxs[0], nullptr));
     return pred;
+}
+
+static StatusOr<std::string> variant_json_at(const ColumnPtr& column, size_t row_num) {
+    const Column* data_col = ColumnHelper::get_data_column(column.get());
+    auto* variant_col = down_cast<const VariantColumn*>(data_col);
+    VariantRowValue cell;
+    const VariantRowValue* row = variant_col->get_row_value(row_num, &cell);
+    if (row == nullptr) {
+        return Status::InvalidArgument("failed to get variant row value");
+    }
+    return row->to_json();
+}
+
+static Status fill_dst_chunk_without_projected(GroupReader* group_reader, ChunkPtr& active_chunk, ChunkPtr* dst_chunk) {
+    return group_reader->_fill_dst_chunk(active_chunk, ChunkPtr{}, dst_chunk);
+}
+
+static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
+    auto variant = VariantColumn::create();
+    MutableColumns typed_columns;
+    auto typed_col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    typed_col->append_datum(int64_t(11));
+    typed_col->append_datum(int64_t(22));
+    typed_columns.emplace_back(typed_col->as_mutable_ptr());
+    variant->set_shredded_columns({"a.b.c"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
+static ColumnPtr make_typed_decimal32_variant_column_for_virtual_column_test() {
+    auto variant = VariantColumn::create();
+    MutableColumns typed_columns;
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto typed_col = ColumnHelper::create_column(decimal_type, true);
+    typed_col->append_datum(Datum(int32_t(1050)));
+    typed_col->append_datum(Datum(int32_t(1250)));
+    typed_columns.emplace_back(typed_col->as_mutable_ptr());
+    variant->set_shredded_columns({"a.b.c"}, {decimal_type}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
+// Build a raw (non-shredded) VariantColumn from JSON strings.
+// The path "a.b.c" is embedded in each row's binary variant encoding; there is no typed
+// shredded column.  This forces project_variant_leaf_column to use the row-by-row fallback
+// path (build_decimal_variant_projection_column / build_variant_projection_column).
+static ColumnPtr make_raw_json_variant_column_for_virtual_column_test(
+        std::initializer_list<std::string_view> json_rows) {
+    auto variant = VariantColumn::create();
+    for (auto json : json_rows) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json);
+        DCHECK(encoded.ok()) << encoded.status().to_string();
+        variant->append(&encoded.value());
+    }
+    return variant;
+}
+
+static ColumnPtr make_nullable_typed_variant_column_for_virtual_column_test() {
+    auto data = make_typed_only_variant_column_for_virtual_column_test();
+    auto nulls = NullColumn::create();
+    nulls->append(1);
+    nulls->append(0);
+    return NullableColumn::create(data->as_mutable_ptr(), std::move(nulls));
+}
+
+static Status create_bigint_eq_conjunct_ctxs(ObjectPool* pool, RuntimeState* state, SlotId slot_id, int64_t value,
+                                             std::vector<ExprContext*>* conjunct_ctxs) {
+    TExprNode pred_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::BIGINT, TExprOpcode::EQ);
+    TExprNode slot_ref = ExprsTestHelper::create_slot_expr_node_t<TYPE_BIGINT>(0, slot_id, true);
+    TExprNode literal = ExprsTestHelper::create_literal<TYPE_BIGINT, int64_t>(value, false);
+
+    TExpr expr;
+    expr.nodes.emplace_back(pred_node);
+    expr.nodes.emplace_back(slot_ref);
+    expr.nodes.emplace_back(literal);
+
+    std::vector<TExpr> conjunct_exprs{expr};
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(pool, conjunct_exprs, conjunct_ctxs, nullptr));
+    RETURN_IF_ERROR(ExprExecutor::prepare(*conjunct_ctxs, state));
+    DictOptimizeParser::disable_open_rewrite(conjunct_ctxs);
+    RETURN_IF_ERROR(ExprExecutor::open(*conjunct_ctxs, state));
+    return Status::OK();
+}
+
+static StatusOr<GroupReader::VariantVirtualProjection> make_virtual_projection_for_test(
+        const std::string& leaf_path, const TypeDescriptor& target_type, SlotId source_slot_id) {
+    ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(std::string_view(leaf_path)));
+    return GroupReader::VariantVirtualProjection{
+            .parsed_path = std::move(parsed_path), .target_type = target_type, .source_slot_id = source_slot_id};
 }
 
 ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
@@ -2243,6 +2395,76 @@ static tparquet::FileMetaData build_t_filemeta_with_iceberg_columns(ObjectPool* 
     return t_file_meta;
 }
 
+static tparquet::FileMetaData build_t_filemeta_with_variant_column(std::string_view column_name) {
+    tparquet::FileMetaData t_file_meta;
+    t_file_meta.__set_version(2);
+    t_file_meta.__set_num_rows(5);
+
+    std::vector<tparquet::SchemaElement> schema_elements;
+
+    tparquet::SchemaElement root;
+    root.__set_name("hive_schema");
+    root.__set_num_children(1);
+    schema_elements.emplace_back(std::move(root));
+
+    tparquet::SchemaElement data;
+    data.__set_name(std::string(column_name));
+    data.__set_num_children(3);
+    schema_elements.emplace_back(std::move(data));
+
+    tparquet::SchemaElement metadata;
+    metadata.__set_name("metadata");
+    metadata.__set_type(tparquet::Type::BYTE_ARRAY);
+    metadata.__set_num_children(0);
+    schema_elements.emplace_back(std::move(metadata));
+
+    tparquet::SchemaElement value;
+    value.__set_name("value");
+    value.__set_type(tparquet::Type::BYTE_ARRAY);
+    value.__set_num_children(0);
+    schema_elements.emplace_back(std::move(value));
+
+    tparquet::SchemaElement typed_value;
+    typed_value.__set_name("typed_value");
+    typed_value.__set_num_children(1);
+    schema_elements.emplace_back(std::move(typed_value));
+
+    tparquet::SchemaElement leaf;
+    leaf.__set_name("a");
+    leaf.__set_num_children(2);
+    schema_elements.emplace_back(std::move(leaf));
+
+    tparquet::SchemaElement leaf_value;
+    leaf_value.__set_name("value");
+    leaf_value.__set_type(tparquet::Type::BYTE_ARRAY);
+    leaf_value.__set_num_children(0);
+    schema_elements.emplace_back(std::move(leaf_value));
+
+    tparquet::SchemaElement leaf_typed_value;
+    leaf_typed_value.__set_name("typed_value");
+    leaf_typed_value.__set_type(tparquet::Type::INT64);
+    leaf_typed_value.__set_num_children(0);
+    schema_elements.emplace_back(std::move(leaf_typed_value));
+
+    std::vector<tparquet::ColumnChunk> cols;
+    for (int i = 0; i < 4; ++i) {
+        tparquet::ColumnChunk col;
+        col.__set_file_path("c" + std::to_string(i));
+        col.file_offset = 0;
+        col.meta_data.data_page_offset = 4;
+        col.meta_data.__set_type((i == 3) ? tparquet::Type::INT64 : tparquet::Type::BYTE_ARRAY);
+        cols.emplace_back(std::move(col));
+    }
+
+    tparquet::RowGroup row_group;
+    row_group.__set_columns(std::move(cols));
+    row_group.__set_num_rows(5);
+
+    t_file_meta.__set_row_groups({std::move(row_group)});
+    t_file_meta.__set_schema(std::move(schema_elements));
+    return t_file_meta;
+}
+
 TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
     auto* param = _create_group_reader_param();
 
@@ -2327,6 +2549,450 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation
     ASSERT_NE(group_reader->_column_readers[101], nullptr);
 }
 
+TEST_F(GroupReaderTest, VariantVirtualColumnMapsPrefixAndLeafPathsIndependently) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* leaf_slot = _pool.add(
+            new SlotDescriptor(120, "data.a.b.c", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* prefix_slot = _pool.add(
+            new SlotDescriptor(121, "data.a.b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+    auto* source_slot =
+            _pool.add(new SlotDescriptor(122, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column leaf_col{};
+    leaf_col.slot_desc = leaf_slot;
+    GroupReaderParam::Column prefix_col{};
+    prefix_col.slot_desc = prefix_slot;
+    GroupReaderParam::Column source_col{};
+    source_col.slot_desc = source_slot;
+    param->read_cols.emplace_back(leaf_col);
+    param->read_cols.emplace_back(prefix_col);
+    param->read_cols.emplace_back(source_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ColumnPtr variant_source = make_typed_only_variant_column_for_virtual_column_test();
+    ASSIGN_OR_ABORT(auto leaf_projection,
+                    make_virtual_projection_for_test("a.b.c", leaf_slot->type(), source_slot->id()));
+    ASSIGN_OR_ABORT(auto prefix_projection,
+                    make_virtual_projection_for_test("a.b", prefix_slot->type(), source_slot->id()));
+    group_reader->_variant_virtual_projections.emplace(leaf_slot->id(), std::move(leaf_projection));
+    group_reader->_variant_virtual_projections.emplace(prefix_slot->id(), std::move(prefix_projection));
+    group_reader->_column_readers.emplace(source_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_source->clone()));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_source, source_slot->id());
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(leaf_slot->type(), true), leaf_slot->id());
+    dst_chunk->append_column(ColumnHelper::create_column(prefix_slot->type(), true), prefix_slot->id());
+    dst_chunk->append_column(ColumnHelper::create_column(source_slot->type(), true), source_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+
+    const auto& leaf_result = dst_chunk->get_column_by_slot_id(leaf_slot->id());
+    ASSERT_EQ(2, leaf_result->size());
+    EXPECT_EQ(11, leaf_result->get(0).get_int64());
+    EXPECT_EQ(22, leaf_result->get(1).get_int64());
+
+    const auto& prefix_result = dst_chunk->get_column_by_slot_id(prefix_slot->id());
+    ASSERT_EQ(2, prefix_result->size());
+    auto row0_json = variant_json_at(prefix_result, 0);
+    auto row1_json = variant_json_at(prefix_result, 1);
+    ASSERT_TRUE(row0_json.ok()) << row0_json.status();
+    ASSERT_TRUE(row1_json.ok()) << row1_json.status();
+    EXPECT_EQ("{\"c\":11}", std::move(row0_json).value());
+    EXPECT_EQ("{\"c\":22}", std::move(row1_json).value());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromPhysicalSourceSlot) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(100, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(200)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(200));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(11, result->get(0).get_int64());
+    EXPECT_EQ(22, result->get(1).get_int64());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnReturnsNullForNullAndMissingLeafRows) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(103, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection,
+                    make_virtual_projection_for_test("missing.leaf", virtual_slot->type(), SlotId(300)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_nullable_typed_variant_column_for_virtual_column_test(), SlotId(300));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_TRUE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourceNullMask) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(105, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(302)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_nullable_typed_variant_column_for_virtual_column_test(), SlotId(302));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_TRUE(result->is_null(0));
+    EXPECT_EQ(22, result->get(1).get_int64());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedDecimalVirtualColumn) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(106, "data.id", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(303)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(303));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(1050, result->get(0).get_int32());
+    EXPECT_EQ(1250, result->get(1).get_int32());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnWithWidening) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(107, "data.id", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(304)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(304));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(1050, result->get(0).get_int64());
+    EXPECT_EQ(1250, result->get(1).get_int64());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualVarcharColumnFromPhysicalSourceSlot) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(104, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(301)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(301));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ("11", result->get(0).get_slice().to_string());
+    EXPECT_EQ("22", result->get(1).get_slice().to_string());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(101, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(-1)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_hidden_variant_sources.emplace(
+            "data", GroupReader::HiddenVariantSource{.slot_id = SlotId(-1), .reader = nullptr});
+
+    // With the new design, _fill_dst_chunk looks up all sources in active_chunk only.
+    // The hidden source column (slot -1) must be in the active_chunk argument, not in
+    // _read_chunk.  This matches the runtime flow where Phase 6 merges lazy hidden
+    // sources into active_chunk before _fill_dst_chunk is called.
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-1));
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(11, result->get(0).get_int64());
+    EXPECT_EQ(22, result->get(1).get_int64());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnWhenVirtualSlotPrecedesSourceSlot) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(101, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* source_slot =
+            _pool.add(new SlotDescriptor(102, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    GroupReaderParam::Column source_col{};
+    source_col.slot_desc = source_slot;
+    param->read_cols.emplace_back(virtual_col);
+    param->read_cols.emplace_back(source_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto variant_source = make_typed_only_variant_column_for_virtual_column_test();
+    ASSIGN_OR_ABORT(auto projection,
+                    make_virtual_projection_for_test("a.b.c", virtual_slot->type(), source_slot->id()));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_column_readers.emplace(source_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_source->clone()));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_source, source_slot->id());
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+    dst_chunk->append_column(ColumnHelper::create_column(source_slot->type(), true), source_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+
+    const auto& projected = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, projected->size());
+    EXPECT_EQ(11, projected->get(0).get_int64());
+    EXPECT_EQ(22, projected->get(1).get_int64());
+
+    const auto& source = dst_chunk->get_column_by_slot_id(source_slot->id());
+    ASSERT_EQ(2, source->size());
+}
+
+TEST_F(GroupReaderTest, CollectIORangesDeduplicatesIdenticalRangesAcrossReaders) {
+    auto* file = _create_file();
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_TRUE(_create_filemeta(&file_meta, param).ok());
+
+    param->chunk_size = config::vector_chunk_size;
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    group_reader->_column_readers.clear();
+    group_reader->_active_column_indices = {0};
+    group_reader->_lazy_column_indices = {1};
+    group_reader->_column_readers.emplace(0, std::make_unique<MockIORangeColumnReader>(
+                                                     std::vector<io::SharedBufferedInputStream::IORange>{{100, 20}}));
+    group_reader->_column_readers.emplace(
+            1, std::make_unique<MockIORangeColumnReader>(
+                       std::vector<io::SharedBufferedInputStream::IORange>{{100, 20}, {200, 10}}));
+
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    group_reader->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
+
+    ASSERT_EQ(2, ranges.size());
+    EXPECT_EQ(100, ranges[0].offset);
+    EXPECT_EQ(20, ranges[0].size);
+    EXPECT_TRUE(ranges[0].is_active);
+    EXPECT_EQ(200, ranges[1].offset);
+    EXPECT_EQ(10, ranges[1].size);
+    EXPECT_FALSE(ranges[1].is_active);
+    EXPECT_EQ(210, end_offset);
+}
+
+TEST_F(GroupReaderTest, ProcessColumnsDefersVirtualColumnConjunctsUntilAfterProjection) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(110, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* source_slot =
+            _pool.add(new SlotDescriptor(111, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    virtual_col.is_extended_variant_virtual = true;
+    virtual_col.source_variant_column_name = "data";
+    virtual_col.variant_virtual_leaf_path = "a.b.c";
+    GroupReaderParam::Column source_col{};
+    source_col.slot_desc = source_slot;
+    param->read_cols.emplace_back(virtual_col);
+    param->read_cols.emplace_back(source_col);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, virtual_slot->id(), 22, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[virtual_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    auto variant_source = make_typed_only_variant_column_for_virtual_column_test();
+
+    ASSIGN_OR_ABORT(auto projection,
+                    make_virtual_projection_for_test("a.b.c", virtual_slot->type(), source_slot->id()));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_column_readers.emplace(source_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_source->clone()));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_EQ(1, group_reader->_deferred_variant_virtual_conjunct_ctxs.size());
+    ASSERT_TRUE(group_reader->_left_conjunct_ctxs.empty());
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_source, source_slot->id());
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+    dst_chunk->append_column(ColumnHelper::create_column(source_slot->type(), true), source_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    ASSERT_EQ(2, dst_chunk->num_rows());
+
+    ASSERT_OK(ChunkPredicateEvaluator::eval_conjuncts(group_reader->_deferred_variant_virtual_conjunct_ctxs,
+                                                      dst_chunk.get()));
+    ASSERT_EQ(1, dst_chunk->num_rows());
+    EXPECT_EQ(22, dst_chunk->get_column_by_slot_id(virtual_slot->id())->get(0).get_int64());
+}
+
 TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
     auto* param = _create_group_reader_param();
 
@@ -2358,6 +3024,673 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
     // Both physical column readers should be created
     ASSERT_NE(group_reader->_column_readers[100], nullptr);
     ASSERT_NE(group_reader->_column_readers[101], nullptr);
+}
+
+TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForPhysicalSource) {
+    auto* param = _create_group_reader_param();
+    param->read_cols.clear();
+
+    auto* source_slot =
+            _pool.add(new SlotDescriptor(180, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(181, "data.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column source_col{};
+    source_col.slot_desc = source_slot;
+    source_col.idx_in_parquet = 0;
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    virtual_col.idx_in_parquet = 0;
+    virtual_col.is_extended_variant_virtual = true;
+    virtual_col.source_variant_column_name = "data";
+    virtual_col.variant_virtual_leaf_path = "a";
+
+    param->read_cols.emplace_back(source_col);
+    param->read_cols.emplace_back(virtual_col);
+
+    auto t_file_meta = build_t_filemeta_with_variant_column("data");
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    param->file_metadata = file_meta;
+    param->file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSERT_OK(group_reader->init());
+    auto it = group_reader->_column_readers.find(virtual_slot->id());
+    ASSERT_NE(it, group_reader->_column_readers.end());
+    EXPECT_NE(nullptr, down_cast<VariantVirtualZoneMapReader*>(it->second.get()));
+}
+
+TEST(GroupReaderBloomFilterTest, DecimalBloomFilterApplicabilityRequiresExactLayoutMatch) {
+    MockColumnReader reader(tparquet::Type::INT32);
+
+    ParquetField decimal32_field;
+    decimal32_field.physical_type = tparquet::Type::INT32;
+    decimal32_field.precision = 5;
+    decimal32_field.scale = 2;
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+                                                         decimal32_field));
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 6, 2),
+                                                          decimal32_field));
+
+    ParquetField decimal64_field;
+    decimal64_field.physical_type = tparquet::Type::INT64;
+    decimal64_field.precision = 16;
+    decimal64_field.scale = 2;
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 16, 2),
+                                                         decimal64_field));
+
+    ParquetField decimal128_field;
+    decimal128_field.physical_type = tparquet::Type::FIXED_LEN_BYTE_ARRAY;
+    decimal128_field.precision = 22;
+    decimal128_field.scale = 4;
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 22, 4),
+                                                          decimal128_field));
+}
+
+// ── Hidden variant source active/lazy classification ─────────────────────────
+
+// Covers: _lazy_hidden_slot_ids.push_back (lazy hidden source path in Step 4)
+//         _active_slot_ids.push_back for active hidden (Step 5)
+TEST_F(GroupReaderTest, ProcessColumnsClassifiesHiddenSourcesAsActiveOrLazy) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    // Two virtual columns: slot 120 has a conjunct (→ active source),
+    //                      slot 121 is projection-only (→ lazy source).
+    auto* vslot_active =
+            _pool.add(new SlotDescriptor(120, "v1.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot_lazy =
+            _pool.add(new SlotDescriptor(121, "v2.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc1{};
+    vc1.slot_desc = vslot_active;
+    vc1.is_extended_variant_virtual = true;
+    vc1.source_variant_column_name = "v1";
+    vc1.variant_virtual_leaf_path = "a";
+    GroupReaderParam::Column vc2{};
+    vc2.slot_desc = vslot_lazy;
+    vc2.is_extended_variant_virtual = true;
+    vc2.source_variant_column_name = "v2";
+    vc2.variant_virtual_leaf_path = "a";
+    param->read_cols.emplace_back(vc1);
+    param->read_cols.emplace_back(vc2);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot_active->id(), 11, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[vslot_active->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Manually wire projections and hidden sources (normally done by _create_column_readers).
+    const SlotId active_src_id = SlotId(-10);
+    const SlotId lazy_src_id = SlotId(-11);
+    ASSIGN_OR_ABORT(auto proj_active, make_virtual_projection_for_test("a", vslot_active->type(), active_src_id));
+    ASSIGN_OR_ABORT(auto proj_lazy, make_virtual_projection_for_test("a", vslot_lazy->type(), lazy_src_id));
+    group_reader->_variant_virtual_projections.emplace(vslot_active->id(), std::move(proj_active));
+    group_reader->_variant_virtual_projections.emplace(vslot_lazy->id(), std::move(proj_lazy));
+
+    auto& active_src =
+            group_reader->_hidden_variant_sources
+                    .emplace("v1", GroupReader::HiddenVariantSource{.slot_id = active_src_id, .reader = nullptr})
+                    .first->second;
+    auto& lazy_src = group_reader->_hidden_variant_sources
+                             .emplace("v2", GroupReader::HiddenVariantSource{.slot_id = lazy_src_id, .reader = nullptr})
+                             .first->second;
+    group_reader->_hidden_slot_index[active_src_id] = &active_src;
+    group_reader->_hidden_slot_index[lazy_src_id] = &lazy_src;
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    // active_src_id should be in _active_hidden_slot_ids (backed by conjunct)
+    EXPECT_TRUE(std::find(group_reader->_active_hidden_slot_ids.begin(), group_reader->_active_hidden_slot_ids.end(),
+                          active_src_id) != group_reader->_active_hidden_slot_ids.end());
+    // lazy_src_id should be in _lazy_hidden_slot_ids (projection-only)
+    EXPECT_TRUE(std::find(group_reader->_lazy_hidden_slot_ids.begin(), group_reader->_lazy_hidden_slot_ids.end(),
+                          lazy_src_id) != group_reader->_lazy_hidden_slot_ids.end());
+    // active_src_id should also appear in unified _active_slot_ids
+    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
+                          active_src_id) != group_reader->_active_slot_ids.end());
+    // _deferred_conjunct_slot_ids must contain vslot_active
+    EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(vslot_active->id()));
+}
+
+TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForHiddenSource) {
+    auto* param = _create_group_reader_param();
+    param->read_cols.clear();
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(190, "data.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    virtual_col.idx_in_parquet = 0;
+    virtual_col.is_extended_variant_virtual = true;
+    virtual_col.source_variant_column_name = "data";
+    virtual_col.variant_virtual_leaf_path = "a";
+    param->read_cols.emplace_back(virtual_col);
+
+    auto t_file_meta = build_t_filemeta_with_variant_column("data");
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    param->file_metadata = file_meta;
+    param->file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSERT_OK(group_reader->init());
+    ASSERT_FALSE(group_reader->_hidden_slot_index.empty());
+    auto it = group_reader->_column_readers.find(virtual_slot->id());
+    ASSERT_NE(it, group_reader->_column_readers.end());
+    EXPECT_NE(nullptr, down_cast<VariantVirtualZoneMapReader*>(it->second.get()));
+}
+
+// Covers: _lazy_slot_ids.push_back (physical lazy column path in Step 5)
+TEST_F(GroupReaderTest, ProcessColumnsPopulatesLazySlotIdsForPhysicalColumnsWithoutPredicates) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    // Two physical variant columns: slot 130 has a predicate (active), 131 has none (lazy).
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(130, "col_a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(131, "col_b", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cb{};
+    cb.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cb);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto variant_col = make_typed_only_variant_column_for_virtual_column_test();
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_col->clone()));
+    group_reader->_column_readers.emplace(lazy_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_col->clone()));
+
+    // parquet_late_materialization_enable defaults to true; the no-predicate
+    // column is expected to land in _lazy_column_indices / _lazy_slot_ids.
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
+                          active_slot->id()) != group_reader->_active_slot_ids.end());
+    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), lazy_slot->id()) !=
+                group_reader->_lazy_slot_ids.end());
+}
+
+// Covers: physical VARIANT column with no direct conjuncts must be promoted to
+//         active when it is the source_slot_id for a deferred virtual conjunct.
+//         Without the pre-pass fix this column would be lazified and Phase 4
+//         would fail to find it in active_chunk.
+TEST_F(GroupReaderTest, ProcessColumnsPromotesPhysicalVariantSourceForDeferredConjunct) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    // Physical VARIANT column — no direct conjunct, should normally be lazy.
+    auto* phys_slot =
+            _pool.add(new SlotDescriptor(170, "v", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+    // Virtual slot with a deferred conjunct whose source is the physical slot.
+    auto* virt_slot =
+            _pool.add(new SlotDescriptor(171, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column pc{};
+    pc.slot_desc = phys_slot;
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = virt_slot;
+    vc.is_extended_variant_virtual = true;
+    param->read_cols.emplace_back(pc);
+    param->read_cols.emplace_back(vc);
+
+    // Conjunct on the virtual slot.
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, virt_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[virt_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto variant_col = make_typed_only_variant_column_for_virtual_column_test();
+    group_reader->_column_readers.emplace(phys_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_col->clone()));
+
+    // Wire projection: virtual slot 171 → source is physical slot 170 (non-negative).
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a", virt_slot->type(), phys_slot->id()));
+    group_reader->_variant_virtual_projections.emplace(virt_slot->id(), std::move(proj));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    // Physical slot must be active (not lazy) because a deferred conjunct needs it.
+    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
+                          phys_slot->id()) != group_reader->_active_slot_ids.end());
+    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), phys_slot->id()) ==
+                group_reader->_lazy_slot_ids.end());
+    // The virtual conjunct slot must be registered.
+    EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(virt_slot->id()));
+}
+
+// ── _apply_deferred_variant_conjuncts ────────────────────────────────────────
+
+// Covers: Status::InternalError when a deferred-conjunct slot's source is absent
+//         from active_chunk (invariant violation path, lines ~1289-1293).
+TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsReturnsErrorWhenConjunctSourceMissing) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(140, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Wire projection for vslot pointing to source slot -20 (absent from active_chunk).
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-20)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    // Mark this slot as having a deferred conjunct (simulating Step 1 output).
+    group_reader->_deferred_conjunct_slot_ids.insert(vslot->id());
+    // Push a dummy conjunct so the early-exit guard doesn't fire.
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot->id(), 11, &conjunct_ctxs));
+    for (auto* ctx : conjunct_ctxs) {
+        group_reader->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
+    }
+
+    // active_chunk is empty — source slot -20 is absent.
+    auto active_chunk = std::make_shared<Chunk>();
+    auto projected_chunk = std::make_shared<Chunk>();
+    auto status = group_reader->_apply_deferred_variant_conjuncts(active_chunk, 2, &projected_chunk);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.status().is_internal_error());
+}
+
+// Covers: eval_chunk->append_column (line ~1300) — the success path where source
+//         IS in active_chunk and the filter correctly selects matching rows.
+TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsProjectsSourceAndFilters) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(150, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Source slot -21 will be present in active_chunk.
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-21)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_deferred_conjunct_slot_ids.insert(vslot->id());
+
+    // Conjunct: v.a == 22  (row 0 has 11, row 1 has 22 → only row 1 passes).
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot->id(), 22, &conjunct_ctxs));
+    for (auto* ctx : conjunct_ctxs) {
+        group_reader->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
+    }
+
+    // active_chunk contains the source variant column with typed path "a.b.c" → [11, 22].
+    auto active_chunk = std::make_shared<Chunk>();
+    active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-21));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    ASSIGN_OR_ABORT(auto filter, group_reader->_apply_deferred_variant_conjuncts(active_chunk, 2, &projected_chunk));
+    ASSERT_EQ(2u, filter.size());
+    EXPECT_EQ(0, filter[0]); // row 0 (value=11) rejected
+    EXPECT_EQ(1, filter[1]); // row 1 (value=22) passed
+    // active_chunk is NOT filtered here; the caller merges and applies the combined filter.
+    EXPECT_EQ(2u, active_chunk->num_rows());
+}
+
+TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterReturnsErrorWhenRowCountMismatch) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    active_col->append_datum(Datum(int64_t{1}));
+    active_col->append_datum(Datum(int64_t{2}));
+    active_chunk->append_column(active_col, SlotId(1));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    auto projected_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    projected_col->append_datum(Datum(int64_t{99}));
+    projected_chunk->append_column(projected_col, SlotId(2));
+
+    Filter filter = {1, 0};
+    auto st = group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterAppliesFilterForPreFilterRows) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    active_col->append_datum(Datum(int64_t{1}));
+    active_col->append_datum(Datum(int64_t{2}));
+    active_chunk->append_column(active_col, SlotId(1));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    auto projected_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    projected_col->append_datum(Datum(int64_t{11}));
+    projected_col->append_datum(Datum(int64_t{22}));
+    projected_chunk->append_column(projected_col, SlotId(2));
+
+    Filter filter = {1, 0};
+    ASSERT_OK(group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2));
+    ASSERT_EQ(1u, projected_chunk->num_rows());
+    EXPECT_EQ(11, projected_chunk->get_column_by_slot_id(SlotId(2))->get(0).get_int64());
+}
+
+// ── _fill_dst_chunk error path ────────────────────────────────────────────────
+
+// Covers: Status::InternalError in _fill_dst_chunk when source slot absent
+//         from active_chunk (lines ~1340-1342).
+TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenSourceSlotMissingFromActiveChunk) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(160, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = vslot;
+    param->read_cols.emplace_back(vc);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Wire projection pointing to source slot -30 — NOT present in active_chunk.
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-30)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+
+    auto active_chunk = std::make_shared<Chunk>(); // source slot -30 absent
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+
+    auto status = fill_dst_chunk_without_projected(group_reader, active_chunk, &dst_chunk);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnIsNull) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(260, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = vslot;
+    param->read_cols.emplace_back(vc);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-31)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-31));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    projected_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+    projected_chunk->get_column_by_slot_id(vslot->id()).reset();
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+
+    auto status = group_reader->_fill_dst_chunk(active_chunk, projected_chunk, &dst_chunk);
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnRowCountMismatch) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(261, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = vslot;
+    param->read_cols.emplace_back(vc);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-32)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-32));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    auto projected_col = ColumnHelper::create_column(vslot->type(), true);
+    projected_col->append_datum(Datum(int64_t{1}));
+    projected_chunk->append_column(projected_col, vslot->id());
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+
+    auto status = group_reader->_fill_dst_chunk(active_chunk, projected_chunk, &dst_chunk);
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyOnInvalidAccessPath) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0));
+    ASSIGN_OR_ABORT(auto field_arr, ColumnAccessPath::create(TAccessPathType::FIELD, "arr", 0, root->absolute_path()));
+    ASSIGN_OR_ABORT(auto offset_0,
+                    ColumnAccessPath::create(TAccessPathType::OFFSET, "0", 0, field_arr->absolute_path()));
+    field_arr->children().emplace_back(std::move(offset_0));
+    root->children().emplace_back(std::move(field_arr));
+    column_access_paths.emplace_back(std::move(root));
+    param->column_access_paths = &column_access_paths;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    auto hints = group_reader->_get_variant_shredded_hints("data");
+    EXPECT_TRUE(hints.shredded_paths.empty());
+    EXPECT_TRUE(hints.parsed_shredded_paths.empty());
+}
+
+// ── Decimal virtual column fallback tests ──────────────────────────────────────
+//
+// These tests exercise the row-by-row decimal fallback path that is reached when
+// neither build_exact_typed_variant_projection nor build_decimal_typed_variant_projection
+// succeeds (i.e. the shredded leaf is absent or is a non-decimal type).
+//
+// Covered lines in group_reader.cpp (build_decimal_typed_variant_projection early
+// returns + build_decimal_variant_projection_column body):
+//   line 219: !reader.is_typed_exact() → no shredded leaf at path, decimal target
+//   line 224: source leaf is not decimal (e.g. INT64) with decimal target
+//   lines 262-300: build_decimal_variant_projection_column (normal + overflow rows)
+//   lines 346-351: TYPE_DECIMAL32/64/128 switch cases in project_variant_leaf_column
+
+// Test: raw JSON variant data (no typed shredded leaf) with a DECIMAL32 target.
+// build_decimal_typed_variant_projection returns NotFound at line 219 (no typed exact
+// leaf), then build_decimal_variant_projection_column is invoked for the row-by-row cast.
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromRawVariantFallback) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(400, "data.price", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Project path "a.b.c" → DECIMAL32(5,2). The raw variant rows hold integer values
+    // at that path; they must be cast row-by-row via cast_variant_to_decimal.
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(401)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    // Raw variant: {"a":{"b":{"c":10}}} and {"a":{"b":{"c":20}}} — no typed shredded leaf.
+    auto variant_src = make_raw_json_variant_column_for_virtual_column_test(
+            {R"({"a":{"b":{"c":10}}})", R"({"a":{"b":{"c":20}}})"});
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_src, SlotId(401));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    // 10 → 10.00 in DECIMAL32(5,2) stored as 1000; 20 → 2000.
+    EXPECT_EQ(1000, result->get(0).get_int32());
+    EXPECT_EQ(2000, result->get(1).get_int32());
+}
+
+// Test: variant with an INT64 typed shredded leaf at "a.b.c" but a DECIMAL32 target.
+// build_decimal_typed_variant_projection returns NotFound at line 224 (source is INT64,
+// not a decimal type), then build_decimal_variant_projection_column does the row-by-row
+// cast reading from the typed INT64 column.
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromBigintTypedLeafFallback) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 7, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(402, "data.price", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(403)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    // Typed INT64 leaf at "a.b.c" (values 11 and 22).
+    // Target DECIMAL32(7,2): exact match fails (INT64 ≠ DECIMAL32); decimal typed match
+    // fails at line 224 (INT64 is not a decimal type); row-by-row cast follows.
+    auto variant_src = make_typed_only_variant_column_for_virtual_column_test(); // INT64 values 11, 22
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_src, SlotId(403));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    // 11 → 11.00 stored as 1100; 22 → 2200.
+    EXPECT_EQ(1100, result->get(0).get_int32());
+    EXPECT_EQ(2200, result->get(1).get_int32());
+}
+
+// Test: raw JSON variant with a value that overflows DECIMAL32 storage.
+// cast_variant_to_decimal uses DecimalV3Cast::from_integer which checks for int32_t overflow
+// (value × scale_factor > INT32_MAX).  For scale=2, scale_factor=100; integer 21474837 ×
+// 100 = 2147483700 exceeds INT32_MAX (2147483647), so overflow=true and the row is NULL
+// (lines 292-293 in build_decimal_variant_projection_column).
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnOverflowBecomesNull) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(404, "data.price", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(405)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    // Row 0: integer 5 → 5 × 100 = 500, fits in int32_t → non-null.
+    // Row 1: integer 21474837 → 21474837 × 100 = 2147483700 > INT32_MAX → overflow → NULL.
+    auto variant_src = make_raw_json_variant_column_for_virtual_column_test(
+            {R"({"a":{"b":{"c":5}}})", R"({"a":{"b":{"c":21474837}}})"});
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_src, SlotId(405));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(500, result->get(0).get_int32()); // 5 × 100 = 500
+    EXPECT_TRUE(result->is_null(1));            // 21474837 × 100 overflows int32_t → NULL
 }
 
 } // namespace starrocks::parquet

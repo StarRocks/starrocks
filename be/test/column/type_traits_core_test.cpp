@@ -17,7 +17,7 @@
 #include <limits>
 #include <type_traits>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 
 namespace starrocks {
 

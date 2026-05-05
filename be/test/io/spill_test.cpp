@@ -27,6 +27,7 @@
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"

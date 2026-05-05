@@ -83,6 +83,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -146,6 +147,7 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -215,6 +217,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -256,6 +259,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -373,7 +377,54 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     }
 
     public void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {
+        checkNativeQueryCatalogUsage(context, statement);
         ColumnPrivilege.check(context, statement, excludeTables);
+    }
+
+    private void checkNativeQueryCatalogUsage(ConnectContext context, QueryStatement statement) {
+        if (statement == null) {
+            return;
+        }
+
+        Set<String> catalogs = new HashSet<>();
+        new NativeQueryCatalogCollector(catalogs).visit(statement);
+        for (String catalog : catalogs) {
+            try {
+                Authorizer.checkCatalogAction(context, catalog, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        catalog,
+                        context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(),
+                        ObjectType.CATALOG.name(),
+                        catalog);
+            }
+        }
+    }
+
+    private static class NativeQueryCatalogCollector extends AstTraverser<Void, Void> {
+        private final Set<String> catalogs;
+
+        private NativeQueryCatalogCollector(Set<String> catalogs) {
+            this.catalogs = catalogs;
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            if (node.getRight() != null) {
+                visit(node.getRight(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            if (node.getQueryTable() != null) {
+                catalogs.add(node.getQueryTable().getCatalogName());
+            }
+            return null;
+        }
     }
 
     // --------------------------------- Routine Load Statement ---------------------------------

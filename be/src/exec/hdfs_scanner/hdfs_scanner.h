@@ -23,13 +23,13 @@
 #include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
@@ -281,6 +281,12 @@ struct HdfsScannerParams {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool use_min_max_opt = false;
+    // Mirrors THdfsScanNode.can_use_any_column.  When true, PruneHDFSScanColumnRule
+    // injected a placeholder materialized column because all queried columns were
+    // partition columns.  Used together with use_min_max_opt to skip reading the
+    // placeholder from the data file.
+    bool can_use_any_column = false;
+
     bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
@@ -298,11 +304,12 @@ struct HdfsScannerContext {
         bool decode_needed = true;
 
         std::string formatted_name(bool case_sensitive) const {
-            return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
+            auto n = std::string(name());
+            return case_sensitive ? n : boost::algorithm::to_lower_copy(n);
         }
-        const std::string& name() const { return slot_desc->col_name(); }
+        std::string_view name() const { return slot_desc->col_name(); }
         int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
-        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
+        std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
@@ -353,6 +360,11 @@ struct HdfsScannerContext {
     bool orc_use_column_names = false;
 
     bool use_min_max_opt = false;
+    // Set when can_use_any_column is propagated from the scan node.  In combination
+    // with use_min_max_opt this tells update_min_max_columns() that any materialized
+    // column without a min/max entry is a placeholder and should be filled with a
+    // default value instead of being read from the data file.
+    bool can_use_any_column = false;
 
     bool use_count_opt = false;
     bool is_first_split = false;

@@ -34,8 +34,8 @@
 #include "types/hll.h"
 #include "types/json_value.h"
 #include "types/percentile_value.h"
+#include "types/storage_type_traits.h"
 #include "types/timestamp_value.h"
-#include "types/type_traits.h"
 #include "util/stack_util.h"
 
 namespace starrocks {
@@ -504,7 +504,7 @@ public:
 template <LogicalType int_type>
 class IntegerToDateV2TypeConverter : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<int_type>::CppType;
+    using CppType = StorageCppType<int_type>;
 
     IntegerToDateV2TypeConverter() = default;
     ~IntegerToDateV2TypeConverter() override = default;
@@ -539,8 +539,8 @@ public:
 template <LogicalType SrcType, LogicalType DstType>
 class DecimalTypeConverter : public TypeConverter {
 public:
-    using SrcCppType = typename CppTypeTraits<SrcType>::CppType;
-    using DstCppType = typename CppTypeTraits<DstType>::CppType;
+    using SrcCppType = StorageCppType<SrcType>;
+    using DstCppType = StorageCppType<DstType>;
 
     DecimalTypeConverter() = default;
     ~DecimalTypeConverter() override = default;
@@ -566,8 +566,8 @@ public:
 template <LogicalType SrcType, LogicalType DstType>
 class DecimalV3TypeConverter : public TypeConverter {
 public:
-    using SrcCppType = typename CppTypeTraits<SrcType>::CppType;
-    using DstCppType = typename CppTypeTraits<DstType>::CppType;
+    using SrcCppType = StorageCppType<SrcType>;
+    using DstCppType = StorageCppType<DstType>;
 
     DecimalV3TypeConverter() = default;
     ~DecimalV3TypeConverter() override = default;
@@ -595,7 +595,7 @@ public:
 template <LogicalType Type>
 class StringToOtherTypeConverter : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<Type>::CppType;
+    using CppType = StorageCppType<Type>;
 
     StringToOtherTypeConverter() = default;
     ~StringToOtherTypeConverter() override = default;
@@ -622,9 +622,9 @@ public:
 // Convert string to json
 // JSON needs dynamic memory allocation, which could not fit in TypeInfo::from_string
 template <>
-class StringToOtherTypeConverter<TYPE_JSON> : public TypeConverter {
+class StringToOtherTypeConverter<TYPE_JSON> final : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<TYPE_JSON>::CppType;
+    using CppType = StorageCppType<TYPE_JSON>;
 
     StringToOtherTypeConverter() = default;
     ~StringToOtherTypeConverter() override = default;
@@ -657,9 +657,9 @@ public:
 };
 
 template <LogicalType Type>
-class OtherToStringTypeConverter : public TypeConverter {
+class OtherToStringTypeConverter final : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<Type>::CppType;
+    using CppType = StorageCppType<Type>;
 
     OtherToStringTypeConverter() = default;
     ~OtherToStringTypeConverter() override = default;
@@ -674,7 +674,7 @@ public:
             dst->set_null();
             return Status::OK();
         }
-        auto value = src.template get<CppType>();
+        auto value = src.get<CppType>();
         std::string source = src_typeinfo->to_string(&value);
         Slice slice;
         slice.size = source.size();
@@ -696,7 +696,7 @@ public:
 template <>
 class OtherToStringTypeConverter<TYPE_JSON> : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<TYPE_JSON>::CppType;
+    using CppType = StorageCppType<TYPE_JSON>;
 
     OtherToStringTypeConverter() = default;
     ~OtherToStringTypeConverter() override = default;
@@ -1075,7 +1075,7 @@ public:
 template <LogicalType SrcType>
 class DecimalToPercentileTypeConverter : public MaterializeTypeConverter {
 public:
-    using CppType = typename CppTypeTraits<SrcType>::CppType;
+    using CppType = StorageCppType<SrcType>;
     DecimalToPercentileTypeConverter() = default;
     ~DecimalToPercentileTypeConverter() override = default;
 

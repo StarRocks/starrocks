@@ -103,7 +103,7 @@ public interface ConnectorMetadata {
      * @return a list of partition names
      */
     default List<String> listPartitionNames(String databaseName, String tableName,
-                                            ConnectorMetadatRequestContext requestContext) {
+                                            ConnectorMetadataRequestContext requestContext) {
         return Lists.newArrayList();
     }
 
@@ -128,6 +128,13 @@ public interface ConnectorMetadata {
      * @return a Table instance
      */
     default Table getTable(ConnectContext context, String dbName, String tblName) {
+        return null;
+    }
+
+    /**
+     * Build a temporary table from a pass-through query when the connector can infer the result schema.
+     */
+    default Table getTableFromQuery(ConnectContext context, String dbName, String query) {
         return null;
     }
 
@@ -187,10 +194,6 @@ public interface ConnectorMetadata {
         return RemoteFileInfoDefaultSource.EMPTY;
     }
 
-    default List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        return Lists.newArrayList();
-    }
-
     /**
      * Get table meta serialized specification
      *
@@ -208,6 +211,15 @@ public interface ConnectorMetadata {
 
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
+    }
+
+    /**
+     * Get partition info at a specific snapshot identified by the request context.
+     * Default implementation ignores the context and falls back to the live-snapshot variant.
+     */
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                              ConnectorMetadataRequestContext requestContext) {
+        return getPartitions(table, partitionNames);
     }
 
     /**

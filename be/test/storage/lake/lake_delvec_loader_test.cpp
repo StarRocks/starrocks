@@ -23,6 +23,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -221,6 +222,90 @@ TEST_F(LakeDelvecLoaderTest, test_load_from_file_normal) {
 
     st = loader.load_from_file(tsid, version, &pdelvec);
     ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(pdelvec != nullptr);
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// Test that load_from_file reuses the cached metadata when (tablet_id, version) matches.
+// The on-disk tablet metadata file and the metacache entry are both removed before loading, so
+// a fallback to get_tablet_metadata would fail with NotFound. Successful load therefore proves
+// the cached-metadata fast path is taken.
+TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_cached_metadata) {
+    const int64_t tablet_id = 10006;
+    const uint32_t segment_id = 600;
+    const int64_t version = 15;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {7, 14, 21};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+
+    ASSIGN_OR_ABORT(auto cached_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    auto meta_path = _tablet_manager->tablet_metadata_location(tablet_id, version);
+    ASSERT_TRUE(FileSystem::Default()->delete_file(meta_path).ok());
+    _tablet_manager->metacache()->erase(meta_path);
+
+    DelVectorPtr pdelvec;
+    TabletSegmentId tsid(tablet_id, segment_id);
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, cached_metadata);
+
+    ASSERT_TRUE(loader.load_from_file(tsid, version, &pdelvec).ok());
+    ASSERT_TRUE(pdelvec != nullptr);
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// Test that load_from_file ignores the cached metadata when its (tablet_id, version) does not
+// match the request, and still succeeds by falling back to get_tablet_metadata from disk.
+TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_mismatched_cached_metadata) {
+    const int64_t tablet_id = 10007;
+    const uint32_t segment_id = 700;
+    const int64_t version = 16;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {11, 22, 33};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+
+    // Cached metadata is for a different version; the loader must fall back to disk read.
+    auto stale_metadata = std::make_shared<TabletMetadata>();
+    stale_metadata->set_id(tablet_id);
+    stale_metadata->set_version(version + 1);
+
+    DelVectorPtr pdelvec;
+    TabletSegmentId tsid(tablet_id, segment_id);
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, true /* fill_cache */, lake_io_opts, stale_metadata);
+
+    ASSERT_TRUE(loader.load_from_file(tsid, version, &pdelvec).ok());
     ASSERT_TRUE(pdelvec != nullptr);
     EXPECT_EQ(expected_delvec, pdelvec->save());
 }

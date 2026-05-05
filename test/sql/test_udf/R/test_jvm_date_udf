@@ -1,0 +1,99 @@
+-- name: test_jvm_date_udf @no_arrow_flight_sql
+CREATE FUNCTION echo_date(date)
+RETURNS date
+PROPERTIES (
+    "symbol" = "EchoDate",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/date.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION echo_datetime(datetime)
+RETURNS datetime
+PROPERTIES (
+    "symbol" = "EchoDateTime",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/date.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION date_gt(datetime, date)
+RETURNS datetime
+PROPERTIES (
+    "symbol" = "GreaterTime",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/date.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION echo_date_array(array<date>)
+RETURNS array<date>
+PROPERTIES (
+    "symbol" = "EchoDateArray",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/date.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION echo_date_map(map<date, date>)
+RETURNS map<date, date>
+PROPERTIES (
+    "symbol" = "EchoDateMap",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/date.jar"
+);
+-- result:
+-- !result
+CREATE TABLE t_dt (
+    id INT,
+    dt1 date,
+    dt2 datetime,
+    dt3 array<date>,
+    dt4 map<date, date>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_dt VALUES
+    (1, '2020-02-02', '2020-02-02 20:22:02', ['2020-02-02', '2020-02-03'], map('2020-02-02', '2020-02-21')),
+    (2, '2020-01-22', '2020-01-02 20:22:02', ['2021-02-02', '2026-02-03'], map('2023-02-02', '2024-02-21'));
+-- result:
+-- !result
+select echo_date(dt1) from t_dt;
+-- result:
+2020-02-02
+2020-01-22
+-- !result
+select echo_datetime(dt2) from t_dt;
+-- result:
+2020-02-02 20:22:02
+2020-01-02 20:22:02
+-- !result
+select echo_date_array(dt3) from t_dt;
+-- result:
+["2020-02-02","2020-02-03"]
+["2021-02-02","2026-02-03"]
+-- !result
+select echo_date_map(dt4) from t_dt;
+-- result:
+{"2020-02-02":"2020-02-21"}
+{"2023-02-02":"2024-02-21"}
+-- !result
+select echo_date('2020-02-02');
+-- result:
+2020-02-02
+-- !result
+select echo_datetime('2020-02-02 19:22:02');
+-- result:
+2020-02-02 19:22:02
+-- !result
+select echo_date_array(['2020-02-02']);
+-- result:
+["2020-02-02"]
+-- !result
+select echo_date_map(map('2020-02-02', '2020-01-01'));
+-- result:
+{"2020-02-02":"2020-01-01"}
+-- !result

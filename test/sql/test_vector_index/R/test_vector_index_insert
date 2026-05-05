@@ -26,29 +26,8 @@ INSERT into t1 values
 -- result:
 [REGEX].*Insert has filtered data.*
 -- !result
-INSERT into t1 values 
-    (1, [null, null, null, null, null], [1,2,3,4,5]);
--- result:
-[REGEX].*The input vector is not normalized but `metric_type` is cosine_similarity and `is_vector_normed` is true.*
--- !result
-INSERT into t1 values 
-    (1, [1,2,3,4], [1,2,3,4]);
--- result:
-[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 4.*
--- !result
-INSERT into t1 values 
-    (1, [], []);
--- result:
-[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 0.*
--- !result
 INSERT INTO t1 values
-    (1, [1,2,3,4,5], [1,2,3,4,5]),
-    (2, [4,5,6,7,8], [4,5,6,7,8]);
--- result:
-[REGEX].*The input vector is not normalized but `metric_type` is cosine_similarity and `is_vector_normed` is true.*
--- !result
-INSERT INTO t1 values
-    (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242], 
+    (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242],
         [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242]),
     (2, [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093],
         [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093]),
@@ -57,13 +36,6 @@ INSERT INTO t1 values
     (4, [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152],
         null);
 -- result:
--- !result
-INSERT INTO t1 values
-    (1, [1,2,3,4,5], [1,2,3,4,5]),
-    (2, [4,5,6,7,8], [4,5,6,7,8]),
-    (3, null, null);
--- result:
-[REGEX].*The input vector is not normalized but `metric_type` is cosine_similarity and `is_vector_normed` is true.*
 -- !result
 INSERT INTO t1 values
     (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242], 
@@ -116,7 +88,6 @@ INSERT INTO t2 values
     (4, [null, null, null, null], [null, null, null, null]),
     (5, [4,5,6,7,8], null);
 -- result:
-[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 4.*
 -- !result
 INSERT INTO t2 values
     (1, [1,2,3,4,5], [1,2,3,4,5]),
@@ -125,10 +96,19 @@ INSERT INTO t2 values
     (4, [null, null, null, null], [null, null, null, null]),
     (5, [4,5,6,7,8], null);
 -- result:
-[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 4.*
 -- !result
-select * from t2 order by id;
+select * from t2 order by id, v1, v2;
 -- result:
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+2	[4,5,6,7]	[4,5,6,7,8]
+2	[4,5,6,7,8]	[4,5,6,7,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
 -- !result
 insert into t1 select * from t2;
 -- result:
@@ -140,12 +120,32 @@ select * from t1 order by id, v1, v2;
 -- result:
 1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
 1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
 2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
 2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
+2	[4,5,6,7]	[4,5,6,7,8]
+2	[4,5,6,7]	[4,5,6,7,8]
+2	[4,5,6,7,8]	[4,5,6,7,8]
+2	[4,5,6,7,8]	[4,5,6,7,8]
 3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
 3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
 4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
 4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
 -- !result
 insert into t2 select * from t1;
 -- result:
@@ -158,12 +158,42 @@ select * from t2 order by id, v1, v2;
 -- result:
 1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
 1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
+1	[1,2,3,4,5]	[1,2,3,4,5]
 2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
 2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
+2	[4,5,6,7]	[4,5,6,7,8]
+2	[4,5,6,7]	[4,5,6,7,8]
+2	[4,5,6,7]	[4,5,6,7,8]
+2	[4,5,6,7,8]	[4,5,6,7,8]
+2	[4,5,6,7,8]	[4,5,6,7,8]
+2	[4,5,6,7,8]	[4,5,6,7,8]
 3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
 3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+3	[4,5,6,null,8]	[4,5,6,null,8]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
+4	[null,null,null,null]	[null,null,null,null]
 4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
 4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
+5	[4,5,6,7,8]	None
 -- !result
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
 -- result:

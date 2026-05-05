@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -100,6 +101,14 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(tabletReshardJob);
+
+        if (MetricRepo.hasInit) {
+            if (tabletReshardJob.getJobType() == TabletReshardJob.JobType.SPLIT_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL.increase(1L);
+            } else if (tabletReshardJob.getJobType() == TabletReshardJob.JobType.MERGE_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL.increase(1L);
+            }
+        }
 
         LOG.info("Added tablet reshard job. {}", tabletReshardJob);
     }

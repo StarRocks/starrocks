@@ -124,4 +124,12 @@ void SchemaTestHelper::add_column_pb_to_tablet_schema(TabletSchemaPB* tablet_sch
     column->set_aggregation(agg);
 }
 
+void SchemaTestHelper::add_column_pb(TabletSchemaPB* schema_pb, const std::string& name, const std::string& type,
+                                     bool is_key) {
+    auto* col = schema_pb->add_column();
+    col->set_name(name);
+    col->set_is_key(is_key);
+    col->set_type(type);
+}
+
 } // namespace starrocks

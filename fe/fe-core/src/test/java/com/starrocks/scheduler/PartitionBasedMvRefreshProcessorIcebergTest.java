@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -27,7 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
@@ -193,10 +194,13 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
+        Assertions.assertNotNull(mvContext.getPartitionTopology());
+        Assertions.assertNotNull(mvContext.getRefreshScope());
+        Assertions.assertTrue(Strings.isNullOrEmpty(taskRun.getStatus().getErrorMessage()));
         assertPlanContains(execPlan, "3: date >= '2020-01-02', 3: date < '2020-01-03'");
 
         Map<String, Long> partitionVersionMap = new HashMap<>();
@@ -268,7 +272,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -398,9 +402,10 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                         Assertions.assertTrue(queryCacheStats != null);
                         queryCacheStats.getCounter().forEach((key, value) -> {
                             if (key.contains("cache_partitionNames_")) {
-                                Assertions.assertEquals(2L, value.longValue());
-                            } else if (key.contains("cache_getPartitionKeyRange_")) {
-                                Assertions.assertEquals(4L, value.longValue());
+                                // After removing getPartitionKeyRange from CachedPartitionTraits,
+                                // MVPartitionCellBuilder calls getPartitionNames directly each time,
+                                // increasing cache hits while the actual remote call remains cached.
+                                Assertions.assertTrue(value.longValue() >= 2L);
                             } else if (key.contains("cache_getPartitionNameWithPartitionInfo_")) {
                                 Assertions.assertEquals(1L, value.longValue());
                             } else if (key.contains("cache_getUpdatedPartitionNames_")) {
@@ -450,7 +455,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
             Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -667,32 +672,25 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
     @Test
     public void testRefreshMvWithIcebergPartitionEvolution() throws Exception {
-        // Create MV on Iceberg table without partition evolution
-        String mvName = "iceberg_refresh_evolution_mv";
+        String mvName = "iceberg_refresh_evolution_unpartitioned_mv";
         starRocksAssert.useDatabase("test")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
-                        "PARTITION BY date_trunc('month', ts)\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ")\n" +
-                        "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
+                        "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                        + "`t0_date_month_identity_evolution` as a;");
 
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), mvName));
+        Assertions.assertTrue(mv.getPartitionInfo().isUnPartitioned());
 
-        // First refresh should succeed
         triggerRefreshMv(testDb, mv);
 
-        // Now simulate partition evolution by changing the base table to one with evolution
-        // This simulates the scenario where the base table has done partition evolution after MV creation
-        // We do this by altering the MV's base table info to point to the evolution table
-        // Note: This is a test-only approach to verify the check works
-
-        // Create a new MV directly on the evolution table - should fail during creation
-        String mvName2 = "iceberg_evolution_mv2";
+        String mvName2 = "iceberg_evolution_partitioned_mv";
         try {
             starRocksAssert.useDatabase("test")
                     .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName2 + "`\n" +
@@ -706,9 +704,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                             + "`t0_date_month_identity_evolution` as a;");
             Assertions.fail("Should fail because Iceberg table has partition evolution");
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains(
-                    "Do not support create materialized view when base iceberg table"));
-            Assertions.assertTrue(e.getMessage().contains("has done partition evolution"));
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"));
         }
 
         starRocksAssert.dropMaterializedView(mvName);

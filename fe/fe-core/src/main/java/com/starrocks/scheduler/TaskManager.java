@@ -124,6 +124,9 @@ public class TaskManager implements MemoryTrackable {
             clearUnfinishedTaskRun();
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
+                if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                    return;
+                }
                 if (!taskRunManager.tryTaskRunLock()) {
                     LOG.warn("TaskRun scheduler cannot acquire the lock");
                     return;
@@ -270,9 +273,6 @@ public class TaskManager implements MemoryTrackable {
         Task task = nameToTaskMap.get(taskName);
         if (task.getType() != Constants.TaskType.PERIODICAL) {
             return false;
-        }
-        if (task.getState() == Constants.TaskState.PAUSE) {
-            return true;
         }
         TaskSchedule taskSchedule = task.getSchedule();
         // this will not happen
@@ -835,6 +835,9 @@ public class TaskManager implements MemoryTrackable {
         // set task's next schedule time
         task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
+            if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                return;
+            }
             // ensure an execute task will not throw exception
             try {
                 task.setLastScheduleTime(TimeUtils.getEpochSeconds());

@@ -133,7 +133,7 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
             }
 
             size_t index = 0;
-            if (schema.root()->nameIndex(desc->col_name(), index)) {
+            if (schema.root()->nameIndex(std::string(desc->col_name()), index)) {
                 _field_indexes[i] = index;
             }
         }
@@ -166,7 +166,7 @@ void AvroReader::TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
         }
 
         size_t index = 0;
-        if (schema.root()->nameIndex(desc->col_name(), index)) {
+        if (schema.root()->nameIndex(std::string(desc->col_name()), index)) {
             _field_indexes[i] = index;
         }
     }

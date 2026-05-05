@@ -21,7 +21,7 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"

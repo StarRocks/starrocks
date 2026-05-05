@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <exception>
 #include <memory>
 #include <sstream>
 #include <type_traits>
@@ -108,7 +109,7 @@ public:
         // sometimes we may fill _bytes and _offsets separately and resize them in the final stage,
         // if an exception is thrown in the middle process, _offsets maybe inconsistent with _bytes,
         // we should skip the check.
-        if (std::uncaught_exception()) {
+        if (std::uncaught_exceptions() > 0) {
             return;
         }
 #endif
@@ -125,20 +126,6 @@ public:
 
     bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
     bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
-
-    const uint8_t* raw_data() const override {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return reinterpret_cast<const uint8_t*>(_slices.data());
-    }
-
-    uint8_t* mutable_raw_data() override {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return reinterpret_cast<uint8_t*>(_slices.data());
-    }
 
     size_t size() const override { return _offsets.size() - 1; }
 
@@ -178,7 +165,6 @@ public:
         // affect the performance.
         // _bytes.reserve(n * 4);
         _offsets.reserve(n + 1);
-        _slices_cache = false;
     }
 
     // If you know the size of the Byte array in advance, you can call this method,
@@ -186,29 +172,21 @@ public:
     void reserve(size_t n, size_t byte_size) {
         _offsets.reserve(n + 1);
         _bytes.reserve(byte_size);
-        _slices_cache = false;
     }
 
     void resize(size_t n) override {
         _offsets.resize(n + 1, _offsets.back());
         _bytes.resize(_offsets.back());
-        _slices_cache = false;
     }
 
     void assign(size_t n, size_t idx) override;
 
     void remove_first_n_values(size_t count) override;
 
-    // No complain about the overloaded-virtual for this function
-    DIAGNOSTIC_PUSH
-    DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
+    using Column::append;
     void append(const Slice& str);
-    DIAGNOSTIC_POP
 
-    void append_datum(const Datum& datum) override {
-        append(datum.get_slice());
-        _slices_cache = false;
-    }
+    void append_datum(const Datum& datum) override { append(datum.get_slice()); }
 
     void append(const Column& src, size_t offset, size_t count) override;
 
@@ -221,7 +199,6 @@ public:
     void append_string(const std::string& str) {
         _bytes.insert(_bytes.end(), str.data(), str.data() + str.size());
         _offsets.emplace_back(_bytes.size());
-        _slices_cache = false;
     }
 
     bool append_strings(const Slice* data, size_t size) override;
@@ -239,14 +216,10 @@ public:
 
     void append_value_multiple_times(const void* value, size_t count) override;
 
-    void append_default() override {
-        _offsets.emplace_back(_bytes.size());
-        _slices_cache = false;
-    }
+    void append_default() override { _offsets.emplace_back(_bytes.size()); }
 
     void append_default(size_t count) override {
         _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
-        _slices_cache = false;
     }
 
     StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
@@ -313,6 +286,12 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
+    // Mark this column as holding BINARY / VARBINARY (rather than VARCHAR/CHAR) data.
+    // When set, put_mysql_row_buffer uses push_binary inside nested types so that
+    // raw bytes are encoded as hex/base64 instead of being emitted verbatim.
+    void set_is_binary_type(bool v) { _is_binary_type = v; }
+    bool is_binary_type() const { return _is_binary_type; }
+
     std::string get_name() const override {
         static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
         if (std::is_same_v<T, uint32_t>) {
@@ -350,7 +329,7 @@ public:
         return ImmBytes(_bytes.data(), _bytes.size());
     }
 
-    const uint8_t* continuous_data() const override { return _data_base(); }
+    const uint8_t* raw_bytes() const { return _data_base(); }
 
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
@@ -359,7 +338,7 @@ public:
 
     size_t container_memory_usage() const override {
         size_t bytes_memory = _resource.empty() ? _bytes.capacity() : 0;
-        return bytes_memory + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
+        return bytes_memory + _offsets.capacity() * sizeof(_offsets[0]);
     }
 
     size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
@@ -370,8 +349,6 @@ public:
         swap(this->_delete_state, r._delete_state);
         swap(_bytes, r._bytes);
         swap(_offsets, r._offsets);
-        swap(_slices, r._slices);
-        swap(_slices_cache, r._slices_cache);
         swap(_resource, r._resource);
     }
 
@@ -380,15 +357,10 @@ public:
         // TODO(zhuming): shrink size if needed.
         _bytes.clear();
         _offsets.resize(1, 0);
-        _slices.clear();
-        _slices_cache = false;
         _resource.reset();
     }
 
-    void invalidate_slice_cache() {
-        _slices_cache = false;
-        _german_strings_cache = false;
-    }
+    void invalidate_slice_cache() { _german_strings_cache = false; }
 
     std::string debug_item(size_t idx) const override;
 
@@ -413,7 +385,9 @@ public:
     void build_slices(Container& slices) const;
 
 private:
-    void _build_slices() const;
+    template <typename SrcOffset>
+    void _append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count);
+
     void _build_german_strings() const;
     void _ensure_materialized();
     ALWAYS_INLINE const uint8_t* _data_base() const {
@@ -425,10 +399,13 @@ private:
     Offsets _offsets;
     ContainerResource _resource;
 
-    mutable Container _slices;
-    mutable bool _slices_cache = false;
     mutable GermanStringContainer _german_strings;
     mutable bool _german_strings_cache = false;
+
+    // True when this column holds BINARY / VARBINARY data.  Causes put_mysql_row_buffer to
+    // use push_binary (hex/base64 encoding) instead of push_string when inside a
+    // nested type context.
+    bool _is_binary_type = false;
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;

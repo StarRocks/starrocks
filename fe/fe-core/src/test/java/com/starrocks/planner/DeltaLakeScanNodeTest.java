@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.CatalogConnector;
@@ -23,7 +24,9 @@ import com.starrocks.connector.delta.DeltaLakeEngine;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPlanNode;
 import io.delta.kernel.Snapshot;
 import mockit.Expectations;
 import mockit.Mock;
@@ -173,5 +176,35 @@ public class DeltaLakeScanNodeTest {
                 "reachLimit should be reset to false");
         Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
                 "scanRangeSource should be cleared by clear()");
+    }
+
+    public void testToThriftSetsConnectorCatalogType(@Mocked GlobalStateMgr globalStateMgr,
+                                                      @Mocked CatalogConnector connector,
+                                                      @Mocked DeltaLakeTable table) {
+        String catalogName = "delta0";
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory
+                .buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+                result = connector;
+                connector.getMetadata().getCloudConfiguration();
+                result = cloudConfiguration;
+                table.getCatalogName();
+                result = catalogName;
+                table.getName();
+                result = "delta_tbl";
+                table.getType();
+                result = Table.TableType.DELTALAKE;
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
+        TPlanNode node = new TPlanNode();
+        scanNode.toThrift(node);
+        Assertions.assertNotNull(node.getConnector_scan_node());
+        Assertions.assertEquals("deltalake", node.getConnector_scan_node().getCatalog_type());
     }
 }

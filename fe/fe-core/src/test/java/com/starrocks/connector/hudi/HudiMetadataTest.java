@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
@@ -143,7 +143,7 @@ public class HudiMetadataTest {
     public void testGetPartitionKeys() {
         Assertions.assertEquals(
                 Lists.newArrayList("col1"),
-                hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
+                hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadataRequestContext.DEFAULT));
     }
 
     @Test

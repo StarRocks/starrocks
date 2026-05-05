@@ -1,0 +1,22 @@
+-- name: test_stream_load_txn_debezium_json @sequential
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "label:txn_deb_${uuid0}" -H "db:db_${uuid0}" -H "table:t1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:txn_deb_${uuid0}" -H "db:db_${uuid0}" -H "table:t1" -H "format: json" -H "envelope: debezium" -d '{"payload":{"before":null,"after":{"id":1,"name":"Alice","age":25},"op":"c"}} {"payload":{"before":null,"after":{"id":2,"name":"Bob","age":30},"op":"r"}} {"payload":{"before":{"id":3,"name":"Old","age":0},"after":{"id":3,"name":"Charlie","age":35},"op":"u"}}' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:txn_deb_${uuid0}" -H "db:db_${uuid0}" -H "table:t1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+sync;
+select * from t1 order by id;
+
+drop database db_${uuid0};

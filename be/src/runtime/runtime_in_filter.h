@@ -23,7 +23,7 @@
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
 #include "gutil/port.h"
 #include "runtime/mem_pool.h"

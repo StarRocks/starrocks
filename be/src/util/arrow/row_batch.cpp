@@ -255,7 +255,7 @@ Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::sha
     return Status::OK();
 }
 
-Status convert_to_arrow_field(const TypeDescriptor& desc, const string& col_name, bool is_nullable,
+Status convert_to_arrow_field(const TypeDescriptor& desc, const std::string& col_name, bool is_nullable,
                               std::shared_ptr<arrow::Field>* field) {
     std::shared_ptr<arrow::DataType> type;
     RETURN_IF_ERROR(convert_to_arrow_type(desc, &type));
@@ -291,7 +291,7 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
 
         Expr* expr = expr_context->root();
         std::shared_ptr<arrow::Field> field;
-        string col_name;
+        std::string col_name;
         ColumnRef* col_ref = find_first_column_ref(expr);
         DCHECK(col_ref != nullptr);
         int64_t slot_id = col_ref->slot_id();

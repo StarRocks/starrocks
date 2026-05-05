@@ -42,16 +42,17 @@
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
 #include "util/time_guard.h"
 
 namespace starrocks {
 
-DataStreamMgr::DataStreamMgr() {
-    REGISTER_GAUGE_STARROCKS_METRIC(data_stream_receiver_count, [this]() { return _receiver_count.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(fragment_endpoint_count, [this]() { return _fragment_count.load(); });
+DataStreamMgr::DataStreamMgr(MetricRegistry* metrics) {
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, data_stream_receiver_count, [this]() { return _receiver_count.load(); });
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, fragment_endpoint_count, [this]() { return _fragment_count.load(); });
+    }
 }
 
 DataStreamMgr::~DataStreamMgr() {
@@ -140,6 +141,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
     SCOPED_SET_TRACE_INFO({}, {}, t_finst_id)
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     SCOPED_SET_TRACE_PLAN_NODE_ID(request.node_id());
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_datastream_timeout_guard_ms);
 

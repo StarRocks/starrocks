@@ -382,7 +382,7 @@ jobs:
     needs:
       - info
       - build
-    if: always() && needs.info.result == 'success' && needs.build.result != 'cancelled'
+    if: "!cancelled() && needs.info.result == 'success' && needs.build.result != 'cancelled'"
     env:
       ALL_LINUX: needs.info.outputs.ALL_LINUX
     outputs:
@@ -480,7 +480,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.CENTOS_RELEASE_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: "!cancelled() && needs.test_filter.outputs.CENTOS_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.CENTOS_RELEASE_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')"
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -499,7 +499,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH != ''
+    if: "!cancelled() && needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH != ''"
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -520,7 +520,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH != ''
+    if: "!cancelled() && needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH != ''"
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -540,7 +540,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: "!cancelled() && needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')"
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -559,7 +559,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: "!cancelled() && needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')"
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}

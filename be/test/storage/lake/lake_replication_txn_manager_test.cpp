@@ -23,12 +23,12 @@
 #include <random>
 #include <thread>
 
-#include "agent/master_info.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "common/system/master_info.h"
 #ifdef USE_STAROS
 #include <fslib/file.h>
 #include <fslib/file_system.h>

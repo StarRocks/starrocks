@@ -15,6 +15,17 @@
 
 set -eo pipefail
 
+# build.sh sources env_macos.sh before calling us (directly or via the auto-
+# trigger when thirdparty is not yet built), which exports a batch of CMake
+# behavior-control vars intended for the BE build only. They leak into
+# thirdparty subprocesses and break bundled cmake logic
+# (e.g. velocypack's TargetArch.cmake rejects CMAKE_OSX_ARCHITECTURES=arm64
+# with "Invalid OS X arch name: arm64"). Unset at entry so running via
+# build.sh matches running this script standalone.
+unset CMAKE_OSX_ARCHITECTURES CMAKE_BUILD_TARGET_ARCH \
+      CMAKE_GENERATOR CMAKE_FIND_LIBRARY_SUFFIXES \
+      BUILD_SHARED_LIBS CMAKE_BUILD_TYPE MAKEFLAGS
+
 curdir="$(cd -- "$(dirname -- "$0")" >/dev/null 2>&1 && pwd)"
 
 export STARROCKS_HOME="${STARROCKS_HOME:-$curdir/..}"
@@ -125,6 +136,23 @@ __hash_memory(const void* __ptr, size_t __size) noexcept {
 EOF
 }
 
+ensure_macos_libtool_wrapper() {
+    local wrapper_dir="${TP_DIR}/build/libtool-wrapper"
+    local wrapper_path="${wrapper_dir}/libtool"
+
+    mkdir -p "${wrapper_dir}"
+    cat > "${wrapper_path}" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "-V" ]]; then
+    /usr/bin/libtool -V 2>&1
+    exit $?
+fi
+exec /usr/bin/libtool "$@"
+EOF
+    chmod +x "${wrapper_path}"
+    echo "${wrapper_path}"
+}
+
 append_object_to_archive() {
     local archive="$1"
     local object_file="$2"
@@ -229,12 +257,16 @@ link_formula_metadata() {
 
 sync_lib64_links() {
     local lib
+    local dst
     mkdir -p "${TP_INSTALL_DIR}/lib64"
     for lib in "${TP_INSTALL_DIR}"/lib/*; do
         [[ -e "${lib}" || -L "${lib}" ]] || continue
         case "$(basename "${lib}")" in
             *.a|*.dylib|*.so|*.so.*)
-                link_if_missing "../lib/$(basename "${lib}")" "${TP_INSTALL_DIR}/lib64/$(basename "${lib}")"
+                dst="${TP_INSTALL_DIR}/lib64/$(basename "${lib}")"
+                if [[ ! -e "${dst}" && ! -L "${dst}" ]]; then
+                    ln -s "../lib/$(basename "${lib}")" "${dst}"
+                fi
                 ;;
         esac
     done
@@ -569,6 +601,7 @@ build_thrift() {
         --without-java \
         --without-rs \
         --without-swift \
+        --without-cl \
         --with-cpp \
         --with-libevent="${libevent_prefix}" \
         --with-boost="${TP_INSTALL_DIR}" \
@@ -1330,24 +1363,114 @@ build_formula_sasl() {
     sync_lib64_links
 }
 
-build_formula_absl() {
-    ensure_formula abseil
-    local prefix
-    prefix="$(formula_prefix abseil)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libabsl"*.a "${prefix}/lib/libabsl"*.dylib
-    link_formula_metadata "${prefix}"
+# Build abseil from TP source (pinned 20220623). Homebrew's abseil ABI drifts
+# across releases and newer ones are too new for gRPC 1.43; source build
+# keeps the whole TP chain consistent.
+build_absl() {
+    check_if_source_exist "${ABSL_SOURCE}"
+
+    # Drop stale symlinks from a prior build_formula_absl run — cmake --install
+    # would follow them into Homebrew's Cellar (corrupt or EACCES).
+    rm -rf "${TP_INCLUDE_DIR}/absl"
+    rm -rf "${TP_INSTALL_DIR}/lib/cmake/absl"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libabsl_"*.a \
+        "${TP_INSTALL_DIR}/lib/libabsl_"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libabsl_"*.a \
+        "${TP_INSTALL_DIR}/lib64/libabsl_"*.dylib \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/absl_"*.pc
+
+    cd "${TP_SOURCE_DIR}/${ABSL_SOURCE}"
+
+    # Narrow the APPLE+Clang branch to AppleClang only — Homebrew LLVM clang
+    # does not implement Apple Clang's -Xarch_* driver and fails on arm64.
+    local patch_file="${TP_PATCH_DIR}/abseil-cpp-20220623.0-apple-clang-only.patch"
+    local copts_file="absl/copts/AbseilConfigureCopts.cmake"
+    if [[ -f "${patch_file}" ]] && grep -q "MATCHES \\[\\[Clang\\]\\]" "${copts_file}" 2>/dev/null; then
+        patch -p1 --forward --batch < "${patch_file}" >/dev/null || true
+    fi
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" .. \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}" install
     sync_lib64_links
 }
 
-build_formula_grpc() {
-    ensure_formula grpc
-    local prefix
-    prefix="$(formula_prefix grpc)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libgrpc"*.a "${prefix}/lib/libgrpc"*.dylib "${prefix}/lib/libgpr"*.a "${prefix}/lib/libgpr"*.dylib "${prefix}/lib/libaddress_sorting"*.a "${prefix}/lib/libaddress_sorting"*.dylib
-    link_matching_if_missing "${TP_INSTALL_DIR}/bin" "${prefix}/bin/grpc"* "${prefix}/bin/protoc-gen-grpc"* "${prefix}/bin/grpc_cpp_plugin"
-    link_formula_metadata "${prefix}"
+# Build gRPC 1.43 from TP source with all providers pinned to TP deps
+# (protobuf 3.14, abseil 20220623, re2, openssl). The Homebrew symlink
+# approach would drag in protobuf 33.x and collide with arrow-flight targets.
+build_grpc() {
+    check_if_source_exist "${GRPC_SOURCE}"
+
+    # Drop stale symlinks from a prior build_formula_grpc run (see build_absl).
+    rm -rf \
+        "${TP_INCLUDE_DIR}/grpc" \
+        "${TP_INCLUDE_DIR}/grpc++" \
+        "${TP_INCLUDE_DIR}/grpcpp"
+    rm -rf \
+        "${TP_INSTALL_DIR}/lib/cmake/grpc" \
+        "${TP_INSTALL_DIR}/lib/cmake/gRPC"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libgrpc"*.a \
+        "${TP_INSTALL_DIR}/lib/libgrpc"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libgpr"*.a \
+        "${TP_INSTALL_DIR}/lib/libgpr"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libaddress_sorting"*.a \
+        "${TP_INSTALL_DIR}/lib/libaddress_sorting"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libupb"*.a \
+        "${TP_INSTALL_DIR}/lib/libupb"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libutf8_range"*.a \
+        "${TP_INSTALL_DIR}/lib/libutf8_range"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libgrpc"*.a \
+        "${TP_INSTALL_DIR}/lib64/libgrpc"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libgpr"*.a \
+        "${TP_INSTALL_DIR}/lib64/libgpr"*.dylib \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/grpc"*.pc \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/gpr"*.pc \
+        "${TP_INSTALL_DIR}/bin/grpc_cpp_plugin" \
+        "${TP_INSTALL_DIR}/bin/grpc_"* \
+        "${TP_INSTALL_DIR}/bin/protoc-gen-grpc"*
+
+    cd "${TP_SOURCE_DIR}/${GRPC_SOURCE}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" .. \
+        -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DgRPC_INSTALL=ON \
+        -DgRPC_BUILD_TESTS=OFF \
+        -DgRPC_BUILD_CSHARP_EXT=OFF \
+        -DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PYTHON_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF \
+        -DgRPC_BACKWARDS_COMPATIBILITY_MODE=OFF \
+        -DgRPC_SSL_PROVIDER=package \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DgRPC_ZLIB_PROVIDER=package \
+        -DZLIB_LIBRARY_RELEASE="${TP_INSTALL_DIR}/lib/libz.a" \
+        -DgRPC_ABSL_PROVIDER=package \
+        -Dabsl_DIR="${TP_INSTALL_DIR}/lib/cmake/absl" \
+        -DgRPC_PROTOBUF_PROVIDER=package \
+        -DgRPC_RE2_PROVIDER=package \
+        -DRE2_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DRE2_LIBRARY="${TP_INSTALL_DIR}/lib/libre2.a" \
+        -DgRPC_CARES_PROVIDER=module \
+        -DCARES_ROOT_DIR="${TP_SOURCE_DIR}/${CARES_SOURCE}/" \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}" install
     sync_lib64_links
 }
 
@@ -1371,13 +1494,168 @@ build_formula_brotli() {
     sync_lib64_links
 }
 
-build_formula_arrow() {
-    ensure_formula apache-arrow
-    local prefix
-    prefix="$(formula_prefix apache-arrow)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libarrow"*.a "${prefix}/lib/libarrow"*.dylib "${prefix}/lib/libparquet"*.a "${prefix}/lib/libparquet"*.dylib "${prefix}/lib/libgandiva"*.a "${prefix}/lib/libgandiva"*.dylib
-    link_formula_metadata "${prefix}"
+build_arrow() {
+    # libarrow_flight_sql.a as short-circuit sentinel: it is installed last,
+    # so its presence implies libarrow_flight.a + libarrow.a; a pre-Flight
+    # install or a run interrupted mid-way falls through to a full rebuild.
+    if [[ -f "${TP_INSTALL_DIR}/lib/libarrow.a" && -f "${TP_INSTALL_DIR}/lib/libparquet.a" \
+          && -f "${TP_INSTALL_DIR}/lib/libarrow_flight_sql.a" && -f "${TP_INCLUDE_DIR}/arrow/api.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${ARROW_SOURCE}"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libarrow"* \
+        "${TP_INSTALL_DIR}/lib/libparquet"* \
+        "${TP_INSTALL_DIR}/lib/libgandiva"* \
+        "${TP_INSTALL_DIR}/lib64/libarrow"* \
+        "${TP_INSTALL_DIR}/lib64/libparquet"* \
+        "${TP_INSTALL_DIR}/lib64/libgandiva"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/arrow"*.pc \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/parquet"*.pc
+    rm -rf \
+        "${TP_INCLUDE_DIR}"/arrow* \
+        "${TP_INCLUDE_DIR}/parquet" \
+        "${TP_INCLUDE_DIR}/gandiva" \
+        "${TP_INSTALL_DIR}/lib/cmake"/Arrow* \
+        "${TP_INSTALL_DIR}/lib/cmake"/Parquet* \
+        "${TP_INSTALL_DIR}/lib/cmake"/Gandiva*
+
+    cd "${TP_SOURCE_DIR}/${ARROW_SOURCE}/cpp"
+    rm -rf release
+    mkdir -p release
+    cd release
+
+    export ARROW_BROTLI_URL="${TP_SOURCE_DIR}/${BROTLI_NAME}"
+    export ARROW_GLOG_URL="${TP_SOURCE_DIR}/${GLOG_NAME}"
+    export ARROW_LZ4_URL="${TP_SOURCE_DIR}/${LZ4_NAME}"
+    export ARROW_SNAPPY_URL="${TP_SOURCE_DIR}/${SNAPPY_NAME}"
+    export ARROW_ZLIB_URL="${TP_SOURCE_DIR}/${ZLIB_NAME}"
+    export ARROW_FLATBUFFERS_URL="${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}"
+    export ARROW_ZSTD_URL="${TP_SOURCE_DIR}/${ZSTD_NAME}"
+    export ARROW_THRIFT_URL="${TP_SOURCE_DIR}/${THRIFT_NAME}"
+
+    # Pin pkg-config to TP's protobuf to keep arrow-flight's static-link probe
+    # from picking up Homebrew's v33.x. Saved/restored so it does not leak.
+    local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
+    export PKG_CONFIG_PATH="${TP_INSTALL_DIR}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+
+    # Arrow 19's FindProtobufAlt tries find_package(protobuf CONFIG) then
+    # find_package(Protobuf). CMAKE_DISABLE_FIND_PACKAGE_<name> is case-
+    # sensitive: the lowercase _protobuf guard (set below) blocks only the
+    # CONFIG probe, which is where a stray protobuf-config.cmake would leak.
+    # The capital-P module fallback is intentionally kept and pinned to TP
+    # via the Protobuf_LIBRARY / _INCLUDE_DIR / _PROTOC_EXECUTABLE hints.
+    # Adding _Protobuf (capital) would break Flight configure.
+
+    local formula
+    for formula in rapidjson zlib lz4 snappy zstd brotli flatbuffers; do
+        ensure_formula "${formula}"
+    done
+
+    local rapidjson_prefix
+    local zlib_prefix
+    local lz4_prefix
+    local snappy_prefix
+    local brotli_prefix
+    local flatbuffers_prefix
+    rapidjson_prefix="$(formula_prefix rapidjson)"
+    zlib_prefix="$(formula_prefix zlib)"
+    lz4_prefix="$(formula_prefix lz4)"
+    snappy_prefix="$(formula_prefix snappy)"
+    brotli_prefix="$(formula_prefix brotli)"
+    flatbuffers_prefix="$(formula_prefix flatbuffers)"
+
+    local arrow_simd_level="DEFAULT"
+    local arrow_runtime_simd_level="SSE4_2"
+    if [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
+        arrow_simd_level="AVX2"
+        arrow_runtime_simd_level="AVX2"
+    fi
+
+    local arrow_prefix_path="${TP_INSTALL_DIR};${flatbuffers_prefix};${snappy_prefix};${lz4_prefix};${brotli_prefix};${zlib_prefix};${rapidjson_prefix}"
+    local libtool_wrapper
+    libtool_wrapper="$(ensure_macos_libtool_wrapper)"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_LIBTOOL="${libtool_wrapper}" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DARROW_BUILD_STATIC=ON \
+        -DARROW_BUILD_SHARED=OFF \
+        -DARROW_BUILD_TESTS=OFF \
+        -DARROW_BUILD_EXAMPLES=OFF \
+        -DARROW_BUILD_INTEGRATION=OFF \
+        -DARROW_BUILD_UTILITIES=OFF \
+        -DARROW_BUILD_BENCHMARKS=OFF \
+        -DARROW_GANDIVA=OFF \
+        -DARROW_PARQUET=ON \
+        -DARROW_JSON=ON \
+        -DARROW_IPC=ON \
+        -DARROW_USE_GLOG=OFF \
+        -DARROW_WITH_BROTLI=ON \
+        -DARROW_WITH_LZ4=ON \
+        -DARROW_WITH_SNAPPY=ON \
+        -DARROW_WITH_ZLIB=ON \
+        -DARROW_WITH_ZSTD=ON \
+        -DARROW_WITH_UTF8PROC=OFF \
+        -DARROW_WITH_RE2=OFF \
+        -DARROW_JEMALLOC=OFF \
+        -DARROW_MIMALLOC=OFF \
+        -DARROW_SIMD_LEVEL="${arrow_simd_level}" \
+        -DARROW_RUNTIME_SIMD_LEVEL="${arrow_runtime_simd_level}" \
+        -DARROW_GFLAGS_USE_SHARED=OFF \
+        -DJEMALLOC_HOME="${TP_INSTALL_DIR}/jemalloc" \
+        -Dzstd_SOURCE=BUNDLED \
+        -DRapidJSON_ROOT="${rapidjson_prefix}" \
+        -DARROW_SNAPPY_USE_SHARED=OFF \
+        -DZLIB_ROOT="${zlib_prefix}" \
+        -DLZ4_INCLUDE_DIR="${lz4_prefix}/include" \
+        -DARROW_LZ4_USE_SHARED=OFF \
+        -DBROTLI_ROOT="${brotli_prefix}" \
+        -DARROW_BROTLI_USE_SHARED=OFF \
+        -Dgflags_ROOT="${TP_INSTALL_DIR}" \
+        -DSnappy_ROOT="${snappy_prefix}" \
+        -DGLOG_ROOT="${TP_INSTALL_DIR}" \
+        -DLZ4_ROOT="${lz4_prefix}" \
+        -DBoost_DIR="${TP_INSTALL_DIR}" \
+        -DBoost_ROOT="${TP_INSTALL_DIR}" \
+        -DARROW_BOOST_USE_SHARED=OFF \
+        -DBoost_NO_BOOST_CMAKE=ON \
+        -DARROW_FLIGHT=ON \
+        -DARROW_FLIGHT_SQL=ON \
+        -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew/anaconda3" \
+        -DCMAKE_DISABLE_FIND_PACKAGE_protobuf=ON \
+        -DProtobuf_PROTOC_EXECUTABLE="${TP_INSTALL_DIR}/bin/protoc" \
+        -DProtobuf_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DProtobuf_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf.a" \
+        -DProtobuf_PROTOC_LIBRARY="${TP_INSTALL_DIR}/lib/libprotoc.a" \
+        -DProtobuf_LITE_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf-lite.a" \
+        -DProtobuf_USE_STATIC_LIBS=ON \
+        -Dflatbuffers_ROOT="${flatbuffers_prefix}" \
+        -DCMAKE_PREFIX_PATH="${arrow_prefix_path}" \
+        -DThrift_ROOT="${TP_INSTALL_DIR}" \
+        -Dthrift_SOURCE=SYSTEM \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
+
+    # Hoist Arrow's bundled zstd — zstd is not in Darwin's package-manifest.sh,
+    # so this is TP's only source (matches Linux build-thirdparty.sh).
+    if [ -f ./zstd_ep-install/lib64/libzstd.a ]; then
+        cp -rf ./zstd_ep-install/lib64/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
+    else
+        cp -rf ./zstd_ep-install/lib/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
+    fi
+    mkdir -p "${TP_INSTALL_DIR}/include/zstd"
+    cp ./zstd_ep-install/include/* "${TP_INSTALL_DIR}/include/zstd"
+
+    restore_env_var PKG_CONFIG_PATH "${old_pkg_config_path}"
+
     sync_lib64_links
 }
 
@@ -1425,6 +1703,12 @@ build_formula_aws_cpp_sdk() {
     link_children_if_missing "${prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${crt_prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${HOMEBREW_PREFIX}/include/aws" "${TP_INCLUDE_DIR}/aws"
+    if [[ -L "${TP_INCLUDE_DIR}/smithy" ]]; then
+        rm -f "${TP_INCLUDE_DIR}/smithy"
+    fi
+    mkdir -p "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${prefix}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${HOMEBREW_PREFIX}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libaws"*.a "${prefix}/lib/libaws"*.dylib
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${crt_prefix}/lib/libaws-crt-cpp"*.a "${crt_prefix}/lib/libaws-crt-cpp"*.dylib
     link_formula_metadata "${prefix}"
@@ -1470,13 +1754,73 @@ build_formula_jansson() {
     sync_lib64_links
 }
 
-build_formula_poco() {
-    ensure_formula poco
-    local prefix
-    prefix="$(formula_prefix poco)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libPoco"*.a "${prefix}/lib/libPoco"*.dylib
-    link_formula_metadata "${prefix}"
+clean_poco_install_artifacts() {
+    rm -rf "${TP_INCLUDE_DIR}/Poco" \
+        "${TP_INSTALL_DIR}/lib/cmake/Poco" \
+        "${TP_INSTALL_DIR}/share/cmake/Poco"
+    safe_remove_glob "${TP_INSTALL_DIR}/lib/libPoco"* "${TP_INSTALL_DIR}/lib64/libPoco"*
+}
+
+remove_stale_homebrew_poco_symlinks() {
+    find "${TP_INSTALL_DIR}/lib" "${TP_INSTALL_DIR}/lib64" \
+        -maxdepth 1 \
+        -type l \
+        -name 'libPoco*' \
+        -lname "${HOMEBREW_PREFIX%/}/*" \
+        -exec rm -f {} +
+}
+
+build_poco() {
+    remove_stale_homebrew_poco_symlinks
+    if [[ -f "${TP_INSTALL_DIR}/lib/libPocoNet.a" &&
+          -f "${TP_INSTALL_DIR}/lib/libPocoNetSSL.a" &&
+          -f "${TP_INCLUDE_DIR}/Poco/Net/HTTPResponse.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${POCO_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${POCO_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    clean_poco_install_artifacts
+    cd "${BUILD_DIR}"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DPOCO_UNBUNDLED=ON \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DZLIB_ROOT="${TP_INSTALL_DIR}" \
+        -DPCRE2_ROOT_DIR="${HOMEBREW_PREFIX}/opt/pcre2" \
+        -DENABLE_XML=OFF \
+        -DENABLE_JSON=OFF \
+        -DENABLE_NET=ON \
+        -DENABLE_NETSSL=ON \
+        -DENABLE_CRYPTO=OFF \
+        -DENABLE_JWT=OFF \
+        -DENABLE_DATA=OFF \
+        -DENABLE_DATA_SQLITE=OFF \
+        -DENABLE_DATA_MYSQL=OFF \
+        -DENABLE_DATA_POSTGRESQL=OFF \
+        -DENABLE_DATA_ODBC=OFF \
+        -DENABLE_MONGODB=OFF \
+        -DENABLE_REDIS=OFF \
+        -DENABLE_UTIL=OFF \
+        -DENABLE_ZIP=OFF \
+        -DENABLE_APACHECONNECTOR=OFF \
+        -DENABLE_ENCODINGS=OFF \
+        -DENABLE_PAGECOMPILER=OFF \
+        -DENABLE_PAGECOMPILER_FILE2PAGE=OFF \
+        -DENABLE_ACTIVERECORD=OFF \
+        -DENABLE_ACTIVERECORD_COMPILER=OFF \
+        -DENABLE_PROMETHEUS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
     sync_lib64_links
 }
 
@@ -2033,10 +2377,10 @@ for package in "${packages[@]}"; do
             build_formula_sasl
             ;;
         absl)
-            build_formula_absl
+            build_absl
             ;;
         grpc)
-            build_formula_grpc
+            build_grpc
             ;;
         flatbuffers)
             build_formula_flatbuffers
@@ -2048,7 +2392,7 @@ for package in "${packages[@]}"; do
             build_formula_brotli
             ;;
         arrow)
-            build_formula_arrow
+            build_arrow
             ;;
         librdkafka)
             build_formula_librdkafka
@@ -2121,7 +2465,7 @@ for package in "${packages[@]}"; do
             build_formula_llvm
             ;;
         poco)
-            build_formula_poco
+            build_poco
             ;;
         xsimd)
             build_formula_xsimd

@@ -490,4 +490,23 @@ public class LoadJobTest {
         loadInfo = loadJob.toThrift();
         Assertions.assertEquals("", loadInfo.getWarehouse());
     }
+
+    @Test
+    public void testJsonOptionsEnvelope() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.ENVELOPE, LoadStmt.ENVELOPE_DEBEZIUM);
+
+        LoadJob loadJob = new BrokerLoadJob();
+        loadJob.setJobProperties(properties);
+        Assertions.assertEquals(LoadStmt.ENVELOPE_DEBEZIUM, loadJob.jsonOptions.envelope);
+
+        // Mutually exclusive: json_root and envelope
+        properties.put(LoadStmt.JSONROOT, "$.root");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
+
+        // Mutually exclusive: strip_outer_array and envelope
+        properties.remove(LoadStmt.JSONROOT);
+        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
+    }
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 30
 ---
 
 # Monitoring Metrics for Shared-data Clusters

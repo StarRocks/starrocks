@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.ivm.IvmRewriter;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
@@ -130,6 +131,7 @@ import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
+import com.starrocks.sql.optimizer.rule.tree.WidenProjectionNullableRule;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMaterializationRewriter;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
@@ -548,9 +550,9 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
 
-        // tvr rule rewrite
+        // IVM rule rewrite
         if (context.getSessionVariable().isEnableIVMRefresh()) {
-            scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.TVR_REWRITE_RULES);
+            IvmRewriter.rewrite(tree, rootTaskContext, scheduler, requiredColumns);
         }
 
         if (sessionVariable.isEnableFineGrainedRangePredicate()) {
@@ -679,6 +681,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_PREDICATE_RULES);
+        scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_EMPTY_OPERATOR_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new CTEProduceAddProjectionRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
@@ -983,20 +986,16 @@ public class QueryOptimizer extends Optimizer {
             context.getRuleSet().addOuterJoinTransformationRules();
         }
 
-        if (!sessionVariable.isMVPlanner()) {
-            // add join implementRule
-            String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
-            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addMergeJoinImplementationRule();
-            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addHashJoinImplementationRule();
-            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addNestLoopJoinImplementationRule();
-            } else {
-                context.getRuleSet().addAutoJoinImplementationRule();
-            }
+        // Legacy MV planner mode is inert, so use the normal join implementation rules unconditionally.
+        String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
+        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addMergeJoinImplementationRule();
+        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addHashJoinImplementationRule();
+        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addNestLoopJoinImplementationRule();
         } else {
-            context.getRuleSet().addRealtimeMVRules();
+            context.getRuleSet().addAutoJoinImplementationRule();
         }
 
         if (mvRewriteStrategy.enableCBOBasedMvRewrite && mvRewriteStrategy.enableMultiTableRewrite) {
@@ -1051,6 +1050,10 @@ public class QueryOptimizer extends Optimizer {
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
         result = new RemoveUselessScanOutputPropertyRule().rewrite(result, rootTaskContext);
+        // Must run before GlobalLateMaterializationRewriter: FETCH writes target slots directly
+        // from storage, so any post-MV-rewrite Projection whose output nullable is narrower than
+        // its input nullable must be widened first.
+        result = new WidenProjectionNullableRule().rewrite(result, rootTaskContext);
         result = new GlobalLateMaterializationRewriter().rewrite(result, context);
 
         result.setPlanCount(planCount);

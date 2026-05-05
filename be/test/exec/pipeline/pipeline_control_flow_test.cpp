@@ -16,11 +16,22 @@
 #include <random>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/spill/dir_manager.h"
+#include "exec/spill/global_spill_manager.h"
+#include "exec/spill/operator_mem_resource_manager.h"
 #include "pipeline_test_base.h"
+#include "runtime/service_contexts.h"
 
 #define ASSERT_COUNTER_LIFETIME(counter, dop)       \
     do {                                            \
@@ -364,7 +375,328 @@ public:
 private:
     CounterPtr _counter;
 };
+
+class RuntimeAccessProbeOperator final : public Operator {
+public:
+    RuntimeAccessProbeOperator(OperatorFactory* factory, OperatorRuntimeAccess* runtime_access, int32_t driver_sequence)
+            : Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), false, driver_sequence,
+                       runtime_access) {}
+
+    bool has_output() const override { return false; }
+    bool need_input() const override { return true; }
+    bool is_finished() const override { return false; }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
+};
+
+class RuntimeAccessProbeFactory final : public OperatorFactory {
+public:
+    RuntimeAccessProbeFactory(int32_t id, int32_t plan_node_id)
+            : OperatorFactory(id, "runtime_access_probe", plan_node_id) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<RuntimeAccessProbeOperator>(
+                this, runtime_access_override != nullptr ? runtime_access_override : this, driver_sequence);
+    }
+
+    void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                 std::vector<ExprContext*>* runtime_in_filters) override {
+        ++bind_calls;
+        last_state = state;
+        last_driver_sequence = driver_sequence;
+        runtime_in_filters->insert(runtime_in_filters->end(), local_filters.begin(), local_filters.end());
+        runtime_in_filters->insert(runtime_in_filters->end(), instance_filters.begin(), instance_filters.end());
+    }
+
+    int bind_calls = 0;
+    RuntimeState* last_state = nullptr;
+    int32_t last_driver_sequence = -1;
+    std::vector<ExprContext*> local_filters;
+    std::vector<ExprContext*> instance_filters;
+    OperatorRuntimeAccess* runtime_access_override = nullptr;
+};
+
+class RuntimeAccessProbe final : public OperatorRuntimeAccess {
+public:
+    void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                 std::vector<ExprContext*>* runtime_in_filters) override {
+        ++bind_calls;
+        last_state = state;
+        last_driver_sequence = driver_sequence;
+        runtime_in_filters->insert(runtime_in_filters->end(), local_filters.begin(), local_filters.end());
+        runtime_in_filters->insert(runtime_in_filters->end(), instance_filters.begin(), instance_filters.end());
+    }
+
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override { return nullptr; }
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override { return nullptr; }
+    const std::vector<SlotId>& get_filter_null_value_columns() const override { return filter_null_value_columns; }
+
+    int bind_calls = 0;
+    RuntimeState* last_state = nullptr;
+    int32_t last_driver_sequence = -1;
+    std::vector<ExprContext*> local_filters;
+    std::vector<ExprContext*> instance_filters;
+    std::vector<SlotId> filter_null_value_columns;
+};
+
 class TestPipelineControlFlow : public PipelineTestBase {};
+
+class SpillLifecycleSourceOperator final : public SourceOperator {
+public:
+    SpillLifecycleSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                                 bool spillable, bool releaseable, Status prepare_status = Status::OK())
+            : SourceOperator(factory, id, "spill_lifecycle_source", plan_node_id, false, driver_sequence),
+              _spillable(spillable),
+              _releaseable(releaseable),
+              _prepare_status(std::move(prepare_status)) {}
+
+    Status prepare(RuntimeState* state) override {
+        RETURN_IF_ERROR(SourceOperator::prepare(state));
+        return _prepare_status;
+    }
+
+    bool has_output() const override { return false; }
+    bool need_input() const override { return false; }
+    bool is_finished() const override { return true; }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
+
+    bool spillable() const override { return _spillable; }
+    bool releaseable() const override { return _releaseable; }
+
+private:
+    bool _spillable;
+    bool _releaseable;
+    Status _prepare_status;
+};
+
+class SpillLifecycleSourceOperatorFactory final : public SourceOperatorFactory {
+public:
+    SpillLifecycleSourceOperatorFactory(int32_t id, int32_t plan_node_id, bool spillable, bool releaseable,
+                                        Status prepare_status = Status::OK())
+            : SourceOperatorFactory(id, "spill_lifecycle_source", plan_node_id),
+              _spillable(spillable),
+              _releaseable(releaseable),
+              _prepare_status(std::move(prepare_status)) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<SpillLifecycleSourceOperator>(this, _id, _plan_node_id, driver_sequence, _spillable,
+                                                              _releaseable, _prepare_status);
+    }
+
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+
+private:
+    bool _spillable;
+    bool _releaseable;
+    Status _prepare_status;
+};
+
+class SpillLifecycleOperator final : public Operator {
+public:
+    SpillLifecycleOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                           bool spillable, bool releaseable, Status prepare_status = Status::OK())
+            : Operator(factory, id, "spill_lifecycle_operator", plan_node_id, false, driver_sequence),
+              _spillable(spillable),
+              _releaseable(releaseable),
+              _prepare_status(std::move(prepare_status)) {}
+
+    Status prepare(RuntimeState* state) override {
+        RETURN_IF_ERROR(Operator::prepare(state));
+        return _prepare_status;
+    }
+
+    bool has_output() const override { return false; }
+    bool need_input() const override { return false; }
+    bool is_finished() const override { return true; }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
+
+    bool spillable() const override { return _spillable; }
+    bool releaseable() const override { return _releaseable; }
+
+private:
+    bool _spillable;
+    bool _releaseable;
+    Status _prepare_status;
+};
+
+class SpillLifecycleOperatorFactory final : public OperatorFactory {
+public:
+    SpillLifecycleOperatorFactory(int32_t id, int32_t plan_node_id, bool spillable, bool releaseable,
+                                  Status prepare_status = Status::OK())
+            : OperatorFactory(id, "spill_lifecycle_operator", plan_node_id),
+              _spillable(spillable),
+              _releaseable(releaseable),
+              _prepare_status(std::move(prepare_status)) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<SpillLifecycleOperator>(this, _id, _plan_node_id, driver_sequence, _spillable,
+                                                        _releaseable, _prepare_status);
+    }
+
+private:
+    bool _spillable;
+    bool _releaseable;
+    Status _prepare_status;
+};
+
+class TestPipelineDriver final : public PipelineDriver {
+public:
+    using PipelineDriver::PipelineDriver;
+
+    void close_operators_for_test(RuntimeState* runtime_state) { _close_operators(runtime_state); }
+};
+
+struct SpillDriverTestHarness {
+    spill::GlobalSpillManager global_spill_manager;
+    spill::DirManager spill_dir_manager;
+    RuntimeServices runtime_services;
+    QueryExecutionServices query_execution_services;
+    QueryContext query_ctx;
+    FragmentContext fragment_ctx;
+    Pipeline pipeline;
+
+    SpillDriverTestHarness() : pipeline(1, {}, nullptr) {
+        runtime_services.spill_dir_mgr = &spill_dir_manager;
+        runtime_services.global_spill_manager = &global_spill_manager;
+        query_execution_services.runtime = &runtime_services;
+        query_ctx.set_query_id(generate_uuid());
+        query_ctx.set_query_execution_services(&query_execution_services);
+        EXPECT_OK(query_ctx.init_spill_manager(TQueryOptions{}));
+        query_ctx.set_query_execution_services(nullptr);
+
+        fragment_ctx.set_query_id(query_ctx.query_id());
+        fragment_ctx.set_fragment_instance_id(generate_uuid());
+        auto runtime_state = std::make_shared<RuntimeState>(TQueryGlobals{});
+        runtime_state->set_query_ctx(&query_ctx);
+        runtime_state->set_fragment_ctx(&fragment_ctx);
+        fragment_ctx.set_runtime_state(std::move(runtime_state));
+    }
+
+    RuntimeState* state() const { return fragment_ctx.runtime_state(); }
+};
+
+TEST(OperatorRuntimeAccessTest, test_operator_precondition_ready_uses_runtime_access) {
+    RuntimeAccessProbeFactory factory(1, 2);
+    RuntimeAccessProbe runtime_access;
+    factory.runtime_access_override = &runtime_access;
+    int local_filter_sentinel = 0;
+    int instance_filter_a_sentinel = 0;
+    int instance_filter_b_sentinel = 0;
+    runtime_access.local_filters = {reinterpret_cast<ExprContext*>(&local_filter_sentinel)};
+    runtime_access.instance_filters = {reinterpret_cast<ExprContext*>(&instance_filter_a_sentinel),
+                                       reinterpret_cast<ExprContext*>(&instance_filter_b_sentinel)};
+
+    RuntimeState state;
+    auto op = factory.create(1, 7);
+
+    op->set_precondition_ready(&state);
+
+    ASSERT_EQ(0, factory.bind_calls);
+    ASSERT_EQ(1, runtime_access.bind_calls);
+    ASSERT_EQ(&state, runtime_access.last_state);
+    ASSERT_EQ(7, runtime_access.last_driver_sequence);
+    ASSERT_EQ(3, op->runtime_in_filters().size());
+    EXPECT_EQ(runtime_access.local_filters[0], op->runtime_in_filters()[0]);
+    EXPECT_EQ(runtime_access.instance_filters[0], op->runtime_in_filters()[1]);
+    EXPECT_EQ(runtime_access.instance_filters[1], op->runtime_in_filters()[2]);
+}
+
+TEST(OperatorExecStatsSnapshotTest, test_default_operator_snapshot) {
+    TestNormalOperatorFactory factory(1, 10, std::make_shared<Counter>());
+    RuntimeState state;
+    auto op = factory.create(1, 0);
+
+    ASSERT_OK(op->prepare_local_state(&state));
+    COUNTER_UPDATE(op->_push_row_num_counter, 5);
+    COUNTER_UPDATE(op->_pull_row_num_counter, 3);
+    op->_init_conjuct_counters();
+    COUNTER_UPDATE(op->_conjuncts_input_counter, 11);
+    COUNTER_UPDATE(op->_conjuncts_output_counter, 7);
+    op->_init_rf_counters(true);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_input_counter, 13);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_output_counter, 9);
+
+    auto snapshot = op->exec_stats_snapshot();
+
+    EXPECT_TRUE(snapshot.valid);
+    EXPECT_TRUE(snapshot.require_registered_plan_node);
+    EXPECT_EQ(10, snapshot.plan_node_id);
+    EXPECT_TRUE(snapshot.update_push_rows);
+    EXPECT_TRUE(snapshot.update_pull_rows);
+    EXPECT_FALSE(snapshot.force_set_pull_rows);
+    EXPECT_EQ(5, snapshot.push_rows);
+    EXPECT_EQ(3, snapshot.pull_rows);
+    EXPECT_TRUE(snapshot.update_pred_filter_rows);
+    EXPECT_EQ(4, snapshot.pred_filter_rows);
+    EXPECT_TRUE(snapshot.update_rf_filter_rows);
+    EXPECT_EQ(4, snapshot.rf_filter_rows);
+}
+
+TEST(OperatorExecStatsSnapshotTest, test_limit_snapshot_force_sets_pull_rows) {
+    LimitOperatorFactory factory(1, 20, 100);
+    RuntimeState state;
+    auto op = factory.create(1, 0);
+
+    ASSERT_OK(op->prepare_local_state(&state));
+    COUNTER_UPDATE(op->_pull_row_num_counter, 6);
+    op->_init_conjuct_counters();
+    COUNTER_UPDATE(op->_conjuncts_input_counter, 10);
+    COUNTER_UPDATE(op->_conjuncts_output_counter, 4);
+    op->_init_rf_counters(true);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_input_counter, 8);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_output_counter, 3);
+
+    auto snapshot = op->exec_stats_snapshot();
+
+    EXPECT_TRUE(snapshot.valid);
+    EXPECT_FALSE(snapshot.require_registered_plan_node);
+    EXPECT_EQ(20, snapshot.plan_node_id);
+    EXPECT_FALSE(snapshot.update_push_rows);
+    EXPECT_TRUE(snapshot.update_pull_rows);
+    EXPECT_TRUE(snapshot.force_set_pull_rows);
+    EXPECT_EQ(6, snapshot.pull_rows);
+    EXPECT_TRUE(snapshot.update_pred_filter_rows);
+    EXPECT_EQ(6, snapshot.pred_filter_rows);
+    EXPECT_TRUE(snapshot.update_rf_filter_rows);
+    EXPECT_EQ(5, snapshot.rf_filter_rows);
+}
+
+TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
+    SpillDriverTestHarness harness;
+    SpillLifecycleSourceOperatorFactory source_factory(1, 10, false, true);
+    SpillLifecycleOperatorFactory spillable_factory(2, 20, true, false);
+    Operators operators{source_factory.create(1, 0), spillable_factory.create(1, 0)};
+
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline, -1);
+
+    ASSERT_OK(driver.prepare(harness.state()));
+    ASSERT_EQ(config::local_exchange_buffer_mem_limit_per_driver +
+                      spill::OperatorMemoryResourceManager::compute_available_memory_bytes(*harness.state()),
+              harness.global_spill_manager.spill_expected_reserved_bytes());
+    ASSERT_EQ(1, harness.global_spill_manager.spillable_operators());
+
+    ASSERT_OK(driver.prepare_local_state(harness.state()));
+    driver.close_operators_for_test(harness.state());
+    EXPECT_EQ(0, harness.global_spill_manager.spill_expected_reserved_bytes());
+    EXPECT_EQ(0, harness.global_spill_manager.spillable_operators());
+}
+
+TEST(PipelineDriverSpillResourceManagerTest, test_prepare_failure_rolls_back_all_prepared_managers) {
+    SpillDriverTestHarness harness;
+    SpillLifecycleSourceOperatorFactory source_factory(1, 10, false, true);
+    SpillLifecycleOperatorFactory failing_factory(2, 20, true, false, Status::InternalError("prepare failed"));
+    Operators operators{source_factory.create(1, 0), failing_factory.create(1, 0)};
+
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline, -1);
+
+    auto st = driver.prepare(harness.state());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+    EXPECT_EQ(0, harness.global_spill_manager.spill_expected_reserved_bytes());
+    EXPECT_EQ(0, harness.global_spill_manager.spillable_operators());
+}
 
 TEST_F(TestPipelineControlFlow, test_two_operatories) {
     std::default_random_engine e;

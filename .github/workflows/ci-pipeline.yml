@@ -169,7 +169,7 @@ jobs:
           ./scripts/check-approve.sh
       
       - name: Check Test Case Info
-        if: always() && steps.check_test_case.outcome == 'success' && steps.check_test_case.outputs.TEST_PR != ''
+        if: "!cancelled() && steps.check_test_case.outcome == 'success' && steps.check_test_case.outputs.TEST_PR != ''"
         id: check_test_case_info
         run: |
           echo "TEST_PR=${{ steps.check_test_case.outputs.TEST_PR }}" >> ./test-pr-info.txt
@@ -253,6 +253,9 @@ jobs:
               - 'build-support/test_check_be_module_boundaries.py'
               - 'build-support/test_render_be_agents.py'
               - 'build-support/be_module_boundary_baseline.json'
+              - 'build-support/exec_env_header_include_allowlist.txt'
+              - 'build-support/exec_env_singleton_allowlist.txt'
+              - 'build-support/runtime_state_header_include_allowlist.txt'
 
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
@@ -358,8 +361,10 @@ jobs:
       - name: Compute Merge Base
         id: merge_base
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
-          echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
+          git fetch origin ${{ github.base_ref }}
+          base="$(git merge-base FETCH_HEAD HEAD)"
+          [[ -n "${base}" ]]
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
 
       - name: Determine Baseline Enforcement
         id: baseline_shrink
@@ -412,7 +417,9 @@ jobs:
               - 'test/AGENTS.md'
               - 'handbook/**'
               - 'build-support/README.md'
+              - 'build-support/handbook_plan.py'
               - 'build-support/check_repo_handbook.py'
+              - 'build-support/test_handbook_plan.py'
               - 'build-support/test_check_repo_handbook.py'
 
       - uses: actions/checkout@v6
@@ -422,18 +429,60 @@ jobs:
         if: steps.path-filter.outputs.handbook == 'true'
         run: |
           python3 -m unittest build-support/test_check_repo_handbook.py
+          python3 -m unittest build-support/test_handbook_plan.py
 
       - name: Handbook Check
         if: steps.path-filter.outputs.handbook == 'true'
         run: |
           python3 build-support/check_repo_handbook.py
 
+  schema-compatibility:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: Schema Compatibility
+    if: needs.basic-checker.outputs.PASS == 'true'
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            schema:
+              - '.github/workflows/ci-pipeline.yml'
+              - '.github/workflows/ci-pipeline-branch.yml'
+              - 'gensrc/proto/**'
+              - 'gensrc/thrift/**'
+              - 'build-support/check_gensrc_schema_compatibility.py'
+              - 'build-support/test_check_gensrc_schema_compatibility.py'
+              - 'build-support/schema_compatibility_waivers.json'
+
+      - uses: actions/checkout@v6
+        if: steps.path-filter.outputs.schema == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Compute Merge Base
+        if: steps.path-filter.outputs.schema == 'true'
+        id: merge_base
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Schema Tool Tests
+        if: steps.path-filter.outputs.schema == 'true'
+        run: |
+          python3 -m unittest build-support/test_check_gensrc_schema_compatibility.py
+
+      - name: Schema Check
+        if: steps.path-filter.outputs.schema == 'true'
+        run: |
+          python3 build-support/check_gensrc_schema_compatibility.py --mode changed --base "${{ steps.merge_base.outputs.base }}"
+
   thirdparty-info:
     runs-on: ubuntu-latest
     needs:
       - be-checker
       - thirdparty-update
-    if: always() && (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')
+    if: "!cancelled() && (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')"
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
@@ -474,7 +523,7 @@ jobs:
     timeout-minutes: 150
     name: BE UT
     if: >
-      always() &&
+      !cancelled() &&
       needs.be-checker.result == 'success' &&
       needs.thirdparty-info.result != 'failure' &&
       needs.thirdparty-info.result != 'cancelled' &&
@@ -504,7 +553,7 @@ jobs:
 
       - name: Upload Log
         uses: actions/upload-artifact@v6
-        if: always() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''
+        if: "!cancelled() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''"
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -523,7 +572,7 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
     if: >
-      always() &&
+      !cancelled() &&
       needs.be-checker.result == 'success' &&
       needs.thirdparty-info.result != 'failure' &&
       needs.thirdparty-info.result != 'cancelled' &&
@@ -708,15 +757,23 @@ jobs:
 
   fe-ut:
     runs-on: [self-hosted, normal]
-    needs: 
+    needs:
       - fe-codestyle-check
       - fe-checker
+      - thirdparty-info
     name: FE UT
+    if: >
+      always() &&
+      needs.fe-codestyle-check.result == 'success' &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.thirdparty-info.result != 'cancelled'
     env:
       PR_NUMBER: ${{ github.event.number }}
       CODE_PATH: ${{ github.workspace }}
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
+      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
+      LINUX_DISTRO: ubuntu
     steps:
       - name: clean
         run: |
@@ -725,11 +782,11 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
-        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_ut_conclusion != 'success' 
+        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_ut_conclusion != 'success'
         run: |
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
@@ -741,19 +798,23 @@ jobs:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
+          if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
+              export image_cache_id=${IMAGE_CACHE_ID}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
 
       - name: Clean ECI
-        if: always() && steps.run_ut.outputs.ECI_ID != ''
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo "::group::>>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           echo "::endgroup::"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        if: always() && steps.run_ut.outputs.RES_LOG != ''
+        if: always() && steps.run_ut.outputs.RES_LOG
         uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG
@@ -822,9 +883,9 @@ jobs:
       sys_test_need: ${{ steps.run_build.outputs.sys_test_need }}
       pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     if: >
-      always() && 
-      needs.thirdparty-info.result != 'failure' && 
-      needs.fe-codestyle-check.result != 'failure' && 
+      !cancelled() &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.fe-codestyle-check.result != 'failure' &&
       (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true') &&
       (needs.thirdparty-info.result != 'cancelled' && needs.fe-codestyle-check.result != 'cancelled' && needs.test-checker.outputs.test_change != 'cancelled')
     steps:
@@ -941,7 +1002,7 @@ jobs:
   deploy:
     runs-on: [self-hosted, normal]
     needs: build
-    if: always() && needs.build.result == 'success' && needs.build.outputs.sys_test_need == 'true'
+    if: "!cancelled() && needs.build.result == 'success' && needs.build.outputs.sys_test_need == 'true'"
     name: DEPLOY SR
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1090,7 +1151,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: SQL-Tester
     needs: [build, deploy]
-    if: always() && needs.deploy.result == 'success'
+    if: "!cancelled() && needs.deploy.result == 'success'"
     timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1170,7 +1231,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart FE
     needs: [deploy, SQL-Tester]
-    if: always() && needs.SQL-Tester.result == 'success'
+    if: "!cancelled() && needs.SQL-Tester.result == 'success'"
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
@@ -1196,7 +1257,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart BE
     needs: [deploy, SQL-Tester]
-    if: always() && needs.SQL-Tester.result == 'success'
+    if: "!cancelled() && needs.SQL-Tester.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1229,7 +1290,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs: [deploy, restart-fe, restart-be]
-    if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
+    if: "!cancelled() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'"
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1297,7 +1358,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart FE(Admit)
     needs: [deploy, admit]
-    if: always() && needs.admit.result == 'success'
+    if: "!cancelled() && needs.admit.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1330,7 +1391,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart BE(Admit)
     needs: [deploy, admit]
-    if: always() && needs.admit.result == 'success'
+    if: "!cancelled() && needs.admit.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}

@@ -33,7 +33,10 @@ set(STARROCKS_LIBS
     FileSystem
     FSCore
     Formats
+    orc
     Gutil
+    HttpClient
+    HttpCore
     IO
     Serde
     Storage

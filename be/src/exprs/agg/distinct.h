@@ -24,7 +24,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"

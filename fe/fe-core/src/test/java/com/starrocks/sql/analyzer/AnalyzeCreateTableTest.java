@@ -84,6 +84,18 @@ public class AnalyzeCreateTableTest {
     }
 
     @Test
+    public void testExternalFileTableVarbinaryKeepsUnspecifiedLength() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create external table test.file_varbinary (col1 int, col2 varbinary) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"parquet\")");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(-1, type.getLength());
+        Assertions.assertEquals("varbinary", type.toSql());
+    }
+
+    @Test
     public void testNoDb() {
         AnalyzeTestUtil.getConnectContext().setDatabase(null);
         String sql =
@@ -485,6 +497,12 @@ public class AnalyzeCreateTableTest {
         analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table" 
                         + "(k1 int, k2 varchar(10)) partition by truncate(k2)",
                 "Function 'truncate' requires exactly 2 arguments: column and number, but got 1 argument(s)");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by bucket(4, k2)",
+                "No matching function with signature: bucket(tinyint(4), varchar(10))");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by truncate(4, k2)",
+                "No matching function with signature: truncate(tinyint(4), varchar(10))");
         AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 

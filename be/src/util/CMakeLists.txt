@@ -22,16 +22,9 @@ set(UTIL_FILES
   arrow/starrocks_column_to_arrow.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp
-  brpc_stub_cache.cpp
-  compression/block_compression.cpp
-  compression/compression_context_pool_singletons.cpp
-  compression/stream_compressor.cpp
-  compression/stream_decompressor.cpp
   download_util.cpp
   json_util.cpp
   json_flattener.cpp
-  global_metrics_registry.cpp
-  metrics/file_scan_metrics.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
   static_asserts.cpp
@@ -40,11 +33,8 @@ set(UTIL_FILES
   system_metrics.cpp
 # coding_util.cpp
   thrift_rpc_helper.cpp
-  frame_of_reference_coding.cpp
   debug/query_trace_impl.cpp
   memory_lock.cpp
-  internal_service_recoverable_stub.cpp
-  lake_service_recoverable_stub.cpp
   byte_buffer.cpp
   hdfs_util.cpp
   jvm_metrics.cpp

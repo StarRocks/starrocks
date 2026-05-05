@@ -37,6 +37,75 @@ protected:
     }
 };
 
+// In-memory CSVReader used to drive the more_rows() state machine from a
+// fixed string buffer. Mirrors the behavior of
+// CSVScanner::ScannerCSVReader::_fill_buffer for the state-machine parser.
+class StringCSVReader : public starrocks::CSVReader {
+public:
+    StringCSVReader(const starrocks::CSVParseOptions& parse_options, std::string data, size_t max_chunk = SIZE_MAX)
+            : CSVReader(parse_options), _data(std::move(data)), _max_chunk(max_chunk) {}
+
+    // Collects each row's fields as copied strings so tests don't have to
+    // worry about the underlying buffer being reused.
+    starrocks::Status read_all_rows(std::vector<std::vector<std::string>>* rows) {
+        while (true) {
+            starrocks::CSVRow row;
+            auto st = next_record(row);
+            if (st.is_end_of_file()) {
+                return starrocks::Status::OK();
+            }
+            if (!st.ok()) {
+                return st;
+            }
+            std::vector<std::string> fields;
+            fields.reserve(row.columns.size());
+            for (const auto& column : row.columns) {
+                const char* base = column.is_escaped_column ? escapeDataPtr() : buffBasePtr();
+                fields.emplace_back(base + column.start_pos, column.length);
+            }
+            rows->push_back(std::move(fields));
+        }
+    }
+
+protected:
+    starrocks::Status _fill_buffer() override {
+        DCHECK(_buff.free_space() > 0);
+        size_t free_space = _buff.free_space();
+        size_t remaining = _data.size() - _pos;
+        size_t to_copy = std::min({free_space, remaining, _max_chunk});
+        if (to_copy > 0) {
+            memcpy(_buff.limit(), _data.data() + _pos, to_copy);
+            _buff.add_limit(to_copy);
+            _pos += to_copy;
+            return starrocks::Status::OK();
+        }
+        auto n = _buff.available();
+        if (n < _parse_options.row_delimiter.size() ||
+            _buff.find(_parse_options.row_delimiter, n - _parse_options.row_delimiter.size()) == nullptr) {
+            if (_buff.free_space() < _parse_options.row_delimiter.size()) {
+                return starrocks::Status::InternalError("row delimiter does not fit");
+            }
+            for (char ch : _parse_options.row_delimiter) {
+                _buff.append(ch);
+            }
+        }
+        if (n == 0) {
+            _buff.skip(_parse_options.row_delimiter.size());
+            return starrocks::Status::EndOfFile("string-csv-reader");
+        }
+        return starrocks::Status::OK();
+    }
+
+    char* _find_line_delimiter(starrocks::CSVBuffer& buffer, size_t pos) override {
+        return buffer.find(_parse_options.row_delimiter, pos);
+    }
+
+private:
+    std::string _data;
+    size_t _pos = 0;
+    size_t _max_chunk;
+};
+
 class CSVReaderTest : public ::testing::Test {
 public:
     CSVReaderTest() = default;
@@ -195,6 +264,117 @@ TEST_F(CSVReaderTest, test_split_record_large_data) {
     EXPECT_EQ(1000, fields1.size());
     EXPECT_EQ("field0", fields1[0].to_string());
     EXPECT_EQ("field999", fields1[999].to_string());
+}
+
+// Regression test for issue #51725: when the input uses Windows-style CRLF
+// line endings and the last column of each row is enclosed, the closing
+// enclose byte and the preceding '\r' must both be stripped from the
+// emitted value. The previous code dropped only the closing enclose, so
+// the emitted value ended with "'\r".
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_last_field) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'{\"x\":1}'\r\nb,'{\"y\":2}'\r\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(2u, rows.size());
+    ASSERT_EQ(2u, rows[0].size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("{\"x\":1}", rows[0][1]);
+    ASSERT_EQ(2u, rows[1].size());
+    EXPECT_EQ("b", rows[1][0]);
+    EXPECT_EQ("{\"y\":2}", rows[1][1]);
+}
+
+// The CRLF fix targets the row-terminator transition out of ENCLOSE. An
+// enclosed non-final column is followed directly by a column delimiter
+// (not '\r'), so its behavior must remain unchanged.
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_non_final_field) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "'v1','v2','v3'\r\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(1u, rows.size());
+    ASSERT_EQ(3u, rows[0].size());
+    EXPECT_EQ("v1", rows[0][0]);
+    EXPECT_EQ("v2", rows[0][1]);
+    EXPECT_EQ("v3", rows[0][2]);
+}
+
+// Regression guard: LF line endings with enclose must still parse
+// correctly (the pre-existing, working case).
+TEST_F(CSVReaderTest, test_more_rows_enclose_lf_last_field) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'{\"x\":1}'\nb,'{\"y\":2}'\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(2u, rows.size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("{\"x\":1}", rows[0][1]);
+    EXPECT_EQ("b", rows[1][0]);
+    EXPECT_EQ("{\"y\":2}", rows[1][1]);
+}
+
+// Regression guard: without an enclose char the state-machine parser is
+// not used, but the legacy next_record path is. This test documents the
+// current behavior (trailing '\r' stays in the last column) so future
+// changes to that code path trip this assertion deliberately.
+TEST_F(CSVReaderTest, test_more_rows_no_enclose_crlf_preserved) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, 0);
+    std::string data = "a,b\r\nc,d\r\n";
+    StringCSVReader reader(options, data);
+
+    starrocks::CSVReader::Record record;
+    ASSERT_TRUE(reader.next_record(&record).ok());
+    starrocks::CSVReader::Fields fields;
+    reader.split_record(record, &fields);
+    ASSERT_EQ(2u, fields.size());
+    EXPECT_EQ("a", fields[0].to_string());
+    // The legacy fast path leaves '\r' attached to the last column; this
+    // is a separate, pre-existing behavior that the enclose CRLF fix does
+    // not touch.
+    EXPECT_EQ("b\r", fields[1].to_string());
+}
+
+// Regression guard: the double-enclose escape form ('') inside a quoted
+// value must still work after the CRLF fix.
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_with_escaped_enclose) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'it''s fine'\r\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(1u, rows.size());
+    ASSERT_EQ(2u, rows[0].size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("it's fine", rows[0][1]);
+}
+
+// Exercises the readMore() path inside the CRLF fix: feeding data one
+// byte at a time forces the buffer to hold only '\r' when the closing
+// enclose is consumed, so _buff.available() < 2 triggers readMore to
+// pull in the '\n'. Covers the buffer-boundary scenario flagged in
+// code review.
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_buffer_boundary) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'{\"x\":1}'\r\nb,'{\"y\":2}'\r\n";
+    StringCSVReader reader(options, data, 1);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(2u, rows.size());
+    ASSERT_EQ(2u, rows[0].size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("{\"x\":1}", rows[0][1]);
+    ASSERT_EQ(2u, rows[1].size());
+    EXPECT_EQ("b", rows[1][0]);
+    EXPECT_EQ("{\"y\":2}", rows[1][1]);
 }
 
 } // namespace starrocks::csv

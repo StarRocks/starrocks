@@ -21,7 +21,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/function_helper.h"
 #include "typeinfo"
 #include "types/logical_type.h"
@@ -256,7 +256,7 @@ public:
             NullColumn::MutablePtr null_flags;
             if (data->is_nullable()) {
                 auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(data);
-                null_flags = NullColumn::static_pointer_cast(std::move(*nullable_column->null_column()).mutate());
+                null_flags = NullColumn::static_pointer_cast(Column::mutate(nullable_column->null_column()));
             } else {
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
                 null_flags->resize(data->size());

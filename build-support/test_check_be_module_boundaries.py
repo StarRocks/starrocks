@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -35,6 +37,102 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CheckBeModuleBoundariesTest(unittest.TestCase):
+    def test_load_path_allowlist_ignores_comments_and_blank_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            allowlist_path = Path(tmpdir) / "allowlist.txt"
+            allowlist_path.write_text(
+                textwrap.dedent(
+                    """\
+                    # comment
+
+                    src/runtime/exec_env.cpp
+                    src/storage/lake/update_manager.cpp
+                    """
+                )
+            )
+
+            self.assertEqual(
+                {
+                    "src/runtime/exec_env.cpp",
+                    "src/storage/lake/update_manager.cpp",
+                },
+                MODULE.load_path_allowlist(allowlist_path),
+            )
+
+    def test_collect_exec_env_include_paths_scans_header_files_in_src_and_test(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "be" / "test" / "runtime" / "exec_env_helper.h").write_text('#include "runtime/exec_env.h"\n')
+            (repo / "be" / "test" / "runtime" / "exec_env_helper.cpp").write_text('#include "runtime/exec_env.h"\n')
+
+            self.assertEqual(
+                {
+                    "src/column/hash_set.h",
+                    "test/runtime/exec_env_helper.h",
+                },
+                MODULE.collect_exec_env_include_paths(repo),
+            )
+
+    def test_collect_exec_env_singleton_paths_scans_be_src_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "be" / "src" / "runtime" / "runtime.cpp").write_text("void f() { (void)ExecEnv::GetInstance(); }\n")
+            (repo / "be" / "test" / "runtime" / "runtime_test.cpp").write_text("void f() { (void)ExecEnv::GetInstance(); }\n")
+
+            self.assertEqual(
+                {"src/runtime/runtime.cpp"},
+                MODULE.collect_exec_env_singleton_paths(repo),
+            )
+
+    def test_diff_allowlist_reports_new_and_stale_paths(self) -> None:
+        extra_paths, stale_paths = MODULE.diff_path_allowlist(
+            current={"src/runtime/runtime.cpp", "src/column/hash_set.h"},
+            allowlist={"src/runtime/runtime.cpp", "src/exec/old.cpp"},
+        )
+
+        self.assertEqual({"src/column/hash_set.h"}, extra_paths)
+        self.assertEqual({"src/exec/old.cpp"}, stale_paths)
+
+    def test_print_path_allowlist_diff_highlights_allowlist_and_action_for_new_paths(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            MODULE._print_path_allowlist_diff(
+                "exec-env-include",
+                {"test/testutil/runtime_state_test_util.h"},
+                set(),
+                "build-support/exec_env_header_include_allowlist.txt",
+            )
+
+        output = stdout.getvalue()
+        self.assertIn("ERROR: new exec-env-include paths require allowlist review", output)
+        self.assertIn("allowlist: build-support/exec_env_header_include_allowlist.txt", output)
+        self.assertIn(
+            "action: remove the new dependency or add the path to build-support/exec_env_header_include_allowlist.txt if it is intentional.",
+            output,
+        )
+        self.assertIn("[exec-env-include] new path=test/testutil/runtime_state_test_util.h", output)
+
+    def test_print_path_allowlist_diff_highlights_allowlist_and_action_for_stale_paths(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            MODULE._print_path_allowlist_diff(
+                "exec-env-singleton",
+                set(),
+                {"src/exec/old.cpp"},
+                "build-support/exec_env_singleton_allowlist.txt",
+            )
+
+        output = stdout.getvalue()
+        self.assertIn("ERROR: stale exec-env-singleton allowlist entries should be removed", output)
+        self.assertIn("allowlist: build-support/exec_env_singleton_allowlist.txt", output)
+        self.assertIn(
+            "action: delete the stale entries from build-support/exec_env_singleton_allowlist.txt.",
+            output,
+        )
+        self.assertIn("[exec-env-singleton] stale path=src/exec/old.cpp", output)
+
     def test_ci_architecture_filter_covers_checker_code_extensions(self) -> None:
         workflow_path = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml"
         workflow_lines = workflow_path.read_text().splitlines()
@@ -77,6 +175,25 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
             'python3 build-support/check_be_module_boundaries.py --mode changed --base ${{ steps.merge_base.outputs.base }} --enforce-baseline-shrink',
             workflow_text,
         )
+
+    def test_ci_architecture_filter_includes_exec_env_guardrail_files(self) -> None:
+        workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
+
+        self.assertIn("- 'build-support/exec_env_header_include_allowlist.txt'", workflow_text)
+        self.assertIn("- 'build-support/exec_env_singleton_allowlist.txt'", workflow_text)
+
+    def test_changed_full_check_paths_include_exec_env_guardrail_files(self) -> None:
+        self.assertIn("build-support/exec_env_header_include_allowlist.txt", MODULE.DEFAULT_CHANGED_FULL_CHECK_PATHS)
+        self.assertIn("build-support/exec_env_singleton_allowlist.txt", MODULE.DEFAULT_CHANGED_FULL_CHECK_PATHS)
+
+    def test_ci_compute_merge_base_uses_fetched_base_head(self) -> None:
+        workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
+
+        self.assertIn('name: Compute Merge Base', workflow_text)
+        self.assertIn('git fetch origin ${{ github.base_ref }}', workflow_text)
+        self.assertIn('base="$(git merge-base FETCH_HEAD HEAD)"', workflow_text)
+        self.assertIn('[[ -n "${base}" ]]', workflow_text)
+        self.assertIn('echo "base=${base}" >> "$GITHUB_OUTPUT"', workflow_text)
 
     def test_find_baseline_expansions_allows_deletions_only(self) -> None:
         previous = {

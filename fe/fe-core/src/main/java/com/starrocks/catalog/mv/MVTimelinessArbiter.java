@@ -31,6 +31,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -45,6 +46,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -289,10 +291,11 @@ public abstract class MVTimelinessArbiter {
         if (partitionInfo.isUnPartitioned()) {
             return null;
         }
-        Map<Table, PCellSortedSet> basePartitionNameToRangeMap = differ.syncBaseTablePartitionInfos();
-        if (CollectionUtils.sizeIsEmpty(basePartitionNameToRangeMap)) {
+        Map<Table, BaseToMVPartitionMapping> basePartitionMappings = differ.syncBaseTablePartitionInfos();
+        if (CollectionUtils.sizeIsEmpty(basePartitionMappings)) {
             return null;
         }
+        Map<Table, PCellSortedSet> basePartitionNameToRangeMap = BaseToMVPartitionMapping.extractCells(basePartitionMappings);
         // add into base table info
         mvUpdateInfo.addRefBaseTablePCells(basePartitionNameToRangeMap);
         return basePartitionNameToRangeMap;
@@ -305,8 +308,10 @@ public abstract class MVTimelinessArbiter {
             if (partitionInfo.isUnPartitioned()) {
                 return null;
             }
-            PartitionDiffResult result = differ.computePartitionDiff(null,
-                    basePartitionNameToRangeMap);
+            // Wrap into BaseToMVPartitionMapping (no source name mapping needed for timeliness check)
+            Map<Table, BaseToMVPartitionMapping> mappings = new HashMap<>();
+            basePartitionNameToRangeMap.forEach((k, v) -> mappings.put(k, BaseToMVPartitionMapping.of(v)));
+            PartitionDiffResult result = differ.computePartitionDiff(null, mappings);
             if (result == null) {
                 logMVPrepare(mv, "Partitioned mv compute list diff failed");
                 return null;

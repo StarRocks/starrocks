@@ -133,6 +133,43 @@ public class GlobalLateMaterializeNativeTest extends PlanTestBase {
                 PROPERTIES (
                 "replication_num" = "1"
                 );""");
+
+        starRocksAssert.withTable("""
+                CREATE TABLE glm_join_expr_t0 (
+                    k0 int(11) NULL,
+                    v1 date NULL,
+                    v2 datetime NULL,
+                    v3 char(20) NULL,
+                    v4 varchar(20) NULL,
+                    v5 boolean NULL
+                ) ENGINE=OLAP
+                DUPLICATE KEY(`k0`)
+                DISTRIBUTED BY HASH(`k0`) BUCKETS 3
+                PROPERTIES ("replication_num" = "1");""");
+        starRocksAssert.withTable("""
+                CREATE TABLE glm_join_expr_t1 (
+                    k0 int(11) NULL,
+                    v1 date NULL,
+                    v2 datetime NULL,
+                    v3 char(20) NULL,
+                    v4 varchar(20) NULL,
+                    v5 boolean NULL
+                ) ENGINE=OLAP
+                DUPLICATE KEY(`k0`)
+                DISTRIBUTED BY HASH(`k0`) BUCKETS 3
+                PROPERTIES ("replication_num" = "1");""");
+        starRocksAssert.withTable("""
+                CREATE TABLE glm_join_expr_t2 (
+                    k0 int(11) NULL,
+                    v1 date NULL,
+                    v2 datetime NULL,
+                    v3 char(20) NULL,
+                    v4 varchar(20) NULL,
+                    v5 boolean NULL
+                ) ENGINE=OLAP
+                DUPLICATE KEY(`k0`)
+                DISTRIBUTED BY HASH(`k0`) BUCKETS 3
+                PROPERTIES ("replication_num" = "1");""");
     }
 
     @AfterAll
@@ -695,6 +732,30 @@ public class GlobalLateMaterializeNativeTest extends PlanTestBase {
                 "map_apply((k,v)->(k+1,concat(v,'a')), b))=map{2:\"aba\",4:\"cdda\"} order by 1 limit 1;\n";
         final String plan = getFragmentPlan(sql);
         System.out.println("plan = " + plan);
+    }
+
+    @Test
+    public void testCostBasedGlmKeepsDerivedJoinKeyProjection() throws Exception {
+        final SessionVariable sv = connectContext.getSessionVariable();
+        try {
+            sv.setEnableGlobalLateMaterializationCostBased(true);
+            String plan = getFragmentPlan(
+                    "select * from glm_join_expr_t0 t0 " +
+                            "join glm_join_expr_t1 t1 " +
+                            "on t0.v1 = t1.v1 " +
+                            "and t0.v2 = (exists (select max(v2) from glm_join_expr_t2)) " +
+                            "order by 1");
+            assertContains(plan, "1:Project\n" +
+                    "  |  <slot 1> : 1: k0\n" +
+                    "  |  <slot 2> : 2: v1\n" +
+                    "  |  <slot 3> : 3: v2\n" +
+                    "  |  <slot 4> : 4: v3\n" +
+                    "  |  <slot 6> : 6: v5\n" +
+                    "  |  <slot 23> : CAST(3: v2 AS DOUBLE)\n" +
+                    "  |  <slot 27> : 27: v4");
+        } finally {
+            sv.setEnableGlobalLateMaterializationCostBased(false);
+        }
     }
 
     @Test

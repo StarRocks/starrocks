@@ -19,7 +19,7 @@
       "owned_targets": ["Gutil"],
       "owned_roots": ["be/src/gutil"],
       "allowed_include_prefixes": ["gutil/"],
-      "allowed_target_deps": [],
+      "allowed_target_deps": ["Common", "Base", "Gutil"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep Gutil independent; move BE-specific logic out instead of importing BE modules."
@@ -27,14 +27,90 @@
     {
       "id": "common",
       "doc_label": "Common",
-      "summary": "Core shared infrastructure above Base/Gutil only. Higher-level BE modules must not leak back into it.",
+      "summary": "Core shared infrastructure above Base/Gutil and generated code only. Higher-level BE modules must not leak back into it.",
       "owned_targets": ["Common"],
       "owned_roots": ["be/src/common"],
       "allowed_include_prefixes": ["common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["Base", "Gutil"],
+      "allowed_target_deps": ["Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["common_test"],
       "allowed_test_link_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated headers."
+      "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code."
+    },
+    {
+      "id": "cache",
+      "doc_label": "Cache",
+      "summary": "Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.",
+      "owned_targets": ["Cache"],
+      "owned_roots": ["be/src/cache"],
+      "allowed_include_prefixes": [
+        "cache/",
+        "common/brpc/",
+        "runtime/current_thread.h",
+        "runtime/mem_tracker.h",
+        "fs/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "runtime/",
+        "storage/",
+        "service/",
+        "http/",
+        "agent/",
+        "exec/",
+        "connector/",
+        "util/"
+      ],
+      "forbidden_includes": [
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["RuntimeCore", "FSCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["cache_test"],
+      "allowed_test_link_deps": [
+        "Cache",
+        "RuntimeCore",
+        "FSCore",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "remediation": "Keep Cache self-contained within cache engines, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache."
+    },
+    {
+      "id": "httpcore",
+      "doc_label": "HttpCore",
+      "summary": "Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.",
+      "owned_targets": ["HttpCore"],
+      "owned_globs": [
+        "be/src/http/http_handler.h",
+        "be/src/http/http_method.*",
+        "be/src/http/http_status.*",
+        "be/src/http/http_headers.*",
+        "be/src/http/http_request.*",
+        "be/src/http/http_response.*",
+        "be/src/http/http_parser.*",
+        "be/src/http/http_channel.*",
+        "be/src/http/http_stream_channel.*",
+        "be/src/http/ev_http_server.*"
+      ],
+      "allowed_include_prefixes": ["http/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["http/action/"],
+      "forbidden_includes": [
+        "http/default_path_handlers.h",
+        "http/download_action.h",
+        "http/http_common.h",
+        "http/monitor_action.h",
+        "http/rest_monitor_iface.h",
+        "http/utils.h",
+        "http/web_page_handler.h"
+      ],
+      "allowed_target_deps": ["Common", "Base", "Gutil"],
+      "allowed_test_targets": ["http_core_test"],
+      "allowed_test_link_deps": ["HttpCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward."
     },
     {
       "id": "iocore",
@@ -56,19 +132,21 @@
       "owned_targets": ["FSCore"],
       "owned_globs": [
         "be/src/fs/fs.*",
+        "be/src/fs/fd_cache.*",
         "be/src/fs/encrypt_file.*",
         "be/src/fs/bundle_file.*",
-        "be/src/fs/fs_options.*"
+        "be/src/fs/fs_options.*",
+        "be/src/fs/fs_memory.*",
+        "be/src/fs/fs_factory.*",
+        "be/src/fs/fs_posix.*",
+        "be/src/fs/fs_registry.*",
+        "be/src/fs/fs_scheme.*"
       ],
       "allowed_include_prefixes": ["fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
       "forbidden_includes": [
-        "fs/fd_cache.h",
         "fs/fs_broker.h",
-        "fs/fs_factory.h",
-        "fs/fs_memory.h",
         "fs/fs_options_helper.h",
-        "fs/fs_posix.h",
         "fs/fs_s3.h",
         "fs/fs_starlet.h",
         "fs/fs_util.h",
@@ -79,6 +157,44 @@
       "allowed_test_targets": ["fs_core_test"],
       "allowed_test_link_deps": ["FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem."
+    },
+    {
+      "id": "spillcore",
+      "doc_label": "SpillCore",
+      "summary": "Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.",
+      "owned_targets": ["SpillCore"],
+      "owned_globs": [
+        "be/src/exec/spill/block_manager.h",
+        "be/src/exec/spill/common.h",
+        "be/src/exec/spill/spill_fwd.h",
+        "be/src/exec/spill/dir_manager.h",
+        "be/src/exec/spill/dir_manager.cpp",
+        "be/src/exec/spill/log_block_manager.h",
+        "be/src/exec/spill/log_block_manager.cpp",
+        "be/src/exec/spill/file_block_manager.h",
+        "be/src/exec/spill/file_block_manager.cpp",
+        "be/src/exec/spill/hybird_block_manager.h",
+        "be/src/exec/spill/hybird_block_manager.cpp",
+        "be/src/exec/spill/query_spill_manager.h",
+        "be/src/exec/spill/query_spill_manager.cpp",
+        "be/src/exec/spill/block_reader.cpp",
+        "be/src/exec/spill/global_spill_manager.h",
+        "be/src/exec/spill/operator_mem_resource_manager.h",
+        "be/src/exec/spill/operator_mem_resource_manager.cpp",
+        "be/src/exec/spill/partition.h",
+        "be/src/exec/spill/spill_metrics.h",
+        "be/src/exec/spill/spill_metrics.cpp"
+      ],
+      "allowed_include_prefixes": ["exec/spill/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
+      "forbidden_includes": [
+        "runtime/exec_env.h",
+        "exec/sort_exec_exprs.h"
+      ],
+      "allowed_target_deps": ["RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["spill_core_test"],
+      "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward."
     },
     {
       "id": "typecore",
@@ -128,25 +244,39 @@
       "summary": "Core runtime building blocks without full Runtime/Exec/Storage coupling.",
       "owned_targets": ["RuntimeCore"],
       "additional_owned_globs": [
+        "be/src/runtime/arena_allocator.h",
         "be/src/runtime/bucket_aware_partition.h",
+        "be/src/runtime/closure_guard.h",
         "be/src/runtime/current_thread.h",
+        "be/src/runtime/descriptor_helper.h",
         "be/src/runtime/descriptors.h",
+        "be/src/runtime/descriptors_fwd.h",
+        "be/src/runtime/exception.h",
+        "be/src/runtime/exec_env_fwd.h",
+        "be/src/runtime/global_dict/config.h",
+        "be/src/runtime/global_dict/dict_column.h",
+        "be/src/runtime/global_dict/types_fwd_decl.h",
+        "be/src/runtime/heartbeat_flags.h",
         "be/src/runtime/mem_pool.h",
         "be/src/runtime/mem_tracker.h",
+        "be/src/runtime/mem_tracker_fwd.h",
+        "be/src/runtime/multi_precision.h",
         "be/src/runtime/raw_container_checked.h",
+        "be/src/runtime/runtime_fwd.h",
         "be/src/runtime/runtime_filter.h",
         "be/src/runtime/runtime_filter_cache.h",
         "be/src/runtime/runtime_filter_factory.h",
         "be/src/runtime/runtime_filter_layout.h",
+        "be/src/runtime/runtime_in_filter.h",
+        "be/src/runtime/runtime_metrics.h",
         "be/src/runtime/runtime_state.h",
-        "be/src/runtime/starrocks_metrics.h",
+        "be/src/runtime/runtime_state_fwd.h",
+        "be/src/runtime/service_contexts.h",
         "be/src/runtime/memory/*.h"
       ],
       "allowed_include_prefixes": ["runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": [
         "runtime/batch_write/",
-        "runtime/global_dict/",
-        "runtime/prof/",
         "runtime/routine_load/",
         "runtime/stream_load/"
       ],
@@ -155,7 +285,6 @@
         "runtime/base_load_path_mgr.h",
         "runtime/broker_mgr.h",
         "runtime/buffer_control_block.h",
-        "runtime/client_cache.h",
         "runtime/command_executor.h",
         "runtime/customized_result_writer.h",
         "runtime/data_stream_mgr.h",
@@ -176,7 +305,6 @@
         "runtime/lake_tablets_channel.h",
         "runtime/load_channel.h",
         "runtime/load_channel_mgr.h",
-        "runtime/load_fail_point.h",
         "runtime/load_path_mgr.h",
         "runtime/local_pass_through_buffer.h",
         "runtime/lookup_stream_mgr.h",
@@ -187,7 +315,6 @@
         "runtime/mysql_table_writer.h",
         "runtime/plan_fragment_executor.h",
         "runtime/profile_report_worker.h",
-        "runtime/query_statistics.h",
         "runtime/result_buffer_mgr.h",
         "runtime/result_queue_mgr.h",
         "runtime/result_sink.h",
@@ -197,7 +324,6 @@
         "runtime/sorted_chunks_merger.h",
         "runtime/table_function_table_sink.h",
         "runtime/tablets_channel.h",
-        "runtime/type_pack.h",
         "runtime/user_function_cache.h",
         "runtime/variable_result_writer.h"
       ],
@@ -241,6 +367,158 @@
       "allowed_test_targets": ["expr_core_test"],
       "allowed_test_link_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs."
+    },
+    {
+      "id": "execcore",
+      "doc_label": "ExecCore",
+      "summary": "Execution-node base and runtime-filter infrastructure on top of ExprCore without broader Exec/Runtime service coupling.",
+      "owned_targets": ["ExecCore"],
+      "additional_owned_globs": [
+        "be/src/exec/runtime_filter/**"
+      ],
+      "allowed_include_prefixes": ["exec/runtime_filter/", "exec/pipeline/pipeline_fwd.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["exec_core_test"],
+      "allowed_test_link_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code."
+    },
+    {
+      "id": "pipelineprimitives",
+      "doc_label": "PipelinePrimitives",
+      "summary": "Stable pipeline operator primitives without pipeline runtime, scheduler, context, factory, or concrete operator coupling.",
+      "owned_targets": ["PipelinePrimitives"],
+      "owned_globs": [
+        "be/src/exec/pipeline/operator.h",
+        "be/src/exec/pipeline/operator.cpp",
+        "be/src/exec/pipeline/primitives/operator_exec_stats.h",
+        "be/src/exec/pipeline/primitives/operator_runtime_access.h"
+      ],
+      "allowed_include_prefixes": ["exec/pipeline/operator.h", "exec/pipeline/primitives/", "exec/pipeline/runtime_filter_core_types.h", "exec/runtime_filter/", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "storage/", "service/", "http/", "connector/", "cache/", "util/"],
+      "forbidden_includes": [
+        "exec/exec_node.h",
+        "exec/data_sink.h",
+        "exec/pipeline/fragment_context.h",
+        "exec/pipeline/operator_factory.h",
+        "exec/pipeline/pipeline.h",
+        "exec/pipeline/pipeline_driver.h",
+        "exec/pipeline/pipeline_driver_executor.h",
+        "exec/pipeline/query_context.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": [],
+      "allowed_test_link_deps": [],
+      "remediation": "Keep pipeline primitives limited to base operator contracts and narrow helper types; move runtime, scheduler, factory, and concrete operator behavior into higher pipeline modules."
+    },
+    {
+      "id": "execsinkcore",
+      "doc_label": "ExecSinkCore",
+      "summary": "DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.",
+      "owned_targets": ["ExecSinkCore"],
+      "allowed_include_prefixes": ["exec/data_sink.h", "exec/pipeline/pipeline_fwd.h", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "connector/", "storage/", "http/", "service/", "cache/", "runtime/"],
+      "forbidden_includes": [
+        "exec/exec_node.h",
+        "exec/multi_olap_table_sink.h",
+        "exec/tablet_sink.h"
+      ],
+      "allowed_target_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_core_test"],
+      "allowed_test_link_deps": ["ExecSinkCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecSinkCore limited to the DataSink base contract; move construction, concrete sinks, pipeline decomposition, and future sink IO behavior into higher modules."
+    },
+    {
+      "id": "execschemascannercore",
+      "doc_label": "ExecSchemaScannerCore",
+      "summary": "Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.",
+      "owned_targets": ["ExecSchemaScannerCore"],
+      "allowed_include_prefixes": ["exec/schema_scanner.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/schema_scanner/", "exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "forbidden_includes": [
+        "runtime/exec_env.h",
+        "exec/exec_node.h",
+        "exec/data_sink.h"
+      ],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["schema_scanner_core_test"],
+      "allowed_test_link_deps": ["ExecSchemaScannerCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules."
+    },
+    {
+      "id": "execschemascanners",
+      "doc_label": "ExecSchemaScanners",
+      "summary": "Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.",
+      "owned_targets": ["ExecSchemaScanners"],
+      "additional_owned_globs": [
+        "be/src/exec/schema_scanner/schema_column_filler.h"
+      ],
+      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner/schema_column_filler.h", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "forbidden_includes": [
+        "exec/schema_scanner/schema_helper.h",
+        "runtime/exec_env.h",
+        "exec/exec_node.h",
+        "exec/data_sink.h"
+      ],
+      "allowed_target_deps": ["ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["exec_schema_scanners_test"],
+      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
+    },
+    {
+      "id": "execsortingcore",
+      "doc_label": "ExecSortingCore",
+      "summary": "Reusable exec sorting algorithms without pipeline, spill, workgroup, storage, or service coupling.",
+      "owned_targets": ["ExecSortingCore"],
+      "owned_globs": [
+        "be/src/exec/sorting/compare_column.cpp",
+        "be/src/exec/sorting/merge.*",
+        "be/src/exec/sorting/merge_cascade.cpp",
+        "be/src/exec/sorting/merge_column.cpp",
+        "be/src/exec/sorting/sort_column.cpp",
+        "be/src/exec/sorting/sort_cursor.*",
+        "be/src/exec/sorting/sort_helper.h",
+        "be/src/exec/sorting/sort_permute.*",
+        "be/src/exec/sorting/sorting.h"
+      ],
+      "excluded_globs": [
+        "be/src/exec/sorting/merge_path.*"
+      ],
+      "allowed_include_prefixes": ["exec/sorting/", "exprs/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "exec/spill/", "exec/workgroup/", "runtime/", "storage/", "connector/", "service/", "http/"],
+      "forbidden_includes": [
+        "exec/chunks_sorter.h",
+        "exec/sort_exec_exprs.h"
+      ],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["exec_sorting_core_test"],
+      "allowed_test_link_deps": ["ExecSortingCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecSortingCore limited to reusable sorting algorithms; leave merge-path pipeline observer integration, chunk sorters, spill-aware sorting, and exec-node adapters in higher modules."
+    },
+    {
+      "id": "execjoincore",
+      "doc_label": "ExecJoinCore",
+      "summary": "Reusable exec join hash table algorithms without join nodes, pipeline, storage, service, or util coupling.",
+      "owned_targets": ["ExecJoinCore"],
+      "owned_globs": [
+        "be/src/exec/join/**"
+      ],
+      "allowed_include_prefixes": ["exec/join/", "exec/sorting/sort_helper.h", "exprs/", "serde/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/", "exec/pipeline/", "exec/spill/", "exec/workgroup/", "runtime/batch_write/", "runtime/routine_load/", "runtime/stream_load/", "storage/", "service/", "http/", "cache/", "connector/", "util/"],
+      "forbidden_includes": [
+        "exec/cross_join_node.h",
+        "exec/data_sink.h",
+        "exec/exec_node.h",
+        "exec/hash_join_components.h",
+        "exec/hash_join_node.h",
+        "exec/hash_joiner.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["ExecSortingCore", "ExprCore", "SerdeCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["exec_join_core_test"],
+      "allowed_test_link_deps": ["ExecJoinCore", "ExecSortingCore", "ExprCore", "SerdeCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
     }
   ]
 }

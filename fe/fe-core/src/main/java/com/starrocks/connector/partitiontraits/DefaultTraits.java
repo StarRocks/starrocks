@@ -25,16 +25,13 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -90,7 +87,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
             return Lists.newArrayList(table.getName());
         }
 
-        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
         requestContext.setQueryMVRewrite(this.isQueryMVRewrite());
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
@@ -99,18 +96,6 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
     @Override
     public List<Column> getPartitionColumns() {
         return table.getPartitionColumns();
-    }
-
-    @Override
-    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
-            throws AnalysisException {
-        return PartitionUtil.getRangePartitionMapOfExternalTable(
-                table, partitionColumn, getPartitionNames(), partitionExpr);
-    }
-
-    @Override
-    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
-        return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
     }
 
     @Override

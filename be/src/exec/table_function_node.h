@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline_node.h"

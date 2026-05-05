@@ -20,7 +20,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
@@ -196,7 +196,7 @@ public class DeltaLakeScanNode extends ScanNode {
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     deltaLakeTable.getCatalogName(), deltaLakeTable.getCatalogDBName(), deltaLakeTable.getCatalogTableName(),
-                    ConnectorMetadatRequestContext.DEFAULT);
+                    ConnectorMetadataRequestContext.DEFAULT);
 
             if (selectedPartitionCount == -1) {
                 if (scanRangeSource != null) {
@@ -235,6 +235,8 @@ public class DeltaLakeScanNode extends ScanNode {
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

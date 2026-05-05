@@ -16,8 +16,10 @@
 
 #include "common/config_scan_io_fwd.h"
 #include "connector/lake_connector.h"
+#include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exprs/expr_executor.h"
 #include "runtime/descriptors.h"
@@ -621,7 +623,7 @@ int64_t ConnectorScanOperator::get_scan_table_id() const {
     }
 
     TupleId tuple_id = tuple_ids[0];
-    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
+    const TupleDescriptor* tuple_desc = get_factory()->runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
     if (tuple_desc != nullptr && tuple_desc->table_desc() != nullptr) {
         return tuple_desc->table_desc()->table_id();
     }
@@ -637,7 +639,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _runtime_bloom_filters(op->get_factory()->get_runtime_bloom_filters()),
           _enable_adaptive_io_tasks(enable_adaptive_io_tasks) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
@@ -697,6 +699,8 @@ Status ConnectorChunkSource::_report_split_source_morsel_finished_once() {
 
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
+
+    _update_catalog_metrics();
 
     // Ensure split-source completion is reported even when this chunk source
     // exits through non-EOF paths (cancel/close/error/limit reach).
@@ -928,6 +932,27 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
     if (_chunk_rows_read == 0) return 0;
     return _chunk_mem_bytes / _chunk_rows_read;
+}
+
+void ConnectorChunkSource::_update_catalog_metrics() {
+    auto* catalog_metrics = CatalogScanMetrics::instance();
+    if (catalog_metrics == nullptr || _scan_node == nullptr) {
+        return;
+    }
+
+    const std::string& catalog_type = _scan_node->catalog_type();
+    if (catalog_type.empty()) {
+        return;
+    }
+
+    catalog_metrics->update_scan_bytes(catalog_type, _scan_bytes);
+    catalog_metrics->update_scan_rows(catalog_type, _scan_rows_num);
+
+    // files_scan metrics from data source
+    if (_data_source != nullptr) {
+        catalog_metrics->update_files_scan_bytes_read(catalog_type, _data_source->num_bytes_read());
+        catalog_metrics->update_files_scan_rows_return(catalog_type, _data_source->num_rows_read());
+    }
 }
 
 } // namespace starrocks::pipeline

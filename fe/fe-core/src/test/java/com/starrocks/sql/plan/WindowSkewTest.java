@@ -77,6 +77,7 @@ class WindowSkewTest extends PlanTestBase {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
+
     }
 
     @BeforeEach
@@ -214,8 +215,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: (cast([5: p, INT, true] as VARCHAR(1048576)) != '1') " +
-                "OR ([5: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: ([5: p, INT, true] != 1) OR ([5: p, INT, true] IS NULL)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -282,7 +282,9 @@ class WindowSkewTest extends PlanTestBase {
 
     @Test
     void testWindowWithComplexPartition() throws Exception {
-        setColumnStatForP(0.3);
+        // Test that the rewrite is not triggered if the complex expr stats return a lower
+        // null fraction. In our case null fractions from the CASE WHEN should be (1 - 0.2) * 0.2 = 0.16 --> below threshold
+        setColumnStatForP(0.2);
 
         // Partition by expression (case when) instead of direct column
         String sql = "select p, s, sum(x) " +

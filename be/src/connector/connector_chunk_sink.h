@@ -57,7 +57,7 @@ public:
 
     virtual void callback_on_commit(const CommitResult& result) = 0;
 
-    Status write_partition_chunk(const std::string& partition, const vector<int8_t>& partition_field_null_list,
+    Status write_partition_chunk(const std::string& partition, const std::vector<int8_t>& partition_field_null_list,
                                  const ChunkPtr& chunk);
 
     Status status();

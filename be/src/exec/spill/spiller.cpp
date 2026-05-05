@@ -34,6 +34,7 @@
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
+#include "exec/spill/spill_metrics.h"
 #include "exec/spill/spiller.hpp"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
@@ -41,6 +42,10 @@
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);
+
+TQueryType::type spill_query_type(RuntimeState* state) {
+    return state->query_options().query_type;
+}
 
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     DCHECK(profile != nullptr);
@@ -120,6 +125,16 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     skew_mem_table_output_bytes = ADD_CHILD_COUNTER(profile, "SkewMemTableOutputBytes", TUnit::BYTES, parent);
     skew_mem_table_input_rows = ADD_CHILD_COUNTER(profile, "SkewMemTableInputRows", TUnit::UNIT, parent);
     skew_mem_table_output_rows = ADD_CHILD_COUNTER(profile, "SkewMemTableOutputRows", TUnit::UNIT, parent);
+
+    // Resolve the server-level spill counter buckets here (rather than in
+    // Spiller::prepare()) so the pointers travel with the SpillProcessMetrics
+    // value. Several operators (e.g. SpillableAggregateBlockingSinkOperator)
+    // call Spiller::prepare() before set_metrics(), and a later set_metrics()
+    // assignment would otherwise clobber pointers cached on the Spiller.
+    if (auto* sm = SpillMetrics::instance(); sm != nullptr) {
+        global_local = sm->get(/*is_remote=*/false);
+        global_remote = sm->get(/*is_remote=*/true);
+    }
 }
 
 Status Spiller::prepare(RuntimeState* state) {

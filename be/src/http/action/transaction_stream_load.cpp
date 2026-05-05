@@ -27,8 +27,6 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
-#include "base/metrics.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -36,6 +34,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
+#include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -53,7 +52,6 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -454,6 +452,14 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         }
     } else {
         request.__set_strip_outer_array(false);
+    }
+    if (!http_req->header(HTTP_ENVELOPE).empty()) {
+        auto envelope_str = http_req->header(HTTP_ENVELOPE);
+        if (boost::iequals(envelope_str, "debezium")) {
+            request.__set_envelope(TEnvelopeType::DEBEZIUM);
+        } else if (!boost::iequals(envelope_str, "none")) {
+            return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
+        }
     }
     if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
         request.__set_partial_update(true);

@@ -546,6 +546,90 @@ Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
     return Status::OK();
 }
 
+Status DebeziumJsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) noexcept {
+    if (UNLIKELY(_curr_ready)) {
+        _curr.reset();
+        *row = _curr;
+        return Status::OK();
+    }
+
+    try {
+        while (true) {
+            simdjson::ondemand::object full_doc;
+            RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&full_doc));
+
+            // Try to extract "payload" field. Support both envelope format (with payload wrapper)
+            // and flat format (payload fields at top level).
+            simdjson::ondemand::object payload;
+            auto payload_result = full_doc.find_field_unordered(kFieldPayload);
+            if (payload_result.error() == simdjson::SUCCESS) {
+                simdjson::ondemand::value payload_val = payload_result.value_unsafe();
+                if (payload_val.type() == simdjson::ondemand::json_type::null) {
+                    // Debezium tombstone message: payload is null. Silently advance past it
+                    // so that mixed streams (tombstone + valid events) are fully ingested.
+                    RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
+                    continue;
+                }
+                payload = payload_val.get_object();
+            } else {
+                // Flat format - use the document itself as payload
+                full_doc.reset();
+                payload = full_doc;
+            }
+
+            // Extract "op" field: c=create, u=update, d=delete, r=read(snapshot)
+            auto op_result = payload.find_field_unordered(kFieldOp);
+            if (op_result.error() != simdjson::SUCCESS) {
+                return Status::DataQualityError("Missing 'op' field in Debezium JSON message");
+            }
+            auto op_str_result = op_result.get_string();
+            if (op_str_result.error() != simdjson::SUCCESS) {
+                return Status::DataQualityError("'op' field in Debezium JSON message is not a string");
+            }
+            std::string_view op_str = op_str_result.value_unsafe();
+
+            // Based on op, extract the appropriate data field
+            if (op_str == kOpDelete) {
+                _current_op = 1; // DELETE
+                auto before_result = payload.find_field_unordered(kFieldBefore);
+                if (before_result.error() != simdjson::SUCCESS) {
+                    return Status::DataQualityError("Missing 'before' field in Debezium delete message");
+                }
+                simdjson::ondemand::value before_val = before_result.value_unsafe();
+                if (before_val.type() == simdjson::ondemand::json_type::null) {
+                    return Status::DataQualityError("'before' is null in Debezium delete message");
+                }
+                _curr = before_val.get_object();
+            } else if (op_str == kOpCreate || op_str == kOpUpdate || op_str == kOpRead) {
+                _current_op = 0; // UPSERT
+                auto after_result = payload.find_field_unordered(kFieldAfter);
+                if (after_result.error() != simdjson::SUCCESS) {
+                    return Status::DataQualityError("Missing 'after' field in Debezium message");
+                }
+                simdjson::ondemand::value after_val = after_result.value_unsafe();
+                if (after_val.type() == simdjson::ondemand::json_type::null) {
+                    return Status::DataQualityError("'after' is null in Debezium message");
+                }
+                _curr = after_val.get_object();
+            } else {
+                return Status::DataQualityError(fmt::format("Unknown Debezium op type: '{}'", op_str));
+            }
+
+            *row = _curr;
+            _curr_ready = true;
+            return Status::OK();
+        }
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = fmt::format("Failed to parse Debezium JSON envelope: {}", simdjson::error_message(e.error()));
+        return status_from_json_parse_error(err_msg);
+    }
+}
+
+Status DebeziumJsonDocumentStreamParser::advance() noexcept {
+    _curr_ready = false;
+    return this->JsonDocumentStreamParser::advance();
+}
+
 Status status_from_json_parse_error(const std::string& err_msg) {
     // the keywords "parse error" will be used in FE to determine the error type.
     return Status::DataQualityError(fmt::format("parse error. {}", err_msg));

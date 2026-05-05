@@ -126,8 +126,7 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
             // This is a shared data file.
             segment_file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
         }
-        segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
-        segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
+        _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());

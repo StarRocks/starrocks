@@ -36,6 +36,7 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "types/datum.h"
 #include "utils.h"
@@ -323,11 +324,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
 
     // Create partition chunk writer factory
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
+    auto* query_execution_services = runtime_state->query_execution_services();
 
     auto writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
             {file_writer_factory, location_provider, ctx->max_file_size, ctx->partition_column_names.empty()},
             fs,
             ctx->fragment_context,
+            query_execution_services->runtime->connector_sink_spill_executor,
             delete_tuple_desc,
             column_evaluators,
             sort_ordering});

@@ -20,7 +20,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "glog/logging.h"

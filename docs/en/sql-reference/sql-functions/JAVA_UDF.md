@@ -538,20 +538,39 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 
 > **NOTE**
 >
-> Currently, only non-nested ARRAY and MAP parameter/return types are supported for Scalar UDFs.
+> Scalar UDFs support nested `ARRAY` and `MAP` parameter/return types,
+> for example `ARRAY<ARRAY<INT>>`, `ARRAY<MAP<INT, STRING>>`, and
+> `MAP<INT, ARRAY<STRING>>`. The leaf element type must still be one of
+> the scalar types listed below. Because of Java type erasure, the Java
+> method signature only needs the raw `java.util.List` / `java.util.Map`;
+> StarRocks drives the per-row conversion from the SQL signature.
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
-| ARRAY          | java.util.List    |
-| Map            | java.util.Map     |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| DATE                                           | java.time.LocalDate   |
+| DATETIME                                       | java.time.LocalDateTime |
+| ARRAY                                          | java.util.List        |
+| Map                                            | java.util.Map         |
+
+> **NOTE**
+>
+> For `DECIMAL` parameters, BigDecimal values produced by the UDF are rescaled
+> to the column's declared `(precision, scale)` using `RoundingMode.HALF_UP`
+> before they are written back. If the rescaled value does not fit in the
+> declared `(precision, scale)`, the behavior follows the session
+> `overflow_mode`:
+>
+> - `OUTPUT_NULL` (default): the offending row is written as `NULL`.
+> - `REPORT_ERROR`: the query aborts with an `ArithmeticException`.
 
 ## Parameter settings
 

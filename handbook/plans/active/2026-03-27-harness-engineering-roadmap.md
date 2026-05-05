@@ -12,9 +12,11 @@ Track the staged conversion of StarRocks toward a harness-engineering workflow w
 
 - Root entrypoints route agents to `handbook/` for repo topology and active plans.
 - Phase-1 BE boundary harness remains the structural guardrail baseline.
+- Generated schema compatibility checks are mechanically enforced for thrift and protobuf changes in `gensrc/`.
 - Handbook structure is validated mechanically in CI.
 
 ## Decision Log
 
 - 2026-03-27: Keep internal engineering knowledge outside `docs/` to avoid mixing with public documentation and translation automation.
 - 2026-03-27: Use `handbook/` as the internal knowledge root for architecture maps and execution plans.
+- 2026-03-27: Treat thrift and protobuf compatibility as a diff-aware harness with reviewed waivers instead of a docs-only convention.

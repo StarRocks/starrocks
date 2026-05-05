@@ -7,13 +7,16 @@ Map the local scripts and GitHub workflows that enforce structural rules, run va
 ## Entrypoints
 
 - [`build-support/README.md`](../../build-support/README.md)
+- [`build-support/check_gensrc_schema_compatibility.py`](../../build-support/check_gensrc_schema_compatibility.py)
 - [`.github/workflows/ci-pipeline.yml`](../../.github/workflows/ci-pipeline.yml)
 - [`.github/workflows/ci-pipeline-branch.yml`](../../.github/workflows/ci-pipeline-branch.yml)
 
 ## Commands
 
 - `python3 -m unittest build-support/test_check_repo_handbook.py`
+- `python3 -m unittest build-support/test_check_gensrc_schema_compatibility.py`
 - `python3 build-support/check_repo_handbook.py`
+- `python3 build-support/check_gensrc_schema_compatibility.py --mode changed --base origin/main`
 - `python3 build-support/check_be_module_boundaries.py --mode full`
 
 ## Guardrails

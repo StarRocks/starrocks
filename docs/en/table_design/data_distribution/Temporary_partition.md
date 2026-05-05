@@ -167,7 +167,7 @@ For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../../
 
 ## Query data in temporary partitions
 
-You can use the [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) statement to query data in specified temporary partitions.
+You can use the [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) statement to query data in specified temporary partitions.
 
 ```SQL
 SELECT * FROM

@@ -22,6 +22,7 @@
 #include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/dictionary_cache_writer.h"
@@ -30,7 +31,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "types/datum.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -163,7 +164,7 @@ public:
         case DictionaryCacheEncoderType::PK_ENCODE: {
             size_t size = src->size();
             RETURN_IF(size == 0, Status::OK());
-            const auto* raw_data = reinterpret_cast<const KeyCppType*>(src->raw_data());
+            const auto& raw_data = GetContainer<KeyLogicalType>::get_data(src);
             DCHECK(value_encode_flags.size() == size);
             // avoid memory reallocation when looking up hash table
             if constexpr (!std::is_same_v<ValueCppType, Slice>) {
@@ -191,7 +192,6 @@ public:
 
                     if constexpr (std::is_same_v<KeyCppType, Slice>) {
                         for (size_t j = 0; j < PREFETCHN; j++) {
-                            PREFETCH_ADDR(&raw_data[beg_index + j]);
                             PREFETCH_ADDR(raw_data[beg_index + j].data);
                         }
                     } else {
@@ -425,7 +425,7 @@ public:
             }
 
             const auto& src = chunk->get_column_by_index(idx);
-            const auto* raw_data = reinterpret_cast<const Slice*>(src->raw_data());
+            const auto& raw_data = GetContainer<TYPE_VARCHAR>::get_data(src);
             for (int i = 0; i < size; i++) {
                 bool contains_zero = false;
                 for (int j = 0; j < raw_data[i].size; j++) {

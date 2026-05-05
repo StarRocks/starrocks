@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/nljoin/spillable_nljoin_build_operator.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/options.h"

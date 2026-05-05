@@ -36,8 +36,8 @@
 
 #include <sstream>
 
-#include "agent/master_info.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "util/thrift_rpc_helper.h"
 
 using std::map;

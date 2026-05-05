@@ -25,6 +25,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "fs/fs_memory.h"
 #include "io/async_flush_output_stream.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::io {
 
@@ -34,6 +35,9 @@ public:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
     }
 
     void TearDown() override {}

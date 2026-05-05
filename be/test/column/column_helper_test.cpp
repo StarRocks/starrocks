@@ -191,4 +191,134 @@ TEST_F(ColumnHelperTest, append_column_value_large_binary) {
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
 }
 
+// ColumnHelper::build_slices
+TEST_F(ColumnHelperTest, build_slices_binary_column) {
+    auto col = ColumnTestHelper::build_column<Slice>({"foo", "bar", "baz"});
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(col.get(), slices);
+    ASSERT_EQ(slices.size(), 3);
+    EXPECT_EQ(slices[0].to_string(), "foo");
+    EXPECT_EQ(slices[1].to_string(), "bar");
+    EXPECT_EQ(slices[2].to_string(), "baz");
+}
+
+TEST_F(ColumnHelperTest, build_slices_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("hello");
+    col->append_string("world");
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(col.get(), slices);
+    ASSERT_EQ(slices.size(), 2);
+    EXPECT_EQ(slices[0].to_string(), "hello");
+    EXPECT_EQ(slices[1].to_string(), "world");
+}
+
+TEST_F(ColumnHelperTest, build_slices_nullable_column) {
+    auto nullable = ColumnTestHelper::build_nullable_column<Slice>({"a", "bb"});
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(nullable.get(), slices);
+    ASSERT_EQ(slices.size(), 2);
+    EXPECT_EQ(slices[0].to_string(), "a");
+    EXPECT_EQ(slices[1].to_string(), "bb");
+}
+
+TEST_F(ColumnHelperTest, build_slices_const_column) {
+    auto inner = BinaryColumn::create();
+    inner->append(Slice("const"));
+    ColumnPtr const_col = ConstColumn::create(std::move(inner), 3);
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(const_col.get(), slices);
+    ASSERT_EQ(slices.size(), 1);
+    EXPECT_EQ(slices[0].to_string(), "const");
+}
+
+// GetStorageContainer::get_data
+TEST_F(ColumnHelperTest, get_storage_container_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
+    auto data = GetStorageContainer<TYPE_INT>::get_data(col.get());
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 1);
+    EXPECT_EQ(data[1], 2);
+    EXPECT_EQ(data[2], 3);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_nullable) {
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({10, 20, 30});
+    auto data = GetStorageContainer<TYPE_INT>::get_data(col.get());
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 10);
+    EXPECT_EQ(data[1], 20);
+    EXPECT_EQ(data[2], 30);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_const_column) {
+    auto inner = ColumnTestHelper::build_column<int32_t>({42});
+    auto const_col = ConstColumn::create(std::move(inner), 3);
+    auto data = GetStorageContainer<TYPE_INT>::get_data(const_col.get());
+    ASSERT_EQ(data.size(), 1);
+    EXPECT_EQ(data[0], 42);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_varchar) {
+    auto col = ColumnTestHelper::build_column<Slice>({"hello", "world"});
+    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "hello");
+    EXPECT_EQ(data[1].to_string(), "world");
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_large_binary) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("abc");
+    col->append_string("def");
+    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "abc");
+    EXPECT_EQ(data[1].to_string(), "def");
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_nullable_varchar) {
+    auto col = ColumnTestHelper::build_nullable_column<Slice>({"foo", "bar"});
+    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "foo");
+    EXPECT_EQ(data[1].to_string(), "bar");
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_mutable_column_ptr) {
+    auto col = ColumnTestHelper::build_column<int32_t>({5, 6, 7});
+    MutableColumnPtr mutable_col = std::move(col);
+    auto data = GetStorageContainer<TYPE_INT>::get_data(mutable_col);
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 5);
+    EXPECT_EQ(data[1], 6);
+    EXPECT_EQ(data[2], 7);
+}
+
+// GetStorageContainer::get_data(column, row)
+TEST_F(ColumnHelperTest, get_storage_container_get_data_with_row_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_get_data_with_row_const_column) {
+    auto inner = ColumnTestHelper::build_column<int32_t>({99});
+    auto const_col = ConstColumn::create(std::move(inner), 5);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(const_col.get(), 0), 99);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(const_col.get(), 4), 99);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_get_data_with_row_nullable) {
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
 } // namespace starrocks

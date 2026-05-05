@@ -15,10 +15,9 @@
 #include "storage/persistent_index_load_executor.h"
 
 #include "common/config_primary_key_fwd.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/update_manager.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -59,7 +58,7 @@ Status PersistentIndexLoadExecutor::init() {
     int max_threads = std::max<int>(1, config::pindex_load_thread_pool_num_max);
     RETURN_IF_ERROR(
             ThreadPoolBuilder("pindex_load").set_min_threads(0).set_max_threads(max_threads).build(&_load_pool));
-    REGISTER_THREAD_POOL_METRICS(pindex_load, _load_pool);
+    StorageMetrics::instance()->register_thread_pool_metrics("pindex_load", _load_pool.get());
     return Status::OK();
 }
 

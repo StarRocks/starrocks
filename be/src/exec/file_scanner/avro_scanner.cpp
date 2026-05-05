@@ -724,7 +724,7 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
 }
 
 Status AvroScanner::_construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
-                                      const std::string& col_name) {
+                                      std::string_view col_name) {
     return add_adaptive_nullable_column(column, type_desc, col_name, input_value, !_strict_mode);
 }
 

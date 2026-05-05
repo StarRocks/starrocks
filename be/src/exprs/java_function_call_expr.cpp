@@ -44,7 +44,6 @@ struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
     JavaMethodDescriptor* call_desc;
 
-    // Now we don't support logical type function
     StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
@@ -78,8 +77,15 @@ struct UDFFunctionCallHelper {
         }
         auto& helper = JVMFunctionHelper::getInstance();
         DCHECK(call_desc->method_desc[0].is_box);
-        auto res = ColumnHelper::create_column(ctx->get_return_type(), true);
-        RETURN_IF_ERROR(helper.get_result_from_boxed_array(ctx->get_return_type().type, res.get(), result, num_rows));
+        const auto& return_type = ctx->get_return_type();
+        auto res = ColumnHelper::create_column(return_type, true);
+        if (is_decimalv3_field_type(return_type.type)) {
+            RETURN_IF_ERROR(helper.get_decimal_result_from_boxed_array(return_type.type, return_type.precision,
+                                                                       return_type.scale, res.get(), result, num_rows,
+                                                                       ctx->error_if_overflow()));
+        } else {
+            RETURN_IF_ERROR(helper.get_result_from_boxed_array(return_type.type, res.get(), result, num_rows));
+        }
         RETURN_IF_ERROR(ColumnHelper::update_nested_has_null(res.get()));
         down_cast<NullableColumn*>(res.get())->update_has_null();
         return res;
@@ -191,8 +197,17 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
     auto udf_clazz = desc->udf_class.clazz();
     auto update_method = desc->evaluate->method.handle();
 
-    ASSIGN_OR_RETURN(auto update_stub_clazz, desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
-                                                                                ClassLoader::BATCH_EVALUATE));
+    // For varargs UDFs, pass the actual number of varargs input columns (excluding fixed params)
+    // so that the stub generator produces the correct signature.
+    // method_desc layout: [return, fixedParam1, ..., fixedParamF, varargs_elem] → size = F + 2
+    // so numFixedParams = method_desc.size() - 2.
+    int num_fixed_params = (_fn.has_var_args && desc->evaluate)
+                                   ? std::max(0, static_cast<int>(desc->evaluate->method_desc.size()) - 2)
+                                   : 0;
+    int num_actual_var_args = _fn.has_var_args ? std::max(0, static_cast<int>(_children.size()) - num_fixed_params) : 0;
+    ASSIGN_OR_RETURN(auto update_stub_clazz,
+                     desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
+                                                        ClassLoader::BATCH_EVALUATE, num_actual_var_args));
     ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
                                                           JavaGlobalRef(method));
@@ -223,7 +238,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
 
     UserFunctionCache::FunctionCacheDesc func_cache_desc(_fn.fid, _fn.hdfs_location, _fn.checksum,
-                                                         TFunctionBinaryType::SRJAR);
+                                                         TFunctionBinaryType::SRJAR, _fn.cloud_configuration);
     // cacheable
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
@@ -239,7 +254,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         auto function_cache = UserFunctionCache::instance();
         if (_fn.__isset.isolated && !_fn.isolated) {
             ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(func_cache_desc, get_func_desc));
-            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc.second);
         } else {
             std::string libpath;
             RETURN_IF_ERROR(function_cache->get_libpath(func_cache_desc, &libpath));

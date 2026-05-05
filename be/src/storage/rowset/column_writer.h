@@ -318,6 +318,8 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    Buffer<Slice> _slice_buf;
 };
 
 } // namespace starrocks

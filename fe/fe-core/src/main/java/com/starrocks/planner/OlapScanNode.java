@@ -95,6 +95,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TLakeScanNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNormalOlapScanNode;
@@ -201,6 +202,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     private boolean enableGlobalLateMaterialization = false;
+    private List<Expr> partitionConjuncts = Lists.newArrayList();
 
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
@@ -244,6 +246,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public boolean isPreAggregation() {
         return isPreAggregation;
+    }
+
+    public List<Expr> getPartitionConjuncts() {
+        return partitionConjuncts;
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
@@ -554,6 +560,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
+                                      List<TKeyRange> partitionRanges,
                                       long localBeId) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
@@ -595,6 +602,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(physicalPartition.getId());
+            internalRange.setPartition_column_ranges(partitionRanges);
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
@@ -793,7 +801,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 }
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
-                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
+                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId);
             }
         }
     }
@@ -1124,12 +1132,18 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
             }
 
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                msg.lake_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
             if (enableGlobalLateMaterialization) {
                 msg.lake_scan_node.setEnable_global_late_materialization(true);
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
             msg.lake_scan_node.setSchema_key(getSchemaKey());
+
+            msg.lake_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -1197,6 +1211,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.olap_scan_node.setSample_options(sampleOptions);
                 sample.toThrift(sampleOptions);
             }
+            msg.olap_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         }
     }
 
@@ -1647,8 +1662,20 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         // must order in create table
         List<String> keyColumns = olapTable.getKeyColumnsInOrder().stream().map(Column::getName)
                 .collect(Collectors.toList());
-        Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
 
+        // Some partition predicates may have been removed from conjuncts during partition pruning
+        // (e.g. when the partition column is not a distribution column), but are still required
+        // for short-circuit point lookup to identify the full primary key.
+        // Merge prunedPartitionPredicates into conjuncts, using equals()-based linear scan for dedup
+        // to avoid relying on Expr.hashCode() which includes type while equals() does not.
+        List<Expr> mergedConjuncts = new ArrayList<>(conjuncts);
+        for (Expr pred : prunedPartitionPredicates) {
+            if (!conjuncts.contains(pred)) {
+                mergedConjuncts.add(pred);
+            }
+        }
+
+        Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(mergedConjuncts, keyColumns);
         if (points.isPresent()) {
             rowStoreKeyLiterals = points.get();
         }

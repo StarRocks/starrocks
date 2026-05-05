@@ -20,7 +20,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"

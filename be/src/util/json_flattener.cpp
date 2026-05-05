@@ -38,7 +38,7 @@
 #include "column/json_column.h"
 #include "column/json_converter.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_fwd.h"

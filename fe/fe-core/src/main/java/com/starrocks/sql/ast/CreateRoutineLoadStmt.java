@@ -114,6 +114,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
     public static final String JSONPATHS = "jsonpaths";
     public static final String JSONROOT = "json_root";
+    public static final String ENVELOPE = "envelope";
+    public static final String ENVELOPE_DEBEZIUM = "debezium";
 
     // csv properties
     public static final String TRIMSPACE = "trim_space";
@@ -157,6 +159,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
             .add(JSONROOT)
+            .add(ENVELOPE)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
@@ -223,6 +226,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String jsonPaths = "";
     private String jsonRoot = ""; // MUST be a jsonpath string
     private boolean stripOuterArray = false;
+    private String envelope = "";
 
     // for csv
     private boolean trimspace = false;
@@ -405,6 +409,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public String getJsonRoot() {
         return jsonRoot;
+    }
+
+    public String getEnvelope() {
+        return envelope;
     }
 
     public String getKafkaBrokerList() {
@@ -619,6 +627,24 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         } else {
             format = "csv"; // default csv
         }
+
+        // Parse envelope property (e.g. "debezium")
+        if (jobProperties.containsKey(ENVELOPE)) {
+            envelope = jobProperties.get(ENVELOPE);
+            if (!envelope.equalsIgnoreCase(ENVELOPE_DEBEZIUM)) {
+                throw new StarRocksException("Unknown envelope type: " + envelope);
+            }
+            if (!format.equalsIgnoreCase("json")) {
+                throw new StarRocksException(ENVELOPE + " can only be specified when format is json");
+            }
+            if (!Strings.isNullOrEmpty(jsonRoot)) {
+                throw new StarRocksException(JSONROOT + " cannot be specified when envelope is set");
+            }
+            if (stripOuterArray) {
+                throw new StarRocksException(STRIP_OUTER_ARRAY + " cannot be specified when envelope is set");
+            }
+        }
+
         if (format.equalsIgnoreCase("csv") || format.isEmpty()) {
             trimspace = Boolean.valueOf(jobProperties.getOrDefault(TRIMSPACE, "false"));
             if (jobProperties.containsKey(ENCLOSE)) {

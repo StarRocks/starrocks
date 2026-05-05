@@ -168,6 +168,8 @@ public class MysqlScanNode extends ScanNode {
         if (temporalClause != null && !temporalClause.isEmpty()) {
             msg.mysql_scan_node.setTemporal_clause(temporalClause);
         }
+
+        setConnectorCatalogType(msg);
     }
 
     /**

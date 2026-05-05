@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # 通用监控指标
@@ -548,6 +549,45 @@ displayed_sidebar: docs
 - 单位：个
 - 类型：累计值
 - 描述：该资源组中报错的查询任务的数量
+
+### Catalog 类型查询指标
+
+这些指标提供按 Catalog 类型维度的查询可观测性。每个指标都包含 `catalog_type` 标签，
+取值范围：`default`、`hive`、`iceberg`、`jdbc`、`deltalake`、`hudi`、`paimon`、`odps`、`kudu`、`elasticsearch`。
+
+`default` 表示 StarRocks 内部表（OLAP/Cloud Native）。
+
+| 指标 | 类型 | 单位 | 描述 |
+|------|------|------|------|
+| `starrocks_fe_catalog_query_total` | Counter | 请求数 | 按 Catalog 类型统计的总查询数 |
+| `starrocks_fe_catalog_query_success` | Counter | 请求数 | 按 Catalog 类型统计的成功查询数 |
+| `starrocks_fe_catalog_query_err` | Counter | 请求数 | 按 Catalog 类型统计的失败查询数 |
+| `starrocks_fe_catalog_query_timeout` | Counter | 请求数 | 按 Catalog 类型统计的超时查询数 |
+| `starrocks_fe_catalog_query_analysis_err` | Counter | 请求数 | 按 Catalog 类型统计的分析错误查询数 |
+| `starrocks_fe_catalog_query_internal_err` | Counter | 请求数 | 按 Catalog 类型统计的内部错误查询数 |
+| `starrocks_fe_catalog_query_err_rate` | Gauge | QPS | 按 Catalog 类型统计的错误率 |
+| `starrocks_fe_catalog_query_timeout_rate` | Gauge | QPS | 按 Catalog 类型统计的超时率 |
+| `starrocks_fe_catalog_query_analysis_err_rate` | Gauge | QPS | 按 Catalog 类型统计的分析错误率 |
+| `starrocks_fe_catalog_query_internal_err_rate` | Gauge | QPS | 按 Catalog 类型统计的内部错误率 |
+| `starrocks_fe_catalog_query_latency_ms` | Histogram | ms | 按 Catalog 类型统计的查询延迟 |
+| `starrocks_fe_catalog_slow_query` | Counter | 请求数 | 按 Catalog 类型统计的慢查询数 |
+| `starrocks_be_catalog_query_scan_bytes` | Counter | 字节 | 按 Catalog 类型统计的扫描字节数 |
+| `starrocks_be_catalog_query_scan_rows` | Counter | 行 | 按 Catalog 类型统计的扫描行数 |
+| `starrocks_be_catalog_files_scan_num_bytes_read` | Counter | 字节 | 按 Catalog 类型统计的文件扫描读取字节数 |
+| `starrocks_be_catalog_files_scan_num_rows_return` | Counter | 行 | 按 Catalog 类型统计的文件扫描返回行数 |
+
+**Prometheus 查询示例：**
+
+```promql
+# Hive Catalog 的总查询数
+starrocks_fe_catalog_query_total{catalog_type="hive"}
+
+# 所有 Catalog 类型的错误率对比
+starrocks_fe_catalog_query_err_rate
+
+# 仅外部表的扫描字节数（排除 default）
+starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
+```
 
 ### starrocks_fe_meta_log_count
 
@@ -1207,6 +1247,26 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：当前运行的查询计划 Fragment 数量。
+
+### plan_advisor_guide_applied_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 在查询优化阶段成功应用的 guide 总数。每当某个 guide 成功改写一个计划节点时，该指标加 1。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+### plan_advisor_guide_generated_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 成功生成并写入当前 FE 本地缓存的 guide 总数。只有分析结果非空且作为新的缓存项写入时才会累加。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+### plan_advisor_optimization_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：Plan Advisor 累计节省的查询执行耗时（毫秒）。当一个使用了缓存 guide 的查询执行时间短于生成该 guide 的原始查询时，节省的时间会累加到该指标。
 
 ### page_cache_lookup_count
 

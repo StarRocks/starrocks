@@ -15,6 +15,7 @@
 #include "column/append_with_mask.h"
 
 #include "base/simd/simd.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/const_column.h"
@@ -165,7 +166,7 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBas
     }
 
     const auto* src_offsets = src_column->get_offset().data();
-    const auto* src_bytes = src_column->continuous_data();
+    const auto* src_bytes = src_column->raw_bytes();
 
     size_t total_bytes = 0;
     for (size_t i = 0; i < _count; ++i) {

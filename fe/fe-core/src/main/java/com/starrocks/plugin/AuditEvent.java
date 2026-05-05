@@ -40,6 +40,10 @@ import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /*
@@ -178,6 +182,9 @@ public class AuditEvent {
     @AuditField(value = "PreparedStmtId", ignore_zero = true)
     public String preparedStmtId = null;
 
+    @AuditField(value = "QueriedRelations", ignore_empty = true)
+    public List<String> queriedRelations = Collections.emptyList();
+
     public long readLocalCnt = 0;
     public long readRemoteCnt = 0;
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
@@ -203,6 +210,21 @@ public class AuditEvent {
         } else {
             return 0;
         }
+    }
+
+    public AuditEvent copy() {
+        AuditEvent copied = new AuditEvent();
+        try {
+            for (Field field : AuditEvent.class.getFields()) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                field.set(copied, field.get(this));
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Failed to copy audit event", e);
+        }
+        return copied;
     }
 
     public static class AuditEventBuilder {
@@ -502,9 +524,22 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setQueriedRelations(List<String> queriedRelations) {
+            if (queriedRelations == null || queriedRelations.isEmpty()) {
+                auditEvent.queriedRelations = Collections.emptyList();
+            } else {
+                auditEvent.queriedRelations = Collections.unmodifiableList(new ArrayList<>(queriedRelations));
+            }
+            return this;
+        }
+
         public AuditEvent build() {
             this.auditEvent.calculateCacheHitRatio();
             return this.auditEvent;
+        }
+
+        public AuditEvent buildSnapshot() {
+            return build().copy();
         }
 
         // Copy execution statistics from another audit event

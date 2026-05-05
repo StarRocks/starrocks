@@ -57,6 +57,9 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    @SerializedName(value = "vibv")
+    private volatile long vectorIndexBuiltVersion = 0L;
+
     private volatile long minVersion = 0L;
 
     public long rebuildPindexVersion = 0L;
@@ -197,6 +200,14 @@ public class LakeTablet extends Tablet {
 
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
+    }
+
+    public long getVectorIndexBuiltVersion() {
+        return vectorIndexBuiltVersion;
+    }
+
+    public void setVectorIndexBuiltVersion(long v) {
+        this.vectorIndexBuiltVersion = Math.max(this.vectorIndexBuiltVersion, v);
     }
 
     public void setRebuildPindexVersion(long rebuildPindexVersion) {

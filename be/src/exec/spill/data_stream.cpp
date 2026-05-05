@@ -66,8 +66,15 @@ Status BlockSpillOutputDataStream::_prepare_block(RuntimeState* state, size_t wr
         opts.affinity_group = _block_group->get_affinity_group();
         ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
         // update metrics
-        auto block_count = GET_METRICS(block->is_remote(), _spiller->metrics(), block_count);
+        bool is_remote = block->is_remote();
+        auto block_count = GET_METRICS(is_remote, _spiller->metrics(), block_count);
         COUNTER_UPDATE(block_count, 1);
+        if (auto* g = _spiller->metrics().global(is_remote); g != nullptr) {
+            g->blocks_write_total->increment(1);
+            if (!_spiller->global_spill_triggered().exchange(true)) {
+                g->trigger_total->increment(1);
+            }
+        }
         TRACE_SPILL_LOG << fmt::format("allocate block [{}], affinity group[{}]", block->debug_string(),
                                        opts.affinity_group);
         _cur_block = std::move(block);
@@ -82,15 +89,24 @@ Status BlockSpillOutputDataStream::append(RuntimeState* state, const std::vector
     // acquire block if current block is nullptr or full
     RETURN_IF_ERROR(_prepare_block(state, total_write_size));
     _append_rows += write_num_rows;
+    bool is_remote = _cur_block->is_remote();
+    int64_t io_ns = 0;
+    Status append_st;
     {
-        auto write_io_timer = GET_METRICS(_cur_block->is_remote(), _spiller->metrics(), write_io_timer);
-        SCOPED_TIMER(write_io_timer);
+        SCOPED_RAW_TIMER(&io_ns);
         TRACE_SPILL_LOG << fmt::format("append block[{}], size[{}]", _cur_block->debug_string(), total_write_size);
-        RETURN_IF_ERROR(_cur_block->append(data));
-        _cur_block->inc_num_rows(write_num_rows);
-        auto flush_bytes = GET_METRICS(_cur_block->is_remote(), _spiller->metrics(), flush_bytes);
-        COUNTER_UPDATE(flush_bytes, total_write_size);
-        (*_spiller->metrics().total_spill_bytes) += total_write_size;
+        append_st = _cur_block->append(data);
+    }
+    COUNTER_UPDATE(GET_METRICS(is_remote, _spiller->metrics(), write_io_timer), io_ns);
+    if (auto* g = _spiller->metrics().global(is_remote); g != nullptr) {
+        g->write_io_duration_ns_total->increment(io_ns);
+    }
+    RETURN_IF_ERROR(append_st);
+    _cur_block->inc_num_rows(write_num_rows);
+    COUNTER_UPDATE(GET_METRICS(is_remote, _spiller->metrics(), flush_bytes), total_write_size);
+    (*_spiller->metrics().total_spill_bytes) += total_write_size;
+    if (auto* g = _spiller->metrics().global(is_remote); g != nullptr) {
+        g->bytes_write_total->increment(total_write_size);
     }
     return Status::OK();
 }
@@ -99,12 +115,19 @@ Status BlockSpillOutputDataStream::flush() {
     if (_cur_block == nullptr) {
         return Status::OK();
     }
+    bool is_remote = _cur_block->is_remote();
+    int64_t io_ns = 0;
+    Status flush_st;
     {
-        auto write_io_timer = GET_METRICS(_cur_block->is_remote(), _spiller->metrics(), write_io_timer);
-        SCOPED_TIMER(write_io_timer);
-        RETURN_IF_ERROR(_cur_block->flush());
+        SCOPED_RAW_TIMER(&io_ns);
+        flush_st = _cur_block->flush();
         TRACE_SPILL_LOG << fmt::format("flush block[{}]", _cur_block->debug_string());
     }
+    COUNTER_UPDATE(GET_METRICS(is_remote, _spiller->metrics(), write_io_timer), io_ns);
+    if (auto* g = _spiller->metrics().global(is_remote); g != nullptr) {
+        g->write_io_duration_ns_total->increment(io_ns);
+    }
+    RETURN_IF_ERROR(flush_st);
 
     RETURN_IF_ERROR(_block_manager->release_block(std::move(_cur_block)));
     DCHECK(_cur_block == nullptr);

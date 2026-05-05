@@ -35,17 +35,13 @@ namespace starrocks::pipeline {
 
 class SinkIOExecutor : public bthread::Executor {
 public:
-    static SinkIOExecutor* instance() {
-        static SinkIOExecutor s_instance;
-        return &s_instance;
-    }
+    explicit SinkIOExecutor(PriorityThreadPool* thread_pool) : _thread_pool(thread_pool) {}
+    ~SinkIOExecutor() override = default;
 
     int submit(void* (*fn)(void*), void* args) override;
 
 private:
-    SinkIOExecutor() = default;
-
-    ~SinkIOExecutor() override = default;
+    PriorityThreadPool* _thread_pool;
 };
 
 // SinkIOBuffer accepts input from all sink operators, it uses an execution queue to asynchronously process chunks one by one.
@@ -132,6 +128,7 @@ protected:
 private:
     int _process_chunk(bthread::TaskIterator<QueueItemPtr>& iter);
 
+    std::unique_ptr<SinkIOExecutor> _executor;
     std::unique_ptr<bthread::ExecutionQueueId<QueueItemPtr>> _exec_queue_id;
     // Counter of the result sinkers, trigger auto-finish when the counter is down to zero
     std::atomic_int32_t _num_result_sinkers = 0;

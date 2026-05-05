@@ -16,6 +16,10 @@
 
 #include <filesystem>
 
+#include "cache/disk_cache/block_cache.h"
+#ifdef WITH_STARCACHE
+#include "cache/datacache.h"
+#endif
 #include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
@@ -34,6 +38,7 @@
 #include "fs/fs_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -434,6 +439,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
+    // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
+    // a partition column and a placeholder materialized column was injected to satisfy
+    // the "at least one materialized column" requirement.  We propagate this flag so that
+    // the scanner can avoid reading that placeholder column from the data file when
+    // min/max optimization is active.
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
@@ -732,7 +745,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     if (native_file_path.empty()) {
         bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
-        native_file_path = _hive_table->get_base_path() +
+        native_file_path = std::string(_hive_table->get_base_path()) +
                            (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
 
@@ -827,6 +840,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
     if (!_disable_column_access_path_hints && !_column_access_paths.empty()) {

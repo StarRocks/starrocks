@@ -28,9 +28,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "types/type_descriptor.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -39,9 +37,9 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->metrics()->set_collect_hook_enabled(true);
         _runtime_state = _create_runtime_state();
         _pool = _runtime_state->obj_pool();
     }
@@ -52,7 +50,8 @@ protected:
         TQueryOptions query_options;
         query_options.batch_size = 16;
         TQueryGlobals query_globals;
-        auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                            &_exec_env->query_execution_services(), _exec_env);
         TUniqueId id;
         runtime_state->init_mem_trackers(id);
         return runtime_state;

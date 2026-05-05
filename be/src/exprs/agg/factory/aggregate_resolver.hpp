@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "types/logical_type.h"

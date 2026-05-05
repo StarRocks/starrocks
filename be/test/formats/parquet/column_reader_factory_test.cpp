@@ -18,7 +18,11 @@
 
 #include <sstream>
 
+#include "base/testutil/assert.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -344,6 +348,191 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     SparseRange<uint64_t> sparse_range;
     sparse_range.add(Range<uint64_t>(0, 8));
     st.value()->select_offset_index(sparse_range, 0);
+}
+
+TEST(ColumnReaderFactoryTest, VariantShreddedAllNullFallbackSkipsIoRange) {
+    auto obj = make_shredded_object_node_with_nested_scalar("obj", 2, 3, 4, tparquet::Type::INT32);
+    ParquetField variant = make_variant_field_with_typed_group({obj});
+
+    auto collect_range_count = [&variant](ColumnReaderOptions opts) {
+        auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, {});
+        EXPECT_TRUE(st.ok()) << st.status().to_string();
+        if (!st.ok()) {
+            return size_t{0};
+        }
+
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+        return ranges.size();
+    };
+
+    auto baseline_opts = make_opts_with_num_cols(5);
+    const size_t baseline_ranges = collect_range_count(baseline_opts);
+
+    auto all_null_opts = make_opts_with_num_cols(5);
+    auto mark_all_null = [&](int idx) {
+        auto* row_group_meta = const_cast<tparquet::RowGroup*>(all_null_opts.row_group_meta);
+        auto& meta = row_group_meta->columns[idx].meta_data;
+        meta.__set_num_values(8);
+        tparquet::Statistics statistics;
+        statistics.__set_null_count(meta.num_values);
+        meta.__set_statistics(statistics);
+    };
+    mark_all_null(2);
+    mark_all_null(3);
+
+    const size_t skipped_ranges = collect_range_count(all_null_opts);
+    ASSERT_GT(baseline_ranges, skipped_ranges);
+    ASSERT_EQ(baseline_ranges - 2, skipped_ranges);
+}
+
+TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByName) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("a", 0, tparquet::Type::INT32));
+    field.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
+
+    TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("a");
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("missing");
+
+    TIcebergSchemaField field_a;
+    field_a.__set_field_id(1);
+    field_a.__set_name("a");
+    TIcebergSchemaField field_missing;
+    field_missing.__set_field_id(2);
+    field_missing.__set_name("missing");
+    TIcebergSchemaField root_field;
+    root_field.__set_field_id(10);
+    root_field.__set_name("col");
+    root_field.__set_children(std::vector<TIcebergSchemaField>{field_a, field_missing});
+
+    tparquet::FileMetaData file_meta;
+    tparquet::SchemaElement root_schema;
+    root_schema.__set_name("table");
+    root_schema.__set_num_children(1);
+    tparquet::SchemaElement col_schema;
+    col_schema.__set_name("col");
+    col_schema.__set_num_children(2);
+    tparquet::SchemaElement a_schema;
+    a_schema.__set_name("a");
+    a_schema.__set_type(tparquet::Type::INT32);
+    a_schema.__set_num_children(0);
+    tparquet::SchemaElement b_schema;
+    b_schema.__set_name("b");
+    b_schema.__set_type(tparquet::Type::INT32);
+    b_schema.__set_num_children(0);
+    file_meta.__set_schema(std::vector<tparquet::SchemaElement>{root_schema, col_schema, a_schema, b_schema});
+
+    auto opts = make_opts_with_num_cols(2);
+    FileMetaData parsed_meta;
+    ASSERT_OK(parsed_meta.init(file_meta, true));
+    opts.file_meta_data = &parsed_meta;
+
+    auto reader_or = ColumnReaderFactory::create(opts, &field, col_type, &root_field);
+    ASSERT_TRUE(reader_or.ok()) << reader_or.status().to_string();
+    auto* struct_reader = dynamic_cast<StructColumnReader*>(reader_or.value().get());
+    ASSERT_NE(struct_reader, nullptr);
+    ASSERT_NE(struct_reader->get_child_column_reader("a"), nullptr);
+    ASSERT_EQ(struct_reader->get_child_column_reader("missing"), nullptr);
+}
+
+TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByPhysicalName) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("a_phys", 0, tparquet::Type::INT32));
+    field.children.emplace_back(make_scalar_field("b_phys", 1, tparquet::Type::INT32));
+
+    TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("a");
+    col_type.field_physical_names.emplace_back("a_phys");
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("missing");
+    col_type.field_physical_names.emplace_back("missing_phys");
+
+    TIcebergSchemaField field_a;
+    field_a.__set_field_id(1);
+    field_a.__set_name("a");
+    TIcebergSchemaField field_missing;
+    field_missing.__set_field_id(2);
+    field_missing.__set_name("missing");
+    TIcebergSchemaField root_field;
+    root_field.__set_field_id(10);
+    root_field.__set_name("col");
+    root_field.__set_children(std::vector<TIcebergSchemaField>{field_a, field_missing});
+
+    tparquet::FileMetaData file_meta;
+    tparquet::SchemaElement root_schema;
+    root_schema.__set_name("table");
+    root_schema.__set_num_children(1);
+    tparquet::SchemaElement col_schema;
+    col_schema.__set_name("col");
+    col_schema.__set_num_children(2);
+    tparquet::SchemaElement a_schema;
+    a_schema.__set_name("a_phys");
+    a_schema.__set_type(tparquet::Type::INT32);
+    a_schema.__set_num_children(0);
+    tparquet::SchemaElement b_schema;
+    b_schema.__set_name("b_phys");
+    b_schema.__set_type(tparquet::Type::INT32);
+    b_schema.__set_num_children(0);
+    file_meta.__set_schema(std::vector<tparquet::SchemaElement>{root_schema, col_schema, a_schema, b_schema});
+
+    auto opts = make_opts_with_num_cols(2);
+    FileMetaData parsed_meta;
+    ASSERT_OK(parsed_meta.init(file_meta, true));
+    opts.file_meta_data = &parsed_meta;
+
+    auto reader_or = ColumnReaderFactory::create(opts, &field, col_type, &root_field);
+    ASSERT_TRUE(reader_or.ok()) << reader_or.status().to_string();
+    auto* struct_reader = dynamic_cast<StructColumnReader*>(reader_or.value().get());
+    ASSERT_NE(struct_reader, nullptr);
+    ASSERT_NE(struct_reader->get_child_column_reader("a"), nullptr);
+    ASSERT_EQ(struct_reader->get_child_column_reader("missing"), nullptr);
+}
+
+// Minimal concrete subclass to allow instantiation of the abstract ColumnReader.
+class TestColumnReader : public ColumnReader {
+public:
+    explicit TestColumnReader(const ParquetField* field) : ColumnReader(field) {}
+    Status prepare() override { return Status::OK(); }
+    Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override { return Status::OK(); }
+    void get_levels(level_t**, level_t**, size_t*) override {}
+    void set_need_parse_levels(bool) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+};
+
+// Covers the FIXED_LEN_BYTE_ARRAY condition added to check_type_can_apply_bloom_filter.
+TEST(ColumnReaderTest, CheckTypeCanApplyBloomFilterFixedLenByteArray) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::SCALAR;
+    field.physical_column_index = 0;
+
+    auto check = [&](LogicalType logical, tparquet::Type::type physical) -> bool {
+        field.physical_type = physical;
+        TestColumnReader reader(&field);
+        return reader.check_type_can_apply_bloom_filter(TypeDescriptor(logical), field);
+    };
+
+    // VARBINARY + FIXED_LEN_BYTE_ARRAY is applicable (the new condition)
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+
+    // VARCHAR + FIXED_LEN_BYTE_ARRAY is not applicable
+    // UUID is stored as FIXED_LEN_BYTE_ARRAY and typically read as VARCHAR
+    EXPECT_FALSE(check(TYPE_VARCHAR, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+
+    // BYTE_ARRAY baseline: both VARCHAR and VARBINARY remain applicable
+    EXPECT_TRUE(check(TYPE_VARCHAR, tparquet::Type::BYTE_ARRAY));
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::BYTE_ARRAY));
 }
 
 } // namespace starrocks::parquet
