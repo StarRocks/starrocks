@@ -67,6 +67,9 @@ struct PreparedSegmentReadState {
     SparseRange<> adaptive_coarse_scan_range;
     SparseRangeIterator<> adaptive_coarse_scan_range_iter;
     SparseRange<> adaptive_issued_coarse_ranges;
+    SparseRange<> adaptive_pending_issued_ranges;
+    size_t adaptive_pending_issued_tasks = 0;
+    size_t adaptive_pending_issued_rows = 0;
     bool adaptive_coarse_scan_range_ready = false;
     bool adaptive_pending_issue_closed = false;
     bool adaptive_first_issued_split = true;

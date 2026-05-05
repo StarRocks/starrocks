@@ -1074,6 +1074,9 @@ CONF_mBool(enable_lake_index_pruned_physical_split, "true");
 // previous eager prepared split path.
 CONF_mBool(enable_lake_adaptive_split_morsel_queue, "true");
 
+// Whether Lake adaptive split may issue coarse pending tasks when all queued refined/prepare tasks are drained.
+CONF_mBool(enable_lake_adaptive_split_pending_task, "true");
+
 // Whether Lake adaptive segment prepare includes page-level zonemap/bloom pruning in the shared prepared range.
 // Disable this to defer those two page filters to child morsel execution for A/B testing.
 CONF_mBool(enable_lake_prepare_page_filter_pruning, "false");

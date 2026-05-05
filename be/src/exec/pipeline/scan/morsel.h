@@ -711,7 +711,7 @@ public:
         _has_more_scan_ranges = has_more;
     }
 
-    bool empty() const override { return _size.load(std::memory_order_relaxed) == 0; }
+    bool empty() const override;
     StatusOr<MorselPtr> try_get() override;
     void unget(MorselPtr&& morsel) override;
     std::string name() const override { return "lake_adaptive_split_morsel_queue"; }
@@ -730,18 +730,22 @@ private:
         int32_t plan_node_id = 0;
         TScanRange scan_range;
         lake::PreparedTabletReadStatePtr prepared_read_state;
+        lake::PreparedSegmentReadStatePtr prepared_segment_state;
         size_t rowset_index = 0;
         size_t segment_index = 0;
     };
 
     StatusOr<MorselPtr> _issue_pending_child_locked();
+    bool _has_live_pending_candidate_locked() const;
+    bool _is_live_pending_candidate(const PendingCandidate& candidate) const;
+    bool _try_issue_pending_rowid_range(const PendingCandidate& candidate, RowidRangeOptionPtr* rowid_range);
     void _maybe_register_pending_candidate(const MorselPtr& morsel);
     void _enter_ticket(ScanMorsel* morsel);
 
     std::atomic<int64_t> _size = 0;
     std::deque<MorselPtr> _queue;
     std::deque<PendingCandidate> _pending_candidates;
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     query_cache::TicketCheckerPtr _ticket_checker;
     size_t _degree_of_parallelism = 1;
     int64_t _splitted_scan_rows = 1;

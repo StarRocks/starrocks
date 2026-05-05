@@ -19,6 +19,7 @@
 #include <memory>
 #include <mutex>
 
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/olap_utils.h"
 #include "storage/chunk_helper.h"
@@ -1095,17 +1096,152 @@ Status DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
     return Status::OK();
 }
 
+bool LakeAdaptiveSplitMorselQueue::_is_live_pending_candidate(const PendingCandidate& candidate) const {
+    if (!config::enable_lake_adaptive_split_pending_task || candidate.prepared_segment_state == nullptr ||
+        candidate.prepared_read_state == nullptr ||
+        candidate.rowset_index >= candidate.prepared_read_state->rowsets.size() ||
+        candidate.rowset_index >= candidate.prepared_read_state->rowset_segments.size() ||
+        candidate.segment_index >= candidate.prepared_read_state->rowset_segments[candidate.rowset_index].size()) {
+        return false;
+    }
+
+    const auto& segment_state = candidate.prepared_segment_state;
+    std::lock_guard<std::mutex> guard(segment_state->adaptive_issue_lock);
+    return segment_state->adaptive_coarse_scan_range_ready && !segment_state->adaptive_pending_issue_closed &&
+           segment_state->adaptive_coarse_scan_range_iter.has_more();
+}
+
+bool LakeAdaptiveSplitMorselQueue::_has_live_pending_candidate_locked() const {
+    for (const auto& candidate : _pending_candidates) {
+        if (_is_live_pending_candidate(candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool LakeAdaptiveSplitMorselQueue::empty() const {
+    std::lock_guard<std::mutex> guard(_mutex);
+    return _queue.empty() && !_has_live_pending_candidate_locked();
+}
+
+bool LakeAdaptiveSplitMorselQueue::_try_issue_pending_rowid_range(const PendingCandidate& candidate,
+                                                                  RowidRangeOptionPtr* rowid_range) {
+    *rowid_range = nullptr;
+    auto& segment_state = candidate.prepared_segment_state;
+    if (segment_state == nullptr || candidate.prepared_read_state == nullptr ||
+        candidate.rowset_index >= candidate.prepared_read_state->rowsets.size() ||
+        candidate.rowset_index >= candidate.prepared_read_state->rowset_segments.size() ||
+        candidate.segment_index >= candidate.prepared_read_state->rowset_segments[candidate.rowset_index].size()) {
+        return false;
+    }
+
+    auto& rowset = candidate.prepared_read_state->rowsets[candidate.rowset_index];
+    auto& segment = candidate.prepared_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
+    if (rowset == nullptr || segment == nullptr) {
+        return false;
+    }
+
+    auto result = std::make_shared<RowidRangeOption>();
+    {
+        std::lock_guard<std::mutex> guard(segment_state->adaptive_issue_lock);
+        if (!segment_state->adaptive_coarse_scan_range_ready || segment_state->adaptive_pending_issue_closed ||
+            !segment_state->adaptive_coarse_scan_range_iter.has_more()) {
+            return false;
+        }
+
+        size_t num_taken_rows = 0;
+        while (segment_state->adaptive_coarse_scan_range_iter.has_more() &&
+               num_taken_rows < static_cast<size_t>(_splitted_scan_rows)) {
+            size_t remaining_in_segment = segment_state->adaptive_coarse_scan_range_iter.remaining_rows();
+            size_t rows_to_take =
+                    std::min<size_t>(static_cast<size_t>(_splitted_scan_rows) - num_taken_rows, remaining_in_segment);
+            if (remaining_in_segment > rows_to_take &&
+                remaining_in_segment - rows_to_take < static_cast<size_t>(_splitted_scan_rows)) {
+                rows_to_take = remaining_in_segment;
+            }
+
+            SparseRange<> taken_range;
+            segment_state->adaptive_coarse_scan_range_iter.next_range(rows_to_take, &taken_range);
+            if (taken_range.span_size() == 0) {
+                break;
+            }
+
+            num_taken_rows += taken_range.span_size();
+            segment_state->adaptive_issued_coarse_ranges |= taken_range;
+            segment_state->adaptive_pending_issued_ranges |= taken_range;
+            segment_state->adaptive_pending_issued_tasks += 1;
+            segment_state->adaptive_pending_issued_rows += taken_range.span_size();
+            result->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(std::move(taken_range)),
+                        segment_state->adaptive_first_issued_split);
+            segment_state->adaptive_first_issued_split = false;
+        }
+    }
+
+    if (result->rowid_range_per_segment_per_rowset.empty()) {
+        return false;
+    }
+    *rowid_range = std::move(result);
+    return true;
+}
+
 StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::_issue_pending_child_locked() {
-    // Pending coarse children are disabled for this A/B step. Only segment seed tasks prepare the final range and
-    // publish refined children back through append_morsels().
-    _size -= _pending_candidates.size();
-    _pending_candidates.clear();
+    if (!config::enable_lake_adaptive_split_pending_task) {
+        _pending_candidates.clear();
+        return nullptr;
+    }
+
+    while (!_pending_candidates.empty()) {
+        PendingCandidate candidate = std::move(_pending_candidates.front());
+        _pending_candidates.pop_front();
+        RowidRangeOptionPtr rowid_range;
+        if (!_try_issue_pending_rowid_range(candidate, &rowid_range)) {
+            continue;
+        }
+
+        auto split_context = std::make_unique<LakeSplitContext>();
+        split_context->task_type = LakeSplitContext::TaskType::PHYSICAL_SPLIT;
+        split_context->adaptive_task_source = LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE;
+        split_context->rowid_range = std::move(rowid_range);
+        split_context->prepared_read_state = candidate.prepared_read_state;
+        split_context->prepared_segment_state = candidate.prepared_segment_state;
+        split_context->rowset_index = candidate.rowset_index;
+        split_context->segment_index = candidate.segment_index;
+
+        auto morsel = std::make_unique<ScanMorsel>(candidate.plan_node_id, candidate.scan_range);
+        morsel->set_split_context(std::move(split_context));
+
+        _pending_candidates.emplace_back(std::move(candidate));
+        _enter_ticket(morsel.get());
+        return std::move(morsel);
+    }
     return nullptr;
 }
 
 void LakeAdaptiveSplitMorselQueue::_maybe_register_pending_candidate(const MorselPtr& morsel) {
-    // Do not register pending candidates in the no-pending adaptive queue variant.
-    (void)morsel;
+    if (!config::enable_lake_adaptive_split_pending_task || morsel == nullptr) {
+        return;
+    }
+
+    const auto* scan_morsel = down_cast<const ScanMorsel*>(morsel.get());
+    const auto* split_context = dynamic_cast<const LakeSplitContext*>(scan_morsel->get_split_context());
+    if (split_context == nullptr ||
+        split_context->adaptive_task_source != LakeSplitContext::AdaptiveTaskSource::SEED_LOCAL ||
+        split_context->prepared_read_state == nullptr || split_context->prepared_segment_state == nullptr) {
+        return;
+    }
+
+    PendingCandidate candidate;
+    candidate.plan_node_id = scan_morsel->get_plan_node_id();
+    candidate.scan_range = *scan_morsel->get_scan_range();
+    candidate.prepared_read_state = split_context->prepared_read_state;
+    candidate.prepared_segment_state = split_context->prepared_segment_state;
+    candidate.rowset_index = split_context->rowset_index;
+    candidate.segment_index = split_context->segment_index;
+    if (!_is_live_pending_candidate(candidate)) {
+        return;
+    }
+    _pending_candidates.emplace_back(std::move(candidate));
 }
 
 void LakeAdaptiveSplitMorselQueue::_enter_ticket(ScanMorsel* morsel) {

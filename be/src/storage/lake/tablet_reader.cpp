@@ -356,6 +356,9 @@ void reset_adaptive_segment_issue_state(const PreparedSegmentReadStatePtr& prepa
     prepared_segment_state->adaptive_coarse_scan_range_iter =
             prepared_segment_state->adaptive_coarse_scan_range.new_iterator();
     prepared_segment_state->adaptive_issued_coarse_ranges.clear();
+    prepared_segment_state->adaptive_pending_issued_ranges.clear();
+    prepared_segment_state->adaptive_pending_issued_tasks = 0;
+    prepared_segment_state->adaptive_pending_issued_rows = 0;
     prepared_segment_state->adaptive_coarse_scan_range_ready = true;
     prepared_segment_state->adaptive_pending_issue_closed = false;
     prepared_segment_state->adaptive_first_issued_split = true;
@@ -604,7 +607,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         if (_could_split_physically) {
             auto split_plan = make_lake_split_plan(_could_split_physically, _rowsets);
             if (read_params.enable_lake_adaptive_split_morsel_queue && split_plan.use_prepared_physical_split()) {
-                return _build_prepared_physical_split_tasks(read_params, split_plan.segment_count);
+                return _build_lake_adaptive_split_seed_tasks(read_params, split_plan.segment_count);
             }
             if (config::enable_lake_index_pruned_physical_split) {
                 if (split_plan.use_prepared_physical_split()) {

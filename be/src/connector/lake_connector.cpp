@@ -14,6 +14,7 @@
 
 #include "connector/lake_connector.h"
 
+#include <mutex>
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -87,6 +88,65 @@ bool can_use_split_context_prepared_state(const pipeline::LakeSplitContext* spli
         return false;
     }
     return !split_context->prepared_read_state->disable_segment_prepared_state.load(std::memory_order_acquire);
+}
+
+int64_t rowid_range_option_span_size(const RowidRangeOptionPtr& rowid_range) {
+    if (rowid_range == nullptr) {
+        return 0;
+    }
+
+    int64_t rows = 0;
+    for (const auto& rowset_entry : rowid_range->rowid_range_per_segment_per_rowset) {
+        for (const auto& segment_entry : rowset_entry.second) {
+            const auto& segment_split = segment_entry.second;
+            if (segment_split.row_id_range != nullptr) {
+                rows += static_cast<int64_t>(segment_split.row_id_range->span_size());
+            }
+        }
+    }
+    return rows;
+}
+
+RowidRangeOptionPtr trim_pending_rowid_range_by_prepared_range(const pipeline::LakeSplitContext* split_context,
+                                                               const RowidRangeOptionPtr& rowid_range) {
+    if (split_context == nullptr ||
+        split_context->adaptive_task_source != pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE ||
+        rowid_range == nullptr || split_context->prepared_read_state == nullptr ||
+        split_context->prepared_segment_state == nullptr ||
+        split_context->prepared_segment_state->execution_pruned_range == nullptr ||
+        split_context->prepared_segment_state->lifecycle.load(std::memory_order_acquire) !=
+                static_cast<uint32_t>(lake::PreparedSegmentReadState::Lifecycle::PREPARED)) {
+        return rowid_range;
+    }
+
+    const auto& prepared_state = split_context->prepared_read_state;
+    if (split_context->rowset_index >= prepared_state->rowsets.size() ||
+        split_context->rowset_index >= prepared_state->rowset_segments.size() ||
+        split_context->segment_index >= prepared_state->rowset_segments[split_context->rowset_index].size()) {
+        return rowid_range;
+    }
+
+    const auto& rowset = prepared_state->rowsets[split_context->rowset_index];
+    const auto& segment = prepared_state->rowset_segments[split_context->rowset_index][split_context->segment_index];
+    if (rowset == nullptr || segment == nullptr) {
+        return rowid_range;
+    }
+
+    auto segment_split = rowid_range->get_segment_rowid_range(rowset.get(), segment.get());
+    if (segment_split.row_id_range == nullptr) {
+        return nullptr;
+    }
+
+    SparseRange<> trimmed_range = *segment_split.row_id_range;
+    trimmed_range &= *split_context->prepared_segment_state->execution_pruned_range;
+    if (trimmed_range.span_size() == 0) {
+        return nullptr;
+    }
+
+    auto trimmed = std::make_shared<RowidRangeOption>();
+    trimmed->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(std::move(trimmed_range)),
+                 segment_split.is_first_split_of_segment);
+    return trimmed;
 }
 
 } // namespace
@@ -285,6 +345,7 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
 
     const auto stats = _reader->stats();
     update_counter(state, stats);
+    record_current_adaptive_task_read_stats(stats);
     _released_raw_rows_read += stats.raw_rows_read;
     _released_bytes_read += stats.bytes_read;
     _released_cpu_time_spent_ns += stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
@@ -934,15 +995,25 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::SEGMENT_PREPARE) {
         RowidRangeOptionPtr local_rowid_range;
         RETURN_IF_ERROR(_reader->prepare_segment_split_task(_params, split_context, &local_rowid_range));
+        observe_adaptive_split_task(split_context, local_rowid_range);
         if (local_rowid_range == nullptr) {
+            _current_adaptive_task_source = pipeline::LakeSplitContext::AdaptiveTaskSource::NONE;
             _prepare_only_mode = true;
             return Status::OK();
         }
-        observe_adaptive_split_task(split_context, local_rowid_range);
         _params.rowid_range_option = std::move(local_rowid_range);
         _params.short_key_ranges_option.reset();
     } else if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
         observe_adaptive_split_task(split_context, _params.rowid_range_option);
+        if (split_context->adaptive_task_source == pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE) {
+            _params.rowid_range_option =
+                    trim_pending_rowid_range_by_prepared_range(split_context, _params.rowid_range_option);
+            if (_params.rowid_range_option == nullptr) {
+                _current_adaptive_task_source = pipeline::LakeSplitContext::AdaptiveTaskSource::NONE;
+                _prepare_only_mode = true;
+                return Status::OK();
+            }
+        }
     }
 
     RETURN_IF_ERROR(_reader->open(_params));
@@ -990,6 +1061,15 @@ Status LakeDataSource::fast_reopen_reader_for_current_morsel() {
         COUNTER_UPDATE(_lake_prepared_state_targeted_read_counter, 1);
     }
     observe_adaptive_split_task(split_context, _params.rowid_range_option);
+    if (split_context->adaptive_task_source == pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE) {
+        _params.rowid_range_option =
+                trim_pending_rowid_range_by_prepared_range(split_context, _params.rowid_range_option);
+        if (_params.rowid_range_option == nullptr) {
+            _current_adaptive_task_source = pipeline::LakeSplitContext::AdaptiveTaskSource::NONE;
+            _prepare_only_mode = true;
+            return Status::OK();
+        }
+    }
 
     refresh_reuse_signature();
     _reader->set_prepared_read_state(_prepared_read_state);
@@ -1012,6 +1092,7 @@ void LakeDataSource::release_reader(RuntimeState* state) {
     // Snapshot after close so profile counters include that last batch of metrics.
     const auto stats = _reader->stats();
     update_counter(state, stats);
+    record_current_adaptive_task_read_stats(stats);
     _released_raw_rows_read += stats.raw_rows_read;
     _released_bytes_read += stats.bytes_read;
     _released_cpu_time_spent_ns += stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
@@ -1393,6 +1474,20 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateReuseRejectAdaptivePending", TUnit::UNIT);
     _lake_prepared_state_targeted_read_counter =
             ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateTargetedReads", TUnit::UNIT);
+    _lake_adaptive_seed_task_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedTasks", TUnit::UNIT);
+    _lake_adaptive_pending_task_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingTasks", TUnit::UNIT);
+    _lake_adaptive_pending_empty_task_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingEmptyTasks", TUnit::UNIT);
+    _lake_adaptive_pending_issued_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingIssuedRows", TUnit::UNIT);
+    _lake_adaptive_pending_useful_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingUsefulRows", TUnit::UNIT);
+    _lake_adaptive_pending_wasted_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingWastedRows", TUnit::UNIT);
+    _lake_adaptive_pending_raw_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingRawRowsRead", TUnit::UNIT);
+    _lake_adaptive_pending_output_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingOutputRows", TUnit::UNIT);
     _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
 
     _read_compressed_counter = ADD_COUNTER(_runtime_profile, "CompressedBytesRead", TUnit::BYTES);
@@ -1509,8 +1604,59 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 
 void LakeDataSource::observe_adaptive_split_task(const pipeline::LakeSplitContext* split_context,
                                                  const RowidRangeOptionPtr& rowid_range) {
-    (void)split_context;
-    (void)rowid_range;
+    _current_adaptive_task_source = pipeline::LakeSplitContext::AdaptiveTaskSource::NONE;
+    _current_adaptive_task_start_num_rows_read = _num_rows_read;
+    if (split_context == nullptr) {
+        return;
+    }
+
+    switch (split_context->adaptive_task_source) {
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::SEED_LOCAL: {
+        COUNTER_UPDATE(_lake_adaptive_seed_task_counter, 1);
+        auto segment_state = split_context->prepared_segment_state;
+        if (segment_state != nullptr) {
+            SparseRange<> pending_issued_ranges;
+            SparseRangePtr final_scan_range;
+            {
+                std::lock_guard<std::mutex> guard(segment_state->adaptive_issue_lock);
+                pending_issued_ranges = segment_state->adaptive_pending_issued_ranges;
+                final_scan_range = segment_state->execution_pruned_range;
+            }
+            if (final_scan_range != nullptr && pending_issued_ranges.span_size() > 0) {
+                const int64_t pending_issued_rows = static_cast<int64_t>(pending_issued_ranges.span_size());
+                pending_issued_ranges &= *final_scan_range;
+                const int64_t useful_rows = static_cast<int64_t>(pending_issued_ranges.span_size());
+                COUNTER_UPDATE(_lake_adaptive_pending_useful_rows_counter, useful_rows);
+                COUNTER_UPDATE(_lake_adaptive_pending_wasted_rows_counter, pending_issued_rows - useful_rows);
+            }
+        }
+        break;
+    }
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE: {
+        const int64_t rowid_rows = rowid_range_option_span_size(rowid_range);
+        _current_adaptive_task_source = pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE;
+        COUNTER_UPDATE(_lake_adaptive_pending_task_counter, 1);
+        if (rowid_rows == 0) {
+            COUNTER_UPDATE(_lake_adaptive_pending_empty_task_counter, 1);
+        } else {
+            COUNTER_UPDATE(_lake_adaptive_pending_issued_rows_counter, rowid_rows);
+        }
+        break;
+    }
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::REFINED_CHILD:
+        break;
+    case pipeline::LakeSplitContext::AdaptiveTaskSource::NONE:
+        break;
+    }
+}
+
+void LakeDataSource::record_current_adaptive_task_read_stats(const OlapReaderStatistics& stats) {
+    if (_current_adaptive_task_source == pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE) {
+        COUNTER_UPDATE(_lake_adaptive_pending_raw_rows_counter, stats.raw_rows_read);
+        COUNTER_UPDATE(_lake_adaptive_pending_output_rows_counter,
+                       _num_rows_read - _current_adaptive_task_start_num_rows_read);
+    }
+    _current_adaptive_task_source = pipeline::LakeSplitContext::AdaptiveTaskSource::NONE;
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {

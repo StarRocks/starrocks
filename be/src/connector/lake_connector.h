@@ -136,6 +136,7 @@ private:
     Status refresh_runtime_range_pruner_for_stream_build_filters();
     LateRuntimeFilterReinitDecision detect_late_runtime_filter_reinit() const;
     void record_late_runtime_filter_reinit(const LateRuntimeFilterReinitDecision& decision);
+    void record_current_adaptive_task_read_stats(const OlapReaderStatistics& stats);
     Status reset_reader_state_for_reinit();
     Status rebuild_scan_conjuncts();
 
@@ -177,6 +178,9 @@ private:
     bool _prepare_only_mode = false;
     bool _reuse_pending = false;
     bool _ignore_split_context_prepared_state_once = false;
+    pipeline::LakeSplitContext::AdaptiveTaskSource _current_adaptive_task_source =
+            pipeline::LakeSplitContext::AdaptiveTaskSource::NONE;
+    int64_t _current_adaptive_task_start_num_rows_read = 0;
     struct ReuseSignature {
         bool valid = false;
         int64_t tablet_id = 0;
@@ -302,6 +306,14 @@ private:
     RuntimeProfile::Counter* _lake_prepared_state_reject_disabled_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_state_reject_adaptive_pending_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_state_targeted_read_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_seed_task_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_task_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_empty_task_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_issued_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_useful_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_wasted_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_raw_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_adaptive_pending_output_rows_counter = nullptr;
 };
 
 // ================================
