@@ -229,8 +229,7 @@
         "be/src/column/column_helper_time.*",
         "be/src/column/datum_tuple.*",
         "be/src/column/field.*",
-        "be/src/column/schema.*",
-        "be/src/column/stream_chunk.*"
+        "be/src/column/schema.*"
       ],
       "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "allowed_target_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
