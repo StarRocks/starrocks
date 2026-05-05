@@ -176,8 +176,10 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
                                         SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false)));
     } else {
         // disable spill when group by with a small limit
+        // having clause filters rows after aggregation, so a small limit does not bound the
+        // aggregation input size; only disable spill when there is no having clause.
         bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
-        if (limit() != -1 && limit() < runtime_state()->chunk_size()) {
+        if (limit() != -1 && limit() < runtime_state()->chunk_size() && _tnode.conjuncts.empty()) {
             enable_agg_spill = false;
         }
         if (enable_agg_spill && has_group_by_keys) {
