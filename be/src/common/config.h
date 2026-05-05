@@ -512,6 +512,23 @@ CONF_mInt32(pk_index_parallel_chunk_min_keys, "32");
 CONF_mInt32(pk_index_parallel_chunk_target_keys, "64");
 // Hard upper bound on chunks per multi_get to protect the chunk_io pool's queue.
 CONF_mInt32(pk_index_parallel_chunk_max_chunks, "16");
+// Parallelize the per-sstable loop inside PersistentIndexSstableFileset::multi_get on a
+// dedicated pool so chunks from multiple sstables can be in flight on the chunk_io pool
+// simultaneously. iter-053 measured chunk_io active peak only 26-88 / 128 because the
+// per-sstable loop was serial: the inner_io worker dispatched chunks for one sstable to
+// chunk_io, waited via Token::wait(), then moved to the next sstable.
+//
+// MUST be a different pool from pk_index_inner_io_thread_pool (caller of Fileset::multi_get)
+// AND pk_index_chunk_io_thread_pool (callee of SST::multi_get). Re-entering either pool from
+// a worker holding one of its tasks deadlocks via ThreadPool::check_not_pool_thread_unlocked()
+// (iter-031 trap).
+CONF_mInt32(pk_index_sst_walk_threadpool_max_threads, "0");
+CONF_mInt32(pk_index_sst_walk_threadpool_size, "1048576");
+// Master kill-switch for the per-sstable parallelism inside Fileset::multi_get.
+CONF_mBool(enable_pk_index_parallel_sst_walk, "true");
+// Minimum number of distinct sstables routed to in this Fileset::multi_get for the parallel
+// path to engage. Below this, run the legacy sequential path.
+CONF_mInt32(pk_index_sst_walk_min_ssts, "2");
 // Threadpool dedicated to LakePersistentIndex::_open_sstables_parallel. Each task does
 // 4 sequential OSS round-trips (footer + index + metaindex + filter blocks) inside
 // Table::Open, so it is purely I/O-bound. Splitting it off pk_index_execution_thread_pool

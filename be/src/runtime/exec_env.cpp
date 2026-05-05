@@ -628,6 +628,19 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(config::pk_index_chunk_io_threadpool_size)
                             .build(&_pk_index_chunk_io_thread_pool));
     REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_chunk_io, _pk_index_chunk_io_thread_pool);
+    max_thread_count = config::pk_index_sst_walk_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        // Each sst_walk task waits on chunk-parallel OSS reads via the chunk_io pool, so this
+        // pool is also I/O-bound. Mirroring chunk_io / inner_io / sst_open default to keep
+        // multi-fileset multi-sstable fan-out unblocked under cold-start storms.
+        max_thread_count = CpuInfo::num_cores() * 4;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_sst_walk")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(config::pk_index_sst_walk_threadpool_size)
+                            .build(&_pk_index_sst_walk_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_sst_walk, _pk_index_sst_walk_thread_pool);
     max_thread_count = config::pk_index_sst_open_threadpool_max_threads;
     if (max_thread_count <= 0) {
         // Each SST-open task is 4 sequential OSS round-trips (footer + index + metaindex
@@ -679,6 +692,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_chunk_io_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_sst_walk")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_pk_index_sst_walk_thread_pool));
     RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_sst_open")
                             .set_min_threads(1)
                             .set_max_threads(1)
@@ -817,6 +835,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _pk_index_chunk_io_thread_pool->shutdown();
         component_times.emplace_back("pk_index_chunk_io_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_pk_index_sst_walk_thread_pool) {
+        start = MonotonicMillis();
+        _pk_index_sst_walk_thread_pool->shutdown();
+        component_times.emplace_back("pk_index_sst_walk_thread_pool", MonotonicMillis() - start);
     }
 
     if (_pk_index_sst_open_thread_pool) {
@@ -1022,6 +1046,7 @@ void ExecEnv::destroy() {
     _pk_index_memtable_flush_thread_pool.reset();
     _pk_index_inner_io_thread_pool.reset();
     _pk_index_chunk_io_thread_pool.reset();
+    _pk_index_sst_walk_thread_pool.reset();
     _pk_index_sst_open_thread_pool.reset();
     _metrics = nullptr;
 }
