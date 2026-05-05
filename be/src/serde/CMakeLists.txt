@@ -39,7 +39,6 @@ ADD_BE_LIB(Serde
 
 target_link_libraries(Serde PUBLIC
         SerdeCore
-        Column
         RuntimeCore
         ChunkCore
         ColumnCore

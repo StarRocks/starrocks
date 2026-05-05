@@ -221,21 +221,31 @@
       "owned_targets": ["ColumnCore"],
       "owned_globs": ["be/src/column/**"],
       "excluded_globs": [
-        "be/src/column/append_with_mask.*",
         "be/src/column/chunk.*",
         "be/src/column/chunk_extra_data.*",
         "be/src/column/chunk_slice.*",
         "be/src/column/column_access_path.*",
-        "be/src/column/column_helper_time.*",
         "be/src/column/datum_tuple.*",
         "be/src/column/field.*",
-        "be/src/column/schema.*"
+        "be/src/column/schema.*",
+        "be/src/column/segmented_chunk.*"
       ],
       "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "allowed_target_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["column_test"],
       "allowed_test_link_deps": ["ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ColumnCore free of ChunkCore/Runtime/Exec/Storage coupling; move integration code upward or introduce an interface."
+    },
+    {
+      "id": "chunkcore",
+      "doc_label": "ChunkCore",
+      "summary": "Core chunk, schema, field, and chunk-adjacent helpers on top of ColumnCore.",
+      "owned_targets": ["ChunkCore"],
+      "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["chunk_test"],
+      "allowed_test_link_deps": ["ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ChunkCore limited to chunk/schema helpers and free of Runtime/Exec/Storage/Serde coupling."
     },
     {
       "id": "runtimecore",

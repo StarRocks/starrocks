@@ -158,6 +158,14 @@ Core column representations that must stay independent of ChunkCore and higher l
 - Core tests: `column_test`
 - Remediation: Keep ColumnCore free of ChunkCore/Runtime/Exec/Storage coupling; move integration code upward or introduce an interface.
 
+### ChunkCore (`chunkcore`)
+Core chunk, schema, field, and chunk-adjacent helpers on top of ColumnCore.
+- Targets: `ChunkCore`
+- Allowed internal include prefixes: `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `chunk_test`
+- Remediation: Keep ChunkCore limited to chunk/schema helpers and free of Runtime/Exec/Storage/Serde coupling.
+
 ### RuntimeCore (`runtimecore`)
 Core runtime building blocks without full Runtime/Exec/Storage coupling.
 - Targets: `RuntimeCore`

@@ -29,6 +29,21 @@
 
 namespace starrocks::serde {
 
+static int64_t extra_columns_max_serialized_size(const ChunkExtraColumnsData& extra_data) {
+    int64_t serialized_size = 0;
+    for (auto& column : extra_data.columns()) {
+        serialized_size += ColumnArraySerde::max_serialized_size(*column, 0);
+    }
+    return serialized_size;
+}
+
+static StatusOr<uint8_t*> serialize_extra_columns(const ChunkExtraColumnsData& extra_data, uint8_t* buff) {
+    for (auto& column : extra_data.columns()) {
+        ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*column, buff));
+    }
+    return buff;
+}
+
 int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
 
@@ -95,7 +110,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
     auto* chunk_extra_data =
             chunk.get_extra_data() ? dynamic_cast<ChunkExtraColumnsData*>(chunk.get_extra_data().get()) : nullptr;
     if (chunk_extra_data) {
-        max_serialized_size += chunk_extra_data->max_serialized_size(0);
+        max_serialized_size += extra_columns_max_serialized_size(*chunk_extra_data);
     }
     raw::stl_string_resize_uninitialized(serialized_data, max_serialized_size);
     auto* buff = reinterpret_cast<uint8_t*>(serialized_data->data());
@@ -122,7 +137,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
 
     // do serialize extra data
     if (chunk_extra_data) {
-        ASSIGN_OR_RETURN(buff, chunk_extra_data->serialize(buff));
+        ASSIGN_OR_RETURN(buff, serialize_extra_columns(*chunk_extra_data, buff));
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
     serialized_data->resize(chunk_pb.serialized_size() + padding_size);
