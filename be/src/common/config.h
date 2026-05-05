@@ -531,7 +531,7 @@ CONF_mInt32(pk_index_parallel_chunk_max_chunks, "16");
 //
 // Set hedge_after_ms = 0 to disable (master kill-switch).
 CONF_mBool(enable_pk_index_chunk_hedge, "true");
-CONF_mInt32(pk_index_chunk_hedge_after_ms, "1500");
+CONF_mInt32(pk_index_chunk_hedge_after_ms, "500");
 CONF_mInt32(pk_index_chunk_hedge_max_per_multi_get, "16");
 // Parallelize the per-sstable loop inside PersistentIndexSstableFileset::multi_get on a
 // dedicated pool so chunks from multiple sstables can be in flight on the chunk_io pool
