@@ -117,6 +117,13 @@ import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
+import com.starrocks.sql.optimizer.rule.tree.WidenProjectionNullableRule;
+import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMaterializationRewriter;
+>>>>>>> 31be0b7f21 ([BugFix] fix lazy-materialization slot nullable for MV over outer join (#72621))
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
@@ -948,6 +955,16 @@ public class QueryOptimizer extends Optimizer {
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
+<<<<<<< HEAD
+=======
+        result = new RemoveUselessScanOutputPropertyRule().rewrite(result, rootTaskContext);
+        // Must run before GlobalLateMaterializationRewriter: FETCH writes target slots directly
+        // from storage, so any post-MV-rewrite Projection whose output nullable is narrower than
+        // its input nullable must be widened first.
+        result = new WidenProjectionNullableRule().rewrite(result, rootTaskContext);
+        result = new GlobalLateMaterializationRewriter().rewrite(result, context);
+
+>>>>>>> 31be0b7f21 ([BugFix] fix lazy-materialization slot nullable for MV over outer join (#72621))
         result.setPlanCount(planCount);
         return result;
     }
