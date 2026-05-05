@@ -19,6 +19,7 @@
 #include <filesystem>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
@@ -314,6 +315,10 @@ TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
 TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
     const std::string cache_dir = "./cache_input_stream_cache_dir";
     std::filesystem::create_directories(cache_dir);
+    DeferOp cleanup_cache_dir([&]() {
+        DataCache::GetInstance()->set_block_cache(nullptr);
+        std::filesystem::remove_all(cache_dir);
+    });
 
     DiskCacheOptions options = cache_options();
     // Because the cache adaptor only work for disk cache.
@@ -380,7 +385,6 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
         ASSERT_EQ(stats.read_block_cache_count, block_count);
     }
-    std::filesystem::remove_all(cache_dir);
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
