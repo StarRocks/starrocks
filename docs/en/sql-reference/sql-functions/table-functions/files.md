@@ -142,13 +142,15 @@ Controls the encoding technique used for DATETIME and DECIMAL data types. Valid 
 
 If this item is set to `true`:
 
-- For DATETIME type, the system uses `INT96` encoding.
 - For DECIMAL type, the system uses `fixed_len_byte_array` encoding.
+- For DATETIME type, the system uses `INT96` encoding.
 
 If this item is set to `false`:
 
-- For DATETIME type, the system uses `INT64` encoding.
 - For DECIMAL type, the system uses `INT32` or `INT64` encoding.
+- For DATETIME type, the system uses `INT64` encoding.
+  - **Instant Semantics**: If `isAdjustedToUTC` is set to `true` for the Parquet TIMESTAMP type, the system outputs a timestamp normalized to UTC. Each value unambiguously identifies a single instant on the timeline, and can be transferred into a specific timezone.
+  - **Local Semantics**: If `isAdjustedToUTC` is set to `false` for the Parquet TIMESTAMP type, the system outputs a timestamp that represents the year, month, day, hour, minute, second, and sub-second in a local timezone, regardless of what specific timezone is considered local. Such values are always displayed the same way, regardless of the local timezone in effect, and do not identify instants on the timeline.
 
 :::note
 
