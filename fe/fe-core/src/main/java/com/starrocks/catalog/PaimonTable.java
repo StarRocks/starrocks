@@ -106,8 +106,13 @@ public class PaimonTable extends Table {
     public Map<String, String> getProperties() {
         if (properties == null) {
             this.properties = new HashMap<>();
+            this.properties.putAll(paimonNativeTable.options());
         }
         return properties;
+    }
+
+    public List<String> getPrimaryKeyColumnNames() {
+        return paimonNativeTable.primaryKeys();
     }
 
     @Override
