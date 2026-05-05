@@ -512,6 +512,27 @@ CONF_mInt32(pk_index_parallel_chunk_min_keys, "32");
 CONF_mInt32(pk_index_parallel_chunk_target_keys, "64");
 // Hard upper bound on chunks per multi_get to protect the chunk_io pool's queue.
 CONF_mInt32(pk_index_parallel_chunk_max_chunks, "16");
+// Hedged chunk reads: when a primary chunk task hasn't completed within
+// `pk_index_chunk_hedge_after_ms`, dispatch ONE duplicate task for that chunk on the
+// chunk_io pool with a fresh RandomAccessFile. First completer atomically claims the
+// chunk's output slot; the loser's work is discarded. Targets cold-start OSS-tail
+// latency: post-#72735 (parallel SST walk), wall = max(t_i) over ~1500 OSS reads in
+// flight per cold-start publish, dominated by individual OSS p99 (~5 s) tails.
+// A hedged duplicate creates a fresh fs::new_random_access_file → fresh underlying
+// connection from the S3 client connection pool → likely lands on a different
+// server/connection and completes in p50.
+//
+// Dispatch pattern: after submitting all primary chunks, the dispatcher waits via
+// Token::wait_for(hedge_after_ms). On timeout, it iterates chunks and submits hedges
+// for any not-yet-completed (atomic-flagged) chunks, capped at hedge_max_per_multi_get.
+// Hedges run on the SAME chunk_io pool as primaries (no new pool). Pool peak post-#72735
+// is 30-92 / 128, leaving 36-98 free slots; per-multi_get cap of 16 keeps oversaturation
+// risk low.
+//
+// Set hedge_after_ms = 0 to disable (master kill-switch).
+CONF_mBool(enable_pk_index_chunk_hedge, "true");
+CONF_mInt32(pk_index_chunk_hedge_after_ms, "1500");
+CONF_mInt32(pk_index_chunk_hedge_max_per_multi_get, "16");
 // Parallelize the per-sstable loop inside PersistentIndexSstableFileset::multi_get on a
 // dedicated pool so chunks from multiple sstables can be in flight on the chunk_io pool
 // simultaneously. iter-053 measured chunk_io active peak only 26-88 / 128 because the

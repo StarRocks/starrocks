@@ -16,6 +16,7 @@
 
 #include <butil/time.h> // NOLINT
 
+#include <atomic>
 #include <mutex>
 
 #include "fs/fs.h"
@@ -26,6 +27,7 @@
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
 #include "testutil/sync_point.h"
+#include "util/monotime.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 #include "util/trace.h"
@@ -226,17 +228,11 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             }
             std::vector<std::vector<std::string>> chunk_outs(chunks);
             std::vector<sstable::ReadIOStat> chunk_stats(chunks);
-            std::vector<std::unique_ptr<RandomAccessFile>> chunk_files(chunks);
+            std::vector<std::atomic<int>> chunk_done(chunks);
             for (int c = 0; c < chunks; ++c) {
                 const size_t sz = static_cast<size_t>(std::distance(bounds[c], bounds[c + 1]));
                 chunk_outs[c].assign(sz, std::string());
-                RandomAccessFileOptions opts2;
-                if (!_sstable_pb.encryption_meta().empty()) {
-                    ASSIGN_OR_RETURN(auto info,
-                                     KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
-                    opts2.encryption_info = std::move(info);
-                }
-                ASSIGN_OR_RETURN(chunk_files[c], fs::new_random_access_file(opts2, _rf->filename()));
+                chunk_done[c].store(0, std::memory_order_relaxed);
             }
 
             std::mutex status_mu;
@@ -244,16 +240,50 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             auto* pool = ExecEnv::GetInstance()->pk_index_chunk_io_thread_pool();
             auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
             Trace* trace = Trace::CurrentTrace();
+            // Each task creates its OWN RandomAccessFile so primary and hedged tasks
+            // don't share an underlying connection. The first task to complete wins
+            // (compare_exchange_strong on chunk_done[c]) and writes its results into
+            // chunk_outs[c]/chunk_stats[c]; the loser's local_outs go out of scope.
             auto run_chunk = [&](int c) {
-                sstable::ReadOptions local_opts;
-                local_opts.file = chunk_files[c].get();
-                local_opts.stat = &chunk_stats[c];
-                auto s = _sst->MultiGet(local_opts, keys, bounds[c], bounds[c + 1], &chunk_outs[c]);
-                if (!s.ok()) {
-                    std::lock_guard<std::mutex> lg(status_mu);
-                    shared_status.update(s);
+                const size_t sz = static_cast<size_t>(std::distance(bounds[c], bounds[c + 1]));
+                std::vector<std::string> local_outs(sz);
+                sstable::ReadIOStat local_stat;
+                std::unique_ptr<RandomAccessFile> local_rf;
+                {
+                    RandomAccessFileOptions rf_opts;
+                    if (!_sstable_pb.encryption_meta().empty()) {
+                        auto info_or = KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta());
+                        if (!info_or.ok()) {
+                            std::lock_guard<std::mutex> lg(status_mu);
+                            shared_status.update(info_or.status());
+                            return;
+                        }
+                        rf_opts.encryption_info = std::move(info_or.value());
+                    }
+                    auto rf_or = fs::new_random_access_file(rf_opts, _rf->filename());
+                    if (!rf_or.ok()) {
+                        std::lock_guard<std::mutex> lg(status_mu);
+                        shared_status.update(rf_or.status());
+                        return;
+                    }
+                    local_rf = std::move(rf_or.value());
                 }
+                sstable::ReadOptions local_opts;
+                local_opts.file = local_rf.get();
+                local_opts.stat = &local_stat;
+                auto s = _sst->MultiGet(local_opts, keys, bounds[c], bounds[c + 1], &local_outs);
+                int expected = 0;
+                if (chunk_done[c].compare_exchange_strong(expected, 1, std::memory_order_acq_rel)) {
+                    chunk_outs[c] = std::move(local_outs);
+                    chunk_stats[c] = local_stat;
+                    if (!s.ok()) {
+                        std::lock_guard<std::mutex> lg(status_mu);
+                        shared_status.update(s);
+                    }
+                }
+                // else: another task already won; discard our work.
             };
+            // Dispatch primary chunks.
             for (int c = 0; c < chunks; ++c) {
                 auto submit_st = token->submit_func([c, &run_chunk, trace]() {
                     ADOPT_TRACE(trace);
@@ -266,8 +296,54 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                     run_chunk(c);
                 }
             }
-            token->wait();
+            // Hedged chunk reads (iter-056, Lever I). When a primary chunk task hasn't
+            // completed within `pk_index_chunk_hedge_after_ms`, dispatch ONE duplicate
+            // task with a fresh RandomAccessFile (= fresh underlying S3 connection).
+            // First completer atomically claims chunk_outs[c]; the loser is discarded.
+            // Targets cold-start OSS-tail latency: post-#72735 fan-out is ~205 SSTs
+            // (iter-055 pindex_unique_sstables_touched_cnt p99) → ~1500 OSS reads in
+            // flight per cold-start publish, dominated by individual OSS p99 (~5 s) tails.
+            // A fresh RAF spawns a fresh S3 client connection → likely lands on a
+            // different server / connection and completes in p50 (~150 ms).
+            //
+            // Hedges run on the SAME chunk_io pool as primaries: the primary's worker
+            // is sleeping on OSS (idle CPU) so the slot is fungible. No re-entrance
+            // trap (hedge runs _sst->MultiGet just like the primary, no descent into
+            // chunk_io from a chunk_io worker). The dispatcher (this thread, on
+            // pk_index_sst_walk pool) sleeps in Token::wait_for() — that does NOT
+            // occupy a chunk_io worker.
+            const int hedge_after_ms = static_cast<int>(config::pk_index_chunk_hedge_after_ms);
+            const bool hedge_enabled = config::enable_pk_index_chunk_hedge && hedge_after_ms > 0;
+            int64_t hedged_cnt = 0;
+            if (hedge_enabled) {
+                if (!token->wait_for(MonoDelta::FromMilliseconds(hedge_after_ms))) {
+                    const int hedge_max =
+                            std::max(0, static_cast<int>(config::pk_index_chunk_hedge_max_per_multi_get));
+                    for (int c = 0; c < chunks && hedged_cnt < hedge_max; ++c) {
+                        if (chunk_done[c].load(std::memory_order_acquire) != 0) {
+                            continue;
+                        }
+                        auto submit_st = token->submit_func([c, &run_chunk, trace]() {
+                            ADOPT_TRACE(trace);
+                            run_chunk(c);
+                        });
+                        if (!submit_st.ok()) {
+                            // Pool busy: skip hedge for this chunk. Don't run inline —
+                            // the primary is still in flight; an inline duplicate would
+                            // re-do the same OSS wait we are trying to short-circuit.
+                            continue;
+                        }
+                        ++hedged_cnt;
+                    }
+                }
+                token->wait();
+            } else {
+                token->wait();
+            }
             multiget_st = shared_status;
+            if (hedged_cnt > 0) {
+                TRACE_COUNTER_INCREMENT("multi_get_hedged_chunks", hedged_cnt);
+            }
 
             // Concatenate per-chunk outputs back into index_value_with_vers in key_indexes
             // iteration order (the chunks are contiguous slices of key_indexes, so simple
