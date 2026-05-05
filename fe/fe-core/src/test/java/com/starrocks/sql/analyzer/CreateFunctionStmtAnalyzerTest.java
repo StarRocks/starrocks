@@ -97,6 +97,20 @@ public class CreateFunctionStmtAnalyzerTest {
                 createFunctionSql, 32).get(0);
     }
 
+    private CreateFunctionStmt createPyInlineStmtNoFile(String symbol) {
+        Config.enable_udf = true;
+        String createFunctionSql = String.format("CREATE FUNCTION ABC.MY_UDF_JSON_GET_NOFILE(string, string) \n"
+                + "RETURNS string \n"
+                + "type = 'Python'\n"
+                + "symbol = '%s'\n"
+                + "AS $$\n"
+                + "def a(b):\n"
+                + "   return b\n"
+                + "$$;", symbol);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+    }
+
     @Test
     public void testJUDF() {
         assertThrows(Throwable.class, () -> {
