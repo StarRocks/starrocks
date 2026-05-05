@@ -166,9 +166,7 @@ Status PersistentIndexSstableFileset::multi_get(
     // Each per-sstable task writes to disjoint values[key_index] slots (sstables in a fileset
     // have non-overlapping ranges, enforced at init/append). found_key_indexes writes are per-
     // task local then merged after wait().
-    auto* pool = ExecEnv::GetInstance() != nullptr
-                         ? ExecEnv::GetInstance()->pk_index_sst_walk_thread_pool()
-                         : nullptr;
+    auto* pool = ExecEnv::GetInstance() != nullptr ? ExecEnv::GetInstance()->pk_index_sst_walk_thread_pool() : nullptr;
     if (pool != nullptr && config::enable_pk_index_parallel_sst_walk &&
         sstable_key_indexes_map.size() >= static_cast<size_t>(std::max(1, config::pk_index_sst_walk_min_ssts))) {
         const size_t S = sstable_key_indexes_map.size();
@@ -189,15 +187,15 @@ Status PersistentIndexSstableFileset::multi_get(
             if (touched_sstables != nullptr) {
                 touched_sstables->insert(sstable);
             }
-            auto submit_st = token->submit_func([sstable, keys, key_set, version, values, lf, &shared_status,
-                                                 &status_mu, trace]() {
-                ADOPT_TRACE(trace);
-                auto s = sstable->multi_get(keys, *key_set, version, values, lf);
-                if (!s.ok()) {
-                    std::lock_guard<std::mutex> lg(status_mu);
-                    shared_status.update(s);
-                }
-            });
+            auto submit_st = token->submit_func(
+                    [sstable, keys, key_set, version, values, lf, &shared_status, &status_mu, trace]() {
+                        ADOPT_TRACE(trace);
+                        auto s = sstable->multi_get(keys, *key_set, version, values, lf);
+                        if (!s.ok()) {
+                            std::lock_guard<std::mutex> lg(status_mu);
+                            shared_status.update(s);
+                        }
+                    });
             if (!submit_st.ok()) {
                 // Fallback: run inline so we still produce a result for this sstable.
                 auto s = sstable->multi_get(keys, *key_set, version, values, lf);
