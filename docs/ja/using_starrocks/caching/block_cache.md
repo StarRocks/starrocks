@@ -52,6 +52,15 @@ v3.4.0 以降、StarRocks は共有データクラスタ内の external catalog 
   WHERE NAME LIKE "%starlet_star_cache_disk_size_percent% or %datacache_disk_size%";
   ```
 
+## クエリが Data Cache にヒットしたかどうかの確認
+
+Query Profile 内の以下のメトリクスを分析することで、クエリが Data Cache にヒットしたかどうかを確認できます。
+
+- `CompressedBytesReadRemote`: システムがリモートストレージシステムから読み込んだデータのサイズ。
+- `IOTimeRemote`: システムがリモートストレージシステムからデータを読み取るのに費やした I/O 時間。
+
+これらの値がゼロでない場合、クエリがデータキャッシュをヒットせず、システムがリモートストレージシステムからデータを読み取らなければならなかったことを意味します。
+
 ## Data Cache の監視
 
 StarRocks は Data Cache を監視するためのさまざまなメトリクスを提供します。
