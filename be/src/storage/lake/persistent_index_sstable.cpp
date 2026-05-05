@@ -317,8 +317,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             int64_t hedged_cnt = 0;
             if (hedge_enabled) {
                 if (!token->wait_for(MonoDelta::FromMilliseconds(hedge_after_ms))) {
-                    const int hedge_max =
-                            std::max(0, static_cast<int>(config::pk_index_chunk_hedge_max_per_multi_get));
+                    const int hedge_max = std::max(0, static_cast<int>(config::pk_index_chunk_hedge_max_per_multi_get));
                     for (int c = 0; c < chunks && hedged_cnt < hedge_max; ++c) {
                         if (chunk_done[c].load(std::memory_order_acquire) != 0) {
                             continue;
