@@ -509,9 +509,23 @@ CONF_mBool(enable_pk_index_parallel_chunk_multi_get, "true");
 // + dispatch overhead for tiny lookups.
 CONF_mInt32(pk_index_parallel_chunk_min_keys, "32");
 // Target keys per chunk. Effective chunk count = clamp(ceil(N/target), 1, max_chunks).
-CONF_mInt32(pk_index_parallel_chunk_target_keys, "64");
+// Smaller target_keys ⇒ more chunks per multi_get ⇒ each chunk does fewer sequential
+// OSS round-trips inside Table::MultiGet, raising the per-multi_get parallelism ceiling.
+// Cold-start `multiget_t3_block_read_miss_us` is dominated by these sequential per-key
+// block fetches at ~40 ms OSS first-byte each; cutting target_keys 64 → 16 shifts a
+// 1024-key multi_get from 16 chunks of 64 keys (≈ 18 sequential 40 ms misses each) to
+// 64 chunks of 16 keys (≈ 5 misses each) — roughly 3-4× per-chunk wall-clock reduction
+// before pool saturation. The chunk_io pool (num_cores × 4 = 128 threads on a 32-core
+// CN) is the binding ceiling; with several concurrent multi_gets the new chunks queue
+// rather than execute fully in parallel, but the slowest chunk (which sets per-multi_get
+// wall-clock) is still much shorter, so end-to-end miss-time drops.
+CONF_mInt32(pk_index_parallel_chunk_target_keys, "16");
 // Hard upper bound on chunks per multi_get to protect the chunk_io pool's queue.
-CONF_mInt32(pk_index_parallel_chunk_max_chunks, "16");
+// Raised 16 → 64 in tandem with target_keys 64 → 16 so that big cold-start multi_gets
+// (key counts of several hundred) actually scale up chunk count, not just split into
+// the same 16-chunk envelope. The pool's max_queue (1 048 576) is two orders of
+// magnitude above any plausible burst, so the queue itself is not at risk.
+CONF_mInt32(pk_index_parallel_chunk_max_chunks, "64");
 // Threadpool dedicated to LakePersistentIndex::_open_sstables_parallel. Each task does
 // 4 sequential OSS round-trips (footer + index + metaindex + filter blocks) inside
 // Table::Open, so it is purely I/O-bound. Splitting it off pk_index_execution_thread_pool
