@@ -53,6 +53,7 @@
 #include "common/system/cpu_info.h"
 #include "common/system/master_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
@@ -115,7 +116,6 @@
 #include "storage/update_manager.h"
 #include "types/hll.h"
 #include "udf/python/env.h"
-#include "util/priority_thread_pool.hpp"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"

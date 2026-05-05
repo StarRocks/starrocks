@@ -19,13 +19,13 @@
 #include <memory>
 
 #include "common/compiler_util.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::function<Status()>& func) {

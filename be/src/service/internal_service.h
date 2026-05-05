@@ -41,9 +41,9 @@
 #include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace brpc {
 class Controller;

@@ -41,10 +41,10 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/es/es_scroll_parser.h"
 #include "exec/es/es_scroll_query.h"
 #include "fmt/compile.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 

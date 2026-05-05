@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/util/blocking_priority_queue.hpp
+// This file is based on Apache Doris blocking_priority_queue.hpp.
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -38,15 +37,12 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <type_traits>
 #include <vector>
 
 #include "common/compiler_util.h"
+#include "common/config_thread_fwd.h"
 #include "gutil/port.h"
-
-namespace starrocks::config {
-// Keep this declaration in sync with common/config.h.
-extern int32_t priority_queue_remaining_tasks_increased_frequency;
-} // namespace starrocks::config
 
 namespace starrocks {
 
