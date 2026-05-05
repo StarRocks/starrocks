@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -388,5 +389,57 @@ public class MvRewriteJoinTest extends MVTestBase {
         }
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropMaterializedView("test_mv2");
+    }
+
+    // Regression test for s026: FETCH/LOOKUP slot must honor the storage column's
+    // isAllowNull when MV rewrite produces a Project whose target ColumnRef inherits
+    // a stale nullable=false from the original (pre-rewrite) PK-table scan.
+    @Test
+    public void testMVRewriteFullOuterJoinLazyMaterialization() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1_s026 (\n" +
+                " id BIGINT, dt DATE, region VARCHAR(32), name VARCHAR(64))\n" +
+                " PRIMARY KEY(id, dt, region) DISTRIBUTED BY HASH(id) BUCKETS 4\n" +
+                " PROPERTIES('replication_num'='1');");
+        starRocksAssert.withTable("CREATE TABLE t2_s026 (\n" +
+                " id BIGINT, dt DATE, region VARCHAR(32), amount DECIMAL(18, 2))\n" +
+                " PRIMARY KEY(id, dt, region) DISTRIBUTED BY HASH(id) BUCKETS 4\n" +
+                " PROPERTIES('replication_num'='1');");
+        cluster.runSql("test", "insert into t1_s026 values " +
+                "(1,'2026-01-15','north','alice'),(2,'2026-01-15','south','bob');");
+        cluster.runSql("test", "insert into t2_s026 values " +
+                "(1,'2026-01-15','north',100),(2,'2026-01-15','south',200);");
+
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_s026\n" +
+                "DISTRIBUTED BY HASH(dt) BUCKETS 4\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES('replication_num'='1')\n" +
+                "AS SELECT a.dt, a.region, SUM(b.amount) AS total_amount, COUNT(*) AS cnt\n" +
+                "FROM t1_s026 a FULL OUTER JOIN t2_s026 b ON a.id = b.id\n" +
+                "GROUP BY a.dt, a.region;");
+
+        boolean prevGlm = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        try {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+            connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(false);
+
+            String query = "SELECT a.dt, a.region, SUM(b.amount), COUNT(*)\n" +
+                    "FROM t1_s026 a FULL OUTER JOIN t2_s026 b ON a.id = b.id\n" +
+                    "GROUP BY a.dt, a.region\n" +
+                    "ORDER BY a.dt LIMIT 10;";
+            String plan = getFragmentPlan(query, TExplainLevel.COSTS);
+            // Sanity: query is rewritten to MV and FETCH path is taken.
+            PlanTestBase.assertContains(plan, "mv_s026");
+            PlanTestBase.assertContains(plan, "FETCH");
+            // Bug repro: the lazily-fetched region slot used to be emitted as nullable=false
+            // because it inherited from the pre-rewrite t1_s026.region (PK column, NOT NULL).
+            // After the fix, the slot's nullable is widened by the storage column's isAllowNull.
+            PlanTestBase.assertNotContains(plan, "[region, VARCHAR(1048576), false]");
+            PlanTestBase.assertContains(plan, "[region, VARCHAR(1048576), true]");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(prevGlm);
+            starRocksAssert.dropMaterializedView("mv_s026");
+            starRocksAssert.dropTable("t1_s026");
+            starRocksAssert.dropTable("t2_s026");
+        }
     }
 }
