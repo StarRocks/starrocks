@@ -80,6 +80,10 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         RandomAccessFileOptions init_opts;
         init_opts.skip_fill_local_cache = true;
         init_opts.skip_disk_cache = true;
+        // Route through the isolated PK-index sst_open S3 client (separate connection
+        // pool + shorter requestTimeoutMs). Caps cold-start OSS tail latency by failing
+        // a stuck GetObject so the SDK retries on a fresh connection.
+        init_opts.s3_operation_type = S3ClientOpType::kPkIndexSstOpen;
         if (!sstable_pb.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
             init_opts.encryption_info = std::move(info);
@@ -100,6 +104,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             }
             const std::string sst_path = tablet_mgr->sst_location(metadata->id(), sstable_pb.filename());
             RandomAccessFileOptions opts;
+            opts.s3_operation_type = S3ClientOpType::kPkIndexSstOpen;
             if (!sstable_pb.encryption_meta().empty()) {
                 ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
@@ -183,6 +188,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     std::unique_ptr<RandomAccessFile> rf;
     if (config::enable_pk_index_parallel_execution) {
         RandomAccessFileOptions opts;
+        opts.s3_operation_type = S3ClientOpType::kPkIndexSstOpen;
         if (!_sstable_pb.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
             opts.encryption_info = std::move(info);
@@ -251,6 +257,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                 std::unique_ptr<RandomAccessFile> local_rf;
                 {
                     RandomAccessFileOptions rf_opts;
+                    rf_opts.s3_operation_type = S3ClientOpType::kPkIndexSstOpen;
                     if (!_sstable_pb.encryption_meta().empty()) {
                         auto info_or = KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta());
                         if (!info_or.ok()) {
@@ -466,6 +473,7 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.s3_operation_type = S3ClientOpType::kPkIndexSstOpen;
     if (!sstable_pb.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);

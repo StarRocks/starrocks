@@ -49,6 +49,10 @@ public:
     enum class OperationType {
         UNKNOWN,
         RENAME_FILE,
+        // PK-index sstable open path (cold-start critical path). Uses a separate
+        // S3Client instance so the HTTP connection pool is isolated from cluster-wide
+        // I/O, and pairs with a shorter requestTimeoutMs to cap correlated OSS tails.
+        PK_INDEX_SST_OPEN,
     };
 
     ~S3ClientFactory() = default;

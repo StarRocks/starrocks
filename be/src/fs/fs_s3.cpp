@@ -36,6 +36,7 @@
 #include "common/http/content_type.h"
 #include "common/s3_uri.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
@@ -45,6 +46,14 @@
 #include "util/hdfs_util.h"
 
 namespace starrocks {
+
+// Keep S3ClientOpType integer constants in fs.h in sync with S3ClientFactory::OperationType
+// so storage code can set RandomAccessFileOptions::s3_operation_type without including
+// the AWS SDK headers via fs_s3.h.
+static_assert(static_cast<int>(S3ClientFactory::OperationType::UNKNOWN) == S3ClientOpType::kUnknown);
+static_assert(static_cast<int>(S3ClientFactory::OperationType::RENAME_FILE) == S3ClientOpType::kRenameFile);
+static_assert(static_cast<int>(S3ClientFactory::OperationType::PK_INDEX_SST_OPEN) ==
+              S3ClientOpType::kPkIndexSstOpen);
 
 static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
     switch (error) {
@@ -152,6 +161,13 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
     if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
         config::object_storage_rename_file_request_timeout_ms >= 0) {
         config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (operation_type == S3ClientFactory::OperationType::PK_INDEX_SST_OPEN &&
+               config::object_storage_pk_index_sst_open_request_timeout_ms >= 0) {
+        // Different requestTimeoutMs => different cache key => separate Aws::S3::S3Client
+        // with its own HTTP connection pool, isolating PK-index sst_open reads from
+        // cluster-wide S3 traffic. Shorter timeout caps stuck OSS RPCs and lets the
+        // SDK retry on a fresh connection.
+        config.requestTimeoutMs = config::object_storage_pk_index_sst_open_request_timeout_ms;
     } else if (config::object_storage_request_timeout_ms >= 0) {
         // 0 is meaningful for object_storage_request_timeout_ms
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
@@ -347,6 +363,10 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
     if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
         config::object_storage_rename_file_request_timeout_ms >= 0) {
         config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (operation_type == S3ClientFactory::OperationType::PK_INDEX_SST_OPEN &&
+               config::object_storage_pk_index_sst_open_request_timeout_ms >= 0) {
+        // See comment in S3ClientFactory::new_client(TCloudConfiguration, OperationType).
+        config.requestTimeoutMs = config::object_storage_pk_index_sst_open_request_timeout_ms;
     } else if (config::object_storage_request_timeout_ms >= 0) {
         // 0 is meaningful for object_storage_request_timeout_ms
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
@@ -464,7 +484,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
-    auto client = new_s3client(uri, _options);
+    auto op_type = static_cast<S3ClientFactory::OperationType>(opts.s3_operation_type);
+    auto client = new_s3client(uri, _options, op_type);
     auto read_ahead_size = read_ahead_size_from_options(_options);
     auto input_stream =
             std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
@@ -477,7 +498,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     if (!uri.parse(file_info.path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
     }
-    auto client = new_s3client(uri, _options);
+    auto op_type = static_cast<S3ClientFactory::OperationType>(opts.s3_operation_type);
+    auto client = new_s3client(uri, _options, op_type);
     auto read_ahead_size = read_ahead_size_from_options(_options);
     auto input_stream =
             std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);

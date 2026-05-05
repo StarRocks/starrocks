@@ -1200,6 +1200,15 @@ CONF_mInt64(object_storage_request_timeout_ms, "-1");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
+// Request timeout for object storage specialized for the PK-index SST open path
+// (cold-start critical path). When >= 0, the S3Client built for this purpose uses
+// this requestTimeoutMs, which both (1) caps a stuck OSS GetObject so the AWS SDK
+// retries on a fresh HTTP connection, and (2) yields a different ClientConfiguration
+// cache key so the resulting Aws::S3::S3Client has its own HTTP connection pool,
+// isolated from cluster-wide reads. Default 8000 ms = 8 s, slightly above measured
+// `pindex_init_sst_open_us` p99 (~4.7 s) and well below observed 60 s outliers.
+// Set -1 to disable the override and fall back to the default S3Client.
+CONF_mInt64(object_storage_pk_index_sst_open_request_timeout_ms, "8000");
 
 // Retry strategy for read operation. The following two parameters are the default value of Aws
 // DefaultRetryStrategy

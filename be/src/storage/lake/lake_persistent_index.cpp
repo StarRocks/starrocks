@@ -233,6 +233,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_latency_us");
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.s3_operation_type = S3ClientOpType::kPkIndexSstOpen;
     if (!sst_meta.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(sst_meta.encryption_meta()));
     }

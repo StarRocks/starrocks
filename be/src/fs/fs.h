@@ -113,6 +113,15 @@ struct SequentialFileOptions {
     bool skip_disk_cache = false;
 };
 
+// Selects a separate S3 client / connection pool keyed by purpose. Mirror of
+// S3ClientFactory::OperationType (be/src/fs/fs_s3.h). Defined as a plain int so storage
+// code can set it without pulling the AWS SDK headers in via fs_s3.h.
+struct S3ClientOpType {
+    static constexpr int kUnknown = 0;
+    static constexpr int kRenameFile = 1;
+    static constexpr int kPkIndexSstOpen = 2;
+};
+
 struct RandomAccessFileOptions {
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
@@ -121,6 +130,8 @@ struct RandomAccessFileOptions {
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
+    // See S3ClientOpType. The S3 backend casts this to S3ClientFactory::OperationType.
+    int s3_operation_type = S3ClientOpType::kUnknown;
 };
 
 struct DirEntry {
