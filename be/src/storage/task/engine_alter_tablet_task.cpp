@@ -37,7 +37,7 @@
 #include "agent/agent_metrics.h"
 #include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/schema_change.h"

@@ -21,7 +21,7 @@
 #include <fmt/format.h>
 
 #include "base/concurrency/stopwatch.hpp"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "io/s3_zero_copy_iostream.h"
 
 #ifdef USE_STAROS

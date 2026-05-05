@@ -22,7 +22,7 @@
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/core/io_error.h"
-#include "io/core/io_instrumentation.h"
+#include "io/core/io_profiler.h"
 
 #ifdef USE_STAROS
 #include <fslib/metric_key.h>
@@ -85,7 +85,7 @@ StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     s_posixread_iosize.Observe(res);
 #endif
     _offset += res;
-    IOInstrumentation::record_read(res, watch.elapsed_time());
+    IOProfiler::add_read(res, watch.elapsed_time());
     return res;
 }
 

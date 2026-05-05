@@ -22,7 +22,7 @@
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/core/io_error.h"
-#include "io/core/io_instrumentation.h"
+#include "io/core/io_profiler.h"
 
 namespace starrocks::io {
 
@@ -72,7 +72,7 @@ Status FdOutputStream::write(const void* data, int64_t count) {
             }
         }
     }
-    IOInstrumentation::record_write(bytes_written, watch.elapsed_time());
+    IOProfiler::add_write(bytes_written, watch.elapsed_time());
     return Status::OK();
 }
 

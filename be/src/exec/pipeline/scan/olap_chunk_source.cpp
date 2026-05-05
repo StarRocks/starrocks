@@ -44,7 +44,7 @@
 #include "gen_cpp/Metrics_types.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/map_util.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"

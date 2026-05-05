@@ -44,7 +44,7 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "io/core/fd_input_stream.h"
-#include "io/core/io_instrumentation.h"
+#include "io/core/io_profiler.h"
 
 #ifdef USE_STAROS
 #include <fslib/metric_key.h>
@@ -233,7 +233,7 @@ public:
         s_sr_posix_write_iosize.Observe(bytes_written);
 #endif
 #ifndef __APPLE__
-        io::IOInstrumentation::record_write(bytes_written, watch.elapsed_time());
+        IOProfiler::add_write(bytes_written, watch.elapsed_time());
 #endif
         return Status::OK();
     }
@@ -324,7 +324,7 @@ public:
             RETURN_IF_ERROR(do_sync(_fd, _filename));
         }
 #ifndef __APPLE__
-        io::IOInstrumentation::record_sync(watch.elapsed_time());
+        IOProfiler::add_sync(watch.elapsed_time());
 #endif
         return Status::OK();
     }

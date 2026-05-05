@@ -26,7 +26,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/prof/heap_prof.h"

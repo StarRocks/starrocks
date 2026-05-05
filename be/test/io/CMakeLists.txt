@@ -17,7 +17,7 @@ set(IO_TEST_FILES
     array_input_stream_test.cpp
     fd_input_stream_test.cpp
     fd_output_stream_test.cpp
-    io_instrumentation_test.cpp
+    io_profiler_test.cpp
     seekable_input_stream_test.cpp
     io_error_test.cpp
 )
