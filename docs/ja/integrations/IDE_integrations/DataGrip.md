@@ -2,27 +2,73 @@
 displayed_sidebar: docs
 ---
 
-# DataGrip
+# データグリップ
 
-DataGrip は、StarRocks 内部データと外部データの両方のクエリをサポートしています。
+データグリップは、StarRocksの内部データと外部データの両方のクエリをサポートしています。
 
 :::tip
-[DataGrip docs](https://www.jetbrains.com/help/datagrip/getting-started.html)
+[データグリップ ドキュメント](https://www.jetbrains.com/help/datagrip/getting-started.html)
 :::
 
-DataGrip でデータソースを作成します。データソースとして MySQL を選択する必要があることに注意してください。
+データグリップからStarRocksに接続するには、ネイティブのStarRocks JDBCドライバー（推奨）またはMySQLドライバーのいずれかを使用できます。
+
+## StarRocks JDBCドライバーを使用して接続する（推奨）
+
+StarRocks JDBCドライバーは正確なメタデータ検出を提供し、データグリップでのスキーマブラウジング、オートコンプリート、テーブルイントロスペクションを可能にします。
+
+### 前提条件
+
+StarRocks JDBCドライバーJARをダウンロードします。詳細は[StarRocks JDBCドライバー](../JDBC_driver.md)でダウンロード手順を参照してください。
+
+### 手順
+
+1. データグリップで、**ファイル** > **データソース**（または**データベース**アイコンをツールバーでクリックします）。
+
+2. **+**をクリックし、**ドライバーとデータソース**を選択します。
+
+3. **ドライバー**タブで、**+**をクリックして新しいドライバーを作成します。
+
+   - **名前**を`StarRocks`に設定します。
+   - **ドライバーファイル**の下で、**+**をクリックし、ダウンロードしたStarRocks JDBCドライバーJARを追加します。
+   - **クラス**を`com.starrocks.cj.jdbc.Driver`に設定します。
+   - を設定します。**URLテンプレート**に設定します。
+     ```
+     jdbc:starrocks://{host}:{port}/{catalog}.{database}
+     ```
+   - をクリックして**OK**ドライバーを保存します。
+
+   ![DataGrip - StarRocksドライバー構成](../../_assets/IDE_datagrip_starrocks_driver.png)
+
+4. に戻り、**データソース**タブで、**＋**をクリックして、**StarRocks**作成したドライバーを選択します。
+
+5. 接続設定を構成します。
+
+   - **ホスト**: StarRocksクラスターのFEホストIPアドレス。
+   - **ポート**: StarRocksクラスターのFEクエリポート。例: `9030`。
+   - **カタログ**: ターゲットカタログの名前。内部テーブルには`default_catalog`を使用するか、外部カタログの名前を使用します。
+   - **データベース**: カタログ内のターゲットデータベースの名前。
+   - **ユーザー**: StarRocksクラスターにログインするためのユーザー名。例: `admin`。
+   - **パスワード**: StarRocksクラスターにログインするためのパスワード。
+
+6. **接続テスト**をクリックして設定を確認し、次に**OK**をクリックします。
+
+## MySQLドライバーを使用して接続する
+
+MySQLドライバーは、StarRocks JDBCドライバーのフォールバックです。
+
+DataGripでデータソースを作成します。データソースとしてMySQLを選択する必要があることに注意してください。
 
 ![DataGrip - 1](../../_assets/BI_datagrip_1.png)
 
 ![DataGrip - 2](../../_assets/BI_datagrip_2.png)
 
-設定が必要なパラメータは次のとおりです:
+構成する必要があるパラメーターは次のとおりです。
 
-- **Host**: StarRocks クラスターの FE ホスト IP アドレス。
-- **Port**: StarRocks クラスターの FE クエリポート。例えば、`9030`。
-- **Authentication**: 使用したい認証方法を選択します。**Username & Password** を選択してください。
-- **User**: StarRocks クラスターにログインするためのユーザー名。例えば、`admin`。
-- **Password**: StarRocks クラスターにログインするためのパスワード。
-- **Database**: StarRocks クラスター内でアクセスしたいデータソース。このパラメータの値は `<catalog_name>.<database_name>` 形式です。
-  - `catalog_name`: StarRocks クラスター内のターゲット catalog の名前。内部および外部 catalog の両方がサポートされています。
-  - `database_name`: StarRocks クラスター内のターゲットデータベースの名前。内部および外部データベースの両方がサポートされています。
+- **ホスト**: StarRocksクラスターのFEホストIPアドレス。
+- **ポート**: StarRocksクラスターのFEクエリポート。例: `9030`。
+- **認証**: 使用する認証方法。選択**ユーザー名とパスワード**。
+- **ユーザー**: StarRocksクラスターへのログインに使用するユーザー名。例: `admin`。
+- **パスワード**: StarRocksクラスターへのログインに使用するパスワード。
+- **データベース**: StarRocksクラスターでアクセスするデータソース。このパラメーターの値は`<catalog_name>.<database_name>`形式です。
+  - `catalog_name`: StarRocksクラスター内のターゲットカタログの名前。内部カタログと外部カタログの両方がサポートされています。
+  - `database_name`: StarRocksクラスター内のターゲットデータベースの名前。内部データベースと外部データベースの両方がサポートされています。
