@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/util/priority_thread_pool.hpp
+// This file is based on Apache Doris priority_thread_pool.hpp.
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -37,11 +36,17 @@
 #include <algorithm>
 #include <atomic>
 #include <boost/thread.hpp>
+#include <condition_variable>
+#include <cstdint>
 #include <functional>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "common/logging.h"
+#include "common/thread/blocking_priority_queue.hpp"
 #include "common/thread/thread.h"
-#include "util/blocking_priority_queue.hpp"
 
 namespace starrocks {
 

@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "common/compiler_util.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
@@ -28,7 +29,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::spill {
 struct TraceInfo {

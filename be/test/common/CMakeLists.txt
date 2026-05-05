@@ -26,6 +26,7 @@ set(COMMON_TEST_FILES
     table_metrics_mgr_test.cpp
     thrift_client_test.cpp
     thread/cpu_usage_info_test.cpp
+    thread/priority_thread_pool_test.cpp
     thread/thread_test.cpp
     thread/threadpool_test.cpp
     tracer_test.cpp

@@ -19,6 +19,7 @@
 
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
@@ -28,7 +29,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 

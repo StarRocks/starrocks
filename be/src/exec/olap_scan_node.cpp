@@ -29,6 +29,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/noop_sink_operator.h"
@@ -58,7 +59,6 @@
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/time_types.h"
-#include "util/priority_thread_pool.hpp"
 
 // Print log with query id.
 #define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id() << "] "

@@ -29,6 +29,7 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "formats/column_evaluator.h"
 #include "fs/fs_memory.h"
 #include "io/compression_test_utils.h"
@@ -37,7 +38,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::formats {
 

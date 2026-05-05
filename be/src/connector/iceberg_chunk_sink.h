@@ -20,12 +20,12 @@
 #include <future>
 
 #include "common/status.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "connector/connector.h"
 #include "connector_chunk_sink.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
-#include "util/priority_thread_pool.hpp"
 #include "utils.h"
 
 namespace starrocks::connector {

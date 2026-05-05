@@ -49,6 +49,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exprs/function_context.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
@@ -60,7 +61,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_fwd.h"
 #include "types/type_descriptor.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace parquet {
 class FileMetaData;

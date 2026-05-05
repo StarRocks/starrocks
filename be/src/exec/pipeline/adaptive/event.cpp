@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
@@ -29,7 +30,6 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 
