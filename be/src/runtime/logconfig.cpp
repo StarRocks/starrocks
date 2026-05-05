@@ -55,7 +55,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/logconfig.h"
 #include "util/logging.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

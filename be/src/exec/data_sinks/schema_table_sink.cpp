@@ -34,7 +34,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/datum.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

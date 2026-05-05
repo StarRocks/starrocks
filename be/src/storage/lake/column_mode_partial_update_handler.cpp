@@ -43,7 +43,6 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
-#include "util/stack_util.h"
 
 namespace starrocks::lake {
 

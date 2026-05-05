@@ -20,6 +20,7 @@
 #include "base/utility/defer_op.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"
@@ -35,7 +36,6 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
-#include "util/stack_util.h"
 
 namespace starrocks::lake {
 

@@ -53,6 +53,7 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/stack_util.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
@@ -75,7 +76,6 @@
 #include "serde/protobuf_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/stack_util.h"
 #include "util/thrift_rpc_helper.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;

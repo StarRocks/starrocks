@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/stack_util.h"
+#include "common/stack_util.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -77,6 +77,9 @@ TEST(StackUtilTest, get_stack_trace_for_all_threads) {
 }
 
 TEST(StackUtilTest, get_stack_trace_for_thread) {
+#ifdef __APPLE__
+    GTEST_SKIP() << "cross-thread stack sampling depends on Linux rt_tgsigqueueinfo";
+#endif
     std::atomic_bool stop = false;
     std::promise<pid_t> tid_promise;
     std::thread thread([&]() {

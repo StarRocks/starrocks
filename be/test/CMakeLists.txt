@@ -310,7 +310,7 @@ set(EXEC_FILES
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
         ./util/dynamic_cache_test.cpp
-        ./util/exception_stack_test.cpp
+        ./runtime/exception_stack_test.cpp
         ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_util_test.cpp
@@ -325,7 +325,6 @@ set(EXEC_FILES
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
         ./util/download_util_test.cpp
-        ./util/stack_util_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/mem_hook_test.cpp

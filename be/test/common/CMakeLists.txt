@@ -20,6 +20,7 @@ set(COMMON_TEST_FILES
     cow_test.cpp
     process_exit_test.cpp
     runtime_profile_test.cpp
+    stack_util_test.cpp
     stack_trace_mutex_test.cpp
     system/master_info_test.cpp
     table_metrics_mgr_test.cpp

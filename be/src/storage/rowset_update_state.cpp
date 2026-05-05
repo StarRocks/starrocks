@@ -21,6 +21,7 @@
 #include "column/binary_column.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -35,7 +36,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
