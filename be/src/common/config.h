@@ -550,6 +550,20 @@ CONF_mBool(enable_pk_index_parallel_sst_walk, "true");
 // Minimum number of distinct sstables routed to in this Fileset::multi_get for the parallel
 // path to engage. Below this, run the legacy sequential path.
 CONF_mInt32(pk_index_sst_walk_min_ssts, "2");
+// Whether to fan out the per-fileset multi_get loop in LakePersistentIndex::get_from_sstables
+// across all filesets concurrently (parallel) or walk filesets sequentially in rbegin->rend
+// order with the set_difference shortcut (phased).
+//
+// Phased default (false) bounds concurrent OSS RPS during cold-start. When all filesets fan out
+// in parallel, a cold-start tablet generates F filesets x ~3 SSTs/fileset x 16 chunks/SST in flight
+// per publish; under correlated OSS-tail latency (iter-058: max 33.64 s, iter-059: max 31.79 s,
+// hedging at any threshold did not help), wall = max(t_i) is unbounded. Phased fan-out caps
+// concurrent in-flight reads to one fileset's worth (within-fileset SST and chunk parallelism
+// preserved), so wall = sum_{i} per_fileset_wall is bounded by ~F x chunk-wall p99 (~3 s typical).
+//
+// Trade-off: median steady-state wall increases by ~F * per_fileset_warm_p50 (~30 ms for F=6
+// when SST blocks are in disk cache), well within the per-batch P99 800 ms guardrail.
+CONF_mBool(enable_pk_index_parallel_fileset_fanout, "false");
 // Threadpool dedicated to LakePersistentIndex::_open_sstables_parallel. Each task does
 // 4 sequential OSS round-trips (footer + index + metaindex + filter blocks) inside
 // Table::Open, so it is purely I/O-bound. Splitting it off pk_index_execution_thread_pool

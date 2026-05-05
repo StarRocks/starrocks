@@ -394,7 +394,20 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     // refactor would skip real work — pindex_sstables_queried_cnt is cumulative across
     // chunk×fileset and double-counts the same sstable when revisited.
     std::unordered_set<const PersistentIndexSstable*> touched_sstables;
-    if (config::enable_pk_index_parallel_execution && _sstable_filesets.size() > 1) {
+    // Fileset-level parallelism (Level 1 of 3) is gated behind a separate knob
+    // `enable_pk_index_parallel_fileset_fanout` (default false = phased).
+    // Levels 2 and 3 (within-fileset SST and within-SST chunk parallelism) are
+    // unaffected and still apply through the sequential code path below.
+    //
+    // Why phased by default: iter-058/059 established that with all 3 levels parallel,
+    // a cold-start publish puts ~288 OSS reads in flight (F~6 filesets * ~3 SSTs * 16
+    // chunks). Under correlated OSS-tail latency (vdb at ESSD BW ceiling 656-693 MB/s),
+    // wall = max(t_i) saturates at the worst-case OSS p99 (33.64 s iter-058, 31.79 s
+    // iter-059); hedging at any threshold did not help. Phased fan-out caps concurrent
+    // reads to one fileset's worth (~3 SSTs * 16 chunks = 48 OSS reads), trading a
+    // bounded sequential sum (~F * 500 ms = 3 s) for the unbounded max-of-correlated.
+    if (config::enable_pk_index_parallel_execution && config::enable_pk_index_parallel_fileset_fanout &&
+        _sstable_filesets.size() > 1) {
         const size_t F = _sstable_filesets.size();
         std::vector<std::vector<IndexValue>> local_values(F, std::vector<IndexValue>(n));
         std::vector<KeyIndexSet> local_founds(F);
