@@ -304,6 +304,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of HDFS file descriptors that can be opened.
 - Introduced in: -
 
+### max_hdfs_scanner_num
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Maximum number of concurrent remote scanners (HDFS, object storage, etc.) that ConnectorScanNode can run simultaneously. This value caps estimated concurrency at startup and also limits pending-scanner scheduling at runtime, controlling thread, memory, and file-handle pressure.
+- Introduced in: v3.2.0
+
 ### max_memory_sink_batch_count
 
 - Default: 20
@@ -639,6 +648,15 @@ This topic introduces the following types of FE configurations:
 - Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
 - Introduced in: v3.5.10, v4.0.2
 
+### partial_update_memory_limit_per_worker
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum memory per worker thread for partial update operations. Controls the memory footprint of individual worker threads when processing partial updates.
+- Introduced in: -
+
 ### enable_load_spill_parallel_merge
 
 - Default: true
@@ -803,6 +821,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The RPC timeout for Stream Load.
 - Introduced in: -
 
+### transaction_publish_version_thread_pool_num_min
+
+- Default: 0
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Minimum number of threads in the Publish Version thread pool. The pool can shrink to this value when idle. `0` means no fixed lower bound.
+- Introduced in: -
+
 ### transaction_publish_version_thread_pool_idle_time_ms
 
 - Default: 60000
@@ -820,6 +847,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
+
+### use_mmap_allocate_chunk
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use anonymous mmap (`MAP_ANONYMOUS | MAP_PRIVATE`) for chunk allocation. When enabled, many VM mappings are created; you must raise `vm.max_map_count` (e.g., `echo 262144 > /proc/sys/vm/max_map_count`) and set a large `chunk_reserved_bytes_limit`, otherwise frequent map/unmap operations will cause severe performance degradation.
+- Introduced in: v3.2.0
 
 ### write_buffer_size
 

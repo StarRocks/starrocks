@@ -258,7 +258,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### json_flat_sparsity_factor
 
-- 默认值：0.9
+- 默认值：0.3
 - 类型：Double
 - 单位：
 - 是否动态：是
@@ -611,7 +611,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### partial_update_memory_limit_per_worker
 
-- 默认值：1073741824
+- 默认值：2147483648
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
@@ -793,7 +793,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0
 - 类型：Int
 - 单位：Threads
-- 是否动态：否
+- 是否动态：是
 - 描述：Publish Version 线程池的最小线程数，空闲时可收缩到该值。0 表示不设固定下限。
 - 引入版本：-
 
@@ -898,7 +898,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### streaming_load_thread_pool_idle_time_ms
 
-- 默认值：600000
+- 默认值：2000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -942,7 +942,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_diagnose_rpc_timeout_profile_threshold_ms
 
-- 默认值：30000
+- 默认值：60000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -951,7 +951,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_diagnose_send_rpc_timeout_ms
 
-- 默认值：10000
+- 默认值：2000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -969,7 +969,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_fp_tablets_channel_add_chunk_block_ms
 
-- 默认值：10000
+- 默认值：-1
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
