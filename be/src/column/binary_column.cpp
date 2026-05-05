@@ -518,7 +518,7 @@ bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* dat
         uint64_t offset = old_bytes_size;
 #ifdef __AVX2__
         if constexpr (std::is_same_v<DstValue, uint32_t>) {
-            if (new_bytes_size < std::numeric_limits<uint32_t>::max()) {
+            if (new_bytes_size <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
                 const size_t times = size / 8;
 
 #define FX(m) (m * fixed_length)

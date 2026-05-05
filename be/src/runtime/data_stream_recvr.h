@@ -174,7 +174,7 @@ private:
 
     // Return true if the addition of a new batch of size 'chunk_size' would exceed the
     // total buffer limit.
-    bool exceeds_limit(int chunk_size) { return _num_buffered_bytes + chunk_size > _total_buffer_limit; }
+    bool exceeds_limit(size_t chunk_size) { return _num_buffered_bytes + chunk_size > _total_buffer_limit; }
 
     // Return a metrics for current rpc in round-robin manner.
     Metrics& get_metrics_round_robin() { return _metrics[_rpc_round_roubin_index++ % _metrics.size()]; }
