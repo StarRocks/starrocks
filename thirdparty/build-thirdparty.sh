@@ -835,7 +835,6 @@ build_pulsar() {
 }
 
 # flatbuffers
-# flatbuffers
 build_flatbuffers() {
   check_if_source_exist $FLATBUFFERS_SOURCE
   cd $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE
@@ -843,10 +842,8 @@ build_flatbuffers() {
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
 
-  # INJECTED FIX: Added CXXFLAGS and CFLAGS to bypass GCC 12 strictness
-  CXXFLAGS="-Wno-stringop-overflow" CFLAGS="-Wno-stringop-overflow" LDFLAGS="-static-libstdc++ -static-libgcc" \
+  LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
-  
   ${BUILD_SYSTEM} -j$PARALLEL
   cp flatc  $TP_INSTALL_DIR/bin/flatc
   cp -r ../include/flatbuffers  $TP_INCLUDE_DIR/flatbuffers
