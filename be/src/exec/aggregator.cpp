@@ -1085,19 +1085,7 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     _current_chunk = chunk;
     _set_passthrough(chunk->owner_info().is_passthrough());
     _reset_exprs();
-    RETURN_IF_ERROR(_evaluate_group_by_exprs(chunk));
-    // The inline build_hash_map* path fuses agg-state update into hash-map build, so the
-    // agg input columns must be ready before build_hash_map* runs. Eagerly evaluate them here
-    // so any expression error is surfaced through this Status-returning entry point instead
-    // of being swallowed inside the void-returning build_hash_map* visitor.
-    if (_use_inline_agg_state) {
-        bool use_intermediate = _use_intermediate_as_input();
-        auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
-        }
-    }
-    return Status::OK();
+    return _evaluate_group_by_exprs(chunk);
 }
 
 Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
@@ -1684,9 +1672,11 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (MapType::supports_inline_state) {
             if (_use_inline_agg_state && _current_chunk != nullptr) {
-                // Agg input columns were eagerly evaluated in evaluate_groupby_exprs so any
-                // expression error is propagated by the caller before reaching this void path.
                 bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
@@ -1730,9 +1720,11 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (MapType::supports_inline_state) {
             if (_use_inline_agg_state && _current_chunk != nullptr) {
-                // Agg input columns were eagerly evaluated in evaluate_groupby_exprs so any
-                // expression error is propagated by the caller before reaching this void path.
                 bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
@@ -1763,9 +1755,11 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (MapType::supports_inline_state) {
             if (_use_inline_agg_state && _current_chunk != nullptr) {
-                // Agg input columns were eagerly evaluated in evaluate_groupby_exprs so any
-                // expression error is propagated by the caller before reaching this void path.
                 bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
@@ -1796,9 +1790,11 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (MapType::supports_inline_state) {
             if (_use_inline_agg_state && _current_chunk != nullptr) {
-                // Agg input columns were eagerly evaluated in evaluate_groupby_exprs so any
-                // expression error is propagated by the caller before reaching this void path.
                 bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
@@ -1837,9 +1833,11 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (MapType::supports_inline_state) {
             if (_use_inline_agg_state && _current_chunk != nullptr) {
-                // Agg input columns were eagerly evaluated in evaluate_groupby_exprs so any
-                // expression error is propagated by the caller before reaching this void path.
                 bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
