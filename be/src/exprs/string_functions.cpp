@@ -82,7 +82,14 @@ static const RE2 FIXED_LITERAL_RE(R"(^[^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+$)", re2::
     THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(VARNAME_LINENUM(res), func_name); \
     return VARNAME_LINENUM(res);
 
+// 16 MiB cap for speculative initial byte-buffer reservations in string functions.
+constexpr size_t STRING_FUNCTION_INITIAL_RESERVE_LIMIT = 16 << 20;
+// 16 MiB threshold for concat/concat_ws small-output fast paths.
 constexpr size_t CONCAT_SMALL_OPTIMIZE_THRESHOLD = 16 << 20;
+
+static inline size_t capped_string_function_initial_reserve(size_t size) {
+    return std::min(size, STRING_FUNCTION_INITIAL_RESERVE_LIMIT);
+}
 
 // ascii_substr_per_slice can compute substr directly via pointer arithmetics
 // if s is an ASCII string, so it is faster than its utf8 counterparts significantly.
@@ -470,7 +477,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
         if (INT_MAX / min_len > size) {
             reserved = std::min(min_len * size, reserved);
         }
-        bytes.reserve(reserved);
+        bytes.reserve(capped_string_function_initial_reserve(reserved));
     }
 
     offsets.make_room(size + 1, reserved);
@@ -520,7 +527,7 @@ ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, 
         reserved = std::min(reserved, size * len);
     }
 
-    bytes.reserve(reserved);
+    bytes.reserve(capped_string_function_initial_reserve(reserved));
     offsets.make_room(size + 1, reserved);
     offsets.set(0, 0);
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
@@ -712,7 +719,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
 
     const auto rows_num = columns[0]->size();
     NullableBinaryColumnBuilder result;
-    result.resize(rows_num, src->byte_size());
+    result.resize(rows_num, capped_string_function_initial_reserve(src->byte_size()));
 
     auto src_bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -736,7 +743,7 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
 
     auto src_bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
-    result.resize(rows_num, src->byte_size());
+    result.resize(rows_num, capped_string_function_initial_reserve(src->byte_size()));
 
     if (is_ascii) {
         ascii_right_not_const(rows_num, &str_viewer, &len_viewer, &result);
@@ -2400,9 +2407,10 @@ struct AdaptiveTrimFunction {
         auto& dst_bytes = dst->get_bytes();
 
         const auto num_rows = src->size();
-        dst_offsets.resize(num_rows + 1);
+        const auto src_bytes_size = src->get_immutable_bytes().size();
+        dst_offsets.make_room(num_rows + 1, src_bytes_size);
         dst_offsets.set(0, 0);
-        dst_bytes.reserve(src->get_immutable_bytes().size());
+        dst_bytes.reserve(capped_string_function_initial_reserve(src_bytes_size));
 
         size_t i = 0;
         const auto sample_num = std::min(num_rows, 100ul);
@@ -4155,7 +4163,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(StringFunction
         DCHECK(st == HS_SUCCESS || st == HS_SCAN_TERMINATED) << " status: " << st;
 
         std::string result_str;
-        result_str.reserve(value_size);
+        result_str.reserve(capped_string_function_initial_reserve(value_size));
 
         const char* start = str_viewer.value(row).data;
         size_t last_to = 0;
