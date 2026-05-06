@@ -270,7 +270,9 @@ public class StarRocksClient
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_CAT");
-                // skip internal schemas
+                if (schemaName == null) {
+                    continue;
+                }
                 if (filterSchema(schemaName)) {
                     schemaNames.add(schemaName);
                 }
@@ -285,6 +287,9 @@ public class StarRocksClient
     @Override
     protected boolean filterSchema(String schemaName)
     {
+        if (schemaName == null) {
+            return false;
+        }
         if (schemaName.equalsIgnoreCase("sys")) {
             return false;
         }
@@ -340,7 +345,8 @@ public class StarRocksClient
     protected String getTableSchemaName(ResultSet resultSet)
             throws SQLException
     {
-        return resultSet.getString("TABLE_CAT");
+        String schemaName = resultSet.getString("TABLE_CAT");
+        return schemaName == null ? "" : schemaName;
     }
 
     @Override
@@ -360,8 +366,11 @@ public class StarRocksClient
     @Override
     public Optional<ColumnMapping> toColumnMapping(ConnectorSession session, Connection connection, JdbcTypeHandle typeHandle)
     {
-        String jdbcTypeName = typeHandle.jdbcTypeName()
-                .orElseThrow(() -> new TrinoException(JDBC_ERROR, "Type name is missing: " + typeHandle));
+        // TYPE_NAME is optional per JDBC spec. When StarRocks metadata omits it we still
+        // have the numeric jdbcType code, which is enough to reach the Types.* switch
+        // below and yield a correct mapping. Failing hard here would turn a cosmetic
+        // metadata gap into "GENERIC_INTERNAL_ERROR: Type name is missing" for the user.
+        String jdbcTypeName = typeHandle.jdbcTypeName().orElse("");
 
         Optional<ColumnMapping> mapping = getForcedMappingToVarchar(typeHandle);
         if (mapping.isPresent()) {
@@ -465,7 +474,7 @@ public class StarRocksClient
                         starRocksDateWriteFunctionUsingLocalDate()));
 
             case Types.TIME:
-                TimeType timeType = createTimeType(getTimePrecision(typeHandle.requiredColumnSize()));
+                TimeType timeType = createTimeType(getTimePrecision(typeHandle.columnSize().orElse(ZERO_PRECISION_TIME_COLUMN_SIZE)));
                 requireNonNull(timeType, "timeType is null");
                 checkArgument(timeType.getPrecision() <= 9, "Unsupported type precision: %s", timeType);
                 return Optional.of(ColumnMapping.longMapping(
@@ -474,7 +483,7 @@ public class StarRocksClient
                         timeWriteFunction(timeType.getPrecision())));
 
             case Types.TIMESTAMP:
-                TimestampType timestampType = createTimestampType(getTimestampPrecision(typeHandle.requiredColumnSize()));
+                TimestampType timestampType = createTimestampType(getTimestampPrecision(typeHandle.columnSize().orElse(ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE)));
                 checkArgument(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION, "Precision is out of range: %s", timestampType.getPrecision());
                 return Optional.of(ColumnMapping.longMapping(
                         timestampType,
@@ -1001,7 +1010,18 @@ public class StarRocksClient
     {
         return ColumnMapping.sliceMapping(
                 jsonType,
-                (resultSet, columnIndex) -> jsonParse(utf8Slice(resultSet.getString(columnIndex))),
+                (resultSet, columnIndex) -> {
+                    String raw = resultSet.getString(columnIndex);
+                    if (raw == null || resultSet.wasNull()) {
+                        return null;
+                    }
+                    try {
+                        return jsonParse(utf8Slice(raw));
+                    }
+                    catch (RuntimeException e) {
+                        throw new TrinoException(JDBC_ERROR, "Invalid JSON value from StarRocks at column index " + columnIndex, e);
+                    }
+                },
                 varcharWriteFunction(),
                 DISABLE_PUSHDOWN);
     }
@@ -1011,7 +1031,8 @@ public class StarRocksClient
         try (java.sql.Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery("SHOW VARIABLES LIKE 'gtid_mode'")) {
             if (resultSet.next()) {
-                return !resultSet.getString("Value").equalsIgnoreCase("OFF");
+                String value = resultSet.getString("Value");
+                return value != null && !value.equalsIgnoreCase("OFF");
             }
 
             return false;
@@ -1063,14 +1084,18 @@ public class StarRocksClient
                     .map((rs, ctx) -> {
                         String columnName = rs.getString("COLUMN_NAME");
 
-                        boolean nullable = rs.getString("NULLABLE").equalsIgnoreCase("YES");
-                        checkState(!rs.wasNull(), "NULLABLE is null");
+                        String nullableValue = rs.getString("NULLABLE");
+                        boolean nullable = nullableValue == null || nullableValue.equalsIgnoreCase("YES");
 
                         long cardinality = rs.getLong("CARDINALITY");
-                        checkState(!rs.wasNull(), "CARDINALITY is null");
+                        if (rs.wasNull()) {
+                            cardinality = 0L;
+                        }
 
                         return new SimpleEntry<>(columnName, new ColumnIndexStatistics(nullable, cardinality));
                     })
+                    .stream()
+                    .filter(entry -> entry.getKey() != null)
                     .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
         }
 
@@ -1093,6 +1118,8 @@ public class StarRocksClient
                     .bind("schema", remoteTableName.getCatalogName().orElse(null))
                     .bind("table_name", remoteTableName.getTableName())
                     .map((rs, ctx) -> new SimpleEntry<>(rs.getString("COLUMN_NAME"), rs.getString("HISTOGRAM")))
+                    .stream()
+                    .filter(entry -> entry.getKey() != null && entry.getValue() != null)
                     .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
         }
     }
@@ -1206,6 +1233,16 @@ public class StarRocksClient
                 }
                 allColumns++;
                 String columnName = resultSet.getString("COLUMN_NAME");
+                if (columnName == null) {
+                    log.debug("Skipping column with null COLUMN_NAME for %s", schemaTableName);
+                    continue;
+                }
+                Optional<Integer> dataTypeOpt = getInteger(resultSet, "DATA_TYPE");
+                if (dataTypeOpt.isEmpty()) {
+                    log.debug("Skipping column '%s' with null DATA_TYPE for %s", columnName, schemaTableName);
+                    continue;
+                }
+                int dataType = dataTypeOpt.get();
                 // StarRocks may report null or non-positive COLUMN_SIZE for certain types
                 // (STRING, JSON, LARGEINT, unbounded VARCHAR, etc.). Treat any non-positive
                 // value the same as absent to avoid "Invalid VARCHAR length -1" /
@@ -1215,7 +1252,6 @@ public class StarRocksClient
                 Optional<Integer> columnSize = getInteger(resultSet, "COLUMN_SIZE")
                         .filter(size -> size > 0);
                 if (columnSize.isEmpty()) {
-                    int dataType = getInteger(resultSet, "DATA_TYPE").orElse(Types.VARCHAR);
                     columnSize = switch (dataType) {
                         case Types.CHAR -> Optional.of(255);
                         case Types.TIME -> Optional.of(ZERO_PRECISION_TIME_COLUMN_SIZE);
@@ -1237,7 +1273,7 @@ public class StarRocksClient
                 Optional<Integer> decimalDigits = getInteger(resultSet, "DECIMAL_DIGITS")
                         .filter(digits -> digits >= 0);
                 JdbcTypeHandle typeHandle = new JdbcTypeHandle(
-                        getInteger(resultSet, "DATA_TYPE").orElseThrow(() -> new IllegalStateException("DATA_TYPE is null")),
+                        dataType,
                         Optional.ofNullable(resultSet.getString("TYPE_NAME")),
                         columnSize,
                         decimalDigits,
@@ -1280,10 +1316,11 @@ public class StarRocksClient
     private static RemoteTableName getRemoteTable(ResultSet resultSet)
             throws SQLException
     {
+        String tableName = resultSet.getString("TABLE_NAME");
         return new RemoteTableName(
                 Optional.ofNullable(resultSet.getString("TABLE_CAT")),
                 Optional.ofNullable(resultSet.getString("TABLE_SCHEM")),
-                resultSet.getString("TABLE_NAME"));
+                tableName == null ? "" : tableName);
     }
 
     private Boolean isPkTable(Connection connection, String schemaName, String tableName)
@@ -1291,7 +1328,7 @@ public class StarRocksClient
         try (java.sql.Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery(String.format("SELECT TABLE_MODEL FROM information_schema.tables_config WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", schemaName, tableName))) {
             if (resultSet.next()) {
-                return resultSet.getString("TABLE_MODEL").equalsIgnoreCase(TABLE_MODEL_PRIMARY_KEYS);
+                return TABLE_MODEL_PRIMARY_KEYS.equalsIgnoreCase(resultSet.getString("TABLE_MODEL"));
             }
 
             return false;
