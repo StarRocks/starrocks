@@ -742,11 +742,17 @@ public class TabletScheduler extends LeaderDaemon {
         }
 
         Pair<TabletHealthStatus, TabletSchedCtx.Priority> statusPair;
+        // Intensive path: IS on DB + READ on this one table. The whole critical
+        // section operates on a single tablet of one known table; we never iterate
+        // db.getTables() here. ALTER on this table still takes IX + table WRITE,
+        // which conflicts with our table READ, so the existing checks for
+        // OlapTableState.NORMAL / WAITING_STABLE remain race-free.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long lockTblId = tabletCtx.getTblId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), lockTblId, LockType.READ);
         try {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState()
-                    .getLocalMetastore().getTableIncludeRecycleBin(db, tabletCtx.getTblId());
+                    .getLocalMetastore().getTableIncludeRecycleBin(db, lockTblId);
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
@@ -877,7 +883,7 @@ public class TabletScheduler extends LeaderDaemon {
                         tabletCtx.getTablet().getReplicaInfos());
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), lockTblId, LockType.READ);
         }
 
         handleTabletByTypeAndStatus(statusPair.first, tabletCtx, batchTask);
@@ -1119,9 +1125,11 @@ public class TabletScheduler extends LeaderDaemon {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
+        // Lock acquisition is outside the try so the finally cannot try to unlock
+        // a never-acquired lock if lockTableWithIntensiveDbLock itself throws.
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         try {
-            locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1360,9 +1368,11 @@ public class TabletScheduler extends LeaderDaemon {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
+        // Lock acquisition is outside the try so the finally cannot try to unlock
+        // a never-acquired lock if lockTableWithIntensiveDbLock itself throws.
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         try {
-            locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
@@ -1582,14 +1592,11 @@ public class TabletScheduler extends LeaderDaemon {
                 continue;
             }
 
-            Table tbl;
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
+            // Lock-free: db.getTable hits Database.idToTable which is a
+            // ConcurrentHashMap, so the get is thread-safe on its own. The result
+            // is only used for an instanceof OlapTable check below; a stale or
+            // null reference is acceptable.
+            Table tbl = db.getTable(tableId);
 
             if (!(tbl instanceof OlapTable)) {
                 newAlternativeTablets.add(schedCtx);
@@ -2094,15 +2101,37 @@ public class TabletScheduler extends LeaderDaemon {
                 continue;
             }
 
+            // Snapshot the table list under IS. getTablesIncludeRecycleBin reads
+            // db.getTables() and then recycleBin.getTables() in two separate steps;
+            // without a lock, a concurrent DROP TABLE (which moves a table from
+            // idToTable to recycleBin under DB WRITE) can interleave with these
+            // two reads and produce a list that contains the table twice (in both
+            // halves) or zero times (during the drop's transient gap). IS conflicts
+            // with DB WRITE so the pair becomes atomic with respect to drops, while
+            // still letting concurrent IX writers on other tables proceed.
+            List<Table> tables;
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.INTENTION_SHARED);
             try {
-                for (Table table : localMetastore.getTablesIncludeRecycleBin(db)) {
-                    if (!table.isOlapTableOrMaterializedView()) {
-                        continue;
-                    }
+                tables = localMetastore.getTablesIncludeRecycleBin(db);
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.INTENTION_SHARED);
+            }
 
-                    OlapTable olapTbl = (OlapTable) table;
+            for (Table table : tables) {
+                if (!table.isOlapTableOrMaterializedView()) {
+                    continue;
+                }
+                OlapTable olapTbl = (OlapTable) table;
+
+                // Per-table READ for the partition / index walk: blocks concurrent
+                // ALTER (IX + table WRITE) on this specific table while letting
+                // unrelated tables in the same DB be ALTERed in parallel. The
+                // state re-check below happens under this lock since pre-filter
+                // would have read state without any lock.
+                long tableId = olapTbl.getId();
+                locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                try {
                     // Table not in NORMAL state is not allowed to do balance,
                     // because the change of tablet location can cause Schema change or rollup failed
                     if (olapTbl.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -2133,9 +2162,9 @@ public class TabletScheduler extends LeaderDaemon {
                             }
                         }
                     }
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
     }
