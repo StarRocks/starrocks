@@ -1489,4 +1489,52 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
             sql(query).contains("mv0");
         });
     }
+
+    @Test
+    public void testAggPushDown_ValidMv_QueryPredicateCovered() {
+        // MV has WHERE lo_linenumber = 1 AND lo_custkey = 100 (predicate columns: {lo_linenumber, lo_custkey}).
+        // Query only has WHERE lo_linenumber = 1 (predicate columns: {lo_linenumber}).
+        // MV predicate columns ⊄ query predicate columns → MV data is over-filtered
+        // relative to query → must be pruned.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select lo_orderdate, lo_linenumber, lo_custkey, sum(lo_revenue) as revenue_sum " +
+                "from lineorder where lo_linenumber = 1 and lo_custkey = 100 " +
+                "group by lo_orderdate, lo_linenumber, lo_custkey";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on l.lo_orderdate = d.d_datekey " +
+                    "where l.lo_linenumber = 1 and l.lo_custkey = 100 " +
+                    "group by l.lo_orderdate";
+            sql(query).match("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_QueryJoinOnPredicateCovered() {
+        // MV has WHERE lo_linenumber = 1 (predicate columns: {lo_linenumber}).
+        // Query has JOIN ON ... AND l.lo_linenumber = 1 (predicate columns: {lo_linenumber}).
+        // Query predicate columns ⊇ MV predicate columns → MV is valid and should be used.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select lo_orderdate, lo_linenumber, lo_custkey, sum(lo_revenue) as revenue_sum " +
+                "from lineorder where lo_linenumber = 1 " +
+                "group by lo_orderdate, lo_linenumber, lo_custkey";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on l.lo_orderdate = d.d_datekey " +
+                    "and l.lo_linenumber = 1 " +
+                    "group by l.lo_orderdate";
+            // FixMe: expect a MATCH, but currently, the materialized view rewrite system can't match join predicate
+            // to mv predicate even when there is no mv prune happens
+             sql(query).nonMatch("mv0");
+        });
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on concat(l.lo_orderdate,'a') = concat(d.d_datekey,'b') " +
+                    "and concat(l.lo_linenumber,'1') = concat(1,'2',3) " +
+                    "group by l.lo_orderdate";
+            // FixMe: expect a MATCH, but currently, the materialized view rewrite system can't match join predicate
+            // to mv predicate even when there is no mv prune happens
+            sql(query).nonMatch("mv0");
+        });
+    }
 }

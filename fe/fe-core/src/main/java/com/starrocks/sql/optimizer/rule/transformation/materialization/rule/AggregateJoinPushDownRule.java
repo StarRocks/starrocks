@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.api.client.util.Lists;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -32,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -262,7 +264,8 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
                 (Predicate<Column>) c -> mvUsedColNames.contains(c.getName()));
     }
 
-    private boolean validMvGroupByAndPredicateColumns(MaterializationContext mvContext,
+    @VisibleForTesting
+    boolean validMvGroupByAndPredicateColumns(MaterializationContext mvContext,
                                                       Set<String> queryGroupByAndPredicateColumns,
                                                       Set<String> queryPredicateColumns) {
         Set<String> mvPredicateColumns = mvContext.getPredicateColumns();
@@ -372,11 +375,13 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     /**
      * DFS over the expression tree collecting physical columns referenced in each Scan's predicate,
      * grouped by table id into {@code predicateColumnsByTable}.
+     * Also collects columns from JOIN ON predicates (e.g. {@code a JOIN b ON a.col = 1}),
+     * resolving them to their source scan tables.
      * Nested Agg subtrees are skipped to exclude Agg->Agg->...->Scan paths.
      */
-    private static void collectPredicateColumnsByTable(OptExpression node, Map<Table, Set<String>> predicateColumnsByTable) {
-        if (node.getOp() instanceof LogicalScanOperator) {
-            LogicalScanOperator scan = (LogicalScanOperator) node.getOp();
+    @VisibleForTesting
+    static void collectPredicateColumnsByTable(OptExpression node, Map<Table, Set<String>> predicateColumnsByTable) {
+        if (node.getOp() instanceof LogicalScanOperator scan) {
             if (scan.getPredicate() != null) {
                 Table table = scan.getTable();
                 Map<ColumnRefOperator, Column> refToCol = scan.getColRefToColumnMetaMap();
@@ -389,11 +394,54 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
             }
             return;
         }
+        // Collect columns referenced in JOIN ON filter predicates (e.g. ON a.id = b.id AND a.col = 1).
+        if (node.getOp() instanceof LogicalJoinOperator join && join.getOnPredicate() != null) {
+            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
+            buildSPJFullColumnsToTableColumns(node, colRefToTableColumns);
+            collectJoinOnPredicateColumnsByTable(join.getOnPredicate(), colRefToTableColumns, predicateColumnsByTable);
+        }
         for (OptExpression child : node.getInputs()) {
             if (child.getOp() instanceof LogicalAggregationOperator) {
                 continue;
             }
             collectPredicateColumnsByTable(child, predicateColumnsByTable);
+        }
+    }
+
+    /**
+     * Extracts filter predicate columns from a JOIN ON expression into {@code predicateColumnsByTable}.
+     *
+     * The ON expression is split into atomic conjuncts. A conjunct is treated as a filter predicate
+     * (rather than an equi-join condition) only when at least one of its direct children is a pure
+     * constant expression (i.e. {@link ScalarOperator#isConstant()} returns true, covering literals,
+     * constant functions like {@code concat(1,'2',3)}, etc.). Since constant children contribute no
+     * column refs, {@code clause.getUsedColumns()} is equivalent to collecting only non-constant children.
+     *
+     * Examples:
+     * <ul>
+     *   <li>{@code a.id = b.id}                              → skipped (both sides reference columns)</li>
+     *   <li>{@code concat(a.col,'x') = concat(b.id,'2',3)}   → skipped (both sides reference columns)</li>
+     *   <li>{@code a.col = 1}                                → col from a added</li>
+     *   <li>{@code concat(a.col,'x') = concat(1,'2',3)}      → col from a added</li>
+     * </ul>
+     */
+    private static void collectJoinOnPredicateColumnsByTable(ScalarOperator onPredicate,
+                                                             Map<Integer, List<Pair<Table, String>>> colRefToTableColumns,
+                                                             Map<Table, Set<String>> predicateColumnsByTable) {
+        for (ScalarOperator clause : Utils.extractConjuncts(onPredicate)) {
+            // Skip conjuncts where no direct child is a pure constant (e.g. col_a = col_b equi-joins).
+            boolean hasConstantChild = clause.getChildren().stream().anyMatch(ScalarOperator::isConstant);
+            if (!hasConstantChild) {
+                continue;
+            }
+            clause.getUsedColumns().getStream().forEach(colId -> {
+                List<Pair<Table, String>> resolved =
+                        colRefToTableColumns.getOrDefault(colId, Collections.emptyList());
+                for (Pair<Table, String> tableColumn : resolved) {
+                    predicateColumnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>())
+                            .add(tableColumn.second);
+                }
+            });
         }
     }
 
