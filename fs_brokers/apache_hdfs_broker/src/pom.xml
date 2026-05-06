@@ -53,6 +53,7 @@ under the License.
         <jetty.version>9.4.58.v20250814</jetty.version>
         <io.netty.version>4.1.132.Final</io.netty.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
     </properties>
 
     <profiles>
@@ -110,6 +111,22 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
             <dependency>
                 <groupId>commons-cli</groupId>
