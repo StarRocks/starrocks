@@ -599,6 +599,13 @@ public:
     DEFINE_VECTORIZED_FN(sm3);
 
     /**
+     * @param: [VARCHAR]
+     * @return: StringColumn
+     * Get the hexadecimal representation of BLAKE3 hash value
+     */
+    DEFINE_VECTORIZED_FN(blake3);
+
+    /**
      * Compare two strings. Returns 0 if lhs and rhs compare equal,
      * -1 if lhs appears before rhs in lexicographical order,
      * 1 if lhs appears after rhs in lexicographical order.
