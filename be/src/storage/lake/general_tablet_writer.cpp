@@ -279,8 +279,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
         RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
                                                      _fs.get(), opts));
     }
-    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
-                                                 _fs.get(), opts));
+
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);

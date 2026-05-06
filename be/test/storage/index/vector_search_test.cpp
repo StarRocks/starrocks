@@ -88,7 +88,6 @@ protected:
     }
 
     void append_test_data(VectorIndexWriter* vector_index_writer) {
-        // construct columns
         auto element = FixedLengthColumn<float>::create();
         element->append(1);
         element->append(2);
@@ -108,12 +107,11 @@ protected:
         }
 
         auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
-
         CHECK_OK(vector_index_writer->append(*array_column));
-
         ASSERT_EQ(vector_index_writer->size(), 11);
     }
 
+    // Threshold met: a real .vi file lands at `path`.
     void write_vector_index(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
         DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
 
@@ -129,6 +127,7 @@ protected:
         ASSERT_GT(size, 0);
     }
 
+    // Threshold not met: finish() short-circuits and no .vi file is produced.
     void write_vector_index_below_threshold(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
         std::unique_ptr<VectorIndexWriter> vector_index_writer;
         VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
@@ -139,7 +138,6 @@ protected:
         uint64_t size = 0;
         CHECK_OK(vector_index_writer->finish(&size));
 
-        // Below threshold: no file generated, size is 0
         ASSERT_EQ(size, 0);
         ASSERT_FALSE(fs::path_exist(path));
     }
@@ -151,6 +149,10 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
     tablet_index->add_common_properties("dim", "3");
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
+    // Force the writer to build the index immediately rather than wait for the
+    // default (config_vector_index_default_build_threshold) row count. Without
+    // this the 11 rows below would fall under the threshold and finish() would
+    // short-circuit without producing a file the search test below depends on.
     tablet_index->add_common_properties("index_build_threshold", "0");
     tablet_index->add_index_properties("efconstruction", "40");
     tablet_index->add_index_properties("m", "16");
@@ -198,6 +200,10 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
 #endif
 }
 
+// IVFPQ + threshold not met: VectorIndexWriter::finish() short-circuits and no .vi
+// file is produced. Reader-side, VectorIndexReaderFactory::create_from_file surfaces
+// the missing file as NotFound; the segment_iterator brute-force fallback (added by
+// the read PR) handles that case at scan time.
 TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
     config::config_vector_index_default_build_threshold = 100;
     auto tablet_index = prepare_tablet_index();
@@ -973,7 +979,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     // Set vector_range = 3.0: only rows with L2 distance <= 3.0 should pass
     // Row 1 (dist=2): pass, Row 2 (dist=3): pass, Row 3 (dist=0): pass, Row 4 (dist=48): filtered
     vector_search_opt->vector_range = 3.0;
-    vector_search_opt->result_order = 1; // ascending (L2: keep dist <= range)
+    vector_search_opt->result_order = 0; // 0 = ASC, 1 = DESC (L2 ASC: keep dist <= range)
     vector_search_opt->pq_refine_factor = 1.0;
 
     seg_opts.use_vector_index = true;

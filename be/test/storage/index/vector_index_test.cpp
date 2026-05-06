@@ -64,8 +64,9 @@ protected:
         return tablet_index;
     }
 
+    // Drives 11 rows through the writer. Caller picks expectations based on whether
+    // they configured the index to land above or below the build threshold.
     void append_test_data(VectorIndexWriter* vector_index_writer) {
-        // construct columns
         auto element = FixedLengthColumn<float>::create();
         element->append(1);
         element->append(2);
@@ -85,12 +86,11 @@ protected:
         }
 
         auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
-
         CHECK_OK(vector_index_writer->append(*array_column));
-
         ASSERT_EQ(vector_index_writer->size(), 11);
     }
 
+    // Threshold met: a real .vi file (or stub mark_word under WITH_TENANN=OFF) is produced.
     void write_vector_index(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
         DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
 
@@ -106,6 +106,8 @@ protected:
         ASSERT_GT(size, 0);
     }
 
+    // Threshold not met: finish() short-circuits without writing a file. Readers
+    // surface the missing file as NotFound and fall back to brute-force scan.
     void write_vector_index_below_threshold(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
         std::unique_ptr<VectorIndexWriter> vector_index_writer;
         VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
@@ -116,9 +118,17 @@ protected:
         uint64_t size = 0;
         CHECK_OK(vector_index_writer->finish(&size));
 
-        // Below threshold: no file generated, size is 0
         ASSERT_EQ(size, 0);
         ASSERT_FALSE(fs::path_exist(path));
+    }
+
+    void check_empty(const std::string& index_path) {
+        auto res = _fs->new_random_access_file(index_path);
+        CHECK_OK(res);
+        const auto& index_file = res.value();
+        auto data_res = index_file->read_all();
+        CHECK_OK(data_res);
+        ASSERT_EQ(data_res.value(), IndexDescriptor::mark_word);
     }
 };
 
@@ -128,6 +138,10 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
     tablet_index->add_common_properties("dim", "3");
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
+    // Force the writer to build the index immediately rather than wait for the
+    // default (config_vector_index_default_build_threshold) row count. Without
+    // this the 11 rows below would fall under the threshold and finish() would
+    // short-circuit without producing a file.
     tablet_index->add_common_properties("index_build_threshold", "0");
     tablet_index->add_index_properties("efconstruction", "40");
     tablet_index->add_index_properties("m", "16");
@@ -155,6 +169,10 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
 #endif
 }
 
+// IVFPQ + threshold not met: finish() short-circuits and no .vi file is created.
+// Readers surface the missing file as NotFound (handled by the brute-force fallback
+// in segment_iterator); vacuum sees no vector_index_id recorded in segment_meta and
+// has nothing to delete.
 TEST_F(VectorIndexWriterTest, testwrite_with_empty_mark) {
     config::config_vector_index_default_build_threshold = 100;
     auto tablet_index = prepare_tablet_index();

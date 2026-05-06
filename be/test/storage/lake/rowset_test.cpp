@@ -1465,4 +1465,86 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_no_vi_files) {
     EXPECT_TRUE(files_to_delete[0].find("seg_no_vi.dat") != std::string::npos);
 }
 
+// Test: collect_files_in_log honours the `i < segment_metas_size()` defensive
+// guard when segment_metas is partially populated. This can happen during
+// rolling upgrade or for rowsets that pre-date precise-vacuum tracking — the
+// loop must not walk past the end of the segment_metas array.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->mutable_rowset()->add_segments("seg_a.dat");
+    op_write->mutable_rowset()->add_segments("seg_b.dat");
+    op_write->mutable_rowset()->add_segments("seg_c.dat");
+
+    // Only seg_a has segment_metas; seg_b and seg_c do not (e.g., pre-VI rowset).
+    auto* meta_a = op_write->mutable_rowset()->add_segment_metas();
+    meta_a->add_vector_index_ids(100);
+    meta_a->add_vector_index_ids(200);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 3 segments + 2 vi files (only seg_a has VI tracking) = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("seg_a.dat"));
+    EXPECT_TRUE(contains("seg_b.dat"));
+    EXPECT_TRUE(contains("seg_c.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 200)));
+    // No phantom .vi entries fabricated for seg_b / seg_c which lack metas.
+    EXPECT_FALSE(contains("seg_b.dat_"));
+    EXPECT_FALSE(contains("seg_c.dat_"));
+}
+
+// Test: collect_files_in_log for op_compaction with new_segment_offset / count
+// pointing past the segment_metas array. The combined `idx < segments.size()
+// && cnt < new_segment_count && idx < segment_metas_size()` guard must not crash
+// or fabricate VI filenames for indices without a corresponding segment_meta.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    output_rowset->add_segments("reused.dat");
+    output_rowset->add_segments("new_a.dat");
+    output_rowset->add_segments("new_b.dat");
+    op_compaction->set_new_segment_offset(1);
+    op_compaction->set_new_segment_count(2);
+
+    // Only one segment_meta entry — covers reused.dat. new_a.dat and new_b.dat
+    // do not have segment_metas. The op_compaction loop iterates idx=1 (new_a)
+    // and idx=2 (new_b), both past the metas array — no .vi filenames should
+    // be emitted for either.
+    auto* meta_reused = output_rowset->add_segment_metas();
+    meta_reused->add_vector_index_ids(100);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Only the two new segments (reused is not part of new_segment_count window).
+    // No .vi entries since the new segments don't have segment_metas.
+    EXPECT_EQ(files_to_delete.size(), 2);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("new_a.dat"));
+    EXPECT_TRUE(contains("new_b.dat"));
+    EXPECT_FALSE(contains("reused.dat"));
+    // The one segment_meta entry sits at index 0; the new-segment window starts
+    // at idx=1 and never reads segment_metas(0), so no spurious .vi paths.
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", 100)));
+}
+
 } // namespace starrocks::lake

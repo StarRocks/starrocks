@@ -47,15 +47,17 @@ void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
 }
 
 Status VectorIndexWriter::init() {
-    // Step 1: enforce minimum threshold by algorithm type
-    // IVFPQ requires training points >= nlist. If data is below this,
-    // faiss will throw an error, so we enforce a minimum threshold to skip the build.
+    // Step 1: enforce minimum threshold by algorithm type.
+    // IVFPQ requires training points >= nlist. If the input is below this,
+    // faiss will throw, so we floor the threshold at nlist to skip the build
+    // rather than crash. Other algorithms (HNSW etc.) keep the default
+    // threshold from config so callers that want "build immediately" must
+    // explicitly request it via index_build_threshold below.
     auto index_type_it = _tablet_index->common_properties().find("index_type");
     if (index_type_it != _tablet_index->common_properties().end()) {
         std::string index_type = index_type_it->second;
         std::transform(index_type.begin(), index_type.end(), index_type.begin(), ::tolower);
         if (index_type == "ivfpq") {
-            // faiss requires training points >= nlist, read from user-specified index properties
             auto nlist_it = _tablet_index->index_properties().find("nlist");
             if (nlist_it != _tablet_index->index_properties().end()) {
                 auto nlist = static_cast<uint32_t>(std::atoi(nlist_it->second.c_str()));
@@ -64,7 +66,7 @@ Status VectorIndexWriter::init() {
         }
     }
 
-    // Step 2: user-specified property has final control over threshold
+    // Step 2: user-specified property has final control over threshold.
     auto find_result = _tablet_index->common_properties().find("index_build_threshold");
     if (find_result != _tablet_index->common_properties().end()) {
         _start_vector_index_build_threshold = std::atoi(find_result->second.c_str());
@@ -131,7 +133,11 @@ Status VectorIndexWriter::finish(uint64_t* index_size) {
             }
 #endif
         } else {
-            // threshold not reached, skip file generation entirely
+            // Threshold not met: skip file generation entirely. Readers fall back
+            // to brute-force scan via NotFound; vacuum won't see any vector_index_id
+            // recorded in segment_meta because has_vector_index_written() stays
+            // false (standalone_index_size remained 0), so no phantom .vi paths
+            // are advertised downstream.
             return Status::OK();
         }
         if (index_size) {
