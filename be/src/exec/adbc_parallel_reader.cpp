@@ -220,9 +220,4 @@ void ADBCParallelReader::close() {
     _threads.clear();
 }
 
-void ADBCParallelReader::_reader_thread(const uint8_t* /*partition_data*/, size_t /*partition_length*/) {
-    // Not used directly -- parallel reading is implemented via lambdas in start().
-    // Kept for interface compatibility.
-}
-
 } // namespace starrocks

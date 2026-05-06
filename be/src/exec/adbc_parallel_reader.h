@@ -74,8 +74,6 @@ public:
     void close();
 
 private:
-    void _reader_thread(const uint8_t* partition_data, size_t partition_length);
-
     AdbcDatabase* _database; // borrowed, not owned
     // Owned copies of partition bytes — the caller frees the source AdbcPartitions
     // immediately after start() returns, but reader threads need the bytes alive
