@@ -247,6 +247,12 @@ public class AwsCloudCredential implements CloudCredential {
             } else {
                 configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, IAM_CREDENTIAL_PROVIDER);
             }
+        } else if (useWebIdentityProfile) {
+            if (!iamRoleArn.isEmpty()) {
+                applyAssumeRole(DEFAULT_CREDENTIAL_PROVIDER, configuration);
+            } else {
+                configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, DEFAULT_CREDENTIAL_PROVIDER);
+            }
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             configuration.set(Constants.ACCESS_KEY, accessKey);
             configuration.set(Constants.SECRET_KEY, secretKey);
@@ -315,6 +321,7 @@ public class AwsCloudCredential implements CloudCredential {
         return "AWSCloudCredential{" +
                 "useAWSSDKDefaultBehavior=" + useAWSSDKDefaultBehavior +
                 ", useInstanceProfile=" + useInstanceProfile +
+                ", useWebIdentityProfile=" + useWebIdentityProfile +
                 ", accessKey='" + accessKey + '\'' +
                 ", secretKey='" + secretKey + '\'' +
                 ", sessionToken='" + sessionToken + '\'' +
@@ -348,6 +355,8 @@ public class AwsCloudCredential implements CloudCredential {
             } else {
                 awsCredentialInfo.setProfileCredential(AwsInstanceProfileCredentialInfo.newBuilder().build());
             }
+        } else if (useWebIdentityProfile) {
+            awsCredentialInfo.setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build());
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             // TODO: Support assumeRole with AK/SK
             // TODO: Support sessionToken with AK/SK
