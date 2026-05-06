@@ -418,7 +418,7 @@ public class InsertOverwriteJobRunner {
      * CTE relations, ORDER BY, aggregate, ViewRelation, JoinRelation.onPredicate,
      * and Expr-level Subquery nodes.
      */
-    private void clearLambdaArgumentTransformedOps(InsertStmt stmt) {
+    public void clearLambdaArgumentTransformedOps(InsertStmt stmt) {
         new AstTraverser<Void, Void>() {
             @Override
             public Void visitLambdaArguments(LambdaArgument node, Void context) {
