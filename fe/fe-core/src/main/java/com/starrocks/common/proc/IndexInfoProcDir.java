@@ -77,7 +77,8 @@ public class IndexInfoProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
@@ -116,7 +117,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 
@@ -137,8 +138,13 @@ public class IndexInfoProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index meta id format: " + idxMetaIdStr);
         }
 
+        // Take per-table READ: getSchemaByIndexMetaId reads OlapTable.indexMetaIdToMeta
+        // which is a plain HashMap, so a concurrent ALTER (IX + table WRITE) can race
+        // with this get and produce undefined behavior. The lock pins the table while
+        // we resolve the schema reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
@@ -158,7 +164,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
             }
             return node;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 
