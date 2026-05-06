@@ -20,7 +20,7 @@
 #include "gen_cpp/lake_service.pb.h"
 #endif
 #include "base/failpoint/fail_point.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
@@ -43,7 +43,7 @@ std::mutex& singleton_cache_mutex() {
 
 BrpcStubCache::BrpcStubCache(pipeline::PipelineTimer* pipeline_timer) : _pipeline_timer(pipeline_timer) {
     _stub_map.init(239);
-    REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
+    REGISTER_GAUGE_RUNTIME_METRIC(brpc_endpoint_stub_count, [this]() {
         std::lock_guard<SpinLock> l(_lock);
         return _stub_map.size();
     });

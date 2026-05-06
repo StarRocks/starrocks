@@ -69,6 +69,7 @@
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/starrocks_metrics.h"
 #include "runtime/user_function_cache.h"
 #include "service/backend_metrics_initializer.h"
@@ -131,7 +132,7 @@ void calculate_metrics(void* arg_this) {
             lst_query_bytes = current_query_bytes;
 
             // 3. max disk io util.
-            StarRocksMetrics::instance()->max_disk_io_util_percent.set_value(
+            RuntimeMetrics::instance()->max_disk_io_util_percent.set_value(
                     SystemMetrics::instance()->get_max_io_util(lst_disks_io_time, 15));
             // Update lst map.
             SystemMetrics::instance()->get_disks_io_time(&lst_disks_io_time);
@@ -141,8 +142,8 @@ void calculate_metrics(void* arg_this) {
             int64_t max_receive = 0;
             SystemMetrics::instance()->get_max_net_traffic(lst_net_send_bytes, lst_net_receive_bytes, 15, &max_send,
                                                            &max_receive);
-            StarRocksMetrics::instance()->max_network_send_bytes_rate.set_value(max_send);
-            StarRocksMetrics::instance()->max_network_receive_bytes_rate.set_value(max_receive);
+            RuntimeMetrics::instance()->max_network_send_bytes_rate.set_value(max_send);
+            RuntimeMetrics::instance()->max_network_receive_bytes_rate.set_value(max_receive);
             // update lst map
             SystemMetrics::instance()->get_network_traffic(&lst_net_send_bytes, &lst_net_receive_bytes);
         }

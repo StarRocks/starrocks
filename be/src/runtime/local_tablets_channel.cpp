@@ -44,7 +44,7 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
@@ -76,7 +76,7 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
-        REGISTER_GAUGE_STARROCKS_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });
+        REGISTER_GAUGE_RUNTIME_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });
     });
 
     _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
@@ -512,10 +512,10 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
     auto wait_replica_ns = finish_wait_replica_ts - finish_wait_writer_ts;
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
             wait_memtable_flush_time_us);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
     size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
