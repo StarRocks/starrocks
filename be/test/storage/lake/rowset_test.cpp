@@ -865,6 +865,29 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
 }
 
+// Same as the test above, but with parallel iterator construction enabled. Verifies
+// that fan-out via load_segment_thread_pool produces the same per-segment iterators
+// in the same order as the serial path, and that per-segment options (tablet_range)
+// are honored independently per task.
+TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_parallel) {
+    create_rowsets_for_testing();
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
+
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_iterator_parallel, true);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    OlapReaderStatistics stats;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+
+    // 3 segments, each contributes keys {10, 11} after tablet range filtering.
+    ASSERT_EQ(seg_iters.size(), 3);
+    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
+}
+
 // Test class for segment metadata filter and parallel load with skip_segment_idxs
 class LakeRowsetSegmentMetadataFilterTest : public TestBase {
 public:

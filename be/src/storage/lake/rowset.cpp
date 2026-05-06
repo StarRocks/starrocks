@@ -488,37 +488,95 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-    std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
-    SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
-    seg_options.stats = stats;
-    seg_options.lake_io_opts.fs = seg_options.fs;
-    seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
-    seg_options.is_primary_keys = true;
-    seg_options.delvec_loader =
-            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts);
-    seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
-    seg_options.version = version;
-    seg_options.tablet_id = tablet_id();
-    seg_options.rowset_id = metadata().id();
+    SegmentReadOptions seg_options_template;
+    ASSIGN_OR_RETURN(seg_options_template.fs, FileSystemFactory::CreateSharedFromString(root_loc));
+    seg_options_template.stats = stats;
+    seg_options_template.lake_io_opts.fs = seg_options_template.fs;
+    seg_options_template.lake_io_opts.location_provider = _tablet_mgr->location_provider();
+    seg_options_template.is_primary_keys = true;
+    seg_options_template.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
+                                                                            seg_options_template.lake_io_opts);
+    seg_options_template.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
+    seg_options_template.version = version;
+    seg_options_template.tablet_id = tablet_id();
+    seg_options_template.rowset_id = metadata().id();
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
-    for (int i = 0; i < segments.size(); i++) {
-        auto& seg_ptr = segments[i];
-        seg_options.tablet_range = std::nullopt;
+    auto build_per_segment_options = [&](int i) {
+        SegmentReadOptions opts = seg_options_template;
+        opts.tablet_range = std::nullopt;
         if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
             shared_segment_range.has_value()) {
-            seg_options.tablet_range = *shared_segment_range;
+            opts.tablet_range = *shared_segment_range;
         }
         // Apply per-segment rowid range if provided
         if (rowid_range_per_segment != nullptr && i < rowid_range_per_segment->size()) {
-            seg_options.rowid_range_option = (*rowid_range_per_segment)[i];
+            opts.rowid_range_option = (*rowid_range_per_segment)[i];
         } else {
-            seg_options.rowid_range_option = nullptr;
+            opts.rowid_range_option = nullptr;
         }
-        auto res = seg_ptr->new_iterator(schema, seg_options);
+        return opts;
+    };
+
+    const bool parallel = config::enable_load_segment_iterator_parallel && segments.size() > 1;
+
+    if (!parallel) {
+        std::vector<ChunkIteratorPtr> seg_iterators;
+        seg_iterators.reserve(segments.size());
+        for (int i = 0; i < (int)segments.size(); i++) {
+            auto opts = build_per_segment_options(i);
+            auto res = segments[i]->new_iterator(schema, opts);
+            if (res.status().is_end_of_file()) {
+                continue;
+            }
+            if (!res.ok()) {
+                return res.status();
+            }
+            seg_iterators.push_back(std::move(res).value());
+        }
+        return seg_iterators;
+    }
+
+    // Parallel path: fan out new_iterator calls so the eager delvec / dcg remote reads
+    // inside SegmentIterator's constructor can overlap. Each task captures its own
+    // SegmentReadOptions copy (per-segment fields differ); the shared loaders /
+    // FileSystem are read-only across the parallel section. Stats updates inside the
+    // ctor (get_delvec_ns / get_delta_column_group_ns) are written from worker threads
+    // onto the shared `stats` — these are tracing-only counters, the IO byte/count
+    // fields are not touched until get_next/close runs serially.
+    std::vector<std::future<StatusOr<ChunkIteratorPtr>>> iter_futures;
+    iter_futures.reserve(segments.size());
+    // Outlives futures so the wait-on-destruct fallback runs before futures are torn down.
+    DeferOp wait_iter_futures([&iter_futures]() {
+        for (auto& f : iter_futures) {
+            if (f.valid()) f.wait();
+        }
+    });
+
+    for (int i = 0; i < (int)segments.size(); i++) {
+        auto seg_ptr = segments[i];
+        auto opts = build_per_segment_options(i);
+        auto task = std::make_shared<std::packaged_task<StatusOr<ChunkIteratorPtr>()>>(
+                [seg_ptr, schema, opts]() { return seg_ptr->new_iterator(schema, opts); });
+        auto fut = task->get_future();
+        auto submit_st =
+                ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func([task]() { (*task)(); });
+        if (!submit_st.ok()) {
+            // Thread pool busy / shutting down: run inline so we still make forward progress.
+            // The future becomes ready as soon as (*task)() returns.
+            LOG(WARNING) << "submit_func failed for new_iterator: " << submit_st.code_as_string()
+                         << ", falling back to inline construction, seg_idx: " << i
+                         << ", tablet: " << _tablet_id << ", rowset: " << metadata().id();
+            (*task)();
+        }
+        iter_futures.push_back(std::move(fut));
+    }
+
+    std::vector<ChunkIteratorPtr> seg_iterators;
+    seg_iterators.reserve(segments.size());
+    for (auto& f : iter_futures) {
+        auto res = f.get();
         if (res.status().is_end_of_file()) {
             continue;
         }

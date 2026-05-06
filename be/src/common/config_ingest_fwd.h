@@ -127,6 +127,13 @@ CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
 
 CONF_Bool(enable_load_segment_parallel, "false");
 
+// Construct per-segment iterators in parallel inside
+// Rowset::get_each_segment_iterator_with_delvec. Each task runs SegmentIterator
+// construction on load_segment_thread_pool so the eager delvec / dcg remote reads
+// inside the constructor can overlap across segments. Independent of
+// enable_load_segment_parallel, which only parallelizes segment footer loading.
+CONF_mBool(enable_load_segment_iterator_parallel, "false");
+
 // write buffer size before flush
 CONF_mInt64(write_buffer_size, "104857600");
 
