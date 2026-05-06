@@ -3334,7 +3334,7 @@ struct InvertedIndexFallbackVisitor {
         }
 
         // Read the bitmap from inverted index using the column name from SlotDescriptor
-        const std::string& column_name = expr_pred->slot_desc()->col_name();
+        const auto column_name = expr_pred->slot_desc()->col_name();
         ASSIGN_OR_RETURN(auto roaring_opt, expr_pred->read_inverted_index(column_name, inverted_iter));
         if (!roaring_opt.has_value()) {
             // use empty bitmap (no matches)
