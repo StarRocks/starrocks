@@ -199,7 +199,7 @@ Status ADBCScanner::_try_parallel_read() {
         // servers serialize GetFlightInfo on the same connection).
         AdbcError ep_error = ADBC_ERROR_INIT;
         AdbcStatusCode read_sc = AdbcConnectionReadPartition(&_connection, partitions.partitions[0],
-                                                              partitions.partition_lengths[0], &_c_stream, &ep_error);
+                                                             partitions.partition_lengths[0], &_c_stream, &ep_error);
         cleanup_schema();
         cleanup_partitions();
         if (read_sc != ADBC_STATUS_OK) {
