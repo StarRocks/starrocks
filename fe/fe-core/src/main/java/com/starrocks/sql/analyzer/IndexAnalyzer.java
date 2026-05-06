@@ -66,6 +66,8 @@ import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUC
 public class IndexAnalyzer {
 
     private static final int MAX_INDEX_NAME_LENGTH = 64;
+    // Keep this in sync with k_max_indexable_varchar_length in BE segment_writer.cpp.
+    public static final int MAX_INDEXABLE_VARCHAR_LENGTH = 1024 * 1024;
 
     // InvertedIndexUtil constants
     public static String INVERTED_INDEX_IMP_LIB_KEY = IMP_LIB.name().toLowerCase(Locale.ROOT);
@@ -125,6 +127,7 @@ public class IndexAnalyzer {
     public static void checkColumn(Column column, IndexDef.IndexType indexType,
                                    Map<String, String> properties, KeysType keysType) {
         if (indexType == IndexDef.IndexType.BITMAP) {
+            checkLargeVarcharIndex(column, "BITMAP index");
             String indexColName = column.getName();
             PrimitiveType colType = column.getPrimitiveType();
             if (!(colType.isDateType() ||
@@ -145,6 +148,24 @@ public class IndexAnalyzer {
             checkVectorIndexValid(column, properties, keysType);
         } else {
             throw new SemanticException("Unsupported index type: " + indexType);
+        }
+    }
+
+    public static boolean isVarcharTooLargeForIndex(Column column) {
+        Type type = column.getType();
+        return column.getPrimitiveType() == PrimitiveType.VARCHAR
+                && type instanceof ScalarType
+                && ((ScalarType) type).getLength() > MAX_INDEXABLE_VARCHAR_LENGTH;
+    }
+
+    public static String getLargeVarcharIndexErrorMessage(Column column, String indexName) {
+        return String.format("%s does not support VARCHAR column '%s' with length greater than %d bytes",
+                indexName, Column.removeNamePrefix(column.getName()), MAX_INDEXABLE_VARCHAR_LENGTH);
+    }
+
+    public static void checkLargeVarcharIndex(Column column, String indexName) {
+        if (isVarcharTooLargeForIndex(column)) {
+            throw new SemanticException(getLargeVarcharIndexErrorMessage(column, indexName));
         }
     }
 
@@ -193,6 +214,9 @@ public class IndexAnalyzer {
         }
 
         checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
+        if (getInvertedIndexParser(properties).equalsIgnoreCase(INVERTED_INDEX_PARSER_NONE)) {
+            checkLargeVarcharIndex(column, "GIN index with parser=none");
+        }
         checkInvertedIndexNgram(properties);
 
         // add default properties
@@ -472,6 +496,7 @@ public class IndexAnalyzer {
             throw new SemanticException(String.format("Invalid ngram bloom filter column '%s': unsupported type %s",
                     column.getName(), type));
         }
+        checkLargeVarcharIndex(column, "NGRAMBF index");
 
         // Only support create Ngram bloom filter on DUPLICATE/PRIMARY table or key columns of UNIQUE/AGGREGATE table.
         if (!(column.isKey() || keysType == KeysType.PRIMARY_KEYS ||

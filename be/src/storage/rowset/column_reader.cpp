@@ -95,6 +95,32 @@ ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(seg
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
+bool ColumnReader::has_original_bloom_filter_index() const {
+    if (_bloom_filter_index == nullptr) {
+        return false;
+    }
+    const auto& schema = _segment->tablet_schema();
+    const int32_t column_index = schema.field_index(_column_unique_id);
+    if (column_index < 0) {
+        return false;
+    }
+    const auto& column = schema.column(static_cast<size_t>(column_index));
+    return column.is_bf_column() && !schema.has_index(_column_unique_id, NGRAMBF);
+}
+
+bool ColumnReader::has_ngram_bloom_filter_index() const {
+    if (_bloom_filter_index == nullptr) {
+        return false;
+    }
+    const auto& schema = _segment->tablet_schema();
+    const int32_t column_index = schema.field_index(_column_unique_id);
+    if (column_index < 0) {
+        return false;
+    }
+    const auto& column = schema.column(static_cast<size_t>(column_index));
+    return column.is_bf_column() && schema.has_index(_column_unique_id, NGRAMBF);
+}
+
 ColumnReader::~ColumnReader() {
     if (_segment_zone_map != nullptr) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),

@@ -1485,6 +1485,53 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    private void checkLargeVarcharIndexes(OlapTable olapTable,
+                                          Map<Long, LinkedList<Column>> indexMetaIdToSchema,
+                                          List<Index> indexes,
+                                          Set<ColumnId> bfColumnIds) throws DdlException {
+        List<Column> baseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+        Map<ColumnId, Column> finalColumnById = Maps.newHashMap();
+        for (Column column : baseSchema) {
+            finalColumnById.put(column.getColumnId(), column);
+        }
+
+        if (bfColumnIds != null) {
+            for (ColumnId columnId : bfColumnIds) {
+                Column column = finalColumnById.get(columnId);
+                if (column != null && IndexAnalyzer.isVarcharTooLargeForIndex(column)) {
+                    throw new DdlException(IndexAnalyzer.getLargeVarcharIndexErrorMessage(column, "Bloom filter index"));
+                }
+            }
+        }
+
+        for (Index index : indexes) {
+            if (index.getIndexType() == IndexType.GIN) {
+                for (ColumnId columnId : index.getColumns()) {
+                    Column column = finalColumnById.get(columnId);
+                    if (column != null &&
+                            IndexAnalyzer.isVarcharTooLargeForIndex(column) &&
+                            IndexAnalyzer.getInvertedIndexParser(index.getProperties())
+                                    .equalsIgnoreCase(IndexAnalyzer.INVERTED_INDEX_PARSER_NONE)) {
+                        throw new DdlException(IndexAnalyzer.getLargeVarcharIndexErrorMessage(
+                                column, "GIN index with parser=none"));
+                    }
+                }
+                continue;
+            }
+            if (index.getIndexType() != IndexType.BITMAP && index.getIndexType() != IndexType.NGRAMBF) {
+                continue;
+            }
+            for (ColumnId columnId : index.getColumns()) {
+                Column column = finalColumnById.get(columnId);
+                if (column != null && IndexAnalyzer.isVarcharTooLargeForIndex(column)) {
+                    throw new DdlException(
+                            IndexAnalyzer.getLargeVarcharIndexErrorMessage(column,
+                                    index.getIndexType().name() + " index"));
+                }
+            }
+        }
+    }
+
     private SchemaChangeData finalAnalyze(Database db, OlapTable olapTable,
                                           Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                           Map<String, String> propertyMap,
@@ -1618,6 +1665,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 bfColumnIds.add(column.getColumnId());
             }
         }
+
+        checkLargeVarcharIndexes(olapTable, indexMetaIdToSchema, indexes, bfColumnIds);
 
         IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
