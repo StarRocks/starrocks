@@ -537,7 +537,6 @@ endif()
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
-    Column
     Connector
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
