@@ -63,6 +63,7 @@
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <zookeeper.version>3.8.6</zookeeper.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
     </properties>
 
     <dependencyManagement>
@@ -73,6 +74,21 @@
                 <groupId>org.apache.zookeeper</groupId>
                 <artifactId>zookeeper</artifactId>
                 <version>${zookeeper.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
             </dependency>
             <!-- jni connector -->
             <dependency>
