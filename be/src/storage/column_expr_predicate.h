@@ -63,7 +63,7 @@ public:
     // otherwise, it will contain one or more predicates which form the conjunction normal form
     Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
                                               std::vector<const ColumnExprPredicate*>* output) const;
-    StatusOr<std::optional<roaring::Roaring>> read_inverted_index(const std::string& column_name,
+    StatusOr<std::optional<roaring::Roaring>> read_inverted_index(const std::string_view column_name,
                                                                   InvertedIndexIterator* iterator) const;
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override;
