@@ -287,32 +287,40 @@ public class Locker {
     public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
-            LockType intentionType = (lockType == LockType.WRITE)
-                    ? LockType.INTENTION_EXCLUSIVE
-                    : LockType.INTENTION_SHARED;
-            boolean dbLockHeld = false;
-            List<Long> ridLockedList = new ArrayList<>();
-            try {
-                this.lock(dbId, intentionType, 0);
-                dbLockHeld = true;
-
-                Collections.sort(tableListClone);
-                for (Long rid : tableListClone) {
-                    this.lock(rid, lockType, 0);
-                    ridLockedList.add(rid);
-                }
-            } catch (LockException e) {
-                // Roll back any locks already acquired so that a partial failure
-                // (e.g. deadlock victim selection on the second / Nth lock call)
-                // does not leave a stranded DB intention or table lock that
-                // would block subsequent DB-WRITE operations indefinitely.
-                rollbackPartialIntensiveLock(dbId, intentionType, dbLockHeld, ridLockedList, lockType);
-                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            }
-        } else {
+        if (!Config.lock_manager_enabled) {
             //Fallback to db lock
             lockDatabase(dbId, lockType);
+            return;
+        }
+
+        LockType intentionType = (lockType == LockType.WRITE)
+                ? LockType.INTENTION_EXCLUSIVE
+                : LockType.INTENTION_SHARED;
+        boolean dbLockHeld = false;
+        List<Long> ridLockedList = new ArrayList<>();
+        boolean success = false;
+        try {
+            this.lock(dbId, intentionType, 0);
+            dbLockHeld = true;
+
+            Collections.sort(tableListClone);
+            for (Long rid : tableListClone) {
+                this.lock(rid, lockType, 0);
+                ridLockedList.add(rid);
+            }
+            success = true;
+        } catch (LockException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+        } finally {
+            // Roll back any locks already acquired on partial failure
+            // (LockException, deadlock victim, or any unchecked exception)
+            // so a stranded DB intention or table lock does not block
+            // subsequent DB-WRITE operations indefinitely.
+            // rollbackPartialIntensiveLock releases tables before DB intention
+            // to preserve hierarchical-lock invariants.
+            if (!success) {
+                rollbackPartialIntensiveLock(dbId, intentionType, dbLockHeld, ridLockedList, lockType);
+            }
         }
     }
 
@@ -347,41 +355,39 @@ public class Locker {
                                                     long timeout, TimeUnit unit) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
-            try {
-                if (lockType == LockType.WRITE) {
-                    this.lock(dbId, LockType.INTENTION_EXCLUSIVE, timeout);
-                } else {
-                    this.lock(dbId, LockType.INTENTION_SHARED, timeout);
-                }
-            } catch (LockException e) {
-                return false;
-            }
-
-            List<Long> ridLockedList = new ArrayList<>();
-            try {
-                Collections.sort(tableListClone);
-                for (Long rid : tableListClone) {
-                    this.lock(rid, lockType, timeout);
-                    ridLockedList.add(rid);
-                }
-
-                return true;
-            } catch (LockException e) {
-                if (lockType == LockType.WRITE) {
-                    release(dbId, LockType.INTENTION_EXCLUSIVE);
-                } else {
-                    release(dbId, LockType.INTENTION_SHARED);
-                }
-
-                for (Long rid : ridLockedList) {
-                    release(rid, lockType);
-                }
-                return false;
-            }
-        } else {
+        if (!Config.lock_manager_enabled) {
             // Fallback to db lock
             return tryLockDatabase(dbId, lockType, timeout, unit);
+        }
+
+        LockType intentionType = (lockType == LockType.WRITE)
+                ? LockType.INTENTION_EXCLUSIVE
+                : LockType.INTENTION_SHARED;
+        boolean dbLockHeld = false;
+        List<Long> ridLockedList = new ArrayList<>();
+        boolean success = false;
+        try {
+            this.lock(dbId, intentionType, timeout);
+            dbLockHeld = true;
+
+            Collections.sort(tableListClone);
+            for (Long rid : tableListClone) {
+                this.lock(rid, lockType, timeout);
+                ridLockedList.add(rid);
+            }
+            success = true;
+            return true;
+        } catch (LockException e) {
+            return false;
+        } finally {
+            // Roll back any partial state on LockException (success == false) or
+            // on any unchecked exception that propagates out before success was
+            // set; otherwise the DB intention or already-acquired table locks
+            // would leak. rollbackPartialIntensiveLock releases tables before DB
+            // intention to preserve hierarchical-lock invariants.
+            if (!success) {
+                rollbackPartialIntensiveLock(dbId, intentionType, dbLockHeld, ridLockedList, lockType);
+            }
         }
     }
 
@@ -392,14 +398,18 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
         if (Config.lock_manager_enabled) {
+            // Release in reverse of acquire order: tables first, then DB intention.
+            // Releasing the DB intention while still holding table locks would leave
+            // a window for a DROP-DATABASE-style X-on-DB to slip in and invalidate
+            // the table the caller is still operating on.
+            Collections.sort(tableListClone);
+            for (Long rid : tableListClone) {
+                this.release(rid, lockType);
+            }
             if (lockType == LockType.WRITE) {
                 this.release(dbId, LockType.INTENTION_EXCLUSIVE);
             } else {
                 this.release(dbId, LockType.INTENTION_SHARED);
-            }
-            Collections.sort(tableListClone);
-            for (Long rid : tableListClone) {
-                this.release(rid, lockType);
             }
         } else {
             //Fallback to db lock
@@ -490,11 +500,10 @@ public class Locker {
     public void unLockTableWithIntensiveDbLock(LockParams params, LockType lockType) {
         Map<Long, Database> dbs = params.getDbs();
         Map<Long, Set<Long>> tables = params.getTables();
-        Locker locker = new Locker();
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
-            locker.unLockTablesWithIntensiveDbLock(database.getId(), tableIds, lockType);
+            this.unLockTablesWithIntensiveDbLock(database.getId(), tableIds, lockType);
         }
     }
 
