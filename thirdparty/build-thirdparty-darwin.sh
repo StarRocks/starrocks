@@ -2639,6 +2639,16 @@ build_formula_blake3() {
     sync_lib64_links
 }
 
+build_formula_blake3() {
+    ensure_formula blake3
+    local prefix
+    prefix="$(formula_prefix blake3)"
+    link_if_missing "${prefix}/include/blake3.h" "${TP_INCLUDE_DIR}/blake3.h"
+    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libblake3.a" "${prefix}/lib/libblake3"*.dylib
+    link_formula_metadata "${prefix}"
+    sync_lib64_links
+}
+
 build_formula_ragel() {
     ensure_formula ragel
     local prefix
@@ -3238,6 +3248,9 @@ for package in "${packages[@]}"; do
             ;;
         xxhash)
             build_xxhash
+            ;;
+        blake3)
+            build_formula_blake3
             ;;
         blake3)
             build_formula_blake3
