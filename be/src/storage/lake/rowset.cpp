@@ -521,45 +521,29 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         return opts;
     };
 
-    // Reuse _parallel_load (initialized from config::enable_load_segment_parallel) so the
-    // segment-range-mode constructor — which forces _parallel_load=false to keep segment
-    // order — keeps the serial path here too.
-    const bool parallel = _parallel_load && segments.size() > 1;
-
-    if (!parallel) {
-        std::vector<ChunkIteratorPtr> seg_iterators;
-        seg_iterators.reserve(segments.size());
-        for (int i = 0; i < (int)segments.size(); i++) {
-            auto opts = build_per_segment_options(i);
-            auto res = segments[i]->new_iterator(schema, opts);
-            if (res.status().is_end_of_file()) {
-                continue;
-            }
-            if (!res.ok()) {
-                return res.status();
-            }
-            seg_iterators.push_back(std::move(res).value());
-        }
-        return seg_iterators;
-    }
-
-    // Parallel path: fan out new_iterator calls so the eager delvec / dcg remote reads
-    // inside SegmentIterator's constructor can overlap. Each task captures its own
-    // SegmentReadOptions copy (per-segment fields differ); the shared loaders /
-    // FileSystem are read-only across the parallel section. Stats updates inside the
-    // ctor (get_delvec_ns / get_delta_column_group_ns) are written from worker threads
-    // onto the shared `stats` — these are tracing-only counters, the IO byte/count
-    // fields are not touched until get_next/close runs serially.
+    // Single loop covers both serial and parallel paths. When `_parallel_load` is on
+    // (mirroring config::enable_load_segment_parallel; the segment-range-mode ctor forces
+    // it false to preserve segment order), submit each task to a ThreadPoolToken so the
+    // eager delvec / dcg remote reads inside SegmentIterator's constructor can overlap.
+    // Otherwise — and on submit failure — run the task inline.
     //
-    // Use a ThreadPoolToken for the barrier (token->wait()) instead of a per-segment
-    // future, mirroring UpdateManager::_do_update_with_condition_parallel. Per-segment
-    // outputs are written to a pre-sized vector (each thread owns its own slot, so no
-    // mutex is needed); the first error is captured under a mutex.
+    // Each task writes to its own slot in `per_segment_iters` (independent memory, no
+    // mutex needed). The first error is recorded into `first_err` via Status::update
+    // under a small mutex (rare path).
+    //
+    // Stats updates inside the ctor (get_delvec_ns / get_delta_column_group_ns) are
+    // written from worker threads onto the shared `stats` — these are tracing-only
+    // counters, the IO byte/count fields are not touched until get_next/close runs
+    // serially.
     std::vector<ChunkIteratorPtr> per_segment_iters(segments.size()); // default-init to nullptr
     std::mutex err_mutex;
     Status first_err = Status::OK();
 
-    auto token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::unique_ptr<ThreadPoolToken> token;
+    if (_parallel_load && segments.size() > 1) {
+        token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+    }
 
     for (int i = 0; i < (int)segments.size(); i++) {
         auto seg_ptr = segments[i];
@@ -572,21 +556,25 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
             }
             if (!res.ok()) {
                 std::lock_guard<std::mutex> lock(err_mutex);
-                if (first_err.ok()) first_err = res.status();
+                first_err.update(res.status());
                 return;
             }
             per_segment_iters[i] = std::move(res).value();
         };
-        auto submit_st = token->submit_func(task);
-        if (!submit_st.ok()) {
-            // Thread pool busy / shutting down: run inline so we still make forward progress.
-            LOG(WARNING) << "submit_func failed for new_iterator: " << submit_st.code_as_string()
-                         << ", falling back to inline construction, seg_idx: " << i << ", tablet: " << _tablet_id
-                         << ", rowset: " << metadata().id();
+        if (token) {
+            auto submit_st = token->submit_func(task);
+            if (!submit_st.ok()) {
+                // Thread pool busy / shutting down: run inline so we still make forward progress.
+                LOG(WARNING) << "submit_func failed for new_iterator: " << submit_st.code_as_string()
+                             << ", falling back to inline construction, seg_idx: " << i << ", tablet: " << _tablet_id
+                             << ", rowset: " << metadata().id();
+                task();
+            }
+        } else {
             task();
         }
     }
-    token->wait();
+    if (token) token->wait();
 
     if (!first_err.ok()) {
         return first_err;
