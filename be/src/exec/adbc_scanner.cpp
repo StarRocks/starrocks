@@ -45,8 +45,23 @@ namespace starrocks {
 // ADBCScanner
 // ================================
 
-ADBCScanner::ADBCScanner(const ADBCScanContext& ctx, const TupleDescriptor* tuple_desc)
-        : _ctx(ctx), _tuple_desc(tuple_desc) {}
+ADBCScanner::ADBCScanner(const ADBCScanContext& ctx, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
+        : _ctx(ctx), _tuple_desc(tuple_desc), _runtime_profile(runtime_profile) {
+    _init_profile();
+}
+
+void ADBCScanner::_init_profile() {
+    if (_runtime_profile == nullptr) {
+        return;
+    }
+    _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
+    _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunkTime");
+    _profile.connect_timer = ADD_TIMER(_runtime_profile, "ConnectTime");
+    _runtime_profile->add_info_string("Query", _ctx.sql);
+    _runtime_profile->add_info_string("Driver", _ctx.driver_url);
+}
 
 ADBCScanner::~ADBCScanner() {
     if (!_closed) {
@@ -66,9 +81,10 @@ Status ADBCScanner::open(RuntimeState* state) {
     // would otherwise propagate up and crash the BE process.
     try {
         auto start = MonotonicMillis();
-
-        RETURN_IF_ERROR(_init_adbc());
-
+        {
+            SCOPED_TIMER(_profile.connect_timer);
+            RETURN_IF_ERROR(_init_adbc());
+        }
         _connect_time_ms = MonotonicMillis() - start;
 
         // Try parallel reading first; fall back to single stream if it fails
@@ -292,6 +308,8 @@ Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* e
         }
     } else {
         // Read next batch
+        SCOPED_TIMER(_profile.io_timer);
+        COUNTER_UPDATE(_profile.io_counter, 1);
         if (_use_parallel) {
             bool eos_flag = false;
             RETURN_IF_ERROR(_parallel_reader->get_next(&batch, &eos_flag));
@@ -326,10 +344,14 @@ Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* e
         }
     }
 
-    RETURN_IF_ERROR(_convert_batch_to_chunk(batch, chunk));
+    {
+        SCOPED_TIMER(_profile.fill_chunk_timer);
+        RETURN_IF_ERROR(_convert_batch_to_chunk(batch, chunk));
+    }
 
     _rows_read += (*chunk)->num_rows();
     _bytes_read += (*chunk)->bytes_usage();
+    COUNTER_UPDATE(_profile.rows_read_counter, (*chunk)->num_rows());
 
     return Status::OK();
 }

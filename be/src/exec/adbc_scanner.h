@@ -28,16 +28,25 @@
 #include "common/status.h"
 #include "connector/adbc_connector.h"
 #include "runtime/runtime_state.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
 class ADBCParallelReader;
 class TupleDescriptor;
 
+struct ADBCScannerProfile {
+    RuntimeProfile::Counter* rows_read_counter = nullptr;
+    RuntimeProfile::Counter* io_timer = nullptr;
+    RuntimeProfile::Counter* io_counter = nullptr;
+    RuntimeProfile::Counter* fill_chunk_timer = nullptr;
+    RuntimeProfile::Counter* connect_timer = nullptr;
+};
+
 class ADBCScanner {
 public:
     // Takes context by const ref. Scanner copies the context.
-    ADBCScanner(const ADBCScanContext& ctx, const TupleDescriptor* tuple_desc);
+    ADBCScanner(const ADBCScanContext& ctx, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile);
     ~ADBCScanner();
 
     Status open(RuntimeState* state);
@@ -49,6 +58,7 @@ public:
     int64_t connect_time_ms() const { return _connect_time_ms; }
 
 private:
+    void _init_profile();
     Status _init_adbc();
     Status _get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _try_parallel_read();
@@ -58,6 +68,9 @@ private:
     // Context (copied, not borrowed, since caller may not outlive scanner)
     const ADBCScanContext _ctx;
     const TupleDescriptor* _tuple_desc;
+
+    RuntimeProfile* _runtime_profile = nullptr;
+    ADBCScannerProfile _profile;
 
     // ADBC C API handles (released in reverse order in close())
     AdbcDatabase _database{};

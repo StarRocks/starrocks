@@ -113,8 +113,10 @@ Status ADBCDataSource::open(RuntimeState* state) {
     VLOG(2) << "ADBC connector: driver_url=" << ctx.driver_url << " entrypoint=" << ctx.entrypoint
             << " sql=" << ctx.sql;
 
-    // Create scanner with context struct
-    _scanner = std::make_unique<ADBCScanner>(ctx, tuple_desc);
+    // Create scanner with context struct; pass the data source's runtime
+    // profile so RowsRead/IOTime/FillChunkTime/ConnectTime show up in
+    // EXPLAIN ANALYZE.
+    _scanner = std::make_unique<ADBCScanner>(ctx, tuple_desc, _runtime_profile);
 
     RETURN_IF_ERROR(_scanner->open(state));
     _connect_time_ms = _scanner->connect_time_ms();
