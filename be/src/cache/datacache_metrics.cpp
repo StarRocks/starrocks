@@ -24,16 +24,51 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
-#ifndef WITH_STARCACHE
-// empty implementation if WITH_STARCACHE is not enabled
-void register_datacache_metrics(bool) {}
-#else
-static void update_datacache_metrics(bool use_same_instance) {
+namespace {
+
+#ifdef WITH_STARCACHE
+const char* const kUpdateDataCacheMetricsHookName = "update_datacache_metrics";
+#endif
+
+} // namespace
+
+DataCacheMetrics* DataCacheMetrics::instance() {
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new DataCacheMetrics();
+    return instance;
+}
+
+void DataCacheMetrics::install(MetricRegistry* registry) {
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        return;
+    }
+    _registry = registry;
+
+    registry->register_metric("datacache_mem_quota_bytes", &datacache_mem_quota_bytes);
+    registry->register_metric("datacache_mem_used_bytes", &datacache_mem_used_bytes);
+    registry->register_metric("datacache_disk_quota_bytes", &datacache_disk_quota_bytes);
+    registry->register_metric("datacache_disk_used_bytes", &datacache_disk_used_bytes);
+    registry->register_metric("datacache_meta_used_bytes", &datacache_meta_used_bytes);
+    registry->register_metric("block_cache_hit_bytes", &block_cache_hit_bytes);
+    registry->register_metric("block_cache_miss_bytes", &block_cache_miss_bytes);
+}
+
+void DataCacheMetrics::enable_update_hook(bool use_same_instance) {
+    _use_same_instance.store(use_same_instance, std::memory_order_relaxed);
+#ifdef WITH_STARCACHE
+    if (_registry != nullptr) {
+        _registry->register_hook(kUpdateDataCacheMetricsHookName, [] { DataCacheMetrics::instance()->update(); });
+    }
+#endif
+}
+
+void DataCacheMetrics::update() {
+#ifdef WITH_STARCACHE
     auto* cache_env = DataCache::GetInstance();
     const auto* local_mem_cache = cache_env->local_mem_cache();
     DataCacheMemMetrics mem_metrics{};
@@ -50,7 +85,7 @@ static void update_datacache_metrics(bool use_same_instance) {
         meta_used_bytes = star_metrics.meta_used_bytes;
     }
 #ifdef USE_STAROS
-    if (!use_same_instance) {
+    if (!_use_same_instance.load(std::memory_order_relaxed)) {
         starcache::CacheMetrics starlet_cache_metrics{};
         staros::starlet::fslib::star_cache_get_metrics(&starlet_cache_metrics);
         // merge the disk cache metrics
@@ -59,22 +94,17 @@ static void update_datacache_metrics(bool use_same_instance) {
         meta_used_bytes += starlet_cache_metrics.mem_used_bytes;
     }
 #endif
-    StarRocksMetrics::instance()->datacache_mem_quota_bytes.set_value(mem_metrics.mem_quota_bytes);
-    StarRocksMetrics::instance()->datacache_mem_used_bytes.set_value(mem_metrics.mem_used_bytes);
-    StarRocksMetrics::instance()->datacache_disk_quota_bytes.set_value(disk_metrics.disk_quota_bytes);
-    StarRocksMetrics::instance()->datacache_disk_used_bytes.set_value(disk_metrics.disk_used_bytes);
-    StarRocksMetrics::instance()->datacache_meta_used_bytes.set_value(meta_used_bytes);
+    datacache_mem_quota_bytes.set_value(mem_metrics.mem_quota_bytes);
+    datacache_mem_used_bytes.set_value(mem_metrics.mem_used_bytes);
+    datacache_disk_quota_bytes.set_value(disk_metrics.disk_quota_bytes);
+    datacache_disk_used_bytes.set_value(disk_metrics.disk_used_bytes);
+    datacache_meta_used_bytes.set_value(meta_used_bytes);
 
     // Update hit rate metrics from DataCacheHitRateCounter
     auto* hit_rate_counter = DataCacheHitRateCounter::instance();
-    StarRocksMetrics::instance()->block_cache_hit_bytes.set_value(hit_rate_counter->block_cache_hit_bytes());
-    StarRocksMetrics::instance()->block_cache_miss_bytes.set_value(hit_rate_counter->block_cache_miss_bytes());
-}
-
-void register_datacache_metrics(bool use_same_instance) {
-    GlobalMetricsRegistry::instance()->metrics()->register_hook(
-            "update_datacache_metrics", [use_same = use_same_instance] { update_datacache_metrics(use_same); });
-}
+    block_cache_hit_bytes.set_value(hit_rate_counter->block_cache_hit_bytes());
+    block_cache_miss_bytes.set_value(hit_rate_counter->block_cache_miss_bytes());
 #endif
+}
 
 } // namespace starrocks

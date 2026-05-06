@@ -153,7 +153,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #endif
 #ifndef __APPLE__
     // Register datacache metrics
-    register_datacache_metrics(use_same_datacache_instance);
+    DataCacheMetrics::instance()->enable_update_hook(use_same_datacache_instance);
 #endif
 
     // set up thrift client before providing any service to the external
