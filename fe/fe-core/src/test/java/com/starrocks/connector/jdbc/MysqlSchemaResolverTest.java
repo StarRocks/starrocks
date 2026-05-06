@@ -147,8 +147,7 @@ public class MysqlSchemaResolverTest {
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
-        Assertions.assertEquals(1, tableNamePatterns.size());
-        Assertions.assertTrue(tableNamePatterns.get(0).equalsIgnoreCase("partitions"));
+        Assertions.assertEquals(Arrays.asList("partitions"), tableNamePatterns);
     }
 
     @Test
