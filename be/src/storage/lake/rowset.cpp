@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <future>
+#include <mutex>
 #include <unordered_set>
 
 #include "base/debug/trace.h"
@@ -24,6 +25,7 @@
 #include "column/datum_convert.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -548,44 +550,53 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     // ctor (get_delvec_ns / get_delta_column_group_ns) are written from worker threads
     // onto the shared `stats` — these are tracing-only counters, the IO byte/count
     // fields are not touched until get_next/close runs serially.
-    std::vector<std::future<StatusOr<ChunkIteratorPtr>>> iter_futures;
-    iter_futures.reserve(segments.size());
-    // Outlives futures so the wait-on-destruct fallback runs before futures are torn down.
-    DeferOp wait_iter_futures([&iter_futures]() {
-        for (auto& f : iter_futures) {
-            if (f.valid()) f.wait();
-        }
-    });
+    //
+    // Use a ThreadPoolToken for the barrier (token->wait()) instead of a per-segment
+    // future, mirroring UpdateManager::_do_update_with_condition_parallel. Per-segment
+    // outputs are written to a pre-sized vector (each thread owns its own slot, so no
+    // mutex is needed); the first error is captured under a mutex.
+    std::vector<ChunkIteratorPtr> per_segment_iters(segments.size()); // default-init to nullptr
+    std::mutex err_mutex;
+    Status first_err = Status::OK();
+
+    auto token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
 
     for (int i = 0; i < (int)segments.size(); i++) {
         auto seg_ptr = segments[i];
         auto opts = build_per_segment_options(i);
-        auto task = std::make_shared<std::packaged_task<StatusOr<ChunkIteratorPtr>()>>(
-                [seg_ptr, schema, opts]() { return seg_ptr->new_iterator(schema, opts); });
-        auto fut = task->get_future();
-        auto submit_st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func([task]() { (*task)(); });
+        auto task = [seg_ptr, schema, opts, &per_segment_iters, &err_mutex, &first_err, i]() {
+            auto res = seg_ptr->new_iterator(schema, opts);
+            if (res.status().is_end_of_file()) {
+                // Leave per_segment_iters[i] as nullptr; the final compaction loop drops nullptrs.
+                return;
+            }
+            if (!res.ok()) {
+                std::lock_guard<std::mutex> lock(err_mutex);
+                if (first_err.ok()) first_err = res.status();
+                return;
+            }
+            per_segment_iters[i] = std::move(res).value();
+        };
+        auto submit_st = token->submit_func(task);
         if (!submit_st.ok()) {
             // Thread pool busy / shutting down: run inline so we still make forward progress.
-            // The future becomes ready as soon as (*task)() returns.
             LOG(WARNING) << "submit_func failed for new_iterator: " << submit_st.code_as_string()
                          << ", falling back to inline construction, seg_idx: " << i << ", tablet: " << _tablet_id
                          << ", rowset: " << metadata().id();
-            (*task)();
+            task();
         }
-        iter_futures.push_back(std::move(fut));
     }
+    token->wait();
 
+    if (!first_err.ok()) {
+        return first_err;
+    }
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
-    for (auto& f : iter_futures) {
-        auto res = f.get();
-        if (res.status().is_end_of_file()) {
-            continue;
-        }
-        if (!res.ok()) {
-            return res.status();
-        }
-        seg_iterators.push_back(std::move(res).value());
+    for (auto& it : per_segment_iters) {
+        if (it == nullptr) continue; // EOF-skipped segment
+        seg_iterators.push_back(std::move(it));
     }
     return seg_iterators;
 }
