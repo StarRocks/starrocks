@@ -17,7 +17,7 @@
 #include <memory>
 #include <numeric>
 
-#include "base/testutil/assert.h"
+#include "testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
