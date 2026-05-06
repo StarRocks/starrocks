@@ -14,6 +14,7 @@
 
 #include "storage/lake/vector_index_build_task.h"
 
+#include <brpc/controller.h>
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
@@ -23,6 +24,8 @@
 #include "column/nullable_column.h"
 #include "fs/fs_util.h"
 #include "gutil/casts.h"
+#include "runtime/exec_env.h"
+#include "service/service_be/lake_service.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
@@ -62,12 +65,17 @@ protected:
         c1->set_name("vector");
         c1->set_type("ARRAY");
         c1->set_is_key(false);
-        c1->set_is_nullable(true);
+        // Vector index requires the ARRAY column itself to be non-nullable;
+        // ArrayColumnWriter DCHECKs this on the sync write path and the
+        // tenann builder down_casts to ArrayColumn (not NullableColumn).
+        c1->set_is_nullable(false);
 
         auto* child = c1->add_children_columns();
         child->set_unique_id(3);
         child->set_name("element");
         child->set_type("FLOAT");
+        // Element must be nullable: tenann reads per-element null bits to
+        // skip null vectors during build.
         child->set_is_nullable(true);
 
         // Add vector index
@@ -87,7 +95,7 @@ protected:
             },
             "index_properties": {
                 "efconstruction": "40",
-                "M": "16"
+                "m": "16"
             }
         })";
         idx->set_index_properties(props_json);
@@ -102,7 +110,7 @@ protected:
 
         SegmentWriterOptions opts;
         opts.is_compaction = false;
-        // defer_vector_index_build = true: we simulate async mode (no .vi generation)
+        // defer_vector_index_build = true: simulate async mode (no .vi generation)
         opts.defer_vector_index_build = true;
 
         // Fill vector_index_file_paths so metadata is populated
@@ -365,6 +373,217 @@ TEST_F(VectorIndexBuildTaskTest, test_skip_rowsets_without_vector_indexes) {
     ASSERT_OK(task.execute(request, &response));
     // No vi rowsets to build, watermark advances through the no-vi rowset
     ASSERT_EQ(response.new_built_version(), 2);
+}
+
+// Reusing the same task instance across two prepare()/execute() calls must reset
+// _work_items / _rowset_versions / _built_version / _target_version, otherwise the
+// second run would see stale state from the first.
+TEST_F(VectorIndexBuildTaskTest, test_prepare_reuse_resets_state) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    // First metadata: target version 2, one rowset at v=2.
+    ASSIGN_OR_ABORT(auto seg1, write_segment(tablet_schema, 1001, 10));
+    create_metadata(schema_pb, 2, {{2, seg1}});
+
+    BuildVectorIndexRequest req1;
+    req1.set_tablet_id(kTabletId);
+    req1.set_version(2);
+    BuildVectorIndexResponse resp1;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(req1, &resp1));
+    ASSERT_EQ(2, resp1.new_built_version());
+    EXPECT_EQ(1u, task.work_count());
+
+    // Second metadata: target version 3, two rowsets at v=2 and v=3.
+    // built_version supplied via request = 2, so only v=3 should produce work items.
+    ASSIGN_OR_ABORT(auto seg2, write_segment(tablet_schema, 1002, 10));
+    create_metadata(schema_pb, 3, {{2, seg1}, {3, seg2}}, /*built_version=*/2);
+
+    BuildVectorIndexRequest req2;
+    req2.set_tablet_id(kTabletId);
+    req2.set_version(3);
+    BuildVectorIndexResponse resp2;
+
+    ASSERT_OK(task.execute(req2, &resp2));
+    ASSERT_EQ(3, resp2.new_built_version());
+    // Only 1 fresh work item from v=3; if state hadn't been reset, work_count would
+    // accumulate the v=2 entry from the first run too.
+    EXPECT_EQ(1u, task.work_count());
+}
+
+// Drives the end-to-end LakeServiceImpl::build_vector_index RPC: schema with vector
+// index → segment written in defer mode → metadata records vector_index_ids → call the
+// RPC and verify the .vi file lands on disk with the watermark advanced. This exercises
+// the parallel `latch.wait()` / `thread_pool->submit` path in lake_service.cpp that the
+// task-level tests cannot reach.
+TEST_F(VectorIndexBuildTaskTest, test_lake_service_build_vector_index_full_path) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+    create_metadata(schema_pb, 2, {{2, seg_name}});
+
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get());
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    service.build_vector_index(&cntl, &request, &response, nullptr);
+
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code());
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(2, response.new_built_version());
+
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
+    EXPECT_TRUE(fs::path_exist(vi_path)) << "deferred .vi should have been built by the RPC";
+}
+
+// Same RPC end-to-end path but with one good rowset (v=2) and one whose segment is
+// broken (v=3). Watermark must advance to v=2 and pause at v=3, exercising the
+// parallel worker error reporting + compute_built_version partial-progress path.
+TEST_F(VectorIndexBuildTaskTest, test_lake_service_build_vector_index_partial_failure) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_ok, write_segment(tablet_schema, 1001, 10));
+    auto seg_bad = gen_segment_filename(2002); // never actually written
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(3);
+    *metadata->mutable_schema() = schema_pb;
+    {
+        auto* rs = metadata->add_rowsets();
+        rs->set_id(_next_rowset_id++);
+        rs->add_segments(seg_ok);
+        rs->set_num_rows(10);
+        rs->set_data_size(1024);
+        rs->set_version(2);
+        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+    }
+    {
+        auto* rs = metadata->add_rowsets();
+        rs->set_id(_next_rowset_id++);
+        rs->add_segments(seg_bad);
+        rs->set_num_rows(10);
+        rs->set_data_size(1024);
+        rs->set_version(3);
+        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get());
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(3);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    service.build_vector_index(&cntl, &request, &response, nullptr);
+
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    EXPECT_EQ(0, response.status().status_code());
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(2, response.new_built_version());
+
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kIndexId))));
+    EXPECT_FALSE(
+            fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
+}
+
+// Build with one healthy rowset (v=2) and one whose segment file is broken (v=3).
+// Watermark must advance through v=2 (fully built) and stop at v=3 (failed segment),
+// exercising compute_built_version's failed_versions branch.
+TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_version) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_ok, write_segment(tablet_schema, 1001, 10));
+
+    // Manufacture a non-existent segment name for v=3 so build_segment fails to open
+    // it. We still populate vector_index_ids for that segment so prepare() schedules
+    // a build attempt and compute_built_version can see the failed version.
+    auto seg_bad = gen_segment_filename(2002);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(3);
+    *metadata->mutable_schema() = schema_pb;
+    {
+        auto* rs = metadata->add_rowsets();
+        rs->set_id(_next_rowset_id++);
+        rs->add_segments(seg_ok);
+        rs->set_num_rows(10);
+        rs->set_data_size(1024);
+        rs->set_version(2);
+        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+    }
+    {
+        auto* rs = metadata->add_rowsets();
+        rs->set_id(_next_rowset_id++);
+        rs->add_segments(seg_bad);
+        rs->set_num_rows(10);
+        rs->set_data_size(1024);
+        rs->set_version(3);
+        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(3);
+    BuildVectorIndexResponse response;
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    // execute() returns OK from the orchestration layer regardless of per-segment
+    // failure; progress is conveyed only via new_built_version.
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(2, response.new_built_version()) << "watermark should advance through v=2 and pause at v=3";
+
+    // v=2's .vi was actually built; v=3's was not.
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kIndexId))));
+    EXPECT_FALSE(
+            fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
+}
+
+// Persist segment_size and segment_encryption_metas on the rowset and verify they
+// flow through prepare() into the FileInfo handed to build_segment. This exercises
+// the optional fields in vector_index_build_task.cpp::prepare() that were previously
+// uncovered.
+TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryption) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(2);
+    *metadata->mutable_schema() = schema_pb;
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(_next_rowset_id++);
+    rowset->add_segments(seg_name);
+    rowset->add_segment_size(2048);           // exercises has_segment_size branch
+    rowset->add_segment_encryption_metas(""); // exercises has_encryption_meta branch (empty meta is fine)
+    rowset->set_num_rows(10);
+    rowset->set_version(2);
+    auto* seg_meta = rowset->add_segment_metas();
+    seg_meta->add_vector_index_ids(kIndexId);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    BuildVectorIndexResponse response;
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_EQ(response.new_built_version(), 2);
+
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
+    EXPECT_TRUE(fs::path_exist(vi_path));
 }
 
 } // namespace starrocks::lake

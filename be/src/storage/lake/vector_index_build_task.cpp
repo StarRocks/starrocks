@@ -14,6 +14,8 @@
 
 #include "storage/lake/vector_index_build_task.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <set>
 
@@ -40,6 +42,13 @@ static constexpr int kReadBatchSize = 4096;
 VectorIndexBuildTask::VectorIndexBuildTask(TabletManager* tablet_mgr) : _tablet_mgr(tablet_mgr) {}
 
 Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
+    // Reset task state so the same instance is safe to reuse across prepare() calls.
+    _work_items.clear();
+    _rowset_versions.clear();
+    _tablet_schema.reset();
+    _built_version = 0;
+    _target_version = 0;
+
     _tablet_id = request.tablet_id();
     int64_t version = request.version();
     int batch_limit =
@@ -53,6 +62,7 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
     int64_t metadata_bv = metadata->has_vector_index_built_version() ? metadata->vector_index_built_version() : 0;
     int64_t request_bv = request.has_built_version() ? request.built_version() : 0;
     _built_version = std::max(metadata_bv, request_bv);
+    _target_version = version;
 
     LOG(INFO) << "VectorIndexBuildTask::prepare: tablet=" << _tablet_id << " version=" << version
               << " built_version=" << _built_version << " rowsets=" << metadata->rowsets_size();
@@ -175,14 +185,20 @@ int64_t VectorIndexBuildTask::compute_built_version(const std::vector<Status>& s
     //   - processed vi rowsets with all segments succeeded
     // Stop at first unprocessed vi rowset or failed vi rowset.
     int64_t watermark = _built_version;
+    bool advanced_through_all = true;
     for (const auto& info : _rowset_versions) {
         if (!info.has_vi) {
             watermark = info.version;
         } else if (info.processed && failed_versions.count(info.version) == 0) {
             watermark = info.version;
         } else {
+            advanced_through_all = false;
             break;
         }
+    }
+
+    if (advanced_through_all && _target_version > watermark) {
+        watermark = _target_version;
     }
     return watermark;
 }
@@ -194,11 +210,20 @@ Status VectorIndexBuildTask::execute(const BuildVectorIndexRequest& request, Bui
     for (size_t i = 0; i < _work_items.size(); i++) {
         results[i] = build_one_segment(i);
         if (!results[i].ok()) {
-            LOG(WARNING) << "VectorIndexBuildTask: tablet=" << _tablet_id << " segment build failed: " << results[i];
+            LOG(WARNING) << "VectorIndexBuildTask: tablet=" << _tablet_id << " segment[" << i
+                         << "] failed: " << results[i];
+            for (size_t j = i + 1; j < _work_items.size(); j++) {
+                results[j] = Status::Cancelled("vector index segment build cancelled after earlier failure");
+            }
             break; // Stop on first failure in sequential mode
         }
     }
 
+    // compute_built_version advances through fully-built rowsets and stops at the first
+    // rowset version that had a failed segment, so the watermark reflects exactly how
+    // far this run got even on partial failure. The Status here only reflects whether
+    // the task itself ran; FE infers per-segment failure from new_built_version not
+    // reaching its target version and reschedules.
     response->set_new_built_version(compute_built_version(results));
     return Status::OK();
 }
@@ -300,7 +325,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
         }
 
         RETURN_IF_ERROR(builder->flush());
-        builder->close();
+        RETURN_IF_ERROR(builder->close());
     }
 
     return Status::OK();

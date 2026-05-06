@@ -332,7 +332,8 @@
         "vector_query_cache_capacity",
         "enable_vector_index_block_cache",
         "config_vector_index_build_concurrency",
-        "config_vector_index_default_build_threshold"
+        "config_vector_index_default_build_threshold",
+        "vector_index_build_max_cpu_ratio"
       ]
     },
     {

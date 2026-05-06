@@ -187,9 +187,15 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_bitmap_index = column.has_bitmap_index();
         opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
         opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
-        if (opts.need_vector_index && _opts.defer_vector_index_build) {
-            // async mode: skip VectorIndexWriter creation, but vector_index_file_paths
-            // are still populated so vector_index_ids metadata is correct
+        // Bundle-file segments (shared-data) suppress per-column .vi generation: the
+        // segment filename in metadata is the bundle filename, not the per-segment
+        // name used to derive .vi paths, so producing per-segment .vi here would
+        // generate paths that don't match what readers look up. Disable need_vector_index
+        // before the column writers are constructed so ArrayColumnWriter does not try
+        // to spin up a VectorIndexWriter and look up a non-existent entry in
+        // standalone_index_file_paths. Async mode also skips per-column writer creation;
+        // .vi files are produced later by the deferred build task.
+        if (opts.need_vector_index && (_opts.skip_vector_index || _opts.defer_vector_index_build)) {
             opts.need_vector_index = false;
         }
 
@@ -399,11 +405,17 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         if (standalone_index_size > 0) {
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
             _has_vector_index_written = true;
-        } else if (_tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR) &&
-                   !_opts.defer_vector_index_build) {
-            // Only mark NONE when not deferring. For async mode, leave unset so the read path
-            // will attempt to find .vi files (built later) and fall back gracefully if missing.
-            _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_NONE);
+        } else if (!_has_vector_index_written &&
+                   _tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR)) {
+            // No .vi was produced inline. In async mode, the deferred build task will
+            // produce one later iff this segment has enough rows and isn't a bundle
+            // (bundle segments don't carry .vi). Mark STANDALONE in that case so the
+            // read path looks for the .vi when it lands; otherwise mark NONE so
+            // readers fall back to brute-force scan instead of waiting forever.
+            const bool will_build_async = _opts.defer_vector_index_build && !_opts.skip_vector_index &&
+                                          _num_rows >= _opts.vector_index_build_threshold;
+            _footer.set_vector_index_storage_type(will_build_async ? VECTOR_INDEX_STORAGE_STANDALONE
+                                                                   : VECTOR_INDEX_STORAGE_NONE);
         }
 
         // check global dict valid

@@ -2205,27 +2205,28 @@ void LakeServiceImpl::build_vector_index(::google::protobuf::RpcController* cont
     }
 
     // Adaptive sizing: pool_size * omp_threads <= nproc * cpu_ratio.
-    // Recomputed on every RPC so that dynamic config changes (UPDATE information_schema.be_configs)
-    // take effect without restarting BE.
     const int nproc = CpuInfo::num_cores();
     const int budget = std::max(2, static_cast<int>(nproc * config::vector_index_build_max_cpu_ratio));
     const int configured_omp = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
     const int effective_pool = std::max(1, budget / configured_omp);
     const int effective_omp = std::min(configured_omp, std::max(1, budget / effective_pool));
     if (thread_pool->max_threads() != effective_pool) {
-        (void)thread_pool->update_max_threads(effective_pool);
+        auto st = thread_pool->update_max_threads(effective_pool);
+        if (UNLIKELY(!st.ok())) {
+            LOG(WARNING) << "build_vector_index: failed to resize thread pool from " << thread_pool->max_threads()
+                         << " to " << effective_pool << ", tablet=" << request->tablet_id()
+                         << ", version=" << request->version() << ", error=" << st;
+            st.to_protobuf(response->mutable_status());
+            return;
+        }
     }
 
     LOG(INFO) << "build_vector_index RPC: tablet=" << request->tablet_id() << " version=" << request->version();
 
-    // Tablet-level dedup: if this CN is already building the same tablet
-    // (e.g. FE re-enqueued after RPC timeout), return RESOURCE_BUSY so FE
-    // backs off with cooldown instead of dispatching to another CN.
+    // Tablet-level dedup
     {
         std::lock_guard lock(_building_vi_mutex);
         if (_building_vi_tablets.count(request->tablet_id())) {
-            LOG(INFO) << "build_vector_index: tablet=" << request->tablet_id()
-                      << " already building on this CN, returning RESOURCE_BUSY";
             Status::ResourceBusy("vector index build already in progress").to_protobuf(response->mutable_status());
             return;
         }
@@ -2236,14 +2237,10 @@ void LakeServiceImpl::build_vector_index(::google::protobuf::RpcController* cont
         _building_vi_tablets.erase(request->tablet_id());
     });
 
-    // Phase 1: prepare (read metadata, collect segment work items).
-    // Runs on bthread - metadata is typically cached.
     lake::VectorIndexBuildTask build_task(_tablet_mgr);
     build_task.set_omp_threads(effective_omp);
     auto prepare_st = build_task.prepare(*request);
     if (!prepare_st.ok()) {
-        LOG(WARNING) << "Failed to prepare vector index build for tablet " << request->tablet_id() << ": "
-                     << prepare_st;
         prepare_st.to_protobuf(response->mutable_status());
         return;
     }
@@ -2252,9 +2249,7 @@ void LakeServiceImpl::build_vector_index(::google::protobuf::RpcController* cont
     std::vector<Status> segment_results(work_count);
 
     if (work_count > 0) {
-        // Phase 2: build segments in parallel via thread pool.
         auto latch = BThreadCountDownLatch(work_count);
-
         for (size_t i = 0; i < work_count; i++) {
             auto seg_task = std::make_shared<CancellableRunnable>(
                     [&, i] {
@@ -2267,28 +2262,28 @@ void LakeServiceImpl::build_vector_index(::google::protobuf::RpcController* cont
                     },
                     [&, i] {
                         segment_results[i] = Status::Cancelled("vector index segment build cancelled");
-                        LOG(WARNING) << segment_results[i] << " tablet=" << build_task.tablet_id();
                         latch.count_down();
                     });
-
             auto st = thread_pool->submit(std::move(seg_task));
             if (!st.ok()) {
-                LOG(WARNING) << "Fail to submit segment build task: " << st << " tablet=" << build_task.tablet_id();
                 segment_results[i] = st;
                 latch.count_down();
             }
         }
-
         latch.wait();
     }
 
-    // Phase 3: compute max_built_version from in-memory results.
+    int failed_count = 0;
+    for (const auto& st : segment_results) {
+        if (!st.ok()) {
+            failed_count++;
+        }
+    }
     int64_t new_built_version = build_task.compute_built_version(segment_results);
     response->set_new_built_version(new_built_version);
+    LOG(INFO) << "build_vector_index: tablet=" << request->tablet_id() << " new_built_version=" << new_built_version
+              << " segments_built=" << (work_count - failed_count) << " segments_failed=" << failed_count;
     Status::OK().to_protobuf(response->mutable_status());
-
-    LOG(INFO) << "build_vector_index RPC completed: tablet=" << request->tablet_id()
-              << " new_built_version=" << new_built_version << " segments_built=" << work_count;
 }
 
 } // namespace starrocks

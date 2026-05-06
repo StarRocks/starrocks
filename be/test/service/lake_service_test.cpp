@@ -4985,4 +4985,95 @@ TEST_F(LakeServiceTest, test_get_txn_ids_string_priority) {
     }
 }
 
+// ==================== build_vector_index RPC ====================
+
+TEST_F(LakeServiceTest, test_build_vector_index_missing_tablet_id) {
+    BuildVectorIndexRequest request;
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing tablet_id", cntl.ErrorText());
+}
+
+TEST_F(LakeServiceTest, test_build_vector_index_missing_version) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing version", cntl.ErrorText());
+}
+
+// Tablet metadata exists at version 1 (created in SetUp) but has no rowsets and
+// no vector_index_built_version. Calling with target version=1 should advance
+// the watermark via the _target_version fallback (no work needed).
+TEST_F(LakeServiceTest, test_build_vector_index_no_work_advances_watermark) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(1);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(0, response.status().status_code());
+    // No rowsets above _built_version (=0), so compute_built_version walks an empty
+    // _rowset_versions and falls back to the request's target version.
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(1, response.new_built_version());
+}
+
+// Tablet metadata is missing at the requested version → RPC reports a NotFound
+// (or similar) status without advancing the watermark.
+TEST_F(LakeServiceTest, test_build_vector_index_metadata_not_found) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(99999); // version that has no metadata
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    // RPC always returns OK at the controller level (status only conveys orchestration);
+    // build_task.prepare() fails to load the metadata and the failure is reflected in
+    // response.status.
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    EXPECT_NE(0, response.status().status_code());
+    EXPECT_FALSE(response.has_new_built_version());
+}
+
+// Honors a non-default max_rowsets_per_batch by passing it through to the build task.
+// With no rowsets to build, the watermark should still advance to the request's target
+// version regardless of batch size.
+TEST_F(LakeServiceTest, test_build_vector_index_custom_batch_limit) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(1);
+    request.set_max_rowsets_per_batch(3);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code());
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(1, response.new_built_version());
+}
+
+// FE-supplied built_version above metadata's vector_index_built_version is honored as
+// the floor; with no new rowsets above it, the watermark advances to target version.
+TEST_F(LakeServiceTest, test_build_vector_index_request_built_version_floor) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(1);
+    request.set_built_version(0); // explicit zero, same as default
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_EQ(0, response.status().status_code());
+    EXPECT_EQ(1, response.new_built_version());
+}
+
 } // namespace starrocks

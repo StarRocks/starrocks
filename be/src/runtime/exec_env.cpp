@@ -45,6 +45,7 @@
 #include "common/config.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
