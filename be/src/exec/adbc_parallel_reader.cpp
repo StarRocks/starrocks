@@ -83,8 +83,14 @@ Status RecordBatchQueue::error() const {
 
 ADBCParallelReader::ADBCParallelReader(AdbcDatabase* database, const AdbcPartitions& partitions, size_t num_threads)
         : _database(database), _num_threads(num_threads), _queue(16) {
+    // Copy partition bytes into owned storage. The caller calls partitions.release()
+    // right after start() returns; raw pointers into that buffer would dangle once
+    // the worker threads pick them up.
+    _partitions.reserve(partitions.num_partitions);
     for (size_t i = 0; i < partitions.num_partitions; i++) {
-        _partitions.emplace_back(partitions.partitions[i], partitions.partition_lengths[i]);
+        const uint8_t* src = partitions.partitions[i];
+        size_t len = partitions.partition_lengths[i];
+        _partitions.emplace_back(src, src + len);
     }
 }
 
@@ -134,7 +140,7 @@ Status ADBCParallelReader::start() {
                 }
 
                 struct ArrowArrayStream c_stream {};
-                sc = AdbcConnectionReadPartition(&conn, _partitions[idx].first, _partitions[idx].second, &c_stream,
+                sc = AdbcConnectionReadPartition(&conn, _partitions[idx].data(), _partitions[idx].size(), &c_stream,
                                                  &error);
                 if (sc != ADBC_STATUS_OK) {
                     std::string msg = error.message ? error.message : "Unknown ADBC error";

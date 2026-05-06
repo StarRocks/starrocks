@@ -22,6 +22,7 @@ import org.apache.arrow.adbc.core.AdbcConnection;
 import org.apache.arrow.adbc.core.AdbcDatabase;
 import org.apache.arrow.adbc.core.AdbcDriver;
 import org.apache.arrow.adbc.core.AdbcException;
+import org.apache.arrow.adbc.core.AdbcStatement;
 import org.apache.arrow.adbc.core.AdbcStatusCode;
 import org.apache.arrow.adbc.driver.jni.JniDriverFactory;
 import org.apache.arrow.memory.BufferAllocator;
@@ -199,15 +200,49 @@ public class ADBCConnector implements Connector {
             LOG.warn("ADBC driver '{}': probe failed -- {}", driverIdentifier, e.getMessage());
         }
 
-        // Detect identifier quote character from driver path
+        // Detect identifier quote character
         if (!properties.containsKey("_sr_identifier_quote")) {
             String quoteChar = detectQuoteFromDriverPath(driverIdentifier);
+            if (quoteChar == null && isFlightSqlDriver(driverIdentifier)) {
+                // FlightSQL is a transport — the quote depends on the remote database.
+                // Probe by trying a backtick-quoted query first (MySQL/StarRocks), then double-quote.
+                quoteChar = probeQuoteChar(db);
+            }
             if (quoteChar != null) {
                 properties.put("_sr_identifier_quote", quoteChar);
                 LOG.info("ADBC driver '{}': identifier quote = '{}'",
                         driverIdentifier, quoteChar);
             }
         }
+    }
+
+    /**
+     * Probe the remote database's identifier quoting by running test queries.
+     * Tries backtick first (MySQL/StarRocks), then double-quote (ANSI SQL).
+     * Returns empty string if neither works (use unquoted identifiers).
+     */
+    private static String probeQuoteChar(AdbcDatabase db) {
+        String[] candidates = {"`", "\""};
+        for (String q : candidates) {
+            try (AdbcConnection conn = db.connect();
+                    AdbcStatement stmt = conn.createStatement()) {
+                stmt.setSqlQuery("SELECT 1 AS " + q + "probe" + q);
+                AdbcStatement.QueryResult qr = stmt.executeQuery();
+                try (ArrowReader reader = qr.getReader()) {
+                    reader.loadNextBatch();
+                    LOG.info("Quote probe succeeded with '{}'", q);
+                    return q;
+                }
+            } catch (Exception e) {
+                LOG.debug("Quote probe with '{}' failed: {}", q, e.getMessage());
+            }
+        }
+        LOG.info("All quote probes failed; using unquoted identifiers");
+        return "";
+    }
+
+    private static boolean isFlightSqlDriver(String driverPath) {
+        return driverPath != null && driverPath.toLowerCase().contains("flightsql");
     }
 
     /**
@@ -247,8 +282,9 @@ public class ADBCConnector implements Connector {
         if (lower.contains("postgresql") || lower.contains("postgres")) {
             return "\"";
         }
-        // SQLite, DuckDB, FlightSQL: no quoting needed (or standard ANSI)
-        if (lower.contains("sqlite") || lower.contains("duckdb") || lower.contains("flightsql")) {
+        // SQLite, DuckDB: standard ANSI double-quote
+        // FlightSQL is excluded — it's a transport, so quoting is probed at runtime
+        if (lower.contains("sqlite") || lower.contains("duckdb")) {
             return "\"";
         }
         return null;

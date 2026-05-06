@@ -77,7 +77,11 @@ private:
     void _reader_thread(const uint8_t* partition_data, size_t partition_length);
 
     AdbcDatabase* _database; // borrowed, not owned
-    std::vector<std::pair<const uint8_t*, size_t>> _partitions;
+    // Owned copies of partition bytes — the caller frees the source AdbcPartitions
+    // immediately after start() returns, but reader threads need the bytes alive
+    // until each thread reaches AdbcConnectionReadPartition. Copying at construction
+    // closes that race.
+    std::vector<std::vector<uint8_t>> _partitions;
     size_t _num_threads;
     RecordBatchQueue _queue;
     std::vector<std::thread> _threads;

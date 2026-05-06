@@ -182,13 +182,51 @@ Status ADBCScanner::_try_parallel_read() {
         return Status::NotSupported("ADBC partitions not supported by driver");
     }
 
-    if (partitions.num_partitions <= 1) {
+    if (partitions.num_partitions == 0) {
+        // Driver returned no partitions; treat as not-supported so caller falls back
+        // to single-stream ExecuteQuery. (No prior GetFlightInfo state to deadlock on.)
         cleanup_schema();
         cleanup_partitions();
-        return Status::NotSupported("Only one partition, falling back to single stream");
+        return Status::NotSupported("ADBC ExecutePartitions returned 0 partitions");
     }
 
-    // Create parallel reader with capped thread count
+    if (partitions.num_partitions == 1) {
+        // Single-partition path: read the partition we already have via
+        // AdbcConnectionReadPartition (a DoGet on the existing ticket). Do NOT
+        // fall back to AdbcStatementExecuteQuery — that would issue a second
+        // GetFlightInfo on the same connection while the first is still being
+        // held by the server's per-bearer-token query semaphore (Flight SQL
+        // servers serialize GetFlightInfo on the same connection).
+        AdbcError ep_error = ADBC_ERROR_INIT;
+        AdbcStatusCode read_sc = AdbcConnectionReadPartition(&_connection, partitions.partitions[0],
+                                                              partitions.partition_lengths[0], &_c_stream, &ep_error);
+        cleanup_schema();
+        cleanup_partitions();
+        if (read_sc != ADBC_STATUS_OK) {
+            std::string msg = ep_error.message ? ep_error.message : "Unknown ADBC error";
+            if (ep_error.release) ep_error.release(&ep_error);
+            return Status::InternalError("ADBC ReadPartition failed: " + msg);
+        }
+        _stream_initialized = true;
+
+        // Pull schema off the stream so _convert_batch_to_chunk has it.
+        struct ArrowSchema stream_schema {};
+        if (_c_stream.get_schema(&_c_stream, &stream_schema) != 0) {
+            const char* err = _c_stream.get_last_error(&_c_stream);
+            return Status::InternalError(
+                    fmt::format("Failed to get schema from ADBC partition stream: {}", err ? err : "unknown"));
+        }
+        auto schema_result = arrow::ImportSchema(&stream_schema);
+        if (!schema_result.ok()) {
+            return Status::InternalError("Failed to import Arrow schema: " + schema_result.status().ToString());
+        }
+        _arrow_schema = std::move(schema_result).ValueUnsafe();
+
+        _use_parallel = false;
+        return Status::OK();
+    }
+
+    // Multi-partition path: spin up the parallel reader.
     size_t num_threads = std::min(partitions.num_partitions, (size_t)4);
     _parallel_reader = std::make_unique<ADBCParallelReader>(&_database, partitions, num_threads);
     auto start_status = _parallel_reader->start();
