@@ -1676,8 +1676,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_meta_reader_with_multiple_dcg_columns
 }
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
-                         ::testing::Values(RowsetColumnPartialUpdateParam{1},
-                                           RowsetColumnPartialUpdateParam{1024},
+                         ::testing::Values(RowsetColumnPartialUpdateParam{1}, RowsetColumnPartialUpdateParam{1024},
                                            RowsetColumnPartialUpdateParam{104857600}));
 
 } // namespace starrocks
