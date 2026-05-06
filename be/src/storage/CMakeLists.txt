@@ -26,6 +26,7 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_config.cpp
+    flat_json_metrics.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -50,6 +51,7 @@ set(STORAGE_FILES
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
+    storage_metrics.cpp
     data_dir.cpp
     short_key_index.cpp
     snapshot_manager.cpp
@@ -102,6 +104,7 @@ set(STORAGE_FILES
     rowset/data_sample.cpp
     rowset/dict_page.cpp
     rowset/segment.cpp
+    rowset/segment_file_info.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
@@ -198,6 +201,7 @@ set(STORAGE_FILES
     lake/delta_writer.cpp
     lake/vacuum.cpp
     lake/vacuum_full.cpp
+    lake/vector_index_build_task.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp

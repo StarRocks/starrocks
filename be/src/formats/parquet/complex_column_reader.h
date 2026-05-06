@@ -304,6 +304,8 @@ struct TopBinding {
     std::string path;
     TypeDescriptor type;
     const ShreddedFieldNode* node = nullptr;
+    // Cached parsed form of `path` to avoid re-parsing on every row.
+    VariantPath parsed_path;
 };
 
 // VariantColumnReader handles the reading of Parquet columns that represent variant types.
@@ -347,20 +349,20 @@ public:
                                              const VariantRowRef& full_row, Column* dst);
 
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
-    // shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
+    // parsed_shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
     // If empty, no typed_columns optimization is applied (overlay reconstruction still works).
     explicit VariantColumnReader(const ParquetField* parquet_field,
                                  std::unique_ptr<ScalarColumnReader>&& metadata_reader,
                                  std::unique_ptr<ScalarColumnReader>&& value_reader,
                                  std::vector<ShreddedFieldNode>&& shredded_fields,
-                                 std::vector<std::string> shredded_paths = {},
+                                 std::vector<VariantPath> parsed_shredded_paths = {},
                                  ColumnReaderPtr&& root_typed_value_reader = nullptr,
                                  std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr)
             : ColumnReader(parquet_field),
               _top_level(std::move(metadata_reader), std::move(value_reader), std::move(root_typed_value_reader),
                          std::move(root_typed_value_type)),
               _shredded_fields(std::move(shredded_fields)),
-              _shredded_paths(std::move(shredded_paths)) {
+              _requested_shredded_paths(std::move(parsed_shredded_paths)) {
         // Both readers must be non-null for VariantColumnReader to function correctly
         DCHECK(_top_level.metadata_reader != nullptr) << "VariantColumnReader: metadata reader cannot be null";
         DCHECK(_top_level.value_reader != nullptr) << "VariantColumnReader: value reader cannot be null";
@@ -397,12 +399,23 @@ public:
     bool fallback_values_all_null_in_row_group_for_path(const VariantPath& path, uint64_t rg_num_rows) const;
 
 private:
+    // Fast-path read when _skip_base_payload is true.
+    // Returns true if the fast path handled the read completely.
+    // Returns false if fallback rows were detected; shredded fields are already populated and the
+    // caller should run the normal per-row path without re-reading shredded fields.
+    StatusOr<bool> _read_range_skip_base_payload(const Range<uint64_t>& range, const Filter* filter,
+                                                 VariantColumn* variant_column, NullableColumn* nullable_column);
+
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
-    std::vector<std::string> _shredded_paths;
-    // Cached auto-discovered paths when _shredded_paths is empty (request-all-paths mode).
+    std::vector<VariantPath> _requested_shredded_paths;
+    // True when every requested path maps to a SCALAR typed_value node in the shredded schema.
+    // In that case metadata/value base payload columns are never needed and can be skipped
+    // entirely (IO range, offset-index selection, and data read).
+    bool _skip_base_payload = false;
+    // Cached auto-discovered paths when _requested_shredded_paths is empty (request-all-paths mode).
     // _shredded_fields is fixed after construction, so this only needs to be computed once.
-    mutable std::vector<std::string> _cached_auto_paths;
+    mutable std::vector<VariantPath> _cached_auto_paths;
     mutable bool _auto_paths_cached = false;
 };
 
@@ -449,9 +462,9 @@ public:
                                           const uint64_t rg_num_rows) const override;
 
 private:
-    StatusOr<bool> _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
-                                                uint64_t rg_num_rows, const ColumnReader** leaf_reader,
-                                                std::vector<const ColumnPredicate*>* rewritten_predicates) const;
+    bool _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
+                                      uint64_t rg_num_rows, const ColumnReader** leaf_reader,
+                                      std::vector<const ColumnPredicate*>* rewritten_predicates) const;
 
     VariantColumnReader* _source;
     VariantPath _leaf_path;

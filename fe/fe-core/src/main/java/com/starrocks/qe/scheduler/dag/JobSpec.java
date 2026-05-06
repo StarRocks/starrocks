@@ -72,7 +72,6 @@ public class JobSpec {
 
     private ConnectContext connectContext;
     private boolean enablePipeline;
-    private boolean enableStreamPipeline;
     private boolean isBlockQuery;
 
     private boolean needReport;
@@ -130,7 +129,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(execPlan)
                     .descTable(descTable)
-                    .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(context.getSessionVariable().isEnableProfile() ||
                             context.getSessionVariable().isEnableBigQueryProfile() || queryType == TQueryType.LOAD)
@@ -160,7 +158,6 @@ public class JobSpec {
                     .scanNodes(loadPlanner.getScanNodes())
                     .execPlan(loadPlanner.getExecPlan())
                     .descTable(loadPlanner.getDescTable().toThrift())
-                    .enableStreamPipeline(false)
                     .isBlockQuery(true)
                     .needReport(true)
                     .queryGlobals(queryGlobals)
@@ -197,7 +194,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(null)
                     .descTable(descTable.toThrift())
-                    .enableStreamPipeline(false)
                     .isBlockQuery(true)
                     .needReport(true)
                     .queryGlobals(queryGlobals)
@@ -223,7 +219,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(execPlan)
                     .descTable(descTable.toThrift())
-                    .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(false)
                     .queryGlobals(queryGlobals)
@@ -240,6 +235,18 @@ public class JobSpec {
             TQueryOptions queryOptions = new TQueryOptions();
             queryOptions.setQuery_type(TQueryType.LOAD);
             queryOptions.setLoad_job_type(TLoadJobType.STREAM_LOAD);
+            // Propagate enable_profile decided by StreamLoadPlanner (e.g. from the
+            // table's enable_load_profile property) so that FE respects it when the
+            // ConnectContext session variable is not set, as is the case for stream
+            // loads sent directly to CN.
+            TQueryOptions plannerOptions = params.getQuery_options();
+            if (plannerOptions != null && plannerOptions.isSetEnable_profile()
+                    && plannerOptions.isEnable_profile()) {
+                queryOptions.setEnable_profile(true);
+                if (plannerOptions.isSetLoad_profile_collect_second()) {
+                    queryOptions.setLoad_profile_collect_second(plannerOptions.getLoad_profile_collect_second());
+                }
+            }
 
             return new Builder()
                     .queryId(queryId)
@@ -247,7 +254,6 @@ public class JobSpec {
                     .scanNodes(null)
                     .execPlan(null)
                     .descTable(null)
-                    .enableStreamPipeline(false)
                     .isBlockQuery(true)
                     .needReport(true)
                     .queryGlobals(null)
@@ -276,7 +282,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(null)
                     .descTable(null)
-                    .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(false)
                     .queryGlobals(queryGlobals)
@@ -336,7 +341,6 @@ public class JobSpec {
                 "loadJobId=" + loadJobId +
                 ", queryId=" + DebugUtil.printId(queryId) +
                 ", enablePipeline=" + enablePipeline +
-                ", enableStreamPipeline=" + enableStreamPipeline +
                 ", isBlockQuery=" + isBlockQuery +
                 ", resourceGroup=" + resourceGroup +
                 ", cnGroup=" + computeResource +
@@ -393,10 +397,6 @@ public class JobSpec {
 
     public boolean isEnablePipeline() {
         return enablePipeline;
-    }
-
-    public boolean isEnableStreamPipeline() {
-        return enableStreamPipeline;
     }
 
     public TQueryGlobals getQueryGlobals() {
@@ -559,11 +559,6 @@ public class JobSpec {
                 descTable.setIs_cached(false);
             }
             instance.descTable = descTable;
-            return this;
-        }
-
-        public Builder enableStreamPipeline(boolean enableStreamPipeline) {
-            instance.enableStreamPipeline = enableStreamPipeline;
             return this;
         }
 

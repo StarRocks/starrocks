@@ -24,8 +24,8 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -41,6 +41,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -355,7 +356,40 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        String normalizedQuery = JDBCTable.normalizePassThroughQuery(query);
+        String metadataQuery = "SELECT * FROM (" + normalizedQuery + ") starrocks_query WHERE 1 = 0";
+        try (Connection connection = getConnection();
+                PreparedStatement preparedStatement = connection.prepareStatement(metadataQuery)) {
+            int queryTimeoutSeconds = schemaResolver.getQueryTimeoutSeconds();
+            if (queryTimeoutSeconds > 0) {
+                preparedStatement.setQueryTimeout(queryTimeoutSeconds);
+            }
+
+            try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                Map<String, Integer> originalJdbcTypes = new HashMap<>();
+                List<Column> fullSchema = schemaResolver.convertToSRTable(resultSet.getMetaData(), originalJdbcTypes);
+                if (fullSchema.isEmpty()) {
+                    throw new StarRocksConnectorException("pass-through query returned no columns");
+                }
+
+                int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                JDBCTable queryTable = new JDBCTable(tableId, "_query_" + tableId, fullSchema, dbName, catalogName,
+                        properties);
+                queryTable.setPassThroughQuery(normalizedQuery);
+                if (!originalJdbcTypes.isEmpty()) {
+                    queryTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
+                }
+                return queryTable;
+            }
+        } catch (SQLException | DdlException e) {
+            throw new StarRocksConnectorException("get query table for JDBC catalog fail!", e);
+        }
+    }
+
+    @Override
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {

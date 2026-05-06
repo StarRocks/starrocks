@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.LakeMaterializedView;
@@ -42,6 +43,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AnalyzerUtilsTest {
 
@@ -156,6 +158,24 @@ public class AnalyzerUtilsTest {
         Assertions.assertEquals(Arrays.asList(qualifiedRelationName("test", "relation_src"),
                         qualifiedRelationName("test", "relation_view")),
                 AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(cteStmt));
+    }
+
+    @Test
+    public void testCollectAllConnectorTableAndViewWithViewDefinitions() throws Exception {
+        starRocksAssert.withView("CREATE VIEW relation_nested_view AS SELECT k1 FROM relation_view;");
+        try {
+            QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                    "SELECT k1 FROM relation_nested_view", starRocksAssert.getCtx());
+            Set<String> tableNames = AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement)
+                    .values().stream()
+                    .map(Table::getName)
+                    .collect(Collectors.toSet());
+
+            Assertions.assertEquals(Sets.newHashSet("relation_src", "relation_view", "relation_nested_view"),
+                    tableNames);
+        } finally {
+            starRocksAssert.dropView("relation_nested_view");
+        }
     }
 
     private String qualifiedRelationName(String dbName, String tableName) {

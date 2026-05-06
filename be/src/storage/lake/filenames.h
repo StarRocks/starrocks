@@ -151,6 +151,42 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
+// Generate vector index filename from segment filename.
+// e.g. "0123_abcd.dat" + index_id 123 -> "0123_abcd_123.vi"
+inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t index_id) {
+    if (segment_filename.ends_with(".dat")) {
+        return fmt::format("{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), index_id);
+    }
+    return fmt::format("{}_{}.vi", segment_filename, index_id);
+}
+
+// Compute the vector-index file path that sits next to a segment file in shared-data
+// layout: split |segment_path| into directory + basename, compute the .vi filename
+// from the basename, then re-join under the original directory.
+//
+//   "data/000_abcd.dat"  + 0  -> "data/000_abcd_0.vi"
+//   "/foo/bar/seg.dat"   + 5  -> "/foo/bar/seg_5.vi"
+//   "seg.dat"            + 7  -> "seg_7.vi"            (no directory part)
+//   "/seg.dat"           + 1  -> "seg_1.vi"            (root-only directory)
+inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t index_id) {
+    const size_t last_slash = segment_path.find_last_of('/');
+    std::string_view basename =
+            (last_slash == std::string_view::npos) ? segment_path : segment_path.substr(last_slash + 1);
+    std::string vi_filename = gen_vector_index_filename(basename, index_id);
+    if (last_slash == std::string_view::npos) {
+        return vi_filename;
+    }
+    std::string_view dir = segment_path.substr(0, last_slash);
+    if (dir.empty()) {
+        return vi_filename;
+    }
+    return fmt::format("{}/{}", dir, vi_filename);
+}
+
+inline bool is_vector_index(std::string_view file_name) {
+    return HasSuffixString(file_name, ".vi");
+}
+
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
 inline std::string extract_uuid_from(std::string_view file_name) {
     if (file_name.empty()) {

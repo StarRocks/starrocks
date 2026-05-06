@@ -15,10 +15,15 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
 set(COMMON_FILES
+  bthread_timer.cpp
+  brpc/brpc_stub_cache.cpp
+  brpc/internal_service_recoverable_stub.cpp
+  brpc/lake_service_recoverable_stub.cpp
   brpc_helper.cpp
   configbase.cpp
   config.cpp
   memory/column_allocator.cpp
+  metrics/process_metrics_registry.cpp
   runtime_profile.cpp
   stack_util.cpp
   system/backend_options.cpp

@@ -1001,7 +1001,7 @@ public class ShowStmtMetaTest {
     public void testShowMaterializedViewsStmt() {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("test_db", null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(27, metaData.getColumnCount());
+        Assertions.assertEquals(28, metaData.getColumnCount());
         Assertions.assertEquals("id", metaData.getColumn(0).getName());
         Assertions.assertEquals("database_name", metaData.getColumn(1).getName());
         Assertions.assertEquals("name", metaData.getColumn(2).getName());
@@ -1029,6 +1029,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("creator", metaData.getColumn(24).getName());
         Assertions.assertEquals("last_refresh_process_time", metaData.getColumn(25).getName());
         Assertions.assertEquals("last_refresh_job_id", metaData.getColumn(26).getName());
+        Assertions.assertEquals("last_refresh_time", metaData.getColumn(27).getName());
     }
 
     @Test

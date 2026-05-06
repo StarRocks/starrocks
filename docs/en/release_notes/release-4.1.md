@@ -4,6 +4,14 @@ displayed_sidebar: docs
 
 # StarRocks version 4.1
 
+:::danger
+
+**Container Image Issue (v4.1.0)**
+
+Due to an unstable load order issue in the v4.1.0 container image, BE processes may fail to start reliably in container environments. **Container environment users should NOT upgrade to v4.1.0.** Please wait for v4.1.1, which includes the fix ([#71825](https://github.com/StarRocks/starrocks/pull/71825)).
+
+:::
+
 :::warning
 
 **Downgrade Notes**
@@ -26,7 +34,7 @@ Release Date: April 13, 2026
 
 - **Large-Capacity Tablet Support (Phase 1)**
 
-  Supports significantly larger per-tablet data capacity for shared-data clusters, with a long-term target of 100 GB per tablet. Phase 1 focuses on enabling parallel Compaction and parallel MemTable finalization within a single Lake tablet, reducing ingestion and Compaction overhead as tablet size grows. [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#68677](https://github.com/StarRocks/starrocks/pull/68677)
+  Enables shared-data clusters to host significantly more data per tablet, with a long-term target of 100 GB per tablet. Phase 1 introduces intra-tablet parallelism across the entire ingestion, Primary Key update, and Compaction pipeline, so a single Lake tablet no longer becomes a single-threaded bottleneck as it grows. Improvements include parallel Compaction within a single tablet (with segment-level splitting), parallel MemTable finalization, flush, and merge for Lake loading (including the load-spill path), tablet-internal parallel publish and parallel condition updates for Primary Key tables, and range-split / parallel / size-tiered Compaction for the cloud-native Primary Key index with remote-storage mapper file support. Together, these changes substantially reduce ingestion memory overhead, compaction amplification, and FE metadata pressure for large-tablet workloads. [#66424](https://github.com/StarRocks/starrocks/pull/66424) [#66522](https://github.com/StarRocks/starrocks/pull/66522) [#66778](https://github.com/StarRocks/starrocks/pull/66778) [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#67432](https://github.com/StarRocks/starrocks/pull/67432) [#67478](https://github.com/StarRocks/starrocks/pull/67478) [#67554](https://github.com/StarRocks/starrocks/pull/67554) [#66796](https://github.com/StarRocks/starrocks/pull/66796) [#67392](https://github.com/StarRocks/starrocks/pull/67392) [#67878](https://github.com/StarRocks/starrocks/pull/67878) [#65908](https://github.com/StarRocks/starrocks/pull/65908) [#68677](https://github.com/StarRocks/starrocks/pull/68677) [#68123](https://github.com/StarRocks/starrocks/pull/68123) [#69865](https://github.com/StarRocks/starrocks/pull/69865)
 
 - **Fast Schema Evolution V2**
 
@@ -38,7 +46,7 @@ Release Date: April 13, 2026
 
 - **Cache Observability**
 
-  Cache hit ratio metrics are exposed in audit logs and the monitoring system for better cache transparency and latency predictability. Detailed Data Cache metrics include memory and disk quota, page cache statistics, and per-table hit rates. [#63964](https://github.com/StarRocks/starrocks/pull/63964)
+  Query-level cache hit ratio is now exposed in audit logs and the monitoring system for better cache transparency and latency diagnosis. Additional Data Cache metrics include memory and disk quota usage, and page cache statistics. [#63964](https://github.com/StarRocks/starrocks/pull/63964)
 
 - Added segment metadata filter for Lake tables to skip irrelevant segments based on sort key range during scans, reducing I/O for range-predicate queries. [#68124](https://github.com/StarRocks/starrocks/pull/68124)
 - Supports fast cancel for Lake DeltaWriter, reducing latency for cancelled ingestion jobs in shared-data clusters. [#68877](https://github.com/StarRocks/starrocks/pull/68877)

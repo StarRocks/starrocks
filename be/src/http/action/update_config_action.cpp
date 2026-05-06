@@ -51,6 +51,7 @@
 #include "common/configbase.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
 #include "exec/workgroup/scan_executor.h"
 #include "gutil/strings/substitute.h"
@@ -75,7 +76,6 @@
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
 #include "common/gflags_utils.h"
@@ -300,6 +300,17 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto thread_pool = _exec_env->pk_index_execution_thread_pool();
             if (thread_pool != nullptr) {
                 return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("lake_partial_update_thread_pool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->lake_partial_update_thread_pool();
+            if (thread_pool != nullptr) {
+                int max_thread_count = config::lake_partial_update_thread_pool_max_threads;
+                if (max_thread_count <= 0) {
+                    max_thread_count = CpuInfo::num_cores() / 2;
+                }
+                return thread_pool->update_max_threads(std::max(1, max_thread_count));
             }
             return Status::OK();
         });

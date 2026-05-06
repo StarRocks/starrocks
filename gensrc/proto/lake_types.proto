@@ -142,6 +142,22 @@ message SegmentMetadataPB {
     // IDs of vector indexes that need .vi files for this segment.
     // Only populated when the segment meets the build threshold.
     repeated int64 vector_index_ids = 5;
+    // Equal-row-interval samples of the sort key, NON-DECREASING.
+    // sort_key_samples[i] is the sort key at 0-indexed row (i+1) * interval,
+    // where interval == sort_key_sample_row_interval. Always paired with
+    // a positive sort_key_sample_row_interval. May be empty when num_rows
+    // is not greater than interval (small segments produce no samples
+    // because the first sample row is at index `interval`, which only
+    // exists for num_rows > interval). Consumed by tablet split and
+    // range-split parallel compaction to accurately estimate row
+    // distribution for overlapping segments.
+    repeated TuplePB sort_key_samples = 6;
+    // Row interval used to produce sort_key_samples. Set if and only if
+    // sort_key_samples_size() > 0; in that case the value is > 0 and
+    // sort_key_samples.size() * sort_key_sample_row_interval < num_rows.
+    // Persisted per-segment so a future change to the producer's interval
+    // constant cannot break cross-version readers.
+    optional int64 sort_key_sample_row_interval = 7;
 }
 
 message RowsetMetadataPB {
@@ -228,6 +244,9 @@ message TabletMetadataPB {
     optional FlatJsonConfigPB flat_json_config = 21;
     // Indicates sort key range for range distribution table only
     optional TabletRangePB range = 22;
+    // Watermark for async vector index build: all rowsets with end_version <= this value
+    // have their .vi files fully built. Carry-forwarded during publish.
+    optional int64 vector_index_built_version = 23;
 }
 
 message MetadataUpdateInfoPB {

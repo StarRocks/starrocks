@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -432,9 +433,16 @@ public class StmtExecutor {
                 AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
         if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
-                    AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt));
+                    SqlCredentialRedactor.redact(AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt)));
+        } else if (Config.enable_sql_desensitize_in_log) {
+            String desensitizedSql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
+                            .setColumnSimplifyTableName(false)
+                            .setEnableDigest(true))
+                    .orElse("this is a desensitized sql");
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
+                    SqlCredentialRedactor.redact(desensitizedSql));
         } else {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, sql);
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, SqlCredentialRedactor.redact(sql));
         }
         summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
@@ -862,7 +870,7 @@ public class StmtExecutor {
             if (e.getType().equals(ErrorType.USER_ERROR)) {
                 throw e;
             } else {
-                LOG.warn("Planner error: " + originStmt.originStmt, e);
+                LOG.warn("Planner error: {}", getRedactedOriginStmtInString(), e);
                 throw e;
             }
         } catch (Exception e) {
@@ -993,7 +1001,7 @@ public class StmtExecutor {
                     execPlan = generateExecPlan();
                 } catch (Exception e) {
                     LOG.warn("Generate exec plan failed for explain stmt: {}",
-                            parsedStmt.getOrigStmt().originStmt, e);
+                            getRedactedOriginStmtInString(), e);
                 }
                 handleExplainExecPlan(execPlan);
                 return;
@@ -1006,7 +1014,7 @@ public class StmtExecutor {
             context.setPlanning(true);
             try {
                 QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
-                        QeProcessorImpl.QueryInfo.fromPlanningQuery(context, originStmt.originStmt));
+                        QeProcessorImpl.QueryInfo.fromPlanningQuery(context, getRedactedOriginStmtInString()));
             } catch (Exception e) {
                 LOG.warn("Failed to register planning query: {}", DebugUtil.printId(context.getExecutionId()), e);
             }
@@ -1096,7 +1104,7 @@ public class StmtExecutor {
                                 originStmt = this.originStmt.originStmt;
                             }
                             needRetry = true;
-                            LOG.warn("retry {} times. stmt: {}", (i + 1), originStmt);
+                            LOG.warn("retry {} times. stmt: {}", (i + 1), SqlCredentialRedactor.redact(originStmt));
                         } else {
                             throw e;
                         }
@@ -1259,7 +1267,7 @@ public class StmtExecutor {
             String sql = originStmt != null ? originStmt.originStmt : "";
             String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
             LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
-                    " enable_large_in_predicate=false.", truncatedSql, e.getMessage());
+                    " enable_large_in_predicate=false.", SqlCredentialRedactor.redact(truncatedSql), e.getMessage());
             throw e;
         } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
@@ -1314,7 +1322,7 @@ public class StmtExecutor {
 
             if (shouldMarkIdleCheck && originWarehouseId != null) {
                 WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId,
-                        originStmt == null ? "" : originStmt.originStmt);
+                        getRedactedOriginStmtInString());
             }
 
             recordExecStatsIntoContext();
@@ -1882,7 +1890,7 @@ public class StmtExecutor {
         }
 
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
-                new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
+                new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
         if (isSchedulerExplain) {
             coord.execWithoutDeploy();
@@ -2866,7 +2874,7 @@ public class StmtExecutor {
                 if (sql == null) {
                     sql = originStmt.originStmt;
                 }
-                LOG.warn("DDL statement (" + sql + ") process failed.", e);
+                LOG.warn("DDL statement ({}) process failed.", SqlCredentialRedactor.redact(sql), e);
             }
             context.setState(e.getQueryState());
         } catch (DdlException | AlterJobException e) {
@@ -2879,7 +2887,7 @@ public class StmtExecutor {
             if (sql == null || sql.isEmpty()) {
                 sql = originStmt.originStmt;
             }
-            LOG.warn("DDL statement (" + sql + ") process failed.", e);
+            LOG.warn("DDL statement ({}) process failed.", SqlCredentialRedactor.redact(sql), e);
             context.getState().setError(e.getMessage());
         }
     }
@@ -3104,7 +3112,7 @@ public class StmtExecutor {
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
-            LOG.warn("DML statement({}) process failed.", originStmt.originStmt, t);
+            LOG.warn("DML statement({}) process failed.", getRedactedOriginStmtInString(), t);
             throw t;
         } finally {
             boolean isAsync = false;
@@ -3185,7 +3193,7 @@ public class StmtExecutor {
                 context.getState().setOk();
             } catch (QueryStateException e) {
                 if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                    LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+                    LOG.warn("DDL statement({}) process failed.", getRedactedOriginStmtInString(), e);
                 }
                 context.setState(e.getQueryState());
             }
@@ -3332,7 +3340,8 @@ public class StmtExecutor {
 
             coord.setLoadJobId(jobId);
             trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
-            QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
+            QeProcessorImpl.QueryInfo queryInfo =
+                    new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             if (isSchedulerExplain) {
                 coord.execWithoutDeploy();
@@ -3360,7 +3369,7 @@ public class StmtExecutor {
                     if (Config.log_plan_cancelled_by_crash_be && context.getQueryDetail() == null) {
                         LOG.warn("Query cancelled by crash of backends [QueryId={}] [SQL={}] [Plan={}]",
                                 DebugUtil.printId(context.getExecutionId()),
-                                originStmt == null ? "" : originStmt.originStmt,
+                                getRedactedOriginStmtInString(),
                                 execPlan.getExplainString(TExplainLevel.COSTS));
                     }
 
@@ -3588,10 +3597,7 @@ public class StmtExecutor {
             }
         } catch (Throwable t) {
             // if any throwable being thrown during insert operation, first we should abort this txn
-            String failedSql = "";
-            if (originStmt != null && originStmt.originStmt != null) {
-                failedSql = originStmt.originStmt;
-            }
+            String failedSql = getRedactedOriginStmtInString();
             LOG.warn("failed to handle stmt [{}] label: {}", failedSql, label, t);
             String errMsg = t.getMessage();
             if (errMsg == null) {
@@ -3738,6 +3744,15 @@ public class StmtExecutor {
         return originStmt.originStmt;
     }
 
+    @VisibleForTesting
+    String getRedactedOriginStmtInString() {
+        String sql = getOriginStmtInString();
+        if (!SqlCredentialRedactor.mayNeedCredentialRedaction(sql)) {
+            return sql;
+        }
+        return SqlCredentialRedactor.redact(sql);
+    }
+
     public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
         List<TResultBatch> sqlResult = Lists.newArrayList();
         try {
@@ -3867,14 +3882,17 @@ public class StmtExecutor {
         }
 
         try {
-            String sql = getQueryDetailSql(parsedStmt);
+            String originSql = getQueryDetailSql(parsedStmt);
             boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+            String sql = originSql;
             if (needEncrypt || Config.enable_sql_desensitize_in_log) {
                 sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
                                 .setColumnSimplifyTableName(false)
                                 .setHideCredential(needEncrypt)
                                 .setEnableDigest(Config.enable_sql_desensitize_in_log))
                         .orElse("this is a desensitized sql");
+            } else if (SqlCredentialRedactor.mayNeedCredentialRedaction(originSql)) {
+                sql = SqlCredentialRedactor.redact(originSql);
             }
 
             boolean isQuery = context.isQueryStmt(parsedStmt);

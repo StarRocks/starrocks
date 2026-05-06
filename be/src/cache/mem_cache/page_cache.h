@@ -37,12 +37,14 @@
 #include <string>
 #include <utility>
 
-#include "cache/datacache.h"
+#include "base/metrics.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
 
 namespace starrocks {
 
 class PageCacheHandle;
 class MemTracker;
+class StoragePageCache;
 struct MemCacheWriteOptions;
 
 // Page cache min size is 256MB
@@ -53,6 +55,36 @@ struct StoragePageCacheMetrics {
     static std::atomic<size_t> released_page_handle_count;
 };
 
+class PageCacheMetrics {
+public:
+    static PageCacheMetrics* instance();
+
+    void install(MetricRegistry* registry, StoragePageCache* cache);
+
+    METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_UINT_GAUGE(page_cache_insert_count, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_UINT_GAUGE(page_cache_insert_evict_count, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_UINT_GAUGE(page_cache_release_evict_count, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
+    METRIC_DEFINE_UINT_GAUGE(page_cache_pinned_count, MetricUnit::BYTES);
+
+private:
+    PageCacheMetrics() = default;
+
+    void _set_cache(StoragePageCache* cache) { _cache = cache; }
+    void _update_lookup_count();
+    void _update_hit_count();
+    void _update_insert_count();
+    void _update_insert_evict_count();
+    void _update_release_evict_count();
+    void _update_capacity();
+    void _update_pinned_count();
+
+    MetricRegistry* _registry = nullptr;
+    StoragePageCache* _cache = nullptr;
+};
+
 // Wrapper around Cache, and used for cache page of column datas in Segment.
 // TODO(zc): We should add some metric to see cache hit/miss rate.
 class StoragePageCache {
@@ -60,11 +92,11 @@ public:
     StoragePageCache() = default;
     virtual ~StoragePageCache() = default;
 
-    void init_metrics();
+    void init_metrics(MetricRegistry* metrics = nullptr);
 
     // Return global instance.
     // Client should call create_global_cache before.
-    static StoragePageCache* instance() { return DataCache::GetInstance()->page_cache(); }
+    static StoragePageCache* instance();
 
     StoragePageCache(LocalMemCacheEngine* cache_engine) : _cache(cache_engine), _initialized(true) {}
 

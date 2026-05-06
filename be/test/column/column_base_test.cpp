@@ -28,11 +28,9 @@ namespace {
 
 class TestIntColumn final : public Column {
 public:
-    explicit TestIntColumn(bool is_array = false) : _is_array(is_array) {}
+    explicit TestIntColumn() {}
 
     bool is_array() const override { return _is_array; }
-
-    const uint8_t* raw_data() const override { return reinterpret_cast<const uint8_t*>(_data.data()); }
 
     size_t size() const override { return _data.size(); }
     size_t capacity() const override { return _data.capacity(); }

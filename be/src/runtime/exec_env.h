@@ -67,7 +67,9 @@ class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
 class MetricRegistry;
+class ProcessMetricsRegistry;
 class StorageEngine;
+class TableMetricsManager;
 class ThreadPool;
 class PriorityThreadPool;
 class ResultBufferMgr;
@@ -123,7 +125,7 @@ public:
     GlobalEnv() = default;
     ~GlobalEnv() { _is_init = false; }
 
-    Status init();
+    Status init(MetricRegistry* metrics);
     void stop() {
         _is_init = false;
         _reset_tracker();
@@ -176,7 +178,7 @@ public:
 private:
     static bool _is_init;
 
-    Status _init_mem_tracker();
+    Status _init_mem_tracker(MetricRegistry* metrics);
     void _reset_tracker();
 
     std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
@@ -251,7 +253,8 @@ private:
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
-    Status init(const std::vector<StorePath>& store_paths, bool as_cn = false);
+    Status init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
+                bool as_cn = false);
     void stop();
     void destroy();
     void wait_for_finish();
@@ -271,6 +274,8 @@ public:
     std::string token() const;
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     MetricRegistry* metrics() const { return _metrics; }
+    ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
+    TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
     DataStreamMgr* stream_mgr() { return _stream_mgr; }
     LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
     ResultBufferMgr* result_mgr() { return _result_mgr; }
@@ -369,11 +374,15 @@ public:
 
     ThreadPool* lake_metadata_fetch_thread_pool() { return _lake_metadata_fetch_thread_pool.get(); }
 
+    ThreadPool* lake_vector_index_build_thread_pool() { return _lake_vector_index_build_thread_pool.get(); }
+
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
 
     ThreadPool* pk_index_execution_thread_pool() { return _pk_index_execution_thread_pool.get(); }
 
     ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
+
+    ThreadPool* lake_partial_update_thread_pool() { return _lake_partial_update_thread_pool.get(); }
 
     void try_release_resource_before_core_dump();
 
@@ -387,7 +396,9 @@ private:
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
+    ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     MetricRegistry* _metrics = nullptr;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
     DataStreamMgr* _stream_mgr = nullptr;
     ResultBufferMgr* _result_mgr = nullptr;
     ResultQueueMgr* _result_queue_mgr = nullptr;
@@ -448,9 +459,11 @@ private:
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _lake_metadata_fetch_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _lake_vector_index_build_thread_pool = nullptr;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
     std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _lake_partial_update_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr = nullptr;

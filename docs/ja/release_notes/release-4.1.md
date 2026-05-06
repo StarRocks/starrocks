@@ -4,6 +4,14 @@ displayed_sidebar: docs
 
 # StarRocks version 4.1
 
+:::danger
+
+**コンテナイメージの問題 (v4.1.0)**
+
+v4.1.0 のコンテナイメージにはロード順序が不安定な問題があり、コンテナ環境で BE プロセスが正常に起動しないことがあります。**コンテナ環境のユーザーは v4.1.0 にアップグレードしないでください。** 修正が含まれる v4.1.1 のリリースをお待ちください（[#71825](https://github.com/StarRocks/starrocks/pull/71825)）。
+
+:::
+
 :::warning
 
 **ダウングレードに関する注意事項**
@@ -26,7 +34,7 @@ displayed_sidebar: docs
 
 - **大容量タブレットサポート（フェーズ1）**
 
-  共有データクラスター向けに、タブレットあたりのデータ容量を大幅に拡大し、長期的な目標としてタブレットあたり100 GBを目指します。フェーズ1では、単一のLakeタブレット内での並列コンパクションと並列MemTableファイナライズを可能にすることに焦点を当て、タブレットサイズが大きくなるにつれて取り込みとコンパクションのオーバーヘッドを削減します。[#66586](https://github.com/StarRocks/starrocks/pull/66586) [#68677](https://github.com/StarRocks/starrocks/pull/68677)
+  これにより、共有データクラスタは1つのタブレットあたり大幅に多くのデータを格納できるようになり、長期的な目標として1タブレットあたり100 GBを目指しています。フェーズ1では、データ取り込み、主キーの更新、およびコンパクションのパイプライン全体にわたるタブレット内並列処理を導入するため、単一のLakeタブレットがサイズ拡大に伴いシングルスレッドのボトルネックになることはなくなります。改善点としては、単一タブレット内での並列コンパクション（セグメントレベルの分割を含む）、Lakeロード（ロード・スピル・パスを含む）のための並列MemTableのファイナライズ、フラッシュ、マージ、プライマリキーテーブルに対するタブレット内部の並列パブリッシュおよび並列コンディション更新、そしてリモートストレージマッパーファイルのサポートを備えたクラウドネイティブのプライマリキーインデックス向けの範囲分割／並列／サイズ階層型コンパクションなどが挙げられます。これらの変更により、大規模タブレットワークロードにおけるデータ取り込み時のメモリオーバーヘッド、コンパクションの増幅効果、およびFEメタデータへの負荷が大幅に軽減されます。[#66424](https://github.com/StarRocks/starrocks/pull/66424) [#66522](https://github.com/StarRocks/starrocks/pull/66522) [#66778](https://github.com/StarRocks/starrocks/pull/66778) [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#67432](https://github.com/StarRocks/starrocks/pull/67432) [#67478](https://github.com/StarRocks/starrocks/pull/67478) [#67554](https://github.com/StarRocks/starrocks/pull/67554) [#66796](https://github.com/StarRocks/starrocks/pull/66796) [#67392](https://github.com/StarRocks/starrocks/pull/67392) [#67878](https://github.com/StarRocks/starrocks/pull/67878) [#65908](https://github.com/StarRocks/starrocks/pull/65908) [#68677](https://github.com/StarRocks/starrocks/pull/68677) [#68123](https://github.com/StarRocks/starrocks/pull/68123) [#69865](https://github.com/StarRocks/starrocks/pull/69865)
 
 - **高速スキーマ進化 V2**
 
@@ -38,7 +46,7 @@ displayed_sidebar: docs
 
 - **キャッシュの可観測性**
 
-  キャッシュの透明性とレイテンシーの予測可能性を向上させるため、キャッシュヒット率メトリクスが監査ログと監視システムで公開されます。詳細なデータキャッシュメトリクスには、メモリとディスクのクォータ、ページキャッシュ統計、テーブルごとのヒット率が含まれます。[#63964](https://github.com/StarRocks/starrocks/pull/63964)
+  クエリレベルのキャッシュヒット率が監査ログと監視システムで公開されるようになり、キャッシュの透明性とレイテンシー診断が向上しました。追加のデータキャッシュメトリクスには、メモリとディスクのクォータ使用状況、およびページキャッシュ統計が含まれます。[#63964](https://github.com/StarRocks/starrocks/pull/63964)
 
 - Lakeテーブルにセグメントメタデータフィルターを追加し、スキャン中にソートキー範囲に基づいて関連性のないセグメントをスキップすることで、範囲述語クエリのI/Oを削減します。[#68124](https://github.com/StarRocks/starrocks/pull/68124)
 - Lake DeltaWriterの高速キャンセルをサポートし、共有データクラスターにおけるキャンセルされた取り込みジョブのレイテンシーを削減します。[#68877](https://github.com/StarRocks/starrocks/pull/68877)

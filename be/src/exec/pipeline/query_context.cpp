@@ -38,8 +38,7 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "util/global_metrics_registry.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -58,7 +57,6 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
-    _stream_epoch_manager = std::make_shared<StreamEpochManager>();
     _lifetime_sw.start();
 }
 
@@ -211,7 +209,8 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
         auto* services = runtime_services(_query_execution_services);
         auto* g_spill_manager =
                 services != nullptr ? services->global_spill_manager : ExecEnv::GetInstance()->global_spill_manager();
-        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager);
+        auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : ExecEnv::GetInstance()->spill_dir_mgr();
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager, spill_dir_mgr);
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;
@@ -383,12 +382,14 @@ QueryContextManager::QueryContextManager(size_t log2_num_slots)
           _context_maps(_num_slots),
           _second_chance_maps(_num_slots) {}
 
-Status QueryContextManager::init() {
+Status QueryContextManager::init(MetricRegistry* metrics) {
+    _metrics = metrics;
     // regist query context metrics
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
-    _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
-    metrics->register_metric(_metric_name, _query_ctx_cnt.get());
-    metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
+    if (_metrics != nullptr) {
+        _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
+        _metrics->register_metric(_metric_name, _query_ctx_cnt.get());
+        _metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
+    }
 
     try {
         _clean_thread = std::make_shared<std::thread>(_clean_func, this);
@@ -432,8 +433,9 @@ size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
 
 QueryContextManager::~QueryContextManager() {
     // unregist metrics
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
-    metrics->deregister_hook(_metric_name);
+    if (_metrics != nullptr) {
+        _metrics->deregister_hook(_metric_name);
+    }
     _query_ctx_cnt.reset();
 
     if (_clean_thread) {

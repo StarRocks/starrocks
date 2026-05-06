@@ -469,6 +469,26 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Count
 - Description: Total number of SST file write failures in the lake Primary Key persistent index. Incremented when SST file build fails.
 
+## `plan_advisor_guide_applied_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `operator_type` (`join` or `agg`)
+- Description: Total number of Plan Advisor guides applied during query optimization. The metric is incremented once for each guide that successfully rewrites a plan node. `join` covers join estimation error guides, and `agg` covers streaming aggregation guides.
+
+## `plan_advisor_guide_generated_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `operator_type` (`join` or `agg`)
+- Description: Total number of Plan Advisor guides generated and inserted into the local FE cache. The metric is incremented only when the analyzed guides are non-empty and stored as a new cache entry. `join` covers join estimation error guides, and `agg` covers streaming aggregation guides.
+
+## `plan_advisor_optimization_duration_ms_total`
+
+- Unit: Milliseconds
+- Type: Cumulative
+- Description: Total execution time saved by Plan Advisor, in milliseconds. When a query that used a cached guide finishes faster than the original query that produced the guide, the saved time is added to this counter.
+
 ## `plan_fragment_count`
 
 - Unit: Count

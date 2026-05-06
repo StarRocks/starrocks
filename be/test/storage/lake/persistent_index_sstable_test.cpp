@@ -26,7 +26,6 @@
 #include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -38,6 +37,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -642,7 +642,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_build_sstable_write_error) {
     phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
     map.emplace("key_a", std::make_pair(int64_t(1), IndexValue(1)));
 
-    auto before = StarRocksMetrics::instance()->pk_index_sst_write_error_total.value();
+    auto before = StorageMetrics::instance()->pk_index_sst_write_error_total.value();
 
     SyncPoint::GetInstance()->SetCallBack("table_builder_footer_error",
                                           [](void* arg) { *(Status*)arg = Status::IOError("inject_write_error"); });
@@ -654,7 +654,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_build_sstable_write_error) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     ASSERT_ERROR(st);
-    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_write_error_total.value());
+    ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_write_error_total.value());
 }
 
 TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
@@ -662,7 +662,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
     uint64_t filesize = 0;
     build_test_sst(path, &filesize);
 
-    auto before = StarRocksMetrics::instance()->pk_index_sst_read_error_total.value();
+    auto before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
 
     SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error",
                                           [](void* arg) { *(Status*)arg = Status::IOError("inject_open_error"); });
@@ -679,7 +679,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     ASSERT_ERROR(st);
-    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
+    ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
 TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
@@ -736,7 +736,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     sstable_pb.set_filesize(filesize);
     ASSERT_OK(sst->init(std::move(rf), sstable_pb, cache.get()));
 
-    auto before = StarRocksMetrics::instance()->pk_index_sst_read_error_total.value();
+    auto before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
 
     SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::multi_get:error",
                                           [](void* arg) { *(Status*)arg = Status::IOError("inject_multiget_error"); });
@@ -753,7 +753,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     ASSERT_ERROR(st);
-    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
+    ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
 TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cache) {
@@ -794,6 +794,131 @@ TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cac
     ASSERT_EQ(1, found.size());
     ASSERT_TRUE(found.contains(0));
     ASSERT_EQ(IndexValue(0), values[0]);
+}
+
+// Tombstones are stored as (rssid=UINT32_MAX, rowid=UINT32_MAX) so that the
+// 64-bit packed value equals NullIndexValue on the way out. When the owning
+// sstable has a non-zero rssid_offset (child-tablet contribution after a
+// tablet merge), multi_get used to unconditionally add that offset to the
+// entry's rssid, wrapping UINT32_MAX to a small valid-looking rssid — the
+// caller then mistook the tombstone for a live pointer, pushed
+// rowid=UINT32_MAX into the publish delvec for N deleted keys, and tripped
+// the `cur_old + cur_add != cur_new` consistency check (1000 adds collapse
+// to 1 entry inside the Roaring bitmap).
+TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_rssid_offset) {
+    const int kNumTombstones = 16;
+    const int32_t kOffset = 11;
+
+    const std::string filename = "test_tombstones_rssid_offset.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < kNumTombstones; i++) {
+        // IndexValue(NullIndexValue) packs to (rssid=UINT32_MAX, rowid=UINT32_MAX).
+        map.emplace(fmt::format("tomb_{:016X}", i), std::make_pair(100, IndexValue(NullIndexValue)));
+    }
+
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize, &range_pb));
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    std::unique_ptr<Cache> cache_ptr;
+    cache_ptr.reset(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    sstable_pb.set_rssid_offset(kOffset);
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+
+    std::vector<std::string> key_str(kNumTombstones);
+    std::vector<Slice> keys(kNumTombstones);
+    std::vector<IndexValue> values(kNumTombstones, IndexValue(NullIndexValue));
+    KeyIndexSet key_indexes;
+    KeyIndexSet found;
+    for (int i = 0; i < kNumTombstones; i++) {
+        key_str[i] = fmt::format("tomb_{:016X}", i);
+        keys[i] = Slice(key_str[i]);
+        key_indexes.insert(i);
+    }
+    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+
+    // Every tombstone must come back as NullIndexValue, NOT as
+    // (rssid=UINT32_MAX+kOffset wrap, rowid=UINT32_MAX) which would be a
+    // small valid-looking pointer (upsert would treat the key as live).
+    ASSERT_EQ(found.size(), static_cast<size_t>(kNumTombstones));
+    for (int i = 0; i < kNumTombstones; i++) {
+        ASSERT_EQ(NullIndexValue, values[i].get_value())
+                << "tombstone at key " << key_str[i] << " leaked non-null value 0x" << std::hex << values[i].get_value()
+                << " rssid=" << values[i].get_rssid() << " rowid=" << values[i].get_rowid();
+    }
+}
+
+// Same invariant when shared_version / shared_rssid is used instead of
+// rssid_offset. A tombstone must not have its rssid overwritten with
+// shared_rssid — otherwise the caller sees a small live-looking pointer.
+TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_shared_rssid) {
+    const int kNumTombstones = 8;
+    const uint32_t kSharedRssid = 5;
+    const int64_t kSharedVersion = 42;
+
+    const std::string filename = "test_tombstones_shared_rssid.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < kNumTombstones; i++) {
+        map.emplace(fmt::format("tomb2_{:016X}", i), std::make_pair(100, IndexValue(NullIndexValue)));
+    }
+
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize, &range_pb));
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    std::unique_ptr<Cache> cache_ptr;
+    cache_ptr.reset(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    sstable_pb.set_shared_rssid(kSharedRssid);
+    sstable_pb.set_shared_version(kSharedVersion);
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+
+    std::vector<std::string> key_str(kNumTombstones);
+    std::vector<Slice> keys(kNumTombstones);
+    std::vector<IndexValue> values(kNumTombstones, IndexValue(NullIndexValue));
+    KeyIndexSet key_indexes;
+    KeyIndexSet found;
+    for (int i = 0; i < kNumTombstones; i++) {
+        key_str[i] = fmt::format("tomb2_{:016X}", i);
+        keys[i] = Slice(key_str[i]);
+        key_indexes.insert(i);
+    }
+    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+
+    ASSERT_EQ(found.size(), static_cast<size_t>(kNumTombstones));
+    for (int i = 0; i < kNumTombstones; i++) {
+        ASSERT_EQ(NullIndexValue, values[i].get_value())
+                << "shared_rssid tombstone at key " << key_str[i] << " leaked non-null";
+    }
+
+    // shared_version must still be projected onto tombstones so the time-travel
+    // multi_get path (`version >= 0`) matches them. Without the version projection,
+    // a versioned lookup walks past the tombstone and resurrects a stale live entry
+    // from an older sstable — exactly the ordering bug Codex flagged. Verify by
+    // querying at exactly shared_version and confirming each tombstone is found and
+    // decodes to NullIndexValue.
+    KeyIndexSet found_versioned;
+    std::vector<IndexValue> values_versioned(kNumTombstones, IndexValue(NullIndexValue));
+    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, kSharedVersion, values_versioned.data(), &found_versioned));
+    ASSERT_EQ(found_versioned.size(), static_cast<size_t>(kNumTombstones));
+    for (int i = 0; i < kNumTombstones; i++) {
+        ASSERT_EQ(NullIndexValue, values_versioned[i].get_value());
+    }
 }
 
 } // namespace starrocks::lake

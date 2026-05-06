@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -86,6 +87,12 @@ public class DistributionProperty implements PhysicalProperty {
     }
 
     public GroupExpression appendEnforcers(Group child) {
+        // RangeDistributionSpec is scan-local only; it must never be the
+        // required property of a distribution enforcer. Convert to a hash
+        // shuffle spec (see ChildOutputPropertyGuarantor.convertRangeToHashShuffle
+        // in PR-3) before attempting to enforce.
+        Preconditions.checkState(!(spec instanceof RangeDistributionSpec),
+                "RangeDistributionSpec must not be used as a distribution enforcer required property");
         return new GroupExpression(new PhysicalDistributionOperator(spec), Lists.newArrayList(child));
     }
 
@@ -97,6 +104,8 @@ public class DistributionProperty implements PhysicalProperty {
                         hashDistributionSpec.getEquivDesc()), isCTERequired);
             }
         }
+        // RangeDistributionSpec always builds colocate columns with
+        // nullStrict=true (see RangeDistributionSpec constructor); no conversion needed.
         return this;
     }
 

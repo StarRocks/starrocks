@@ -142,13 +142,15 @@ Controls the encoding technique used for DATETIME and DECIMAL data types. Valid 
 
 If this item is set to `true`:
 
-- For DATETIME type, the system uses `INT96` encoding.
 - For DECIMAL type, the system uses `fixed_len_byte_array` encoding.
+- For DATETIME type, the system uses `INT96` encoding.
 
 If this item is set to `false`:
 
-- For DATETIME type, the system uses `INT64` encoding.
 - For DECIMAL type, the system uses `INT32` or `INT64` encoding.
+- For DATETIME type, the system uses `INT64` encoding.
+  - **Instant Semantics**: If `isAdjustedToUTC` is set to `true` for the Parquet TIMESTAMP type, the system outputs a timestamp normalized to UTC. Each value unambiguously identifies a single instant on the timeline, and can be transferred into a specific timezone.
+  - **Local Semantics**: If `isAdjustedToUTC` is set to `false` for the Parquet TIMESTAMP type, the system outputs a timestamp that represents the year, month, day, hour, minute, second, and sub-second in a local timezone, regardless of what specific timezone is considered local. Such values are always displayed the same way, regardless of the local timezone in effect, and do not identify instants on the timeline.
 
 :::note
 
@@ -552,13 +554,29 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
-  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**                      | **Required** | **Description**                                              |
   | ---------------------------------- | ------------ | ------------------------------------------------------------ |
   | `azure.adls2.oauth2_client_id`       | Yes          | The client (application) ID of the service principal.        |
   | `azure.adls2.oauth2_client_secret`   | Yes          | The value of the new client (application) secret created.    |
   | `azure.adls2.oauth2_client_endpoint` | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
 
 ##### Azure Data Lake Storage Gen1
 

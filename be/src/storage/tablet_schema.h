@@ -39,6 +39,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/concurrency/once.h"
 #include "base/string/c_string.h"
 #include "column/column_access_path.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -50,7 +51,6 @@
 #include "storage/primary_key_encoding_types.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
-#include "util/once.h"
 
 namespace starrocks {
 

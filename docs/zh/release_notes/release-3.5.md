@@ -26,6 +26,75 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.16
+
+发布日期：2026 年 4 月 20 日
+
+### 功能优化
+
+- 为 `WarehouseManager` 中被吞掉的异常补充了更清晰的告警日志。 [#71215](https://github.com/StarRocks/starrocks/pull/71215)
+- 为 Routine Load 增加了不可重试错误的暂停能力。 [#71161](https://github.com/StarRocks/starrocks/pull/71161)
+- 为 “打印所有线程栈” 工具补充了线程名。 [#69366](https://github.com/StarRocks/starrocks/pull/69366)
+- FE 支持对 `regexp_replace` 做常量折叠。 [#70804](https://github.com/StarRocks/starrocks/pull/70804)
+- 支持展示 PostgreSQL 外表的列注释，并支持 `information_schema.tables` 拉取 External Catalog 的完整元数据。 [#70520](https://github.com/StarRocks/starrocks/pull/70520) [#70197](https://github.com/StarRocks/starrocks/pull/70197)
+- 支持在查询异常时自动导出执行计划。 [#70387](https://github.com/StarRocks/starrocks/pull/70387)
+- 提升了云原生 Tablet 元数据拉取和修复效率。 [#70492](https://github.com/StarRocks/starrocks/pull/70492) [#70386](https://github.com/StarRocks/starrocks/pull/70386)
+- FE 支持批量删除 Tablet，以降低写锁竞争。 [#70052](https://github.com/StarRocks/starrocks/pull/70052)
+- 为 Update Compaction Suspension 补充了日志，并新增了 Iceberg 元数据表查询和 Time Travel 查询的监控指标。 [#70538](https://github.com/StarRocks/starrocks/pull/70538) [#70825](https://github.com/StarRocks/starrocks/pull/70825) [#70788](https://github.com/StarRocks/starrocks/pull/70788)
+
+### 问题修复
+
+修复了以下问题：
+
+- `be_tablets.DATA_SIZE` 中 Rowset 列数据大小不准确。 [#70735](https://github.com/StarRocks/starrocks/pull/70735)
+- Broker 构建中已过期的 Maven 仓库配置。 [#71533](https://github.com/StarRocks/starrocks/pull/71533)
+- 更新 `parallel_clone_task_per_path` 时线程池大小计算错误的问题。 [#71484](https://github.com/StarRocks/starrocks/pull/71484)
+- 多个 use-after-free 问题。 [#71513](https://github.com/StarRocks/starrocks/pull/71513) [#71276](https://github.com/StarRocks/starrocks/pull/71276) [#71083](https://github.com/StarRocks/starrocks/pull/71083) [#62917](https://github.com/StarRocks/starrocks/pull/62917) [#69926](https://github.com/StarRocks/starrocks/pull/69926) [#69968](https://github.com/StarRocks/starrocks/pull/69968)
+- 资源组中 `user` 分类器的校验规则与 `CREATE USER` 未保持一致。 [#71470](https://github.com/StarRocks/starrocks/pull/71470)
+- Follower FE 因 StarMgr Journal 回放不同步而出现 “no queryable replica” 的问题。 [#71263](https://github.com/StarRocks/starrocks/pull/71263)
+- 多个依赖安全漏洞。 [#71256](https://github.com/StarRocks/starrocks/pull/71256) [#71017](https://github.com/StarRocks/starrocks/pull/71017) [#70862](https://github.com/StarRocks/starrocks/pull/70862)
+- 带全局变量的 reduce cast 后 `VARCHAR` 长度丢失的问题。 [#70269](https://github.com/StarRocks/starrocks/pull/70269)
+- `information_schema.tables` 等值谓词中特殊字符未转义的问题。 [#71273](https://github.com/StarRocks/starrocks/pull/71273)
+- 不同 Alter Job 之间 `UpdateTabletSchemaTask` 签名冲突的问题。 [#71242](https://github.com/StarRocks/starrocks/pull/71242)
+- `PushDownAggregateRewriter` 在 `CASE WHEN` / `IF` 场景下共享对象被错误修改的问题。 [#71309](https://github.com/StarRocks/starrocks/pull/71309)
+- 非活跃物化视图调度器未停止的问题，并补充了 TaskManager 调度回调中的 Leader 检查。 [#71265](https://github.com/StarRocks/starrocks/pull/71265) [#71156](https://github.com/StarRocks/starrocks/pull/71156)
+- 仅包含 MCV 的直方图行数估算为 `NaN` 的问题。 [#71241](https://github.com/StarRocks/starrocks/pull/71241)
+- AWS SDK 缺失 `s3-transfer-manager` 依赖导致的打包问题。 [#71230](https://github.com/StarRocks/starrocks/pull/71230)
+- Leader Forward 结束后线程本地 `ConnectContext` 被污染的问题。 [#71141](https://github.com/StarRocks/starrocks/pull/71141)
+- 写入事务与 Compaction 事务同批发布时产生孤儿 delvec 记录的问题。 [#71001](https://github.com/StarRocks/starrocks/pull/71001)
+- Short-circuit Point Lookup 丢失分区谓词的问题。 [#71124](https://github.com/StarRocks/starrocks/pull/71124)
+- 聚合 Spill `set_finishing` 过程中可能出现 Hash Table 数据丢失的问题。 [#70851](https://github.com/StarRocks/starrocks/pull/70851)
+- `current_queries` 中错误包含 Query Progress HTTP 回环记录的问题。 [#71032](https://github.com/StarRocks/starrocks/pull/71032)
+- 磁盘重新迁移（A→B→A）过程中 GC 竞争导致 Primary Key Tablet Rowset 元数据丢失的问题。 [#70727](https://github.com/StarRocks/starrocks/pull/70727)
+- `SharedDataStorageVolumeMgr` 中 DB 读锁泄漏的问题。 [#70987](https://github.com/StarRocks/starrocks/pull/70987)
+- `NullableColumn`、`BinaryColumn` 以及 `locate()` 中错误共享 `NullColumn` 的问题。 [#66037](https://github.com/StarRocks/starrocks/pull/66037) [#70957](https://github.com/StarRocks/starrocks/pull/70957)
+- 全局 Runtime Filter 就绪检查中的竞争问题，以及 `ACCUMULATED` 宏截断导致的监控值溢出问题。 [#70920](https://github.com/StarRocks/starrocks/pull/70920) [#70895](https://github.com/StarRocks/starrocks/pull/70895)
+- `DESC` / `SHOW CREATE TABLE` 中生成列未正常展示。 [#70037](https://github.com/StarRocks/starrocks/pull/70037)
+- Load Spill 目录清理时机错误、Memory Table Spiller Workgroup 处理导致的 ASAN 崩溃，以及物理切分开启时扫描空 Tablet 导致的 CN 崩溃。 [#70778](https://github.com/StarRocks/starrocks/pull/70778) [#64379](https://github.com/StarRocks/starrocks/pull/64379) [#70281](https://github.com/StarRocks/starrocks/pull/70281)
+- 关闭 `proxy_pass_request_body` 时 `Content-Length` 处理错误的问题。 [#70821](https://github.com/StarRocks/starrocks/pull/70821)
+- `INSERT INTO BY NAME ... FROM FILES()` 的多项 Schema Pushdown 问题。 [#70762](https://github.com/StarRocks/starrocks/pull/70762) [#70774](https://github.com/StarRocks/starrocks/pull/70774) [#70622](https://github.com/StarRocks/starrocks/pull/70622) [#70621](https://github.com/StarRocks/starrocks/pull/70621)
+- MySQL/JDBC ScanNode 中无效谓词下推导致的 BE 类型错误。 [#70694](https://github.com/StarRocks/starrocks/pull/70694)
+- Iceberg Manifest Cache 不完整、部分写入以及启用 vended credentials 时缓存不应生效的问题。 [#70675](https://github.com/StarRocks/starrocks/pull/70675) [#70652](https://github.com/StarRocks/starrocks/pull/70652) [#69434](https://github.com/StarRocks/starrocks/pull/69434)
+- Ubuntu Runtime 环境缺少 `libssl-dev` 依赖的问题。 [#70688](https://github.com/StarRocks/starrocks/pull/70688)
+- 审计日志和 SQL 脱敏中用户认证字符串未正确打码的问题。 [#70360](https://github.com/StarRocks/starrocks/pull/70360)
+- Iceberg 类 Connector 的外部物化视图刷新问题。 [#70589](https://github.com/StarRocks/starrocks/pull/70589) [#70523](https://github.com/StarRocks/starrocks/pull/70523)
+- `array_map` 处理空字面量数组时崩溃，以及 `MaskMergeIterator` 子迭代器耗尽时的 BE 崩溃问题。 [#70629](https://github.com/StarRocks/starrocks/pull/70629) [#70539](https://github.com/StarRocks/starrocks/pull/70539)
+- `starlet` 配置更新被 `std::call_once` 错误捕获的问题。 [#70482](https://github.com/StarRocks/starrocks/pull/70482)
+- Iceberg 物化视图刷新依赖非单调 Snapshot 时间戳时的不稳定问题。 [#70382](https://github.com/StarRocks/starrocks/pull/70382)
+- 未支持强制刷新物化视图的问题，以及物化视图刷新过程中重复分区名的问题。 [#70381](https://github.com/StarRocks/starrocks/pull/70381) [#70354](https://github.com/StarRocks/starrocks/pull/70354)
+- `OlapTableSink` 在不同分区上错误使用分布列的问题。 [#70310](https://github.com/StarRocks/starrocks/pull/70310)
+- 回滚了 `REFRESH EXTERNAL TABLE FORCE` 的支持，等待后续更安全的实现。 [#70114](https://github.com/StarRocks/starrocks/pull/70114)
+- 检查缺失文件时跨 Tablet 元数据版本重复访问对象存储的问题。 [#70364](https://github.com/StarRocks/starrocks/pull/70364)
+- RESTORE 场景下 `dataVersion` 未设置的问题，并修正了相关 MV Rewrite 逻辑。 [#70373](https://github.com/StarRocks/starrocks/pull/70373) [#69751](https://github.com/StarRocks/starrocks/pull/69751)
+- 导入过程中 `query_pool` 内存统计为负的问题，以及高并发下 FE OOM 风险。 [#70228](https://github.com/StarRocks/starrocks/pull/70228) [#68444](https://github.com/StarRocks/starrocks/pull/68444)
+- SLF4J 参数化日志写法错误的问题。 [#70330](https://github.com/StarRocks/starrocks/pull/70330)
+- `AuditEventProcessor` 遇到 `OutOfMemoryException` 后直接退出的问题。 [#70206](https://github.com/StarRocks/starrocks/pull/70206)
+- 调整了 Primary Key 表在列模式 Partial Update 场景下的处理；本轮发布周期内最初的损坏修复已被回滚，等待后续进一步修正。 [#69652](https://github.com/StarRocks/starrocks/pull/69652)
+- `InformationFunction` 的等价性判断和去重问题。 [#70464](https://github.com/StarRocks/starrocks/pull/70464)
+- `brpc` 在异常被包装为 `NoSuchElementException` 时的重试处理问题。 [#70203](https://github.com/StarRocks/starrocks/pull/70203)
+- 无锁物化视图改写回退到实时元数据时的错误行为。 [#70475](https://github.com/StarRocks/starrocks/pull/70475)
+- `JoinHashTable::merge_ht()` 在基于表达式的 Join Key 列场景下未跳过 Dummy Row 的问题。 [#70465](https://github.com/StarRocks/starrocks/pull/70465)
+
 ## 3.5.15
 
 发布日期：2026 年 3 月 26 日

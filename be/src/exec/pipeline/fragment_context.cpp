@@ -34,7 +34,6 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/batch_write/batch_write_mgr.h"
@@ -46,7 +45,7 @@
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -431,9 +430,9 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
     _pipeline_timer = timer;
-    _timeout_task = new CheckFragmentTimeout(this);
+    _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
     timespec tm = butil::seconds_from_now(runtime_state()->query_ctx()->get_query_expire_seconds());
-    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task, tm));
+    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task.get(), tm));
     return Status::OK();
 }
 
@@ -443,14 +442,14 @@ void FragmentContext::clear_pipeline_timer() {
             for (auto& [ignore, task] : _rf_timeout_tasks) {
                 if (task) {
                     task->unschedule(_pipeline_timer);
-                    SAFE_DELETE(task);
+                    task.reset();
                 }
             }
             _rf_timeout_tasks.clear();
         }
         if (_timeout_task) {
             _timeout_task->unschedule(_pipeline_timer);
-            SAFE_DELETE(_timeout_task);
+            _timeout_task.reset();
         }
     }
 }
@@ -460,26 +459,6 @@ TQueryType::type FragmentContext::query_type() const {
         return TQueryType::EXTERNAL;
     }
     return _runtime_state->query_options().query_type;
-}
-
-Status FragmentContext::reset_epoch() {
-    _num_finished_epoch_pipelines = 0;
-    const std::function<Status(Pipeline*)> caller = [this](Pipeline* pipeline) {
-        RETURN_IF_ERROR(_runtime_state->reset_epoch());
-        RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
-        return Status::OK();
-    };
-    return iterate_pipeline(caller);
-}
-
-void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
-    size_t total_execution_groups = _execution_groups.size();
-    bool all_groups_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == total_execution_groups;
-    if (!all_groups_finished) {
-        return;
-    }
-
-    state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
 }
 
 void FragmentContext::init_jit_profile() {
@@ -604,21 +583,22 @@ void FragmentContext::init_event_scheduler() {
 void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t timeout) {
     RFScanWaitTimeout* task;
     if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
-        task = down_cast<RFScanWaitTimeout*>(iter->second);
+        task = down_cast<RFScanWaitTimeout*>(iter->second.get());
     } else {
-        task = new RFScanWaitTimeout();
-        _rf_timeout_tasks.emplace(timeout, task);
+        auto timeoutTask = std::make_shared<RFScanWaitTimeout>();
+        task = timeoutTask.get();
+        _rf_timeout_tasks.emplace(timeout, timeoutTask);
     }
     task->add_observer(_runtime_state.get(), observer);
 }
 
 Status FragmentContext::submit_all_timer() {
     timespec tm = butil::microseconds_to_timespec(butil::gettimeofday_us());
-    for (auto [delta_ns, task] : _rf_timeout_tasks) {
+    for (const auto& [delta_ns, task] : _rf_timeout_tasks) {
         timespec abstime = tm;
         abstime.tv_nsec += delta_ns;
         butil::timespec_normalize(&abstime);
-        RETURN_IF_ERROR(_pipeline_timer->schedule(task, abstime));
+        RETURN_IF_ERROR(_pipeline_timer->schedule(task.get(), abstime));
     }
     return Status::OK();
 }

@@ -20,13 +20,14 @@
 
 #include "base/url_coding.h"
 #include "common/logging.h"
+#include "common/stack_util.h"
 #include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/prof/heap_prof.h"
@@ -42,7 +43,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/stack_util.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;

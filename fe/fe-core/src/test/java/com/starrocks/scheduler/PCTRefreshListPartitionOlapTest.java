@@ -22,7 +22,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
@@ -174,7 +174,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
     private ExecPlan getExecPlan(TaskRun taskRun) {
         try {
-            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             return execPlan;
@@ -185,7 +185,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         }
     }
 
-    private MVPCTBasedRefreshProcessor getProcessor(TaskRun taskRun) {
+    private MVPCTRefreshProcessor getProcessor(TaskRun taskRun) {
         try {
             initAndExecuteTaskRun(taskRun);
             return getPartitionBasedRefreshProcessor(taskRun);
@@ -1093,7 +1093,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
@@ -1141,7 +1141,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
@@ -1186,7 +1186,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
@@ -1261,7 +1261,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             executeInsertSql("INSERT INTO t1 VALUES \n" +
                     "    (\"2020-07-01\", \"beijing\",  1), (\"2020-07-01\", \"chengdu\",  2),\n" +
                     "    (\"2020-07-02\", \"beijing\",  3), (\"2020-07-02\", \"hangzhou\", 4);\n");
-            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvTaskRunContext = processor.getMvContext();
             Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
             MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
@@ -1353,7 +1353,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -1455,7 +1455,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         String plan = getFragmentPlan(query);

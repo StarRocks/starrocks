@@ -46,11 +46,10 @@
 namespace starrocks::pipeline {
 
 PipelineBuilderContext::PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism,
-                                               size_t sink_dop, bool is_stream_pipeline)
+                                               size_t sink_dop)
         : _fragment_context(fragment_context),
           _degree_of_parallelism(degree_of_parallelism),
           _data_sink_dop(sink_dop),
-          _is_stream_pipeline(is_stream_pipeline),
           _enable_group_execution(fragment_context->enable_group_execution()) {
     // init the default execution group
     _execution_groups.emplace_back(ExecutionGroupBuilder::create_normal_exec_group());
@@ -502,9 +501,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState
 OpFactories PipelineBuilderContext::maybe_interpolate_debug_ops(RuntimeState* state, int32_t plan_node_id,
                                                                 OpFactories& pred_operators) {
     auto action_opt = runtime_state()->debug_action_mgr().get_debug_action(plan_node_id);
-    if (action_opt.has_value() && action_opt.value().is_wait_action()) {
+    if (action_opt.has_value() && action_opt.value().is_pipeline_break_action()) {
         auto* pred_source_op = source_operator(pred_operators);
-        auto wait_context_factory = std::make_shared<WaitContextFactory>(action_opt->value);
+        auto wait_context_factory = std::make_shared<WaitContextFactory>(action_opt->value, action_opt->action);
         auto wait_sink =
                 std::make_shared<WaitOperatorSinkFactory>(next_operator_id(), plan_node_id, wait_context_factory);
 

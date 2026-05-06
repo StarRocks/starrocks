@@ -142,13 +142,15 @@ Parquet 格式示例：
 
 如果此项设置为 `true`：
 
-- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 - 对于 DECIMAL 类型，系统使用 `fixed_len_byte_array` 编码。
+- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 
 如果此项设置为 `false`：
 
-- 对于 DATETIME 类型，系统使用 `INT64` 编码。
 - 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码。
+- 对于 DATETIME 类型，系统使用 `INT64` 编码。
+  - **即时语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `true`，系统将输出一个已转换为 UTC 的时间戳。每个值都能在时间轴上唯一标识一个特定时刻，并可转换为特定时区。
+  - **本地语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `false`，系统将输出一个表示本地时区中的年、月、日、时、分、秒及亚秒的时间戳，无论具体哪个时区被视为本地时区。此类值始终以相同方式显示，无论当前生效的本地时区为何，且无法标识时间轴上的特定时刻。
 
 :::note
 
@@ -559,6 +561,22 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
   | `azure.adls2.oauth2_client_id`       | 是          | 服务主体的客户端（应用程序）ID。        |
   | `azure.adls2.oauth2_client_secret`   | 是          | 创建的新客户端（应用程序）密钥的值。    |
   | `azure.adls2.oauth2_client_endpoint` | 是          | 服务主体或应用程序的 OAuth 2.0 令牌终端（v1）。 |
+
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
 ##### Azure Data Lake Storage Gen1
 

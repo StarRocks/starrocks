@@ -347,6 +347,95 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
     }
 };
 
+// Arrow StringView converter specialization.
+//
+// StringView (Arrow Utf8View / BinaryView) stores strings in a split layout:
+//   - Inline:  strings <= 12 bytes live directly in the 16-byte view struct
+//   - Out-of-line: strings > 12 bytes reference data in one of potentially many
+//     variadic data buffers (not a single contiguous offset buffer)
+//
+// This means the offset-based bulk-memcpy path (optimize_non_fixed_size_binary) used by
+// Binary/String types is NOT safe for StringView — it assumes a single contiguous data
+// buffer, which would silently corrupt out-of-line strings. Instead, we iterate per-element
+// using GetView(i), which correctly resolves both inline and out-of-line storage.
+//
+// An alternative would be to cast StringView -> String via arrow::compute::Cast() first,
+// producing a contiguous offset-based array, then reuse the existing Binary/String converter.
+// We avoid that because it copies the string data twice: once into an intermediate Arrow
+// String array, then again into BinaryColumn. The direct approach here copies once.
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, StringOrBinaryGuard<LT>> {
+    using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
+    using ColumnType = RunTimeColumnType<LT>;
+
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
+                        ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
+        auto* concrete_array = down_cast<const ArrowArrayType*>(array);
+        auto* concrete_column = down_cast<ColumnType*>(column);
+        auto* filter_data = (&chunk_filter->front()) + column_start_idx;
+        size_t max_length = binary_max_length<LT>;
+        if (ctx != nullptr) {
+            size_t type_len = ctx->current_slot->type().len;
+            if (type_len > 0) {
+                max_length = type_len;
+            }
+        }
+
+        concrete_column->reserve(concrete_column->size() + num_elements);
+        bool repeated = false;
+        // Unlike offset-based Binary/String arrays where null slots still have valid offsets,
+        // StringView null slots may contain an undefined 16-byte view struct per the Arrow spec.
+        // GetView() would dereference a garbage buffer_index for out-of-line views. When
+        // is_nullable=true, null_data already guards this. For is_nullable=false, we check once
+        // whether the source array has nulls and guard per-element only when needed.
+        // The framework's fill_filter() typically handles this upstream, but we guard here
+        // defensively since GetView() on a garbage view is a segfault, not a wrong result.
+        const bool needs_null_guard = !is_nullable && concrete_array->null_count() > 0;
+        // Per-element iteration: GetView(i) returns a std::string_view that transparently
+        // handles both inline views (data in the struct) and out-of-line views (pointer
+        // into a variadic buffer). This is O(n) per element but necessary for correctness.
+        for (size_t i = 0; i < num_elements; ++i) {
+            size_t array_idx = array_start_idx + i;
+            if constexpr (is_nullable) {
+                if (null_data[i] == DATUM_NULL) {
+                    concrete_column->append_default();
+                    continue;
+                }
+            }
+            if (needs_null_guard && concrete_array->IsNull(array_idx)) {
+                concrete_column->append_default();
+                // Regardless of fill_filter called or not, we are setting this idx to be filtered out.
+                filter_data[i] = 0;
+                continue;
+            }
+            auto sv = concrete_array->GetView(array_idx);
+            Slice s{sv.data(), sv.size()};
+            if (s.size > max_length) {
+                // String exceeds column's max length (VARCHAR limit or CHAR(N) width).
+                // How we handle it depends on nullable/strict mode:
+                //   - nullable + non-strict: convert to NULL (preserves row, loses value)
+                //   - strict or non-nullable: filter out the row and report the error once
+                concrete_column->append_default();
+                if constexpr (is_nullable && !is_strict) {
+                    null_data[i] = DATUM_NULL;
+                } else {
+                    filter_data[i] = 0;
+                    if (ctx != nullptr && !repeated) {
+                        repeated = true;
+                        std::string reason =
+                                strings::Substitute("string length $0 exceeds max length $1", sv.size(), max_length);
+                        ctx->report_error_message(reason, std::string(sv));
+                    }
+                }
+            } else {
+                concrete_column->append(s);
+            }
+        }
+        return Status::OK();
+    }
+};
+
 template <typename T>
 struct RectifyDecimalType {
     using type = T;
@@ -983,7 +1072,7 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
         STRICT_ARROW_CONV_ENTRY_R(TYPE_FLOAT, ArrowTypeId::HALF_FLOAT, ArrowTypeId::FLOAT),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DOUBLE, ArrowTypeId::DOUBLE),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_VARCHAR, ArrowTypeId::STRING, ArrowTypeId::LARGE_STRING, ArrowTypeId::BINARY,
-                                  ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY),
+                                  ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY, ArrowTypeId::STRING_VIEW),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_VARBINARY, ArrowTypeId::STRING, ArrowTypeId::LARGE_STRING, ArrowTypeId::BINARY,
                                   ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATE, ArrowTypeId::DATE32),
@@ -1019,6 +1108,7 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::DOUBLE, TYPE_DOUBLE, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::STRING, TYPE_CHAR, TYPE_VARCHAR, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::LARGE_STRING, TYPE_CHAR, TYPE_VARCHAR),
+        ARROW_CONV_ENTRY(ArrowTypeId::STRING_VIEW, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::LARGE_BINARY, TYPE_VARBINARY, TYPE_CHAR, TYPE_VARCHAR),

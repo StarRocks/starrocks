@@ -48,10 +48,10 @@
 #include "common/thread/threadpool.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 
@@ -341,10 +341,10 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
                                          TTransactionId transaction_id, int64_t version, const RowsetSharedPtr& rowset,
                                          uint32_t wait_time) {
     if (tablet->updates() != nullptr) {
-        StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
+        StorageMetrics::instance()->update_rowset_commit_request_total.increment(1);
         auto st = tablet->rowset_commit(version, rowset, wait_time, true, false);
         if (!st.ok()) {
-            StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
+            StorageMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
         }
     } else {
@@ -384,10 +384,10 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
                                int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
                                bool is_double_write) {
     if (tablet->updates() != nullptr) {
-        StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
+        StorageMetrics::instance()->update_rowset_commit_request_total.increment(1);
         auto st = tablet->rowset_commit(version, rowset, wait_time, false, is_double_write);
         if (!st.ok()) {
-            StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
+            StorageMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
         }
     } else {
@@ -472,8 +472,8 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         }
     }
 
-    StarRocksMetrics::instance()->txn_persist_total.increment(1);
-    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->txn_persist_total.increment(1);
+    StorageMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
@@ -501,8 +501,8 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
         }
     }
 
-    StarRocksMetrics::instance()->txn_persist_total.increment(1);
-    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->txn_persist_total.increment(1);
+    StorageMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
 }
 
 // txn could be rollbacked if it does not have related rowset

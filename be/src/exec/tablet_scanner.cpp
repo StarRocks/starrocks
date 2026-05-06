@@ -22,12 +22,12 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
+#include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
@@ -394,8 +394,8 @@ void TabletScanner::update_counter() {
 
     COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
-    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
+    QueryScanMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
+    QueryScanMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "DictDecode");

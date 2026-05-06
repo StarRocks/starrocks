@@ -28,6 +28,10 @@ select if (count(*) > 0, "OK", "FAILED") from information_schema.materialized_vi
 -- result:
 OK
 -- !result
+select if(max(if(TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv1' and LAST_REFRESH_TIME is not null, 1, 0)) = 1, "OK", "FAILED") from information_schema.materialized_views;
+-- result:
+OK
+-- !result
 set enable_evaluate_schema_scan_rule=false;
 -- result:
 -- !result
@@ -36,6 +40,10 @@ set enable_evaluate_schema_scan_rule=false;
 1
 -- !result
 select if (count(*) > 0, "OK", "FAILED") from information_schema.materialized_views;
+-- result:
+OK
+-- !result
+select if(max(if(TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv1' and LAST_REFRESH_TIME is not null, 1, 0)) = 1, "OK", "FAILED") from information_schema.materialized_views;
 -- result:
 OK
 -- !result

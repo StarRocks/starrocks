@@ -612,4 +612,42 @@ public class MySqlAndJDBCScanNodeTest {
         // Should wrap each part separately
         Assertions.assertTrue(nodeString.contains("\"mydb\".\"public\".\"users\""), nodeString);
     }
+
+    @Test
+    public void testPassThroughQueryInJDBCScanNode() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("user", "root");
+        properties.put("password", "123456");
+        properties.put("jdbc_uri", "jdbc:mysql://localhost:3306");
+        properties.put("driver_url", "driver_url");
+        properties.put("checksum", "checksum");
+        properties.put("driver_class", "com.mysql.jdbc.Driver");
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", VarcharType.VARCHAR),
+                new Column("name", VarcharType.VARCHAR)
+        );
+        JDBCTable queryTable = new JDBCTable(1, "query_table", columns, properties);
+        queryTable.setPassThroughQuery("select id, name from remote_table");
+
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(queryTable);
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), "id", VarcharType.VARCHAR, true);
+        idSlot.setColumn(columns.get(0));
+        idSlot.setIsMaterialized(true);
+        tupleDesc.addSlot(idSlot);
+        SlotDescriptor nameSlot = new SlotDescriptor(new SlotId(2), "name", VarcharType.VARCHAR, true);
+        nameSlot.setColumn(columns.get(1));
+        nameSlot.setIsMaterialized(true);
+        tupleDesc.addSlot(nameSlot);
+
+        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, queryTable);
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains("TABLE: (select id, name from remote_table) starrocks_query"),
+                nodeString);
+        Assertions.assertTrue(nodeString.contains("SELECT `id`, `name` FROM " +
+                        "(select id, name from remote_table) starrocks_query"), nodeString);
+        Assertions.assertFalse(nodeString.contains("FROM `(select id, name from remote_table) starrocks_query`"),
+                nodeString);
+    }
 }

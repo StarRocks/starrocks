@@ -45,4 +45,18 @@ StatusOr<std::string> SeekableInputStream::read_all() {
     return std::move(ret);
 }
 
+std::string SeekableInputStream::page_cache_key(int64_t stream_offset) const {
+    // Use the virtual filename() rather than the _filename member: many subclasses (e.g.
+    // RandomAccessFile, MemoryFileInputStream, S3InputStream) override filename() to return a
+    // value held in their own member while leaving _filename unset, so reading _filename here
+    // would return an empty string and silently collapse the keys of every file to the same
+    // (empty, offset) prefix.
+    const std::string& fname = filename();
+    std::string key;
+    key.reserve(fname.size() + sizeof(stream_offset));
+    key.append(fname);
+    key.append(reinterpret_cast<const char*>(&stream_offset), sizeof(stream_offset));
+    return key;
+}
+
 } // namespace starrocks::io

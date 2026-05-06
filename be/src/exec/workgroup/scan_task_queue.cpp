@@ -34,6 +34,10 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
     return Status::Cancelled("Shutdown");
 }
 
+bool PriorityScanTaskQueue::try_take(ScanTask* task) {
+    return _queue.non_blocking_get(task);
+}
+
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
     if (task.peak_scan_task_queue_size_counter != nullptr) {
         task.peak_scan_task_queue_size_counter->set(_queue.get_size());

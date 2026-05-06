@@ -24,7 +24,6 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "gutil/stl_util.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
@@ -32,6 +31,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/union_iterator.h"
 
@@ -314,13 +314,13 @@ public:
         timer.stop();
         // update compaction metric
         float divided = 1000 * 1000 * 1000;
-        StarRocksMetrics::instance()->update_compaction_task_cost_time_ns.set_value(timer.elapsed_time());
-        StarRocksMetrics::instance()->update_compaction_task_byte_per_second.set_value(
+        StorageMetrics::instance()->update_compaction_task_cost_time_ns.set_value(timer.elapsed_time());
+        StorageMetrics::instance()->update_compaction_task_byte_per_second.set_value(
                 total_input_size / (timer.elapsed_time() / divided + 1));
-        StarRocksMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
-        StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
-        StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
-        StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
+        StorageMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
+        StorageMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
+        StorageMetrics::instance()->update_compaction_outputs_total.increment(1);
+        StorageMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
         std::stringstream ss;
         ss << "update compaction merge finished. tablet=" << tablet.tablet_id()
            << " #key=" << schema.sort_key_idxes().size()

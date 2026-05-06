@@ -14,9 +14,14 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.CompressionUtils;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -24,9 +29,11 @@ import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Tests for {@link StreamLoadInfo}. */
 public class StreamLoadInfoTest {
@@ -62,6 +69,77 @@ public class StreamLoadInfoTest {
         assertEquals(request.getPartial_update_mode(), info.getPartialUpdateMode());
         assertEquals(CompressionUtils.findTCompressionByName(request.getPayload_compression_type()),
                 info.getPayloadCompressionType());
+    }
+
+    @Test
+    public void testFromStreamLoadWithEnvelope() throws Exception {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setEnvelope(TEnvelopeType.DEBEZIUM);
+        // Envelope is incompatible with jsonRoot and stripOuterArray
+        request.setJson_root("");
+        request.setStrip_outer_array(false);
+
+        StreamLoadInfo info = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
+        assertEquals(TEnvelopeType.DEBEZIUM, info.getEnvelope());
+    }
+
+    @Test
+    public void testSetEnvelope() {
+        StreamLoadInfo info = new StreamLoadInfo(new TUniqueId(1, 2), 3L, TFileType.FILE_STREAM,
+                TFileFormatType.FORMAT_JSON);
+        info.setEnvelope(TEnvelopeType.DEBEZIUM);
+        assertEquals(TEnvelopeType.DEBEZIUM, info.getEnvelope());
+    }
+
+    @Test
+    public void testFromStreamLoadWithEnvelopeRequiresJsonFormat() {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setEnvelope(TEnvelopeType.DEBEZIUM);
+        request.setJson_root("");
+        request.setStrip_outer_array(false);
+
+        StarRocksException exception = assertThrows(StarRocksException.class,
+                () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertEquals(StreamLoadHttpHeader.HTTP_ENVELOPE + " can only be specified when format is json",
+                exception.getMessage());
+    }
+
+    @Test
+    public void testFromStreamLoadWithEnvelopeRejectsJsonRoot() {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setEnvelope(TEnvelopeType.DEBEZIUM);
+        request.setJson_root("$.records");
+        request.setStrip_outer_array(false);
+
+        StarRocksException exception = assertThrows(StarRocksException.class,
+                () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertEquals(StreamLoadHttpHeader.HTTP_JSONROOT + " cannot be specified when envelope is set",
+                exception.getMessage());
+    }
+
+    @Test
+    public void testFromStreamLoadWithEnvelopeRejectsStripOuterArray() {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setEnvelope(TEnvelopeType.DEBEZIUM);
+        request.setJson_root("");
+        request.setStrip_outer_array(true);
+
+        StarRocksException exception = assertThrows(StarRocksException.class,
+                () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertEquals(StreamLoadHttpHeader.HTTP_STRIP_OUTER_ARRAY + " cannot be specified when envelope is set",
+                exception.getMessage());
+    }
+
+    @Test
+    public void testFromRoutineLoadJobWithEnvelope() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
+        jobProperties.put(CreateRoutineLoadStmt.ENVELOPE, CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM);
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
+        assertEquals(TEnvelopeType.DEBEZIUM, info.getEnvelope());
     }
 
     private TStreamLoadPutRequest buildTStreamLoadPutRequest() {

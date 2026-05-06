@@ -22,6 +22,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/mem_tracker_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
@@ -29,8 +30,6 @@
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks::workgroup {
 
@@ -80,13 +79,13 @@ int64_t WorkGroupSchedEntity<Q>::cpu_weight() const {
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::incr_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns += runtime_ns / cpu_weight();
-    _unadjusted_runtime_ns += runtime_ns;
+    _vruntime_ns.fetch_add(runtime_ns / cpu_weight(), std::memory_order_relaxed);
+    _unadjusted_runtime_ns.fetch_add(runtime_ns, std::memory_order_relaxed);
 }
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::adjust_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns += runtime_ns / cpu_weight();
+    _vruntime_ns.fetch_add(runtime_ns / cpu_weight(), std::memory_order_relaxed);
 }
 
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -206,7 +205,7 @@ void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker) {
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
 
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>(
-            GlobalMetricsRegistry::instance()->pipeline_executor_metrics()->get_driver_queue_metrics()));
+            pipeline::PipelineExecutorMetrics::instance()->get_driver_queue_metrics()));
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 
@@ -288,8 +287,10 @@ void WorkGroup::copy_metrics(const WorkGroup& rhs) {
 // WorkGroupManager
 // ------------------------------------------------------------------------------------
 
-WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf)
-        : _executors_manager(this, std::move(executors_manager_conf)), _shared_mem_tracker_manager{} {}
+WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics)
+        : _executors_manager(this, std::move(executors_manager_conf)),
+          _metrics(metrics),
+          _shared_mem_tracker_manager(metrics) {}
 
 WorkGroupManager::~WorkGroupManager() = default;
 
@@ -314,10 +315,11 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock) {
-    std::call_once(init_metrics_once_flag, [this] {
-        GlobalMetricsRegistry::instance()->metrics()->register_hook("work_group_metrics_hook",
-                                                                    [this] { update_metrics(); });
-    });
+    if (_metrics == nullptr) {
+        return;
+    }
+    std::call_once(init_metrics_once_flag,
+                   [this] { _metrics->register_hook("work_group_metrics_hook", [this] { update_metrics(); }); });
 
     if (_wg_metrics.count(wg->name()) == 0) {
         // Unlock when register_metric to avoid deadlock, since update_metric would take the MetricRegistry::mutex then WorkGroupManager::mutex
@@ -325,66 +327,66 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
 
         // cpu limit.
         auto resource_group_cpu_limit_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
-        bool cpu_limit_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_cpu_limit_ratio", MetricLabels().add("name", wg->name()),
-                resource_group_cpu_limit_ratio.get());
+        bool cpu_limit_registered =
+                _metrics->register_metric("resource_group_cpu_limit_ratio", MetricLabels().add("name", wg->name()),
+                                          resource_group_cpu_limit_ratio.get());
         // cpu use ratio.
         auto inuse_cpu_cores = std::make_unique<DoubleGauge>(MetricUnit::NOUNIT);
-        bool inuse_cpu_cores_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
+        bool inuse_cpu_cores_registered = _metrics->register_metric(
                 "resource_group_inuse_cpu_cores", MetricLabels().add("name", wg->name()), inuse_cpu_cores.get());
         // cpu use ratio.
         auto resource_group_cpu_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
-        bool cpu_ratio_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_cpu_use_ratio", MetricLabels().add("name", wg->name()),
-                resource_group_cpu_use_ratio.get());
+        bool cpu_ratio_registered =
+                _metrics->register_metric("resource_group_cpu_use_ratio", MetricLabels().add("name", wg->name()),
+                                          resource_group_cpu_use_ratio.get());
         // scan use ratio.
         auto resource_group_scan_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
-        bool scan_ratio_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_scan_use_ratio", MetricLabels().add("name", wg->name()),
-                resource_group_scan_use_ratio.get());
+        bool scan_ratio_registered =
+                _metrics->register_metric("resource_group_scan_use_ratio", MetricLabels().add("name", wg->name()),
+                                          resource_group_scan_use_ratio.get());
         // connector scan use ratio.
         auto resource_group_connector_scan_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
-        bool connector_scan_ratio_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_connector_scan_use_ratio", MetricLabels().add("name", wg->name()),
-                resource_group_connector_scan_use_ratio.get());
+        bool connector_scan_ratio_registered = _metrics->register_metric("resource_group_connector_scan_use_ratio",
+                                                                         MetricLabels().add("name", wg->name()),
+                                                                         resource_group_connector_scan_use_ratio.get());
         // mem limit.
         auto resource_group_mem_limit_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
-        bool mem_limit_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_mem_limit_bytes", MetricLabels().add("name", wg->name()),
-                resource_group_mem_limit_bytes.get());
+        bool mem_limit_registered =
+                _metrics->register_metric("resource_group_mem_limit_bytes", MetricLabels().add("name", wg->name()),
+                                          resource_group_mem_limit_bytes.get());
         // mem use bytes.
         auto resource_group_mem_allocated_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
-        bool mem_inuse_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_mem_inuse_bytes", MetricLabels().add("name", wg->name()),
-                resource_group_mem_allocated_bytes.get());
+        bool mem_inuse_registered =
+                _metrics->register_metric("resource_group_mem_inuse_bytes", MetricLabels().add("name", wg->name()),
+                                          resource_group_mem_allocated_bytes.get());
         // connector scan use bytes.
         auto resource_group_connector_scan_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
-        bool mem_connector_scan_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_connector_scan_bytes", MetricLabels().add("name", wg->name()),
-                resource_group_connector_scan_bytes.get());
+        bool mem_connector_scan_registered =
+                _metrics->register_metric("resource_group_connector_scan_bytes", MetricLabels().add("name", wg->name()),
+                                          resource_group_connector_scan_bytes.get());
         // running queries
         auto resource_group_running_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
-        bool running_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_running_queries", MetricLabels().add("name", wg->name()),
-                resource_group_running_queries.get());
+        bool running_registered =
+                _metrics->register_metric("resource_group_running_queries", MetricLabels().add("name", wg->name()),
+                                          resource_group_running_queries.get());
 
         // total queries
         auto resource_group_total_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
-        bool total_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_total_queries", MetricLabels().add("name", wg->name()),
-                resource_group_total_queries.get());
+        bool total_registered =
+                _metrics->register_metric("resource_group_total_queries", MetricLabels().add("name", wg->name()),
+                                          resource_group_total_queries.get());
 
         // concurrency overflow
         auto resource_group_concurrency_overflow = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
-        bool concurrency_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_concurrency_overflow_count", MetricLabels().add("name", wg->name()),
-                resource_group_concurrency_overflow.get());
+        bool concurrency_registered = _metrics->register_metric("resource_group_concurrency_overflow_count",
+                                                                MetricLabels().add("name", wg->name()),
+                                                                resource_group_concurrency_overflow.get());
 
         // bigquery count
         auto resource_group_bigquery_count = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
-        bool bigquery_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_bigquery_count", MetricLabels().add("name", wg->name()),
-                resource_group_bigquery_count.get());
+        bool bigquery_registered =
+                _metrics->register_metric("resource_group_bigquery_count", MetricLabels().add("name", wg->name()),
+                                          resource_group_bigquery_count.get());
 
         unique_lock.lock();
         auto it = _wg_metrics.find(wg->name());

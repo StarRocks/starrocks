@@ -36,8 +36,10 @@
 
 #include <memory>
 
+#include "base/compression/block_compression.h"
 #include "base/container/lru_cache.h"
 #include "base/string/faststring.h"
+#include "base/testutil/sync_point.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
@@ -51,8 +53,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/compression/block_compression.h"
+#include "runtime/runtime_metrics.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -69,11 +70,14 @@ namespace starrocks {
 LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, DiagnoseDaemon* diagnose_daemon,
                          BrpcStubCache* brpc_stub_cache, const UniqueId& load_id, int64_t txn_id,
                          const std::string& txn_trace_parent, int64_t timeout_s,
-                         std::unique_ptr<MemTracker> mem_tracker)
+                         std::unique_ptr<MemTracker> mem_tracker, MetricRegistry* metrics,
+                         TableMetricsManager* table_metrics_mgr)
         : _load_mgr(mgr),
           _lake_tablet_mgr(lake_tablet_mgr),
           _diagnose_daemon(diagnose_daemon),
           _brpc_stub_cache(brpc_stub_cache),
+          _metrics(metrics),
+          _table_metrics_mgr(table_metrics_mgr),
           _load_id(load_id),
           _txn_id(txn_id),
           _timeout_s(timeout_s),
@@ -153,10 +157,12 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
                 channel = nullptr;
                 st = Status::NotSupported("lake tablet is not supported on MacOS");
 #else
-                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
+                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile,
+                                                   _table_metrics_mgr);
 #endif
             } else {
-                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile, _brpc_stub_cache);
+                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile, _brpc_stub_cache, _metrics,
+                                                    _table_metrics_mgr);
             }
             if (st.ok()) {
                 if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
@@ -264,9 +270,9 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     }
 
     int64_t total_time_us = watch.elapsed_time() / 1000;
-    StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
-    StarRocksMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
-    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
+    RuntimeMetrics::instance()->load_channel_add_chunks_total.increment(1);
+    RuntimeMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
+    RuntimeMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
 
     report_profile(response, config::pipeline_print_profile);
     _check_and_log_timeout_rpc("tablet writer add chunk", total_time_us / 1000, timeout_ms);
@@ -485,7 +491,9 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
 void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
                                           PLoadReplicaStatusResult* response) {
     TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
-    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(get_tablets_channel(key).get());
+    auto tablets_channel = get_tablets_channel(key);
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(tablets_channel.get());
+    TEST_SYNC_POINT("LoadChannel::get_load_replica_status::after_raw_ptr");
     if (local_tablets_channel == nullptr) {
         for (int64_t tablet_id : request->tablet_ids()) {
             auto replica_status = response->add_replica_statuses();

@@ -47,10 +47,10 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -599,6 +599,10 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
         result.append(buffs[i]);
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::materialize(FunctionContext* context, const Columns& columns) {
+    return Column::mutate(columns[0]);
 }
 
 } // namespace starrocks

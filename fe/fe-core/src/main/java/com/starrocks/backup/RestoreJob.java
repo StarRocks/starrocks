@@ -1038,7 +1038,7 @@ public class RestoreJob extends AbstractJob {
         if (isColocate) {
             try {
                 isColocate = GlobalStateMgr.getCurrentState().getColocateTableIndex()
-                        .addTableToGroup(db, remoteOlapTbl, colocateGroup, false);
+                        .addTableToGroup(db, remoteOlapTbl, colocateGroup, false /* afterTabletCreation */);
             } catch (Exception e) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "check colocate restore failed, errmsg: " + e.getMessage() +

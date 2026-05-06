@@ -150,10 +150,10 @@ symbol = "main.echo"
 | VARCHAR                              | STRING                  |
 | DATE                                 | DATETIME.DATE           |
 | DECIMAL                              | DECIMAL.DECIMAL         |
-| ARRAY                                | List                    |
-| MAP                                  | Dict                    |
-| STRUCT                               | COLLECTIONS.NAMEDTUPLE  |
-| JSON                                 | dict                    |
+| ARRAY                                | list                    |
+| MAP                                  | dict                    |
+| STRUCT                               | dict（フィールド名をキーとする） |
+| JSON                                 | str（`json.loads` でパース） |
 | **VECTORIZED**                       |                         |
 | TYPE_BOOLEAN                         | pyarrow.lib.BoolArray   |
 | TYPE_TINYINT                         | pyarrow.lib.Int8Array   |
@@ -167,6 +167,16 @@ symbol = "main.echo"
 | DATE                                 | pyarrow.Date32Array     |
 | TYPE_TIME                            | pyarrow.TimeArray       |
 | ARRAY                                | pyarrow.ListArray       |
+| MAP                                  | pyarrow.MapArray        |
+| STRUCT                               | pyarrow.StructArray     |
+
+ネスト型（`ARRAY`、`MAP`、`STRUCT`）は任意に組み合わせ可能です。例えば
+`array<map<string,int>>`、`map<string,array<int>>`、
+`struct<a array<int>, b map<string,int>>`、`array<struct<...>>` などです。
+`scalar` モードでは、各行は再帰的に Python の `list` / `dict` に変換されて渡
+されます。ネスト型を返すには、対応する Python の `list` / `dict` を返してくだ
+さい（`dict` のキーは struct のフィールド名）。`pyarrow` が再帰的な変換を自動
+で行います。
 
 ### Python のコンパイル
 

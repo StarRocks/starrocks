@@ -33,8 +33,7 @@ namespace pipeline {
 
 class PipelineBuilderContext {
 public:
-    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism, size_t sink_dop,
-                           bool is_stream_pipeline);
+    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism, size_t sink_dop);
 
     void init_colocate_groups(std::unordered_map<int32_t, ExecutionGroupPtr>&& colocate_groups);
     ExecutionGroupRawPtr find_exec_group_by_plan_node_id(int32_t plan_node_id);
@@ -125,8 +124,6 @@ public:
     size_t degree_of_parallelism() const { return _degree_of_parallelism; }
     size_t data_sink_dop() const { return _data_sink_dop; }
 
-    bool is_stream_pipeline() const { return _is_stream_pipeline; }
-
     const Pipeline* last_pipeline() const {
         DCHECK(!_pipelines.empty());
         return _pipelines[_pipelines.size() - 1].get();
@@ -201,7 +198,6 @@ private:
     const size_t _degree_of_parallelism;
     const size_t _data_sink_dop;
 
-    const bool _is_stream_pipeline;
     const bool _enable_group_execution;
 };
 

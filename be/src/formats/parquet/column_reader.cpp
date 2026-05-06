@@ -56,6 +56,17 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     dict_value_column->append_default();
     size_t dict_size = dict_value_column->size();
     ColumnPtr result_column = std::move(dict_value_column);
+
+    // For columns whose physical bytes differ from the logical string form (e.g. UUID: 16 raw bytes
+    // → 36-char canonical string), convert the raw dict values before evaluating predicates.
+    // This ensures conjuncts that compare canonical string values match correctly.
+    if (dict_value_converter != nullptr && dict_value_converter->need_convert) {
+        MutableColumnPtr converted = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        converted->reserve(result_column->size());
+        RETURN_IF_ERROR(dict_value_converter->convert(result_column.get(), converted.get()));
+        result_column = std::move(converted);
+    }
+
     for (int32_t i = sub_field_path.size() - 1; i >= 0; i--) {
         if (!result_column->is_nullable()) {
             result_column = NullableColumn::create(result_column, NullColumn::create(result_column->size(), 0));
@@ -172,7 +183,8 @@ bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_t
             appliable = true;
         }
     } else if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_VARBINARY) {
-        if (parquet_type == tparquet::Type::type::BYTE_ARRAY) {
+        if (parquet_type == tparquet::Type::type::BYTE_ARRAY ||
+            (parquet_type == tparquet::Type::type::FIXED_LEN_BYTE_ARRAY && type == LogicalType::TYPE_VARBINARY)) {
             appliable = true;
         }
         //TODO: FLBA type should check the length and pad space.

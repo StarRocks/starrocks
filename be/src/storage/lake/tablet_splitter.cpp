@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_splitter.h"
 
 #include <bvar/bvar.h>
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <set>
@@ -22,13 +23,158 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/update_manager.h"
 #include "storage/tablet_range.h"
 
 extern bvar::Adder<int64_t> g_tablet_reshard_split_fallback_total;
 
 namespace starrocks::lake {
+
+Status SegmentSplitInfo::load_sort_key_samples(const SegmentMetadataPB& segment_meta) {
+    if (segment_meta.sort_key_samples_size() == 0 || !segment_meta.has_sort_key_sample_row_interval()) {
+        return Status::OK();
+    }
+    const int64_t row_interval = segment_meta.sort_key_sample_row_interval();
+    const int64_t num_samples = segment_meta.sort_key_samples_size();
+    // Overflow-safe validity: sort_key_samples.size() * row_interval < num_rows.
+    if (!(row_interval > 0 && num_rows > 0 && num_samples <= (num_rows - 1) / row_interval)) {
+        return Status::OK(); // Invalid metadata -- fall through with empty samples.
+    }
+    sort_key_sample_row_interval = row_interval;
+    sort_key_samples.reserve(num_samples);
+    for (const auto& sample_pb : segment_meta.sort_key_samples()) {
+        VariantTuple sample;
+        RETURN_IF_ERROR(sample.from_proto(sample_pb));
+        DCHECK(sort_key_samples.empty() || sort_key_samples.back().compare(sample) <= 0);
+        sort_key_samples.push_back(std::move(sample));
+    }
+    return Status::OK();
+}
+
+// ================================================================================
+// Internal data structures and helpers for range splitting
+// ================================================================================
+
+namespace {
+
+struct RangeInfo {
+    VariantTuple min;
+    VariantTuple max;
+    int64_t num_rows = 0;
+    int64_t data_size = 0;
+    SourceStats source_stats;
+};
+
+// Find ordered_ranges overlapping [sub_min, sub_max].
+// For zero-width sub-segments (sub_min == sub_max), uses [lower, upper) point
+// ownership: non-last range owns x iff r.min <= x < r.max; last range owns x
+// iff r.min <= x <= r.max. For non-zero-width sub-segments, uses the standard
+// two-comparator binary-search overlap rule.
+void find_overlapping_ranges(const VariantTuple& sub_min, const VariantTuple& sub_max,
+                             std::vector<RangeInfo>& ordered_ranges, std::vector<RangeInfo*>& result) {
+    result.clear();
+    const size_t last_range_index = ordered_ranges.size() - 1;
+
+    if (sub_min.compare(sub_max) == 0) {
+        // Zero-width: point ownership matching split output [lower, upper).
+        for (size_t i = 0; i < ordered_ranges.size(); ++i) {
+            auto& r = ordered_ranges[i];
+            bool owns = (i != last_range_index) ? (r.min.compare(sub_min) <= 0 && sub_min.compare(r.max) < 0)
+                                                : (r.min.compare(sub_min) <= 0 && sub_min.compare(r.max) <= 0);
+            if (owns) {
+                result.push_back(&r);
+                return;
+            }
+        }
+        return;
+    }
+
+    // Non-zero-width: binary search for the first overlapping range.
+    size_t lo = 0, hi = ordered_ranges.size();
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        int cmp = ordered_ranges[mid].max.compare(sub_min);
+        if ((mid == last_range_index) ? (cmp < 0) : (cmp <= 0)) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    for (size_t i = lo; i < ordered_ranges.size(); i++) {
+        auto& r = ordered_ranges[i];
+        if (r.min.compare(sub_max) > 0) break;
+        if (i != last_range_index && r.min.compare(sub_max) >= 0) break;
+        result.push_back(&r);
+    }
+}
+
+// Distribute num_rows/data_size evenly across overlapping ranges with remainder
+// correction, optionally tracking per-source statistics.
+void distribute_to_ranges(const std::vector<RangeInfo*>& overlapping, int64_t num_rows, int64_t data_size,
+                          uint32_t source_id, bool track_sources) {
+    if (overlapping.empty()) return;
+    const auto count = static_cast<int64_t>(overlapping.size());
+    for (int64_t i = 0; i < count; i++) {
+        int64_t delta_rows = num_rows / count + (i < num_rows % count ? 1 : 0);
+        int64_t delta_size = data_size / count + (i < data_size % count ? 1 : 0);
+        overlapping[i]->num_rows += delta_rows;
+        overlapping[i]->data_size += delta_size;
+        if (track_sources) {
+            auto& stats = overlapping[i]->source_stats[source_id];
+            stats.first += delta_rows;
+            stats.second += delta_size;
+        }
+    }
+}
+
+// Distribute one segment's data across ordered_ranges. When the segment has
+// sort-key samples, it is split into N+1 sub-segments with known row counts;
+// otherwise, the entire segment is treated as a single [min_key, max_key] range.
+void distribute_segment_to_ranges(const SegmentSplitInfo& segment, std::vector<RangeInfo>& ordered_ranges,
+                                  bool track_sources) {
+    if (segment.num_rows == 0 && segment.data_size == 0) return;
+
+    std::vector<RangeInfo*> overlapping;
+    const int64_t num_samples = static_cast<int64_t>(segment.sort_key_samples.size());
+
+    if (num_samples == 0) {
+        find_overlapping_ranges(segment.min_key, segment.max_key, ordered_ranges, overlapping);
+        distribute_to_ranges(overlapping, segment.num_rows, segment.data_size, segment.source_id, track_sources);
+        return;
+    }
+
+    // Sampled path: N+1 sub-segments with known row counts.
+    const int64_t row_interval = segment.sort_key_sample_row_interval;
+    const int64_t tail_rows = segment.num_rows - num_samples * row_interval;
+    DCHECK_GT(tail_rows, 0);
+
+    // bound(k) returns the k-th sub-segment boundary; k in [0, num_samples+1].
+    auto bound = [&](int64_t k) -> const VariantTuple& {
+        if (k == 0) return segment.min_key;
+        if (k == num_samples + 1) return segment.max_key;
+        return segment.sort_key_samples[k - 1];
+    };
+    // Per-sub-segment byte share; 128-bit intermediate avoids signed overflow.
+    auto bytes_for = [&](int64_t rows) -> int64_t {
+        return static_cast<int64_t>((static_cast<__int128>(rows) * segment.data_size) / segment.num_rows);
+    };
+
+    int64_t bytes_assigned = 0;
+    for (int64_t k = 0; k <= num_samples; ++k) {
+        const int64_t sub_rows = (k < num_samples) ? row_interval : tail_rows;
+        DCHECK_GT(sub_rows, 0);
+        const int64_t sub_bytes = (k == num_samples) ? (segment.data_size - bytes_assigned) : bytes_for(sub_rows);
+        bytes_assigned += sub_bytes;
+        find_overlapping_ranges(bound(k), bound(k + 1), ordered_ranges, overlapping);
+        distribute_to_ranges(overlapping, sub_rows, sub_bytes, segment.source_id, track_sources);
+    }
+    DCHECK_EQ(bytes_assigned, segment.data_size);
+}
+
+} // anonymous namespace
 
 // ================================================================================
 // Core range split algorithm (public API)
@@ -44,12 +190,15 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
         return result;
     }
 
-    // Step 1: Collect all unique boundary points and sort them.
+    // Step 1: Collect all unique boundary points (including sort-key samples) and sort them.
     auto comparator = [](const VariantTuple* a, const VariantTuple* b) { return a->compare(*b) < 0; };
     std::set<const VariantTuple*, decltype(comparator)> ordered_boundaries(comparator);
-    for (const auto& seg : segments) {
-        ordered_boundaries.insert(&seg.min_key);
-        ordered_boundaries.insert(&seg.max_key);
+    for (const auto& segment : segments) {
+        ordered_boundaries.insert(&segment.min_key);
+        ordered_boundaries.insert(&segment.max_key);
+        for (const auto& sample : segment.sort_key_samples) {
+            ordered_boundaries.insert(&sample);
+        }
     }
 
     if (ordered_boundaries.size() < 2) {
@@ -57,14 +206,6 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     }
 
     // Step 2: Build ordered ranges between adjacent boundary points.
-    struct RangeInfo {
-        VariantTuple min;
-        VariantTuple max;
-        int64_t num_rows = 0;
-        int64_t data_size = 0;
-        SourceStats source_stats;
-    };
-
     std::vector<RangeInfo> ordered_ranges;
     ordered_ranges.reserve(ordered_boundaries.size());
     const VariantTuple* last_boundary = nullptr;
@@ -81,60 +222,9 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
         return result;
     }
 
-    // Step 3: Distribute segment data proportionally across overlapping ranges.
-    // Use binary search to find the first overlapping range for each segment.
-    size_t last_range_idx = ordered_ranges.size() - 1;
-    for (const auto& seg : segments) {
-        // Binary search for the first range whose max_key could overlap with seg.min_key.
-        size_t lo = 0, hi = ordered_ranges.size();
-        while (lo < hi) {
-            size_t mid = lo + (hi - lo) / 2;
-            bool mid_is_last = (mid == last_range_idx);
-            int cmp = ordered_ranges[mid].max.compare(seg.min_key);
-            if (mid_is_last ? (cmp < 0) : (cmp <= 0)) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-
-        // Scan forward from 'lo' to collect all overlapping ranges.
-        std::vector<RangeInfo*> overlapping;
-        for (size_t ri = lo; ri < ordered_ranges.size(); ri++) {
-            auto& range = ordered_ranges[ri];
-            if (range.min.compare(seg.max_key) > 0) {
-                break;
-            }
-            if (ri != last_range_idx && range.min.compare(seg.max_key) >= 0) {
-                break;
-            }
-            overlapping.push_back(&range);
-        }
-
-        if (overlapping.empty()) {
-            continue;
-        }
-
-        auto count = static_cast<int64_t>(overlapping.size());
-
-        int64_t rows_per_range = seg.num_rows / count;
-        int64_t rows_remainder = seg.num_rows % count;
-        int64_t size_per_range = seg.data_size / count;
-        int64_t size_remainder = seg.data_size % count;
-
-        for (int64_t i = 0; i < count; i++) {
-            int64_t delta_rows = rows_per_range + (i < rows_remainder ? 1 : 0);
-            int64_t delta_size = size_per_range + (i < size_remainder ? 1 : 0);
-
-            overlapping[i]->num_rows += delta_rows;
-            overlapping[i]->data_size += delta_size;
-
-            if (track_sources) {
-                auto& stats = overlapping[i]->source_stats[seg.source_id];
-                stats.first += delta_rows;
-                stats.second += delta_size;
-            }
-        }
+    // Step 3: Distribute segment data across overlapping ranges.
+    for (const auto& segment : segments) {
+        distribute_segment_to_ranges(segment, ordered_ranges, track_sources);
     }
 
     // Step 4: Calculate split boundaries using a greedy algorithm.
@@ -238,18 +328,19 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     }
 
     {
-        size_t boundary_idx = 0;
+        size_t boundary_index = 0;
         for (const auto* range : candidate_ranges) {
-            while (boundary_idx < result.boundaries.size() && range->max.compare(result.boundaries[boundary_idx]) > 0) {
-                boundary_idx++;
+            while (boundary_index < result.boundaries.size() &&
+                   range->max.compare(result.boundaries[boundary_index]) > 0) {
+                boundary_index++;
             }
-            int32_t group_idx = std::min(static_cast<int32_t>(boundary_idx), num_splits - 1);
-            result.range_data_sizes[group_idx] += range->data_size;
-            result.range_num_rows[group_idx] += range->num_rows;
+            int32_t group_index = std::min(static_cast<int32_t>(boundary_index), num_splits - 1);
+            result.range_data_sizes[group_index] += range->data_size;
+            result.range_num_rows[group_index] += range->num_rows;
 
             if (track_sources) {
                 for (const auto& [source_id, stats_pair] : range->source_stats) {
-                    auto& dest = result.range_source_stats[group_idx][source_id];
+                    auto& dest = result.range_source_stats[group_index][source_id];
                     dest.first += stats_pair.first;
                     dest.second += stats_pair.second;
                 }
@@ -269,6 +360,7 @@ namespace {
 struct Statistic {
     int64_t num_rows = 0;
     int64_t data_size = 0;
+    int64_t num_dels = 0;
 };
 
 struct TabletRangeInfo {
@@ -276,8 +368,76 @@ struct TabletRangeInfo {
     std::unordered_map<uint32_t, Statistic> rowset_stats;
 };
 
-Status get_tablet_split_ranges(const TabletMetadataPtr& tablet_metadata, int32_t split_count,
-                               std::vector<TabletRangeInfo>* split_ranges) {
+// Split the parent rowset's total_num_dels across the split groups proportional to
+// each group's share of the rowset's rows, using the Hare-Niemeyer (largest-remainder)
+// method. Writes the result into TabletRangeInfo.rowset_stats[source_id].num_dels.
+// Guarantees the sum of allocated values equals total_num_dels when at least one
+// group has rows for this source.
+//
+// Each split child keeps the same shared segment files and inherits the parent's
+// delvec cardinality, so without this proportional estimate get_tablet_stats would
+// subtract the full parent num_dels from each child's partial num_rows and collapse
+// the partition's live-row count (see lake_service.cpp:1166).
+void allocate_rowset_num_dels_across_splits(uint32_t source_id, int64_t total_num_dels,
+                                            std::vector<TabletRangeInfo>* split_ranges) {
+    if (total_num_dels <= 0 || split_ranges == nullptr || split_ranges->empty()) {
+        return;
+    }
+
+    int64_t total_rows = 0;
+    for (auto& split_range : *split_ranges) {
+        auto it = split_range.rowset_stats.find(source_id);
+        if (it != split_range.rowset_stats.end()) {
+            total_rows += it->second.num_rows;
+        }
+    }
+    if (total_rows <= 0) {
+        return;
+    }
+
+    std::vector<int64_t> allocated(split_ranges->size(), 0);
+    std::vector<std::pair<int64_t, size_t>> fractional_remainders;
+    fractional_remainders.reserve(split_ranges->size());
+    int64_t sum_allocated = 0;
+    for (size_t i = 0; i < split_ranges->size(); ++i) {
+        auto it = (*split_ranges)[i].rowset_stats.find(source_id);
+        if (it == (*split_ranges)[i].rowset_stats.end() || it->second.num_rows <= 0) continue;
+        // Use 128-bit intermediate: both operands can realistically reach 1e10 on very
+        // large rowsets, whose product overflows int64_t. base fits because it is
+        // bounded by total_num_dels; fractional_remainder fits because it is < total_rows.
+        __int128 numerator = static_cast<__int128>(total_num_dels) * static_cast<__int128>(it->second.num_rows);
+        int64_t base = static_cast<int64_t>(numerator / total_rows);
+        int64_t fractional_remainder = static_cast<int64_t>(numerator % total_rows);
+        allocated[i] = base;
+        sum_allocated += base;
+        fractional_remainders.emplace_back(fractional_remainder, i);
+    }
+
+    std::sort(fractional_remainders.begin(), fractional_remainders.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first; });
+    int64_t leftover = total_num_dels - sum_allocated;
+    for (size_t k = 0; k < fractional_remainders.size() && leftover > 0; ++k, --leftover) {
+        allocated[fractional_remainders[k].second]++;
+    }
+
+    for (size_t i = 0; i < split_ranges->size(); ++i) {
+        if (allocated[i] > 0) {
+            (*split_ranges)[i].rowset_stats[source_id].num_dels = allocated[i];
+        }
+    }
+}
+
+// Compute split_count tablet ranges covering the tablet's key space.
+//
+// Postcondition on Status::OK: split_ranges->size() == split_count.
+// When the algorithm cannot produce exactly that many ranges (insufficient
+// boundary points given the segment key distribution), returns
+// Status::InvalidArgument with split_ranges cleared. The caller (split_tablet)
+// is expected to fall back to identical-tablet publish; only new_tablet_ids(0)
+// is consumed in that case, and FE is responsible for reclaiming the remaining
+// preallocated tablet ids.
+Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                               int32_t split_count, std::vector<TabletRangeInfo>* split_ranges) {
     if (split_count < 2) {
         return Status::InvalidArgument("Invalid split count, it is less than 2");
     }
@@ -290,14 +450,15 @@ Status get_tablet_split_ranges(const TabletMetadataPtr& tablet_metadata, int32_t
             return Status::InvalidArgument("Segment metadata is inconsistent with segment list");
         }
         for (int32_t i = 0; i < rowset.segments_size(); ++i) {
-            SegmentSplitInfo seg;
-            seg.source_id = rowset.id();
+            SegmentSplitInfo segment;
+            segment.source_id = rowset.id();
             const auto& segment_meta = rowset.segment_metas(i);
-            RETURN_IF_ERROR(seg.min_key.from_proto(segment_meta.sort_key_min()));
-            RETURN_IF_ERROR(seg.max_key.from_proto(segment_meta.sort_key_max()));
-            seg.num_rows = segment_meta.num_rows();
-            seg.data_size = rowset.segment_size(i);
-            segments.push_back(std::move(seg));
+            RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
+            RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
+            segment.num_rows = segment_meta.num_rows();
+            segment.data_size = rowset.segment_size(i);
+            RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            segments.push_back(std::move(segment));
         }
     }
 
@@ -310,8 +471,8 @@ Status get_tablet_split_ranges(const TabletMetadataPtr& tablet_metadata, int32_t
     RETURN_IF_ERROR(tablet_range.from_proto(tablet_metadata->range()));
 
     int64_t total_num_rows = 0;
-    for (const auto& seg : segments) {
-        total_num_rows += seg.num_rows;
+    for (const auto& segment : segments) {
+        total_num_rows += segment.num_rows;
     }
     int64_t avg_num_rows = std::max<int64_t>(1, total_num_rows / split_count);
 
@@ -360,9 +521,31 @@ Status get_tablet_split_ranges(const TabletMetadataPtr& tablet_metadata, int32_t
         }
     }
 
-    if (split_ranges->size() < 2) {
+    if (split_ranges->size() != static_cast<size_t>(split_count)) {
+        LOG(WARNING) << "Insufficient split boundaries: tablet_id=" << tablet_metadata->id()
+                     << " version=" << tablet_metadata->version() << " requested=" << split_count
+                     << " produced=" << split_ranges->size();
+        auto produced = split_ranges->size();
         split_ranges->clear();
-        return Status::InvalidArgument("Not enough split ranges available");
+        return Status::InvalidArgument(
+                fmt::format("Insufficient split boundaries: requested {}, produced {}", split_count, produced));
+    }
+
+    // Only PK tablets maintain delete vectors; duplicate/aggregate keys never populate
+    // num_dels so there is nothing to scale.
+    if (is_primary_key(*tablet_metadata)) {
+        for (const auto& rowset : tablet_metadata->rowsets()) {
+            int64_t total_num_dels = 0;
+            if (rowset.has_num_dels()) {
+                total_num_dels = rowset.num_dels();
+            } else if (tablet_manager != nullptr) {
+                // Legacy metadata without num_dels: derive from the delvec. This costs
+                // one delvec read per rowset, acceptable on the one-shot split path.
+                total_num_dels = static_cast<int64_t>(
+                        tablet_manager->update_mgr()->get_rowset_num_deletes(*tablet_metadata, rowset));
+            }
+            allocate_rowset_num_dels_across_splits(rowset.id(), total_num_dels, split_ranges);
+        }
     }
 
     return Status::OK();
@@ -371,19 +554,28 @@ Status get_tablet_split_ranges(const TabletMetadataPtr& tablet_metadata, int32_t
 } // namespace
 
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
-        TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
+        TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
         const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info) {
-    if (old_tablet_metadata == nullptr) {
-        return Status::InvalidArgument("old tablet metadata is null");
+    if (tablet_metadata == nullptr) {
+        return Status::InvalidArgument("tablet metadata is null");
     }
     if (splitting_tablet.new_tablet_ids_size() <= 0) {
         return Status::InvalidArgument("splitting tablet has no new tablet");
     }
 
+    // Flush the parent's PK-index memtable into sstables before propagating
+    // metadata to the children, so every child inherits an sstable_meta that
+    // already covers its rowsets' live data. This is the pre-split half of
+    // the "reshard inputs must have full sstable coverage" invariant; merge
+    // does the post-split half in merge_sstables.
+    ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
+                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata));
+
     std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
 
     std::vector<TabletRangeInfo> split_ranges;
-    Status status = get_tablet_split_ranges(old_tablet_metadata, splitting_tablet.new_tablet_ids_size(), &split_ranges);
+    Status status = get_tablet_split_ranges(tablet_manager, old_tablet_metadata, splitting_tablet.new_tablet_ids_size(),
+                                            &split_ranges);
     if (!status.ok()) {
         g_tablet_reshard_split_fallback_total << 1;
         LOG(WARNING) << "Failed to get tablet split ranges, will not split this tablet: " << old_tablet_metadata->id()
@@ -401,7 +593,14 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         return new_metadatas;
     }
 
-    DCHECK(split_ranges.size() == splitting_tablet.new_tablet_ids_size());
+    // Defense-in-depth: get_tablet_split_ranges guarantees
+    // split_ranges.size() == new_tablet_ids_size() on OK, but a runtime check
+    // here prevents OOB reads into split_ranges[i] if the contract is ever
+    // broken by a future refactor (Release builds strip DCHECK).
+    if (split_ranges.size() != static_cast<size_t>(splitting_tablet.new_tablet_ids_size())) {
+        return Status::InternalError(fmt::format("split_ranges size mismatch: expected={}, actual={}",
+                                                 splitting_tablet.new_tablet_ids_size(), split_ranges.size()));
+    }
     for (int32_t i = 0; i < splitting_tablet.new_tablet_ids_size(); ++i) {
         auto new_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_metadata);
         new_tablet_new_metadata->set_id(splitting_tablet.new_tablet_ids(i));
@@ -418,11 +617,14 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
             RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&rowset_metadata, split_ranges[i].range));
             const auto it = split_ranges[i].rowset_stats.find(rowset_metadata.id());
             if (it != split_ranges[i].rowset_stats.end()) {
+                int64_t scaled_num_dels = std::min<int64_t>(it->second.num_dels, it->second.num_rows);
                 rowset_metadata.set_num_rows(it->second.num_rows);
                 rowset_metadata.set_data_size(it->second.data_size);
+                rowset_metadata.set_num_dels(scaled_num_dels);
             } else {
                 rowset_metadata.set_num_rows(0);
                 rowset_metadata.set_data_size(0);
+                rowset_metadata.set_num_dels(0);
             }
         }
 

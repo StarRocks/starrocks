@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
@@ -727,6 +728,16 @@ public class SPMPlan2SQLBuilder {
                     return HintNode.HINT_JOIN_BUCKET;
                 }
             } else {
+                // Colocate detection mirrors PlanFragmentBuilder.isColocateJoin:
+                // either hash-LOCAL on every required property, or a
+                // RangeDistributionSpec on every required property (range
+                // colocate; scan-local by invariant). Mixed or non-matching
+                // specs fall through to HINT_JOIN_SHUFFLE.
+                boolean allRange = optExpression.getRequiredProperties().stream()
+                        .allMatch(p -> p.getDistributionProperty().getSpec() instanceof RangeDistributionSpec);
+                if (allRange) {
+                    return HintNode.HINT_JOIN_COLOCATE;
+                }
                 Preconditions.checkState(optExpression.getRequiredProperties().stream()
                         .allMatch(p -> p.getDistributionProperty().isShuffle()));
                 if (optExpression.getRequiredProperties().stream().allMatch(p -> {

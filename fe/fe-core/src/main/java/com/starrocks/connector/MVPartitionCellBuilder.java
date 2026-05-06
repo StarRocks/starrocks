@@ -25,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.IcebergPartitionKeyResolver;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.ast.expression.Expr;
@@ -150,26 +151,43 @@ public class MVPartitionCellBuilder {
      * Get range partition cells for any table type (OLAP or external).
      * For OLAP tables, reads directly from OlapTable's range partition map.
      * For external tables, resolves partition names via the resolver pipeline.
+     * @param pinnedVersionRange if non-null, partition enumeration uses this snapshot (Iceberg);
+     *                           if null, uses the live snapshot (current behavior).
      */
     public static BaseToMVPartitionMapping getPartitionKeyRange(Table table, Column partitionColumn,
-                                                       Expr partitionExpr) throws AnalysisException {
+                                                                Expr partitionExpr,
+                                                                TvrVersionRange pinnedVersionRange)
+            throws AnalysisException {
         if (table.isNativeTableOrMaterializedView()) {
             return BaseToMVPartitionMapping.of(getOlapRangePartitionMap((OlapTable) table));
         }
-        return buildRangeCells(table, partitionColumn, getPartitionNames(table), partitionExpr);
+        return buildRangeCells(table, partitionColumn, getPartitionNames(table, pinnedVersionRange), partitionExpr);
+    }
+
+    public static BaseToMVPartitionMapping getPartitionKeyRange(Table table, Column partitionColumn,
+                                                                Expr partitionExpr) throws AnalysisException {
+        return getPartitionKeyRange(table, partitionColumn, partitionExpr, null);
     }
 
     /**
      * Get list partition cells for any table type (OLAP or external).
      * For OLAP tables, reads directly from OlapTable's partition cells.
      * For external tables, resolves partition names via the resolver pipeline.
+     * @param pinnedVersionRange if non-null, partition enumeration uses this snapshot (Iceberg);
+     *                           if null, uses the live snapshot (current behavior).
      */
-    public static BaseToMVPartitionMapping getPartitionCells(Table table, List<Column> partitionColumns)
+    public static BaseToMVPartitionMapping getPartitionCells(Table table, List<Column> partitionColumns,
+                                                             TvrVersionRange pinnedVersionRange)
             throws AnalysisException {
         if (table.isNativeTableOrMaterializedView()) {
             return BaseToMVPartitionMapping.of(((OlapTable) table).getPartitionCells(Optional.of(partitionColumns)));
         }
-        return buildListCells(table, partitionColumns, getPartitionNames(table));
+        return buildListCells(table, partitionColumns, getPartitionNames(table, pinnedVersionRange));
+    }
+
+    public static BaseToMVPartitionMapping getPartitionCells(Table table, List<Column> partitionColumns)
+            throws AnalysisException {
+        return getPartitionCells(table, partitionColumns, null);
     }
 
     private static PCellSortedSet getOlapRangePartitionMap(OlapTable olapTable) {
@@ -179,8 +197,12 @@ public class MVPartitionCellBuilder {
         return olapTable.getRangePartitionMap();
     }
 
-    private static List<String> getPartitionNames(Table table) {
-        return ConnectorPartitionTraits.build(table).getPartitionNames();
+    /**
+     * Get partition names, optionally at a pinned snapshot.
+     * @param pinnedVersionRange if non-null, uses this snapshot for Iceberg; if null, uses live snapshot.
+     */
+    public static List<String> getPartitionNames(Table table, TvrVersionRange pinnedVersionRange) {
+        return ConnectorPartitionTraits.build(table, pinnedVersionRange).getPartitionNames();
     }
 
     /**

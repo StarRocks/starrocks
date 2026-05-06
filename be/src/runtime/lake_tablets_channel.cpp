@@ -17,9 +17,12 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
+#include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
@@ -29,6 +32,7 @@
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
 #include "common/util/stack_trace_mutex.h"
+#include "common/util/table_metrics.h"
 #include "exec/tablet_info.h"
 #include "fs/bundle_file.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -38,7 +42,7 @@
 #include "runtime/load_channel.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/lake/async_delta_writer.h"
@@ -47,8 +51,6 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/compression/block_compression.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -63,7 +65,7 @@ class LakeTabletsChannel : public TabletsChannel {
 
 public:
     LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
-                       RuntimeProfile* parent_profile);
+                       RuntimeProfile* parent_profile, TableMetricsManager* table_metrics_mgr);
 
     ~LakeTabletsChannel() override;
 
@@ -226,6 +228,37 @@ private:
 
     Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
+    // Latch the FE-dispatched `enable_per_partition_coordinator` switch on this
+    // channel (AND semantics across opens) and, when enabled, record coordinator
+    // claims derived from this open's tablet list. Smallest sender_id wins per
+    // partition.
+    void _record_coordinator_claims(const PTabletWriterOpenRequest& params);
+
+    // Snapshot of `_partition_coordinator` for the close-path collect step.
+    // Should be built post-wait, when every sender's eos has been processed and
+    // all incremental_open claims are recorded.
+    struct PartitionCoordinatorSnapshot {
+        bool per_partition_mode = false;
+        std::unordered_set<int64_t> my_partitions;
+        std::unordered_set<int64_t> all_claimed_partitions;
+        int32_t min_coord_sender_id = std::numeric_limits<int32_t>::max();
+    };
+
+    // Coarse pre-wait gate: returns true iff this sender should enter the
+    // wait/collect path on its eos.
+    //   - legacy mode: only sender 0 enters.
+    //   - per-partition mode: only senders that currently own at least one
+    //     partition enter. Sender X's own incremental_open claims to this BE
+    //     are guaranteed to be in the map by eos time (NodeChannel orders X's
+    //     RPCs), and other senders' updates can only add new partitions or
+    //     lower existing sids — never raise an sid to X. So "no entry with
+    //     sid == X" is a sticky-false signal: X can never become coordinator
+    //     for any partition and can skip wait+collect entirely.
+    bool _should_enter_collect_path(int32_t sender_id) const;
+
+    // Snapshot the coordinator map under `_partition_coordinator_mtx`.
+    PartitionCoordinatorSnapshot _snapshot_coordinator(int32_t sender_id) const;
+
     // write access to the delta writers map
     inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
         return _delta_writers_impl.mutable_delta_writers();
@@ -249,6 +282,7 @@ private:
     };
 
     lake::TabletManager* _tablet_manager;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
 
     TabletsChannelKey _key;
 
@@ -290,6 +324,24 @@ private:
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
     TxnLogCollector _txn_log_collector;
 
+    // combined_txn_log collection strategy, latched from the open RPC's
+    // `lake_tablet_params.enable_per_partition_coordinator` (FE-controlled,
+    // uniform per transaction).
+    //
+    // - false: legacy "sender_id == 0 collects all logs" rule.
+    // - true: each partition elects a coordinator (smallest sender_id among
+    //   those whose (incremental_)open tablet list covered the partition),
+    //   and the coordinator collects only its partitions at close time.
+    //
+    // `_enable_per_partition_coordinator` defaults to true and is ANDed with
+    // every open's flag, so the first open adopts and any disagreement flips
+    // the channel to legacy. It's only read on the close path (after at least
+    // one open), so the default never leaks. `_partition_coordinator` is
+    // populated only while the flag stays true; in legacy mode it is empty.
+    mutable StackTraceMutex<bthread::Mutex> _partition_coordinator_mtx;
+    std::unordered_map<int64_t, int32_t> _partition_coordinator;
+    bool _enable_per_partition_coordinator{true};
+
     std::map<string, string> _column_to_expr_value;
 
     // Profile counters
@@ -317,9 +369,11 @@ private:
 };
 
 LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                       TableMetricsManager* table_metrics_mgr)
         : TabletsChannel(),
           _tablet_manager(tablet_manager),
+          _table_metrics_mgr(table_metrics_mgr),
           _key(key),
           _mem_tracker(mem_tracker),
           _mem_pool(std::make_unique<MemPool>()) {
@@ -349,9 +403,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
-#ifndef BE_TEST
-    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
-#endif
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics = _table_metrics_mgr->get_table_metrics(_schema->table_id());
+    }
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
         _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
@@ -366,6 +420,8 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
         _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
+
+    _record_coordinator_claims(params);
 
     for (auto& index_schema : params.schema().indexes()) {
         if (index_schema.id() != _index_id) {
@@ -635,10 +691,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
             wait_memtable_flush_time_ns / NANOSECS_PER_USEC);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns /
-                                                                                            NANOSECS_PER_USEC);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns /
+                                                                                          NANOSECS_PER_USEC);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
     size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
@@ -656,17 +712,92 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
     }
 
-    // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
-    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
+    // combined_txn_log collection dispatch. See `_enable_per_partition_coordinator`
+    // field comment for the two modes and their invariants.
+    //
+    // Note on snapshot timing: the elected coordinator must be decided AFTER
+    // `_txn_log_collector.wait()` returns, NOT before it. `notify()` only fires
+    // when close_channel becomes true, i.e. every sender's eos has been
+    // processed. Each NodeChannel guarantees in-order processing of its own
+    // RPCs (incremental_open precedes add_chunk precedes eos), so by the time
+    // every sender's eos is processed, every sender's incremental_open claims
+    // are recorded in `_partition_coordinator`. Cross-sender RPC processing
+    // is *not* ordered (different brpc workers, different connections), so a
+    // pre-wait snapshot can miss late-arriving incremental_open claims from
+    // other senders and incorrectly classify their partitions as orphan.
+    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() &&
         response->status().status_code() == TStatusCode::OK) {
-        rolk.unlock();
-        auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
-        auto ok = _txn_log_collector.wait(t);
-        auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
-        if (st.ok()) {
-            context->add_txn_logs(_txn_log_collector.logs());
-        } else {
-            context->update_status(st);
+        const int32_t sender_id = request.sender_id();
+
+        if (_should_enter_collect_path(sender_id)) {
+            rolk.unlock();
+            int64_t t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+            // Clamp to non-negative: a budget already exhausted means no wait,
+            // and we report the timeout immediately rather than feeding a
+            // negative value to ConditionVariable::wait_for.
+            if (t < 0) t = 0;
+            auto ok = _txn_log_collector.wait(t);
+            auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
+
+            // Post-wait snapshot: coordinator map is now final (every sender's
+            // eos has been processed by the channel, which means every
+            // sender's prior incremental_open claims have been recorded).
+            const auto snap = _snapshot_coordinator(sender_id);
+            const bool i_collect = snap.per_partition_mode ? !snap.my_partitions.empty() : (sender_id == 0);
+
+            if (!st.ok()) {
+                // Coordinators (or sender 0 in legacy) report the timeout. In
+                // per-partition mode multiple coordinators may call this in
+                // parallel, but `WriteContext::update_status` is first-wins
+                // (it no-ops once the response status is already non-OK), so
+                // the response carries a single error.
+                if (i_collect) {
+                    context->update_status(st);
+                }
+            } else if (i_collect) {
+                if (snap.per_partition_mode) {
+                    RuntimeMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
+                } else {
+                    RuntimeMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
+                }
+                auto all_logs = _txn_log_collector.logs();
+                if (snap.per_partition_mode) {
+                    // Filter: collect only the partitions this sender coordinates.
+                    // Other partitions are returned by their coordinators' eos.
+                    // Any log whose partition is entirely unclaimed (orphan) is
+                    // dropped AND loudly reported — this points to an open /
+                    // data-arrival race or missing open RPC. The minimum elected
+                    // coordinator reports the orphan to avoid duplicate counts
+                    // across coordinators. Invariant in healthy clusters:
+                    // orphan_count == 0.
+                    std::vector<TxnLogPtr> my_logs;
+                    my_logs.reserve(all_logs.size());
+                    int64_t orphan_count = 0;
+                    for (auto& log : all_logs) {
+                        const int64_t pid = log->partition_id();
+                        if (snap.my_partitions.count(pid) > 0) {
+                            my_logs.emplace_back(std::move(log));
+                        } else if (snap.all_claimed_partitions.count(pid) == 0 &&
+                                   sender_id == snap.min_coord_sender_id) {
+                            ++orphan_count;
+                            LOG(ERROR) << "combined_txn_log: orphan log for partition " << pid << " on txn " << _txn_id
+                                       << " — no sender claimed this partition via "
+                                          "(incremental_)open. Log dropped; "
+                                          "points to a missing open RPC or an "
+                                          "open/data-arrival race.";
+                        }
+                    }
+                    if (orphan_count > 0) {
+                        RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
+                    }
+                    context->add_txn_logs(my_logs);
+                } else {
+                    // Legacy path: sender 0 takes every log.
+                    context->add_txn_logs(all_logs);
+                }
+            }
+            // else: woke up but post-snap shows I'm not the coordinator;
+            // silently return — another sender will collect.
         }
     }
 }
@@ -910,6 +1041,7 @@ Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& para
         _num_remaining_senders.fetch_add(1, std::memory_order_release);
         _senders[params.sender_id()].has_incremental_open = true;
     }
+    _record_coordinator_claims(params);
     return Status::OK();
 }
 
@@ -920,6 +1052,65 @@ Status LakeTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, con
             signature, _txn_id, print_id(id), tablet_id);
     LOG(WARNING) << msg;
     return Status::InternalError(msg);
+}
+
+void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenRequest& params) {
+    // Latch the FE-dispatched per-partition-coordinator switch. AND across opens
+    // defensively: if any open disagrees (shouldn't happen under a single FE per
+    // transaction, but an old BE sink wouldn't populate the field at all), fall
+    // back to the legacy `sender_id == 0` rule for the whole channel.
+    const bool flag_enabled =
+            params.has_lake_tablet_params() && params.lake_tablet_params().enable_per_partition_coordinator();
+
+    const int32_t sender_id = params.sender_id();
+
+    // Build the distinct-partition-id set outside the lock to keep the locked
+    // region small. `PTabletWithPartition.partition_id` is a required field on
+    // the wire, so no has_partition_id() guard is needed.
+    std::unordered_set<int64_t> unique_pids;
+    unique_pids.reserve(params.tablets_size());
+    for (const auto& t : params.tablets()) {
+        unique_pids.insert(t.partition_id());
+    }
+
+    std::lock_guard l(_partition_coordinator_mtx);
+    _enable_per_partition_coordinator = _enable_per_partition_coordinator && flag_enabled;
+    if (!_enable_per_partition_coordinator) {
+        // Legacy path: coordinator map unused.
+        return;
+    }
+    for (int64_t pid : unique_pids) {
+        auto it = _partition_coordinator.find(pid);
+        // Smallest sender_id wins (deterministic election across concurrent claimers).
+        if (it == _partition_coordinator.end() || sender_id < it->second) {
+            _partition_coordinator[pid] = sender_id;
+        }
+    }
+}
+
+bool LakeTabletsChannel::_should_enter_collect_path(int32_t sender_id) const {
+    std::lock_guard l(_partition_coordinator_mtx);
+    if (!_enable_per_partition_coordinator) {
+        return sender_id == 0;
+    }
+    for (const auto& [_, sid] : _partition_coordinator) {
+        if (sid == sender_id) return true;
+    }
+    return false;
+}
+
+LakeTabletsChannel::PartitionCoordinatorSnapshot LakeTabletsChannel::_snapshot_coordinator(int32_t sender_id) const {
+    PartitionCoordinatorSnapshot snap;
+    std::lock_guard l(_partition_coordinator_mtx);
+    snap.per_partition_mode = _enable_per_partition_coordinator;
+    if (snap.per_partition_mode) {
+        for (const auto& [pid, sid] : _partition_coordinator) {
+            snap.all_claimed_partitions.insert(pid);
+            if (sid == sender_id) snap.my_partitions.insert(pid);
+            snap.min_coord_sender_id = std::min(snap.min_coord_sender_id, sid);
+        }
+    }
+    return snap;
 }
 
 void LakeTabletsChannel::update_profile() {
@@ -1016,20 +1207,27 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
                       DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableFlushTime",
                       DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
-    ADD_AND_SET_TIMER(profile, "MemtableIOTime",
-                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size.load(), 0));
-    ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES,
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load(), 0));
+    auto* memtable_disk_size_counter = ADD_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES);
+    COUNTER_SET(memtable_disk_size_counter,
+                DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load(), 0));
+    auto* memtable_io_time_counter = ADD_TIMER(profile, "MemtableIOTime");
+    COUNTER_SET(memtable_io_time_counter, DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
+    ADD_DERIVED_COUNTER(profile, "MemtableIOSpeed", TUnit::BYTES_PER_SECOND, "",
+                        [memtable_disk_size_counter, memtable_io_time_counter] {
+                            return RuntimeProfile::units_per_second(memtable_disk_size_counter,
+                                                                    memtable_io_time_counter);
+                        });
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                                         RuntimeProfile* parent_profile) {
+                                                         RuntimeProfile* parent_profile,
+                                                         TableMetricsManager* table_metrics_mgr) {
     // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
     // be consistent with LocalTabletsChannel.
-    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile, table_metrics_mgr);
 }
 
 } // namespace starrocks

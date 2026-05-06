@@ -150,6 +150,11 @@ public:
     // REQUIRES: handle must have been returned by a method on *this.
     virtual void release(Handle* handle) = 0;
 
+    // Refresh the recency of an existing cache entry without taking or
+    // releasing a handle, so callers can update LRU order without triggering
+    // deleter side effects.
+    virtual void touch(const CacheKey& key) = 0;
+
     // Return the value encapsulated in a handle returned by a
     // successful lookup().
     // REQUIRES: handle must not have been released yet.
@@ -274,6 +279,7 @@ public:
                           CachePriority priority = CachePriority::NORMAL);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
     void release(Cache::Handle* handle);
+    void touch(const CacheKey& key, uint32_t hash);
     void erase(const CacheKey& key, uint32_t hash);
     int prune();
 
@@ -326,6 +332,7 @@ public:
                    CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;
     void release(Handle* handle) override;
+    void touch(const CacheKey& key) override;
     void erase(const CacheKey& key) override;
     void* value(Handle* handle) override;
     Slice value_slice(Handle* handle) override;

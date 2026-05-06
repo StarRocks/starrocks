@@ -49,9 +49,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "util/global_metrics_registry.h"
 
 // TODO: test multi thread
 // TODO: test runtime filter
@@ -64,9 +62,9 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->metrics()->set_collect_hook_enabled(true);
 
         const auto& params = _request.params;
         const auto& query_id = params.query_id;
@@ -100,7 +98,7 @@ public:
         _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
         _pool = _runtime_state->obj_pool();
         auto sink_dop = degree_of_parallelism;
-        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop, false));
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 

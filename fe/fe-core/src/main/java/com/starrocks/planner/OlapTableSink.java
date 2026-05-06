@@ -224,6 +224,8 @@ public class OlapTableSink extends DataSink {
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
         tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
+        tSink.setEnable_lake_per_partition_coordinator_txn_log(
+                Config.lake_enable_per_partition_coordinator_txn_log);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             tSink.setDb_name(db.getFullName());
@@ -877,6 +879,20 @@ public class OlapTableSink extends DataSink {
         }
     }
 
+    // Pick the first alive node id from a pre-fetched candidate list.
+    // Returns -1 when the list is null/empty or no candidate is alive; callers fall back to a per-tablet lookup.
+    private static long pickAliveComputeNodeId(List<Long> candidates, SystemInfoService infoService) {
+        if (candidates == null || candidates.isEmpty()) {
+            return -1L;
+        }
+        for (Long id : candidates) {
+            if (id != null && (infoService.checkBackendAlive(id) || infoService.checkComputeNodeAlive(id))) {
+                return id;
+            }
+        }
+        return -1L;
+    }
+
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
                                                          TransactionState txnState) throws StarRocksException {
@@ -896,6 +912,32 @@ public class OlapTableSink extends DataSink {
             return locationParam;
         }
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        // Batch retrieve all tablets' location info in shared-data mode so we make one StarOS RPC per statement
+        // instead of N (one per tablet) while holding db-IS + table-READ in the planner critical section.
+        // Matches the pattern in OlapScanNode.getScanRangeLocations / MetaScanNode.computeRangeLocations.
+        Map<Long, List<Long>> prefetchedTabletLocations = Collections.emptyMap();
+        if (table.isCloudNativeTableOrMaterializedView()) {
+            List<Long> allTabletIds = new ArrayList<>();
+            for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
+                List<MaterializedIndex> indexes = (txnState != null)
+                        ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
+                        : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                for (MaterializedIndex index : indexes) {
+                    for (Tablet tablet : index.getTablets()) {
+                        allTabletIds.add(tablet.getId());
+                    }
+                }
+            }
+            if (!allTabletIds.isEmpty()) {
+                // partial results are ok and can be handled by the per-tablet fallback below.
+                Map<Long, List<Long>> locations =
+                        warehouseManager.getAllComputeNodeIdsAssignToTablets(computeResource, allTabletIds);
+                if (locations != null) {
+                    prefetchedTabletLocations = locations;
+                }
+            }
+        }
         for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
@@ -910,8 +952,14 @@ public class OlapTableSink extends DataSink {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
-                        long computeNodeId =
-                                warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
+                        long computeNodeId = pickAliveComputeNodeId(
+                                prefetchedTabletLocations.get(tablet.getId()), infoService);
+                        if (computeNodeId == -1L) {
+                            // Batch missed this tablet or had no alive candidate. Fall back to the per-tablet
+                            // lookup, which preserves the ERR_NO_NODES_IN_WAREHOUSE semantics on failure.
+                            computeNodeId = warehouseManager
+                                    .getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
+                        }
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(computeNodeId)));
                     } else {
                         // we should ensure the replica backend is alive

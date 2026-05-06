@@ -67,7 +67,7 @@ void* JemallocAllocator<clear_memory>::realloc(void* ptr, size_t old_size, size_
             return nullptr;
         }
         strings::memcpy_inlined(ret, ptr, old_size);
-        je_free(ptr);
+        ::je_free(ptr);
         return ret;
     }
 
@@ -76,7 +76,7 @@ void* JemallocAllocator<clear_memory>::realloc(void* ptr, size_t old_size, size_
         return nullptr;
     }
     strings::memcpy_inlined(ret, ptr, old_size);
-    je_free(ptr);
+    ::je_free(ptr);
     return ret;
 }
 
@@ -85,7 +85,7 @@ void JemallocAllocator<clear_memory>::free(void* ptr, size_t size) {
     if (UNLIKELY(ptr == nullptr)) {
         return;
     }
-    je_free(ptr);
+    ::je_free(ptr);
 }
 
 template <bool clear_memory>

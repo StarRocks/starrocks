@@ -17,6 +17,7 @@
 #include <cstddef>
 
 #include "common/logging.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -24,7 +25,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 // clang-format off
@@ -47,13 +47,6 @@ void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
     size_t num_pipelines = _num_pipelines;
     if (++_num_finished_pipelines == num_pipelines) {
         state->fragment_ctx()->count_down_execution_group();
-    }
-}
-
-void ExecutionGroup::count_down_epoch_pipeline(RuntimeState* state) {
-    size_t num_pipelines = _num_pipelines;
-    if (++_num_epoch_finished_pipelines == num_pipelines) {
-        state->fragment_ctx()->count_down_epoch_pipeline(state);
     }
 }
 

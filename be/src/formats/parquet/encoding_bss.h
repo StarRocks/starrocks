@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "base/bit/bit_util.h"
+#include "base/format.h"
 #include "base/simd/byte_stream_split.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"

@@ -42,27 +42,13 @@ public:
     // In either case,  LocalExchangeSinkOperator is finished.
     bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
 
-    bool is_epoch_finished() const override { return _is_epoch_finished; }
-    Status set_epoch_finishing(RuntimeState* state) override {
-        _is_epoch_finished = true;
-        return Status::OK();
-    }
-    Status set_epoch_finished(RuntimeState* state) override {
-        _exchanger->epoch_finish(state);
-        return Status::OK();
-    }
-    Status reset_epoch(RuntimeState* state) override {
-        _is_epoch_finished = false;
-        return Status::OK();
-    }
-
     Status set_finishing(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    void update_exec_stats(RuntimeState* state) override {}
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
     std::string get_name() const override;
 
@@ -71,8 +57,6 @@ private:
     const std::shared_ptr<LocalExchanger>& _exchanger;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_num_rows_counter = nullptr;
-    // STREAM MV
-    bool _is_epoch_finished = false;
 };
 
 class LocalExchangeSinkOperatorFactory final : public OperatorFactory {

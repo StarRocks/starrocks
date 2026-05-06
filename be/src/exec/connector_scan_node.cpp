@@ -19,16 +19,16 @@
 
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
@@ -132,10 +132,12 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
 
+    if (_data_source_provider->stream_data_source()) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
+
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
-    bool stream_data_source = _data_source_provider->stream_data_source();
-    bool is_stream_pipeline = context->is_stream_pipeline();
 
     // we do estimated here is because we have peeked all scang ranges and gather more infomration
     // so only here we can make more accurate decision.
@@ -148,12 +150,8 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
             max_buffer_capacity, default_buffer_capacity, int64_t(_scan_mem_limit * kChunkBufferMemRatio),
             runtime_state()->chunk_size());
 
-    scan_op = !stream_data_source
-                      ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
-                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
-                                is_stream_pipeline);
+    scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this,
+                                                                       runtime_state(), dop, std::move(buffer_limiter));
 
     // order matters. we will use scan mem limit to limit chunk source mem bytes.
     scan_op->set_mem_share_arb(_mem_share_arb);
@@ -163,7 +161,7 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
                                         _estimated_scan_row_bytes * runtime_state()->chunk_size());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 

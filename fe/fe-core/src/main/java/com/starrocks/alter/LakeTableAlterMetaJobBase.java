@@ -34,9 +34,11 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
@@ -331,8 +333,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                     }
                 }
                 if (useAggregatePublish) {
-                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
-                                null, null, computeResource, null);
+                    List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion,
+                                null, null, computeResource, null, vectorIndexBuildInfos);
+                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
                 }
             }
             return true;
