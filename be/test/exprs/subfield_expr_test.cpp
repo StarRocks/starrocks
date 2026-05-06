@@ -199,7 +199,8 @@ TEST_F(SubfieldExprTest, subfield_clone_test) {
 
     // Column must be cloned
     auto struct_column = down_cast<StructColumn*>(column.get());
-    EXPECT_TRUE(ColumnHelper::get_data_column(struct_column->field_column("id").get()) != subfield_column);
+    auto field_col = struct_column->field_column("id").value();
+    EXPECT_TRUE(ColumnHelper::get_data_column(field_col.get()) != subfield_column);
 }
 
 TEST_F(SubfieldExprTest, subfield_multi_level_test) {
@@ -238,5 +239,4 @@ TEST_F(SubfieldExprTest, subfield_multi_level_test) {
     EXPECT_EQ("NULL", result->debug_item(1));
     EXPECT_EQ("'cruise'", result->debug_item(2));
 }
-
 } // namespace starrocks

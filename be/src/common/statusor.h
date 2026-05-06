@@ -708,6 +708,37 @@ inline std::ostream& operator<<(std::ostream& os, const StatusOr<T>& st) {
     return os << st.status();
 }
 
+// specialization for references
+template <typename T>
+class StatusOr<T&> {
+public:
+    using value_type = T;
+
+    StatusOr(T& ref) : status_(Status::OK()), ptr_(&ref) {}
+    StatusOr(const Status& s) : status_(s), ptr_(nullptr) { DCHECK(!s.ok()); }
+
+    bool ok() const { return status_.ok(); }
+
+    const Status& status() const { return status_; }
+
+    T& value() {
+        if (!ok()) {
+            internal_statusor::ThrowBadStatusOrAccess(status_);
+        }
+        return *ptr_;
+    }
+
+    T& operator*() { return value(); }
+    T* operator->() { return &value(); }
+
+    StatusOr(const StatusOr&) = delete;
+    StatusOr& operator=(const StatusOr&) = delete;
+
+private:
+    Status status_;
+    T* ptr_;
+};
+
 #define ASSIGN_OR_RETURN_IMPL(varname, lhs, rhs) \
     auto&& varname = (rhs);                      \
     RETURN_IF_ERROR(varname);                    \

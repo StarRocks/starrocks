@@ -28,6 +28,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
@@ -901,8 +902,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         DCHECK_EQ(conv_func->field_names.size(), conv_func->children.size());
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
-
-            auto* child_col = struct_col->field_column_raw_ptr(child_name);
+            ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
             auto child_array = struct_array->GetFieldByName(child_name);
 
             if (child_array == nullptr) {
