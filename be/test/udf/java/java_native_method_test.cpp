@@ -28,6 +28,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
 #include "types/date_value.h"
@@ -285,6 +286,126 @@ TEST_F(JavaNativeMethodTest, resize) {
     auto binary_column = ColumnHelper::get_binary_column(str.get());
     ASSERT_EQ(binary_column->get_bytes().size(), 4096);
     binary_column->get_bytes().clear();
+}
+
+// STRUCT result columns flow into the unified UDFHelper.writeResult helper,
+// which calls getAddrs on the parent NullableColumn to fetch the parent null
+// bitmap and then walks getStructFieldAddrs to recurse into per-subfield writes.
+//
+// Without a do_visit(StructColumn) overload, GetColumnAddrVistor would fall
+// into the templated catch-all and surface as
+// "GetColumnAddr in java native function error", failing every STRUCT-returning
+// UDF query. Both visitors must therefore know about StructColumn.
+
+TEST_F(JavaNativeMethodTest, get_column_logical_type_struct) {
+    auto env = getJNIEnv();
+    TypeDescriptor td(TYPE_STRUCT);
+    td.children.emplace_back(TYPE_INT);
+    td.children.emplace_back(TYPE_VARCHAR);
+    td.field_names = {"a", "b"};
+    for (bool nullable : {true, false}) {
+        auto col = ColumnHelper::create_column(td, nullable);
+        EXPECT_EQ(TYPE_STRUCT,
+                  JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(col.get())))
+                << "nullable=" << nullable;
+    }
+}
+
+TEST_F(JavaNativeMethodTest, get_addrs_struct) {
+    auto env = getJNIEnv();
+    TypeDescriptor td(TYPE_STRUCT);
+    td.children.emplace_back(TYPE_INT);
+    td.children.emplace_back(TYPE_VARCHAR);
+    td.field_names = {"a", "b"};
+    auto col = ColumnHelper::create_column(td, /*nullable=*/true);
+
+    // getAddrs() returns a fixed 4-slot array; for STRUCT only addrs[0]
+    // (the parent null bitmap) is meaningful — subfield pointers travel
+    // through a separate sub_field_addrs path. The call must succeed
+    // (i.e. not throw IllegalArgumentException via env) and addrs[0] must
+    // match the actual NullableColumn null buffer pointer.
+    jlongArray jarr = JavaNativeMethods::getAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+    ASSERT_NE(jarr, nullptr);
+    ASSERT_FALSE(env->ExceptionCheck());
+    jlong buf[4];
+    env->GetLongArrayRegion(jarr, 0, 4, buf);
+
+    auto expected_null_data = down_cast<const NullableColumn*>(col.get())->immutable_null_column_data().data();
+    EXPECT_EQ(reinterpret_cast<jlong>(expected_null_data), buf[0]);
+    env->DeleteLocalRef(jarr);
+}
+
+// getStructFieldAddrs(NullableColumn(StructColumn)) returns one address per
+// STRUCT field; each address is the field's outer NullableColumn pointer so
+// the Java-side recursive writer can call getAddrs / resize on it the same
+// way it would on any other column.
+TEST_F(JavaNativeMethodTest, get_struct_field_addrs) {
+    auto env = getJNIEnv();
+    TypeDescriptor td(TYPE_STRUCT);
+    td.children.emplace_back(TYPE_INT);
+    td.children.emplace_back(TYPE_VARCHAR);
+    td.children.emplace_back(TYPE_DOUBLE);
+    td.field_names = {"a", "b", "c"};
+    auto col = ColumnHelper::create_column(td, /*nullable=*/true);
+
+    jlongArray jarr = JavaNativeMethods::getStructFieldAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+    ASSERT_NE(jarr, nullptr);
+    ASSERT_FALSE(env->ExceptionCheck());
+    jsize len = env->GetArrayLength(jarr);
+    EXPECT_EQ(3, len);
+
+    std::vector<jlong> buf(len);
+    env->GetLongArrayRegion(jarr, 0, len, buf.data());
+
+    auto* nullable = down_cast<NullableColumn*>(col.get());
+    auto* struct_col = down_cast<StructColumn*>(nullable->data_column_raw_ptr());
+    for (int i = 0; i < len; ++i) {
+        EXPECT_EQ(reinterpret_cast<jlong>(struct_col->field_column_raw_ptr(i)), buf[i])
+                << "field index " << i << " mismatch";
+    }
+    env->DeleteLocalRef(jarr);
+}
+
+// Empty STRUCT (zero fields) returns a long[0] without throwing.
+TEST_F(JavaNativeMethodTest, get_struct_field_addrs_empty) {
+    auto env = getJNIEnv();
+    TypeDescriptor td(TYPE_STRUCT);
+    auto col = ColumnHelper::create_column(td, /*nullable=*/true);
+
+    jlongArray jarr = JavaNativeMethods::getStructFieldAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+    ASSERT_NE(jarr, nullptr);
+    ASSERT_FALSE(env->ExceptionCheck());
+    EXPECT_EQ(0, env->GetArrayLength(jarr));
+    env->DeleteLocalRef(jarr);
+}
+
+// Non-nullable STRUCT column rejects with IllegalArgumentException — STRUCT
+// result columns in StarRocks are always wrapped in NullableColumn, so the
+// helper enforces that invariant rather than silently dereferencing the
+// outer column as a NullableColumn.
+TEST_F(JavaNativeMethodTest, get_struct_field_addrs_rejects_non_nullable) {
+    auto env = getJNIEnv();
+    TypeDescriptor td(TYPE_STRUCT);
+    td.children.emplace_back(TYPE_INT);
+    td.field_names = {"a"};
+    auto col = ColumnHelper::create_column(td, /*nullable=*/false);
+
+    jlongArray jarr = JavaNativeMethods::getStructFieldAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+    EXPECT_EQ(jarr, nullptr);
+    EXPECT_TRUE(env->ExceptionCheck());
+    env->ExceptionClear();
+}
+
+// NullableColumn whose data column is not a StructColumn (e.g. plain INT) is
+// rejected — the caller passed a non-STRUCT column to a struct-only API.
+TEST_F(JavaNativeMethodTest, get_struct_field_addrs_rejects_non_struct) {
+    auto env = getJNIEnv();
+    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), /*nullable=*/true);
+
+    jlongArray jarr = JavaNativeMethods::getStructFieldAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+    EXPECT_EQ(jarr, nullptr);
+    EXPECT_TRUE(env->ExceptionCheck());
+    env->ExceptionClear();
 }
 
 } // namespace starrocks

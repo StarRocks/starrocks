@@ -20,6 +20,7 @@
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
@@ -229,6 +230,137 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_datetime) {
     EXPECT_EQ(result->debug_item(2), t2.to_string());
 }
 
+// Drives the unified get_result_from_boxed_array's DECIMAL dispatch (the merged
+// DECIMAL / scalar entry point introduced when get_decimal_result_from_boxed_array
+// was folded in). Verifies that passing a non-zero precision/scale routes to the
+// DECIMAL Java helper and writes a BigDecimal[] correctly into a DECIMAL column.
+TEST_F(JavaUDFTest, get_result_from_boxed_array_decimal_dispatch) {
+    auto& helper = JVMFunctionHelper::getInstance();
+
+    // BigDecimal[] { "12345.67", null, "0.00" } over DECIMAL64(9,2).
+    jobject bd0 = helper.newBigDecimal(static_cast<int64_t>(1234567), 2);
+    LOCAL_REF_GUARD(bd0);
+    jobject bd2 = helper.newBigDecimal(static_cast<int64_t>(0), 2);
+    LOCAL_REF_GUARD(bd2);
+
+    jobjectArray arr = _env->NewObjectArray(3, helper.big_decimal_class(), nullptr);
+    ASSERT_NE(arr, nullptr);
+    LOCAL_REF_GUARD(arr);
+    _env->SetObjectArrayElement(arr, 0, bd0);
+    // index 1 stays null
+    _env->SetObjectArrayElement(arr, 2, bd2);
+
+    auto td = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 9, 2);
+    auto result = ColumnHelper::create_column(td, true);
+    ASSERT_OK(helper.get_result_from_boxed_array(TYPE_DECIMAL64, result.get(), arr, 3, 9, 2,
+                                                 /*error_if_overflow=*/true));
+    down_cast<NullableColumn*>(result.get())->update_has_null();
+    ASSERT_EQ(result->size(), 3);
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_EQ(result->debug_item(0), "12345.67");
+    EXPECT_EQ(result->debug_item(2), "0.00");
+}
+
+// FunctionContext-overload of the merged get_result_from_boxed_array (UDAF
+// finalize path). Reports JNI exceptions through ctx->set_error rather than
+// returning Status. Drive a successful scalar write to make sure the new
+// signature is wired and the dispatch keeps the non-DECIMAL fast path intact.
+TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    TypeDescriptor td(TYPE_INT);
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+
+    // Integer[] { 1, 2, 3 } via valueOf.
+    jclass integer_cls = helper.int32_t_class();
+    jmethodID value_of = _env->GetStaticMethodID(integer_cls, "valueOf", "(I)Ljava/lang/Integer;");
+    ASSERT_NE(value_of, nullptr);
+    jobjectArray arr = _env->NewObjectArray(3, integer_cls, nullptr);
+    LOCAL_REF_GUARD(arr);
+    for (int i = 0; i < 3; ++i) {
+        jobject boxed = _env->CallStaticObjectMethod(integer_cls, value_of, i + 1);
+        _env->SetObjectArrayElement(arr, i, boxed);
+        _env->DeleteLocalRef(boxed);
+    }
+
+    auto result = ColumnHelper::create_column(td, true);
+    helper.get_result_from_boxed_array(ctx.get(), TYPE_INT, result.get(), arr, 3);
+    EXPECT_FALSE(ctx->has_error());
+    ASSERT_EQ(result->size(), 3);
+    EXPECT_EQ(result->debug_item(0), "1");
+    EXPECT_EQ(result->debug_item(1), "2");
+    EXPECT_EQ(result->debug_item(2), "3");
+}
+
+// JVMFunctionHelper::new_udf_type_desc constructs a com.starrocks.udf.UdfTypeDesc
+// Java object via the cached constructor. Verify field round-trip via the cached
+// jfieldIDs the BE input boxer relies on.
+TEST_F(JavaUDFTest, new_udf_type_desc_scalar_leaf) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    JNIEnv* env = helper.getEnv();
+
+    ASSIGN_OR_ASSERT_FAIL(jobject desc,
+                          helper.new_udf_type_desc(/*logicalType=*/TYPE_INT, /*children=*/nullptr,
+                                                   /*precision=*/0, /*scale=*/0, /*record_class=*/nullptr));
+    LOCAL_REF_GUARD(desc);
+    ASSERT_NE(desc, nullptr);
+
+    jclass cls = helper.udf_type_desc_class();
+    jfieldID lt_field = env->GetFieldID(cls, "logicalType", "I");
+    ASSERT_NE(lt_field, nullptr);
+    EXPECT_EQ(static_cast<jint>(TYPE_INT), env->GetIntField(desc, lt_field));
+
+    // Leaf nodes carry no children and no recordClass.
+    EXPECT_EQ(nullptr, env->GetObjectField(desc, helper.udf_type_desc_children_field()));
+    EXPECT_EQ(nullptr, env->GetObjectField(desc, helper.udf_type_desc_record_class_field()));
+}
+
+// DECIMAL slots carry precision/scale. STRUCT slots carry the formal record
+// Class<?>. Both flow through new_udf_type_desc and must round-trip through
+// the cached field IDs.
+TEST_F(JavaUDFTest, new_udf_type_desc_decimal_and_struct) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    JNIEnv* env = helper.getEnv();
+
+    // DECIMAL64(18,4)
+    {
+        ASSIGN_OR_ASSERT_FAIL(jobject desc,
+                              helper.new_udf_type_desc(/*logicalType=*/TYPE_DECIMAL64, nullptr, 18, 4, nullptr));
+        LOCAL_REF_GUARD(desc);
+        jclass cls = helper.udf_type_desc_class();
+        jfieldID precision_field = env->GetFieldID(cls, "precision", "I");
+        jfieldID scale_field = env->GetFieldID(cls, "scale", "I");
+        EXPECT_EQ(18, env->GetIntField(desc, precision_field));
+        EXPECT_EQ(4, env->GetIntField(desc, scale_field));
+    }
+
+    // STRUCT with String.class as a stand-in record class plus a non-empty children array.
+    // Verifies the children array slot and record-class slot both populate the
+    // jfieldIDs the BE input boxer reads at runtime.
+    {
+        ASSIGN_OR_ASSERT_FAIL(jobject child, helper.new_udf_type_desc(TYPE_INT, nullptr, 0, 0, nullptr));
+        LOCAL_REF_GUARD(child);
+        jobjectArray children = env->NewObjectArray(1, helper.udf_type_desc_class(), child);
+        LOCAL_REF_GUARD(children);
+
+        jclass string_cls = env->FindClass("java/lang/String");
+        ASSERT_NE(string_cls, nullptr);
+        ASSIGN_OR_ASSERT_FAIL(jobject desc, helper.new_udf_type_desc(TYPE_STRUCT, children, 0, 0, string_cls));
+        LOCAL_REF_GUARD(desc);
+
+        jobject record_class = env->GetObjectField(desc, helper.udf_type_desc_record_class_field());
+        LOCAL_REF_GUARD(record_class);
+        EXPECT_TRUE(env->IsSameObject(record_class, string_cls));
+
+        jobject children_back = env->GetObjectField(desc, helper.udf_type_desc_children_field());
+        LOCAL_REF_GUARD(children_back);
+        ASSERT_NE(children_back, nullptr);
+        EXPECT_EQ(1, env->GetArrayLength(reinterpret_cast<jobjectArray>(children_back)));
+        env->DeleteLocalRef(string_cls);
+    }
+}
+
 // ============================================================================
 // Tests for strip_jni_generic_types():
 //   Strips generic type parameters from JNI method signatures.
@@ -361,9 +493,11 @@ TEST(GetUdafMethodDescTest, LocalDateAndLocalDateTime) {
     EXPECT_TRUE(desc[2].is_box);
 }
 
-// Test: unrecognized object class surfaces as TYPE_UNKNOWN (rejected by
-// get_method_desc validation) instead of being silently skipped.
-TEST(GetUdafMethodDescTest, UnknownObjectClassRejected) {
+// Test: any other object class is treated as a user record bound to a STRUCT
+// parameter/return — the FE analyzer already validates at CREATE FUNCTION time
+// that records only appear in STRUCT slots, so the BE signature parser may
+// safely surface them as TYPE_STRUCT and accept the method.
+TEST(GetUdafMethodDescTest, UnknownObjectClassTreatedAsStruct) {
     ClassAnalyzer analyzer;
     std::vector<MethodTypeDescriptor> desc;
     // process(String, com/example/Mystery) -> void
@@ -371,10 +505,70 @@ TEST(GetUdafMethodDescTest, UnknownObjectClassRejected) {
     ASSERT_EQ(desc.size(), 3);
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_VARCHAR); // String
-    EXPECT_EQ(desc[2].type, TYPE_UNKNOWN); // unknown class
-    // get_method_desc validation must reject the parameter TYPE_UNKNOWN.
+    EXPECT_EQ(desc[2].type, TYPE_STRUCT);  // unknown class -> STRUCT
+    EXPECT_TRUE(desc[2].is_box);
+    // get_method_desc validation must accept the parameter (return type V is
+    // ignored; only param entries are checked for TYPE_UNKNOWN).
     desc.clear();
-    EXPECT_FALSE(analyzer.get_method_desc("(Ljava/lang/String;Lcom/example/Mystery;)V", &desc).ok());
+    ASSERT_OK(analyzer.get_method_desc("(Ljava/lang/String;Lcom/example/Mystery;)V", &desc));
+}
+
+// Test: the original user-reported scenario — `evaluate(StructA): StructA`
+// produces signature `(LStructA;)LStructA;`. Both the param and the return must
+// be classified as TYPE_STRUCT, and get_method_desc must accept the full
+// signature so the UDF can be registered and dispatched.
+//
+// Convention (see end of get_udaf_method_desc): the parser appends entries
+// left-to-right then moves the last (return) entry to desc[0], so the final
+// layout is [return, param1, param2, ...].
+TEST(GetUdafMethodDescTest, RecordParamAndReturn) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    std::string sign = "(LStructA;)LStructA;";
+    ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_STRUCT); // return StructA
+    EXPECT_TRUE(desc[0].is_box);
+    EXPECT_EQ(desc[1].type, TYPE_STRUCT); // param StructA
+    EXPECT_TRUE(desc[1].is_box);
+
+    desc.clear();
+    ASSERT_OK(analyzer.get_method_desc(sign, &desc));
+}
+
+// Test: STRUCT mixed with primitives in the same signature.
+// evaluate(StructA, int, String) -> StructB — exercises the boundary between
+// the L-class branch (which now emits TYPE_STRUCT for unknown classes) and
+// the existing primitive / known-class branches in the same parser pass.
+TEST(GetUdafMethodDescTest, RecordWithPrimitiveAndStringMix) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    std::string sign = "(LStructA;ILjava/lang/String;)LStructB;";
+    ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
+    ASSERT_EQ(desc.size(), 4);
+    EXPECT_EQ(desc[0].type, TYPE_STRUCT);  // return StructB (record)
+    EXPECT_EQ(desc[1].type, TYPE_STRUCT);  // param StructA (record)
+    EXPECT_EQ(desc[2].type, TYPE_INT);     // param int (primitive)
+    EXPECT_EQ(desc[3].type, TYPE_VARCHAR); // param String
+
+    desc.clear();
+    ASSERT_OK(analyzer.get_method_desc(sign, &desc));
+}
+
+// Test: nested record class name with package qualifier and inner-class `$`.
+// JNI signatures use the slash-separated binary name and `$` for inner classes;
+// the parser should treat the whole `L<binary-name>;` as a single record
+// reference and emit TYPE_STRUCT regardless of the surface form.
+TEST(GetUdafMethodDescTest, RecordWithPackageAndInnerClass) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    std::string sign = "(Lcom/example/Outer$Inner;)Lcom/example/pkg/Result;";
+    ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_STRUCT); // return Result
+    EXPECT_TRUE(desc[0].is_box);
+    EXPECT_EQ(desc[1].type, TYPE_STRUCT); // param Outer$Inner
+    EXPECT_TRUE(desc[1].is_box);
 }
 
 } // namespace starrocks

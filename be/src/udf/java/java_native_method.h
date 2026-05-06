@@ -34,6 +34,12 @@ struct JavaNativeMethods {
     // for nullable array column [null_array_start, offset_array_start, elements_addr]
     // for nullable map column [null_array_start, offset_array_start, keys_addr, values_addr]
     static jlongArray getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr);
+    // Return one address per STRUCT field column for a NullableColumn(StructColumn).
+    // STRUCT field count is variable so getAddrs's fixed 4-slot return cannot carry
+    // them; this dedicated helper lets the Java-side recursive writer drill in.
+    // Each returned address is the field's outer NullableColumn (StarRocks invariant
+    // for struct subfields), so callers can recurse with the same getAddrs contract.
+    static jlongArray getStructFieldAddrs(JNIEnv* env, jclass clazz, jlong columnAddr);
     static jlong memory_malloc(JNIEnv* env, jclass clazz, jlong bytes);
 
     static void memory_free(JNIEnv* env, jclass clazz, jlong address);

@@ -28,6 +28,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -828,14 +829,410 @@ static StatusOr<jobject> build_decimal_boxed_array(const TypeDescriptor& type_de
                                              data_buf->handle());
 }
 
+// Helpers for walking a Java reflective Type tree via JNI. ParameterizedType /
+// RecordComponent are introspected lazily by FindClass / GetMethodID per call;
+// these are only invoked at UDF context construction, never on the per-row
+// boxing hot path.
+namespace {
+
+// Resolve a formal Java reflective Type to its raw Class<?>. Accepts either a
+// java.lang.Class (returned as-is) or a java.lang.reflect.ParameterizedType
+// (raw type extracted via getRawType). Returns null for wildcards / type
+// variables, which the FE analyzer already rejects in the field-type checker.
+StatusOr<jclass> type_to_raw_class(JNIEnv* env, jobject formal_type) {
+    if (formal_type == nullptr) {
+        return Status::InternalError("formal Java type is null");
+    }
+    jclass class_clazz = env->FindClass("java/lang/Class");
+    LOCAL_REF_GUARD_ENV(env, class_clazz);
+    if (env->IsInstanceOf(formal_type, class_clazz)) {
+        return reinterpret_cast<jclass>(formal_type);
+    }
+    jclass pt_clazz = env->FindClass("java/lang/reflect/ParameterizedType");
+    LOCAL_REF_GUARD_ENV(env, pt_clazz);
+    if (env->IsInstanceOf(formal_type, pt_clazz)) {
+        jmethodID get_raw = env->GetMethodID(pt_clazz, "getRawType", "()Ljava/lang/reflect/Type;");
+        jobject raw = env->CallObjectMethod(formal_type, get_raw);
+        if (env->ExceptionCheck() || raw == nullptr) {
+            env->ExceptionClear();
+            return Status::InternalError("ParameterizedType.getRawType returned null");
+        }
+        return reinterpret_cast<jclass>(raw);
+    }
+    return Status::InternalError("formal Java type is neither Class nor ParameterizedType");
+}
+
+// Return the actual type arguments of a ParameterizedType (e.g. List<E> -> [E];
+// Map<K,V> -> [K,V]). Caller is responsible for DeleteLocalRef on the returned
+// array.
+StatusOr<jobjectArray> type_actual_args(JNIEnv* env, jobject parameterized_type) {
+    jclass pt_clazz = env->FindClass("java/lang/reflect/ParameterizedType");
+    LOCAL_REF_GUARD_ENV(env, pt_clazz);
+    if (!env->IsInstanceOf(parameterized_type, pt_clazz)) {
+        return Status::InternalError("expected ParameterizedType for ARRAY/MAP slot");
+    }
+    jmethodID get_args = env->GetMethodID(pt_clazz, "getActualTypeArguments", "()[Ljava/lang/reflect/Type;");
+    jobjectArray args = (jobjectArray)env->CallObjectMethod(parameterized_type, get_args);
+    if (env->ExceptionCheck() || args == nullptr) {
+        env->ExceptionClear();
+        return Status::InternalError("ParameterizedType.getActualTypeArguments returned null");
+    }
+    return args;
+}
+
+} // namespace
+
+// Build a Java-side com.starrocks.udf.UdfTypeDesc tree mirroring the SQL
+// TypeDescriptor, capturing the formal record class at every STRUCT slot. Walked
+// in lockstep with the Java reflective Type so List<Inner> / Map<K,V> retain
+// Inner/K/V record-class info via ParameterizedType actual arguments and
+// RecordComponent.getGenericType() for nested record fields.
+//
+// The resulting jobject is the single source of type information shared with
+// the unified Java helpers (UDFHelper.writeResult / boxing helpers); the BE
+// stores it as a JavaGlobalRef per arg / return and passes it back across the
+// JNI boundary verbatim.
+StatusOr<jobject> build_udf_type_desc(JNIEnv* env, const TypeDescriptor& td, jobject formal_type) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    jint logical_type = static_cast<jint>(td.type);
+    jint precision = static_cast<jint>(td.precision);
+    jint scale = static_cast<jint>(td.scale);
+
+    auto build_children = [&](const std::vector<jobject>& child_descs) -> StatusOr<jobjectArray> {
+        jobjectArray arr =
+                env->NewObjectArray(static_cast<jsize>(child_descs.size()), helper.udf_type_desc_class(), nullptr);
+        if (arr == nullptr) {
+            return Status::InternalError("failed to allocate UdfTypeDesc[] children");
+        }
+        for (size_t i = 0; i < child_descs.size(); ++i) {
+            env->SetObjectArrayElement(arr, static_cast<jsize>(i), child_descs[i]);
+        }
+        return arr;
+    };
+
+    switch (td.type) {
+    case TYPE_STRUCT: {
+        ASSIGN_OR_RETURN(jclass raw, type_to_raw_class(env, formal_type));
+        // Drill into record components using their parameterized generic types so
+        // fields like List<Inner> retain Inner.class.
+        jclass class_clazz = env->FindClass("java/lang/Class");
+        LOCAL_REF_GUARD_ENV(env, class_clazz);
+        jmethodID get_components =
+                env->GetMethodID(class_clazz, "getRecordComponents", "()[Ljava/lang/reflect/RecordComponent;");
+        jobjectArray comps = (jobjectArray)env->CallObjectMethod(raw, get_components);
+        if (env->ExceptionCheck() || comps == nullptr) {
+            env->ExceptionClear();
+            return Status::InternalError("getRecordComponents returned null on STRUCT slot");
+        }
+        LOCAL_REF_GUARD_ENV(env, comps);
+        jclass rc_clazz = env->FindClass("java/lang/reflect/RecordComponent");
+        LOCAL_REF_GUARD_ENV(env, rc_clazz);
+        jmethodID get_generic = env->GetMethodID(rc_clazz, "getGenericType", "()Ljava/lang/reflect/Type;");
+
+        std::vector<jobject> children;
+        children.reserve(td.children.size());
+        for (size_t f = 0; f < td.children.size(); ++f) {
+            jobject comp = env->GetObjectArrayElement(comps, static_cast<jsize>(f));
+            LOCAL_REF_GUARD_ENV(env, comp);
+            jobject child_formal = env->CallObjectMethod(comp, get_generic);
+            if (env->ExceptionCheck() || child_formal == nullptr) {
+                env->ExceptionClear();
+                return Status::InternalError(fmt::format("RecordComponent.getGenericType null at {}", f));
+            }
+            LOCAL_REF_GUARD_ENV(env, child_formal);
+            ASSIGN_OR_RETURN(jobject child_desc, build_udf_type_desc(env, td.children[f], child_formal));
+            children.emplace_back(child_desc);
+        }
+        ASSIGN_OR_RETURN(jobjectArray children_arr, build_children(children));
+        for (jobject c : children) env->DeleteLocalRef(c);
+        LOCAL_REF_GUARD_ENV(env, children_arr);
+        return helper.new_udf_type_desc(logical_type, children_arr, precision, scale, raw);
+    }
+    case TYPE_ARRAY: {
+        ASSIGN_OR_RETURN(jobjectArray args, type_actual_args(env, formal_type));
+        LOCAL_REF_GUARD_ENV(env, args);
+        jobject elem = env->GetObjectArrayElement(args, 0);
+        LOCAL_REF_GUARD_ENV(env, elem);
+        ASSIGN_OR_RETURN(jobject child_desc, build_udf_type_desc(env, td.children[0], elem));
+        std::vector<jobject> children = {child_desc};
+        ASSIGN_OR_RETURN(jobjectArray children_arr, build_children(children));
+        env->DeleteLocalRef(child_desc);
+        LOCAL_REF_GUARD_ENV(env, children_arr);
+        return helper.new_udf_type_desc(logical_type, children_arr, precision, scale, nullptr);
+    }
+    case TYPE_MAP: {
+        ASSIGN_OR_RETURN(jobjectArray args, type_actual_args(env, formal_type));
+        LOCAL_REF_GUARD_ENV(env, args);
+        jobject key_t = env->GetObjectArrayElement(args, 0);
+        LOCAL_REF_GUARD_ENV(env, key_t);
+        jobject val_t = env->GetObjectArrayElement(args, 1);
+        LOCAL_REF_GUARD_ENV(env, val_t);
+        ASSIGN_OR_RETURN(jobject k_child, build_udf_type_desc(env, td.children[0], key_t));
+        ASSIGN_OR_RETURN(jobject v_child, build_udf_type_desc(env, td.children[1], val_t));
+        std::vector<jobject> children = {k_child, v_child};
+        ASSIGN_OR_RETURN(jobjectArray children_arr, build_children(children));
+        env->DeleteLocalRef(k_child);
+        env->DeleteLocalRef(v_child);
+        LOCAL_REF_GUARD_ENV(env, children_arr);
+        return helper.new_udf_type_desc(logical_type, children_arr, precision, scale, nullptr);
+    }
+    default:
+        // Scalar / decimal — leaf, no children.
+        return helper.new_udf_type_desc(logical_type, nullptr, precision, scale, nullptr);
+    }
+}
+
+// Helpers that read fields off a com.starrocks.udf.UdfTypeDesc jobject using the
+// jfieldIDs cached at JVMFunctionHelper init time. The UDF context holds one
+// UdfTypeDesc per arg / return — the input boxing path drills into it on demand
+// so STRUCT slots can recover the formal Java record class without a parallel
+// C++ tree.
+static jobject get_type_desc_child(JVMFunctionHelper& helper, jobject type_desc, int index) {
+    if (type_desc == nullptr) {
+        return nullptr;
+    }
+    JNIEnv* env = helper.getEnv();
+    jobjectArray children = (jobjectArray)env->GetObjectField(type_desc, helper.udf_type_desc_children_field());
+    if (children == nullptr) {
+        return nullptr;
+    }
+    LOCAL_REF_GUARD_ENV(env, children);
+    return env->GetObjectArrayElement(children, index);
+}
+
+static jclass get_type_desc_record_class(JVMFunctionHelper& helper, jobject type_desc) {
+    if (type_desc == nullptr) {
+        return nullptr;
+    }
+    JNIEnv* env = helper.getEnv();
+    return reinterpret_cast<jclass>(env->GetObjectField(type_desc, helper.udf_type_desc_record_class_field()));
+}
+
+// RAII wrapper around JNI's PushLocalFrame / PopLocalFrame. Each recursion
+// level of the input boxing path pushes its own bounded frame at entry and
+// pops it at exit, returning the result jobject as a fresh local ref in the
+// caller's frame. Without this, deeply nested STRUCT / ARRAY<STRUCT> /
+// MAP<*,STRUCT> signatures accumulate ~5-8 local refs per level (field
+// arrays, sub-results, child UdfTypeDescs, ...) into the single top-level
+// frame allocated in JavaFunctionCallExpr::call, eventually exhausting it.
+//
+// Per-level capacity is sized for the widest STRUCT we expect plus headroom
+// for the recursion-internal locals; PushLocalFrame guarantees at least the
+// requested capacity so JNI implementations are free to grow if needed.
+class JniLocalFrame {
+public:
+    JniLocalFrame(JNIEnv* env, jint capacity) : _env(env) {
+        if (_env->PushLocalFrame(capacity) < 0) {
+            _pushed = false;
+        }
+    }
+    ~JniLocalFrame() {
+        if (_pushed && !_popped) {
+            _env->PopLocalFrame(nullptr);
+        }
+    }
+    JniLocalFrame(const JniLocalFrame&) = delete;
+    JniLocalFrame& operator=(const JniLocalFrame&) = delete;
+
+    bool ok() const { return _pushed; }
+
+    // Pop the frame and lift `inner_result` (a local ref in this frame) into
+    // the caller's frame as a fresh local ref. Returns the caller-frame ref
+    // (or null if `inner_result` was null).
+    jobject pop(jobject inner_result) {
+        _popped = true;
+        return _env->PopLocalFrame(inner_result);
+    }
+
+private:
+    JNIEnv* _env;
+    bool _pushed = true;
+    bool _popped = false;
+};
+
+// Headroom for the small fixed set of local refs each boxer holds outside the
+// per-field loop (record class, parent null buffer wrapper, offsets wrapper,
+// child UdfTypeDescs, intermediate jobjectArrays). 32 covers comfortably.
+static constexpr jint BOXING_FRAME_HEADROOM = 32;
+
+// Forward declarations for the mutually recursive boxing path: STRUCT slots
+// drive recursion through their fields; ARRAY/MAP slots drive recursion through
+// their element / key+value children. The UdfTypeDesc jobject supplies the
+// formal record class at every STRUCT slot.
+static StatusOr<jobject> box_column(JVMFunctionHelper& helper, const TypeDescriptor& type_desc, const Column* column,
+                                    jobject type_desc_obj, int num_rows);
+
+static StatusOr<jobject> build_list_boxed_array(JVMFunctionHelper& helper, const TypeDescriptor& type_desc,
+                                                const Column* column, jobject type_desc_obj, int num_rows) {
+    JNIEnv* env = helper.getEnv();
+    JniLocalFrame frame(env, BOXING_FRAME_HEADROOM);
+    if (!frame.ok()) {
+        return Status::InternalError("failed to push JNI local frame for ARRAY boxing");
+    }
+
+    const Column* data_column = column;
+    std::unique_ptr<DirectByteBuffer> parent_null_buf;
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const auto& null_data = nullable->immutable_null_column_data();
+        parent_null_buf = std::make_unique<DirectByteBuffer>((void*)null_data.data(), null_data.size());
+        data_column = nullable->data_column().get();
+    }
+    const auto* array_col = down_cast<const ArrayColumn*>(data_column);
+    auto offsets_buf =
+            std::make_unique<DirectByteBuffer>((void*)array_col->offsets().immutable_data().data(),
+                                               array_col->offsets().immutable_data().size() * sizeof(uint32_t));
+
+    const Column* elements_col = array_col->elements_column().get();
+    int total_elements = static_cast<int>(elements_col->size());
+    jobject elem_desc = get_type_desc_child(helper, type_desc_obj, 0);
+    ASSIGN_OR_RETURN(jobject elements_obj,
+                     box_column(helper, type_desc.children[0], elements_col, elem_desc, total_elements));
+
+    const auto& method_map = helper.method_map();
+    auto iter = method_map.find(TYPE_ARRAY_METHOD_ID);
+    if (iter == method_map.end()) {
+        return Status::NotSupported("createBoxedListArray method not registered");
+    }
+    jobject parent_null_handle = parent_null_buf ? parent_null_buf->handle() : nullptr;
+    ASSIGN_OR_RETURN(jobject result, helper.invoke_static_method(iter->second, num_rows, parent_null_handle,
+                                                                 offsets_buf->handle(), elements_obj));
+    return frame.pop(result);
+}
+
+static StatusOr<jobject> build_map_boxed_array(JVMFunctionHelper& helper, const TypeDescriptor& type_desc,
+                                               const Column* column, jobject type_desc_obj, int num_rows) {
+    JNIEnv* env = helper.getEnv();
+    JniLocalFrame frame(env, BOXING_FRAME_HEADROOM);
+    if (!frame.ok()) {
+        return Status::InternalError("failed to push JNI local frame for MAP boxing");
+    }
+
+    const Column* data_column = column;
+    std::unique_ptr<DirectByteBuffer> parent_null_buf;
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const auto& null_data = nullable->immutable_null_column_data();
+        parent_null_buf = std::make_unique<DirectByteBuffer>((void*)null_data.data(), null_data.size());
+        data_column = nullable->data_column().get();
+    }
+    const auto* map_col = down_cast<const MapColumn*>(data_column);
+    auto offsets_buf =
+            std::make_unique<DirectByteBuffer>((void*)map_col->offsets().immutable_data().data(),
+                                               map_col->offsets().immutable_data().size() * sizeof(uint32_t));
+
+    const Column* keys_col = map_col->keys_column().get();
+    const Column* values_col = map_col->values_column().get();
+    int total_elements = static_cast<int>(keys_col->size());
+
+    jobject key_desc = get_type_desc_child(helper, type_desc_obj, 0);
+    jobject val_desc = get_type_desc_child(helper, type_desc_obj, 1);
+
+    ASSIGN_OR_RETURN(jobject keys_obj, box_column(helper, type_desc.children[0], keys_col, key_desc, total_elements));
+    ASSIGN_OR_RETURN(jobject values_obj,
+                     box_column(helper, type_desc.children[1], values_col, val_desc, total_elements));
+
+    const auto& method_map = helper.method_map();
+    auto iter = method_map.find(TYPE_MAP_METHOD_ID);
+    if (iter == method_map.end()) {
+        return Status::NotSupported("createBoxedMapArray method not registered");
+    }
+    jobject parent_null_handle = parent_null_buf ? parent_null_buf->handle() : nullptr;
+    ASSIGN_OR_RETURN(jobject result, helper.invoke_static_method(iter->second, num_rows, parent_null_handle,
+                                                                 offsets_buf->handle(), keys_obj, values_obj));
+    return frame.pop(result);
+}
+
+static StatusOr<jobject> build_struct_boxed_array(JVMFunctionHelper& helper, const TypeDescriptor& type_desc,
+                                                  const Column* column, jobject type_desc_obj, int num_rows) {
+    JNIEnv* env = helper.getEnv();
+    // Capacity sized for the per-level fixed locals plus one in-flight sub_result;
+    // sub_results are explicitly DeleteLocalRef'd inside the per-field loop so the
+    // frame footprint stays bounded regardless of field count.
+    JniLocalFrame frame(env, BOXING_FRAME_HEADROOM);
+    if (!frame.ok()) {
+        return Status::InternalError("failed to push JNI local frame for STRUCT boxing");
+    }
+
+    jclass record_class = get_type_desc_record_class(helper, type_desc_obj);
+    if (record_class == nullptr) {
+        return Status::InternalError("STRUCT argument missing formal record class; cannot box");
+    }
+
+    const Column* data_column = column;
+    std::unique_ptr<DirectByteBuffer> parent_null_buf;
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const auto& null_data = nullable->immutable_null_column_data();
+        parent_null_buf = std::make_unique<DirectByteBuffer>((void*)null_data.data(), null_data.size());
+        data_column = nullable->data_column().get();
+    }
+
+    if (!data_column->is_struct()) {
+        return Status::InternalError("expected StructColumn for STRUCT argument");
+    }
+    const auto* struct_col = down_cast<const StructColumn*>(data_column);
+    int num_fields = static_cast<int>(struct_col->fields_size());
+
+    jclass object_clazz = env->FindClass("java/lang/Object");
+    jobjectArray field_arrays = env->NewObjectArray(num_fields, object_clazz, nullptr);
+    if (field_arrays == nullptr) {
+        return Status::InternalError("failed to allocate field_arrays for STRUCT input");
+    }
+
+    for (int f = 0; f < num_fields; ++f) {
+        const Column* field_col = struct_col->field_column_raw_ptr(f);
+        const TypeDescriptor& field_type = type_desc.children[f];
+        jobject field_desc = get_type_desc_child(helper, type_desc_obj, f);
+        ASSIGN_OR_RETURN(jobject sub_result, box_column(helper, field_type, field_col, field_desc, num_rows));
+        env->SetObjectArrayElement(field_arrays, f, sub_result);
+        if (sub_result != nullptr) {
+            env->DeleteLocalRef(sub_result);
+        }
+        if (field_desc != nullptr) {
+            env->DeleteLocalRef(field_desc);
+        }
+    }
+
+    jobject parent_null_handle = parent_null_buf ? parent_null_buf->handle() : nullptr;
+    ASSIGN_OR_RETURN(jobject result,
+                     helper.create_boxed_struct_array(record_class, num_rows, parent_null_handle, field_arrays));
+    return frame.pop(result);
+}
+
+// Recursive boxing dispatcher. Falls back to JavaArrayConverter when the type
+// subtree contains no STRUCT (signaled by a null UdfTypeDesc), since DECIMAL
+// columns and ARRAY/MAP-of-scalar already have efficient direct boxing helpers.
+static StatusOr<jobject> box_column(JVMFunctionHelper& helper, const TypeDescriptor& type_desc, const Column* column,
+                                    jobject type_desc_obj, int num_rows) {
+    if (type_desc.type == TYPE_STRUCT) {
+        return build_struct_boxed_array(helper, type_desc, column, type_desc_obj, num_rows);
+    }
+    if (type_desc.type == TYPE_ARRAY && type_desc_obj != nullptr) {
+        return build_list_boxed_array(helper, type_desc, column, type_desc_obj, num_rows);
+    }
+    if (type_desc.type == TYPE_MAP && type_desc_obj != nullptr) {
+        return build_map_boxed_array(helper, type_desc, column, type_desc_obj, num_rows);
+    }
+    if (is_decimalv3_field_type(type_desc.type)) {
+        return build_decimal_boxed_array(type_desc, column, num_rows);
+    }
+    JavaArrayConverter conv(helper);
+    RETURN_IF_ERROR(column->accept(&conv));
+    return conv.result();
+}
+
 Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const Column** columns, int num_cols,
-                                                     int num_rows, std::vector<jobject>* res) {
+                                                     int num_rows, std::vector<jobject>* res,
+                                                     const std::vector<jobject>* arg_type_descs) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
     for (int i = 0; i < num_cols; ++i) {
         jobject arg = nullptr;
         const TypeDescriptor& arg_type = *ctx->get_arg_type(i);
-        const bool is_decimal = is_decimalv3_field_type(arg_type.type);
+        jobject type_desc_obj = (arg_type_descs != nullptr && i < static_cast<int>(arg_type_descs->size()))
+                                        ? (*arg_type_descs)[i]
+                                        : nullptr;
         if (columns[i]->only_null() ||
             (columns[i]->is_nullable() && down_cast<const NullableColumn*>(columns[i])->null_count() == num_rows)) {
             arg = helper.create_array(num_rows);
@@ -845,12 +1242,8 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const
             ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(arg_type, true, data_column, 0));
             arg = helper.create_object_array(jval.l, num_rows);
             env->DeleteLocalRef(jval.l);
-        } else if (is_decimal) {
-            ASSIGN_OR_RETURN(arg, build_decimal_boxed_array(arg_type, columns[i], num_rows));
         } else {
-            JavaArrayConverter converter(helper);
-            RETURN_IF_ERROR(columns[i]->accept(&converter));
-            arg = converter.result();
+            ASSIGN_OR_RETURN(arg, box_column(helper, arg_type, columns[i], type_desc_obj, num_rows));
         }
 
         res->emplace_back(arg);

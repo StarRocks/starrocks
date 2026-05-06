@@ -99,6 +99,46 @@ public:
     // (int32/int64/int128 little-endian).
     StatusOr<jobject> create_boxed_decimal_array(int type, int scale, int num_rows, jobject null_buff,
                                                  jobject data_buff);
+
+    // Materialize a STRUCT column on the Java side as `record_class[num_rows]`.
+    // `record_class` is the formal java.lang.Class declared in the UDF method
+    // signature; the FE analyzer guarantees its components match the SQL fields.
+    // `null_buff` is a ByteBuffer over the parent NullableColumn's null bitmap
+    // (may be null for non-nullable columns). `field_arrays` is a jobjectArray
+    // (Object[]) of length numFields where each entry is the already-boxed
+    // Object[numRows] for that subfield column.
+    StatusOr<jobject> create_boxed_struct_array(jclass record_class, int num_rows, jobject null_buff,
+                                                jobject field_arrays);
+
+    // Extract record components into per-field boxed Object[]s and write the parent
+    // NullableColumn's null bitmap. The BE drives per-subfield writes after this call,
+    // recursing back through this method for STRUCT subfields and dispatching DECIMAL
+    // / scalar subfields through the existing per-type result writers. Returning the
+    // per-field arrays (rather than threading the SQL type tree across the JNI
+    // boundary) keeps DECIMAL precision/scale and nested record-class lookups on the
+    // C++ side where they already live.
+    //
+    // Returns a jobjectArray of length `sub_field_types.size()`; each element is a
+    // typed array of length `num_rows` (Integer[]/String[]/... for scalar subfields,
+    // Object[] for STRUCT subfields, which the BE then re-feeds into this method).
+    // Unified output dispatcher: drain a UDF result jobject (records, lists, maps,
+    // scalars) into a native column tree using the SQL type info encoded in
+    // `type_desc` (a com.starrocks.udf.UdfTypeDesc). The BE constructs the desc
+    // once per UDF and just calls this one entry point per query batch.
+    Status write_result(jobject result, int num_rows, jlong column_addr, jobject type_desc, bool error_if_overflow);
+
+    // Cached field IDs for com.starrocks.udf.UdfTypeDesc, used by the BE-side input
+    // boxing recursion to read recordClass / children without repeated FindClass
+    // / GetFieldID lookups.
+    jclass udf_type_desc_class() const { return _udf_type_desc_class; }
+    jfieldID udf_type_desc_record_class_field() const { return _udf_type_desc_record_class; }
+    jfieldID udf_type_desc_children_field() const { return _udf_type_desc_children; }
+
+    // Construct a UdfTypeDesc Java object via the public constructor. Used by the
+    // UDF context builder to materialize the per-arg / per-return type tree from BE.
+    StatusOr<jobject> new_udf_type_desc(jint logical_type, jobjectArray children, jint precision, jint scale,
+                                        jobject record_class);
+
     const std::unordered_map<int, jmethodID>& method_map() const { return _method_map; }
 
     template <class... Args>
@@ -136,21 +176,19 @@ public:
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
 
-    // type: LogicalType
-    // col: result column
-    // jcolumn: Integer[]/String[]
-    void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
+    // Drain a UDF result jobject (Object[] of boxed values) into the native column.
+    // For DECIMAL types, supply precision/scale and the overflow policy
+    // (REPORT_ERROR vs OUTPUT_NULL); the helper rescales to (precision, scale) and
+    // raises ArithmeticException on overflow according to `error_if_overflow`.
+    // For non-DECIMAL types, the trailing arguments are ignored.
+    Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows, int precision = 0,
+                                       int scale = 0, bool error_if_overflow = true);
 
-    Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
-
-    // DECIMAL-aware result conversion. Used when the UDF return type is DECIMAL32/64/128/256
-    // so that the BigDecimal[] produced on the Java side can be materialized into a native
-    // DECIMAL column (int32/int64/int128/int256 unscaled) using `scale` for rounding.
-    // `precision` is the declared DECIMAL precision used for overflow detection; when a
-    // value does not fit, `error_if_overflow` decides between raising an ArithmeticException
-    // (REPORT_ERROR) or nulling the row (OUTPUT_NULL).
-    Status get_decimal_result_from_boxed_array(int type, int precision, int scale, Column* col, jobject jcolumn,
-                                               int rows, bool error_if_overflow);
+    // UDAF variant: same dispatch but reports JNI exceptions through FunctionContext::set_error
+    // instead of returning Status. UDAF return types are restricted to scalar/decimal so the
+    // dispatch matches the unified scalar/decimal logic above.
+    void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows,
+                                     int precision = 0, int scale = 0, bool error_if_overflow = true);
 
     // Per-row helpers used by the BE for single-row DECIMAL writes. Both delegate the
     // setScale + range check + unscaled extraction to UDFHelper (Java side) and surface
@@ -265,8 +303,14 @@ private:
     jobject _utf8_charsets;
 
     jclass _udf_helper_class;
+    jclass _udf_type_desc_class;
+    jmethodID _udf_type_desc_ctor;
+    jfieldID _udf_type_desc_record_class;
+    jfieldID _udf_type_desc_children;
     jmethodID _create_boxed_array;
     jmethodID _create_boxed_decimal_array;
+    jmethodID _create_boxed_struct_array;
+    jmethodID _write_result;
     jmethodID _get_decimal_boxed_result;
     jmethodID _bd_unscaled_long;
     jmethodID _bd_unscaled_le_bytes;
@@ -594,6 +638,15 @@ struct JavaUDFContext {
     std::unique_ptr<JavaMethodDescriptor> prepare;
     std::unique_ptr<JavaMethodDescriptor> evaluate;
     std::unique_ptr<JavaMethodDescriptor> close;
+
+    // Per-argument and return-type UdfTypeDesc Java objects mirroring the SQL
+    // TypeDescriptor of each slot, with the formal Java record class captured at
+    // every STRUCT slot. Built once at UDF context construction (walking
+    // Method.getGenericParameterTypes() / getGenericReturnType() in lockstep with
+    // the SQL type tree). Passed verbatim to the unified UDFHelper.writeResult and
+    // input-boxing entry points so the recursion lives entirely on the Java side.
+    std::vector<JavaGlobalRef> evaluate_arg_type_descs;
+    JavaGlobalRef evaluate_return_type_desc = nullptr;
 };
 
 // Shareable, cacheable UDAF class-level context.

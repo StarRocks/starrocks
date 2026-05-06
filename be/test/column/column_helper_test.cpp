@@ -14,8 +14,12 @@
 
 #include "column/column_helper.h"
 
+#include "base/testutil/assert.h"
 #include "column/column_builder.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "gtest/gtest.h"
+#include "gutil/casts.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {
@@ -319,6 +323,36 @@ TEST_F(ColumnHelperTest, get_storage_container_get_data_with_row_nullable) {
     EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 0), 10);
     EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 1), 20);
     EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
+// Verify update_nested_has_null recurses into STRUCT subfield columns.
+// Mirrors the post-write step a STRUCT-returning Java UDF goes through:
+// the Java side memcpys raw null bytes into subfield bitmaps without touching
+// each NullableColumn's `_has_null` cache, and update_nested_has_null is
+// expected to refresh the cache field-by-field.
+TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
+    TypeDescriptor td(TYPE_STRUCT);
+    td.children.emplace_back(TYPE_INT);
+    td.children.emplace_back(TYPE_VARCHAR);
+    td.field_names = {"a", "b"};
+    auto col = ColumnHelper::create_column(td, true);
+    auto* outer = down_cast<NullableColumn*>(col.get());
+    outer->resize(3);
+
+    auto* sc = down_cast<StructColumn*>(outer->data_column_raw_ptr());
+    ASSERT_EQ(sc->fields_size(), 2);
+    auto* a_col = down_cast<NullableColumn*>(sc->field_column_raw_ptr(0));
+    auto* b_col = down_cast<NullableColumn*>(sc->field_column_raw_ptr(1));
+
+    // Drop a null straight into subfield a's bitmap, bypassing the bookkeeping
+    // that maintains _has_null. Pre-condition is the stale `false`.
+    a_col->null_column_data()[1] = 1;
+    ASSERT_FALSE(a_col->has_null());
+
+    ASSERT_OK(ColumnHelper::update_nested_has_null(col.get()));
+
+    EXPECT_TRUE(a_col->has_null());
+    EXPECT_FALSE(b_col->has_null());
 }
 
 } // namespace starrocks
