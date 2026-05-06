@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
@@ -159,6 +160,10 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             }
             ColumnRefSet inputCols = optExpression.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
+            if (optExpression.getOp() instanceof PhysicalOperator) {
+                usedCols.union(((PhysicalOperator) optExpression.getOp()).getUsedColumns());
+            }
+
             if (optExpression.getOp().getPredicate() != null) {
                 ColumnRefSet predicateCols = optExpression.getOp().getPredicate().getUsedColumns();
                 // The predicate cols should be from the input cols or the output cols of this operator
