@@ -632,16 +632,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
                              .column_pos(0)
                              .nullable(false)
                              .build();
-    auto pos_slot = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
-                            .column_name("_pos")
-                            .column_pos(1)
-                            .nullable(false)
-                            .build();
-    auto c1_slot = slot_desc_builder.type(LogicalType::TYPE_INT)
-                           .column_name("c1")
-                           .column_pos(2)
-                           .nullable(true)
-                           .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
+    auto c1_slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(2).nullable(true).build();
     auto op_slot = slot_desc_builder.type(LogicalType::TYPE_TINYINT)
                            .column_name("op_code")
                            .column_pos(3)
@@ -748,11 +741,8 @@ TEST_F(IcebergTableSinkTest, row_delta_invalid_column_layout) {
                              .column_pos(0)
                              .nullable(false)
                              .build();
-    auto pos_slot = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
-                            .column_name("_pos")
-                            .column_pos(1)
-                            .nullable(false)
-                            .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
     TTupleDescriptorBuilder tuple_desc_builder;
     tuple_desc_builder.add_slot(file_slot);
     tuple_desc_builder.add_slot(pos_slot);
