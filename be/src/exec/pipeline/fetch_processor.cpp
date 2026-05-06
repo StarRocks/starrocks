@@ -227,8 +227,7 @@ StatusOr<FetchTaskPtr> FetchProcessor::_create_fetch_task(TupleId request_tuple_
         return std::make_shared<FetchTask>(std::move(task_ctx));
     }
     default:
-        return Status::InternalError(
-                fmt::format("Unknown row position type: {}", static_cast<uint8_t>(row_position_type)));
+        return Status::InternalError(fmt::format("Unknown row position type: {}", row_position_type));
     }
 }
 

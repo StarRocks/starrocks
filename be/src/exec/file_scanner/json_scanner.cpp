@@ -20,6 +20,7 @@
 #include <sstream>
 #include <utility>
 
+#include "base/format.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"

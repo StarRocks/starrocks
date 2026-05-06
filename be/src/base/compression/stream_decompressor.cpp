@@ -35,6 +35,7 @@
 #include "base/compression/stream_decompressor.h"
 
 #include <bzlib.h>
+#include <fmt/compile.h>
 #include <glog/logging.h>
 #include <zlib.h>
 
@@ -46,7 +47,7 @@
 #include "base/compression/compression_context_pool_singletons.h"
 #include "base/compression/compression_headers.h"
 #include "base/compression/lzo_decompressor_registry.h"
-#include "fmt/compile.h"
+#include "base/format.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -1150,7 +1151,7 @@ StatusOr<std::unique_ptr<StreamDecompressor>> StreamDecompressor::create_decompr
         decompressor = std::make_unique<LzoStreamDecompressor>();
         break;
     default:
-        return Status::InternalError(fmt::format("Unknown compress type: {}", static_cast<int>(type)));
+        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
     }
 
     RETURN_IF_ERROR(decompressor->init());

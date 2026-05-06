@@ -24,6 +24,7 @@
 #include <aws/sts/STSClient.h>
 #include <curl/curl.h>
 
+#include "base/format.h"
 #include "base/metrics.h"
 #include "base/url_coding.h"
 #include "base/utility/defer_op.h"

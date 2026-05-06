@@ -645,7 +645,7 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
         }
         default:
             DCHECK(false) << "unsupport UDF TYPE" << type_desc.type;
-            return Status::NotSupported(fmt::format("unsupport UDF TYPE:{}", static_cast<int>(type_desc.type)));
+            return Status::NotSupported(fmt::format("unsupport UDF TYPE:{}", type_desc.type));
         }
     }
     return Status::OK();

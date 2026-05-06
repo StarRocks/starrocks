@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -424,3 +426,8 @@ bool operator==(const TabletMeta& a, const TabletMeta& b);
 bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::TabletState> : formatter<std::underlying_type_t<starrocks::TabletState>> {
+    auto format(starrocks::TabletState value, format_context& ctx) const -> format_context::iterator;
+};

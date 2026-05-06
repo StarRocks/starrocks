@@ -14,6 +14,7 @@
 
 #include "storage/binlog_file_writer.h"
 
+#include "base/format.h"
 #include "base/hash/crc32c.h"
 #include "base/path/filesystem_util.h"
 #include "fs/fs_factory.h"
@@ -558,3 +559,9 @@ StatusOr<std::shared_ptr<BinlogFileWriter>> BinlogFileWriter::reopen(int64_t fil
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::WriterState>::format(const starrocks::WriterState value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::WriterState>>::format(starrocks::enum_to_underlying_type(value),
+                                                                             ctx);
+}

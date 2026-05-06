@@ -41,6 +41,7 @@
 #include <ctime>
 #include <memory>
 
+#include "base/format.h"
 #include "base/path/path_util.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_compaction_fwd.h"
@@ -1942,3 +1943,9 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
 }
 
 } // end namespace starrocks
+
+auto fmt::formatter<starrocks::TabletDropFlag>::format(const starrocks::TabletDropFlag value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::TabletDropFlag>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
+}

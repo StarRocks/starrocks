@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <memory>
 #include <optional>
 #include <span>
@@ -434,3 +436,9 @@ public:
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::FileSystem::OpenMode>
+        : formatter<std::underlying_type_t<starrocks::FileSystem::OpenMode>> {
+    auto format(starrocks::FileSystem::OpenMode value, format_context& ctx) const -> format_context::iterator;
+};

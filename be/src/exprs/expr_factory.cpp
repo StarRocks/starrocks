@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
+#include "base/format.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exprs/arithmetic_expr.h"

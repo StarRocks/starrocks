@@ -19,6 +19,7 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "base/format.h"
 #include "common/config_local_io_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/encrypt_file.h"
@@ -102,3 +103,9 @@ void FileSystem::on_file_write_close(WritableFile* file) {
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::FileSystem::OpenMode>::format(const starrocks::FileSystem::OpenMode value,
+                                                             format_context& ctx) const -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::FileSystem::OpenMode>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
+}
