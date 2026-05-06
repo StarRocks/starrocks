@@ -76,7 +76,8 @@ public:
     Status query(OlapReaderStatistics* stats, const std::string_view column_name, const void* query_value,
                  InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
 
-    Status query_null(OlapReaderStatistics* stats, const std::string_view column_name, roaring::Roaring* bit_map) override;
+    Status query_null(OlapReaderStatistics* stats, const std::string_view column_name,
+                      roaring::Roaring* bit_map) override;
 
     InvertedIndexReaderType get_inverted_index_reader_type() override { return InvertedIndexReaderType::TEXT; }
 
