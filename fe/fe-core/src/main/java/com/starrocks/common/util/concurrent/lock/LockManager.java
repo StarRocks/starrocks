@@ -243,7 +243,7 @@ public class LockManager {
             throws LockInterruptException, DeadlockException {
         DeadLockChecker dc = null;
         while (true) {
-            boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) < 0;
+            boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) <= 0;
             if (lockTimeOut && dc != null) {
                 if (removeFromWaiterList(rid, currentLocker, lockType)) {
                     /* Failure to acquire lock within the timeout ms */
