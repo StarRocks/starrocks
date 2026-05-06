@@ -301,6 +301,16 @@ public class RemoteFileOperations {
         return HiveWriteUtils.pathExists(path, conf);
     }
 
+    /**
+     * Creates {@code path} as an empty directory (including parents) when it does not exist.
+     * Used when HMS lists a partition but the warehouse path is missing on the filesystem.
+     */
+    public void ensureDirectoryExists(Path path) {
+        if (!pathExists(path)) {
+            createDirectory(path, conf);
+        }
+    }
+
     public boolean deleteIfExists(Path path, boolean recursive) {
         return HiveWriteUtils.deleteIfExists(path, recursive, conf);
     }
