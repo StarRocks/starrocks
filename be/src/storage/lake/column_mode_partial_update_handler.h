@@ -45,9 +45,18 @@ private:
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema);
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
-                                       ChunkPtr* source_chunk);
+                                       ChunkPtr* source_chunk, int32_t condition_idx_in_partial_schema);
     StatusOr<ChunkPtr> _read_from_source_segment(const RowsetUpdateStateParams& params, const Schema& schema,
                                                  uint32_t rssid);
+    // Resolve txn_meta.merge_condition() to a column id in `tschema`.
+    // Returns -1 when no condition is set, or an error when the named column is missing from the schema.
+    static StatusOr<int32_t> _resolve_condition_cid(const RowsetTxnMetaPB& txn_meta, const TabletSchema& tschema);
+    // Locate `condition_cid` inside a per-batch partial column id list. Returns an error when the
+    // condition column is not present in the batch — with the single-batch invariant this indicates
+    // a logic bug (delta_writer should have rejected it), so propagate it loudly rather than silently
+    // falling back to the no-condition path.
+    static StatusOr<int32_t> _locate_condition_idx_in_partial_schema(
+            const std::vector<ColumnId>& selective_update_column_ids, int32_t condition_cid);
 
 private:
     // params
