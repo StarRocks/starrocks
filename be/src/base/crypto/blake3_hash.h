@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 #include "blake3.h"
 
@@ -27,8 +27,7 @@ class Blake3Hash {
 public:
     static constexpr int BLAKE3_HASH_BYTES = BLAKE3_OUT_LEN; // 32
 
-    static void blake3_compute(const unsigned char* message, size_t message_len,
-                               uint8_t digest[BLAKE3_OUT_LEN]) {
+    static void blake3_compute(const unsigned char* message, size_t message_len, uint8_t digest[BLAKE3_OUT_LEN]) {
         blake3_hasher hasher;
         blake3_hasher_init(&hasher);
         blake3_hasher_update(&hasher, message, message_len);
