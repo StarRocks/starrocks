@@ -142,3 +142,149 @@ select * from site_access;
 
 drop database test_column_partial_update_with_condition_update;
 
+
+-- name: test_lake_column_partial_update_with_condition_update @sequential @cloud
+create database test_lake_column_partial_update_with_condition_update;
+use test_lake_column_partial_update_with_condition_update;
+
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  ver INT NOT NULL,
+  v1 INT NULL,
+  v2 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into tab1 values (1, 10, 100, 1000), (2, 20, 200, 2000);
+select * from tab1 order by k;
+
+-- Happy path: column-mode PCU + merge_condition on ver. Only (k, ver, v1) are in the
+-- partial column set; rows where new ver > old ver should update, others should stay.
+-- Inline rows: (1,5,999) → rejected (5 < 10);  (2,30,888) → applied (30 > 20).
+shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_ok -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+sync;
+select * from tab1 order by k;
+
+-- Error path: merge_condition references v2 which is NOT in the partial column set (k, ver, v1).
+-- Stream load is rejected during FE-side validation (Load.checkMergeCondition) with a
+-- "Merge condition column ... does not exist" message; BE never gets to run its matching check here.
+shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_bad -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:v2 -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+sync;
+select * from tab1 order by k;
+
+drop database test_lake_column_partial_update_with_condition_update;
+
+
+-- name: test_lake_column_pcu_condition_after_drop_column @sequential @cloud
+-- Verify that dropping a column ahead of the condition column (which shifts the condition
+-- column's column-id) does not break column-mode PCU + merge_condition. The handler resolves
+-- the condition column by NAME against the publish-time schema, so the post-drop cid is what
+-- gets used end-to-end (no stale write-time cid leaks in).
+create database test_lake_column_pcu_condition_after_drop_column;
+use test_lake_column_pcu_condition_after_drop_column;
+
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  v1 INT NULL,
+  v2 INT NULL,
+  v3 INT NULL,
+  ver INT NOT NULL,
+  v4 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into tab1 values (1, 1, 1, 1, 10, 1), (2, 2, 2, 2, 20, 2);
+select * from tab1 order by k;
+
+-- Drop v2: ver shifts from cid 4 → 3, v3 from 3 → 2, v4 from 5 → 4.
+alter table tab1 drop column v2;
+function: wait_alter_table_finish()
+select * from tab1 order by k;
+
+-- Stream load: partial cols (k, ver, v3), merge_condition=ver.
+-- (1, 5, 777)  → ver=5 < current 10  → reject; row 1 keeps (1, 1, 1, 10, 1).
+-- (2, 30, 888) → ver=30 > current 20 → apply; row 2 becomes (2, 2, 888, 30, 2).
+shell: curl --location-trusted -u root: -d "1,5,777|2,30,888" -XPUT -H label:lake_pcu_cond_drop -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v3 ${url}/api/test_lake_column_pcu_condition_after_drop_column/tab1/_stream_load
+sync;
+select * from tab1 order by k;
+
+drop database test_lake_column_pcu_condition_after_drop_column;
+
+
+-- name: test_lake_column_pcu_condition_after_add_column @sequential @cloud
+-- Verify column-mode PCU + merge_condition still behaves correctly after ALTER TABLE ADD COLUMN.
+-- ADD COLUMN appends a column with a new uid at the tail; existing column-ids are unchanged,
+-- so this is the easy direction of schema evolution. The test pins:
+--   - existing rows: condition compare is unaffected by the appended column;
+--   - new rows (UPSERT path): the appended column gets its declared default.
+create database test_lake_column_pcu_condition_after_add_column;
+use test_lake_column_pcu_condition_after_add_column;
+
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  ver INT NOT NULL,
+  v1 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into tab1 values (1, 10, 100), (2, 20, 200);
+select * from tab1 order by k;
+
+-- Append a new nullable column with a non-NULL default.
+alter table tab1 add column v2 INT NULL DEFAULT "999";
+function: wait_alter_table_finish()
+select * from tab1 order by k;
+
+-- Stream load: partial cols (k, ver, v1), merge_condition=ver. Inline rows:
+--   (1, 5, 777)  → ver=5 < 10  → reject; row 1 stays unchanged.
+--   (2, 30, 888) → ver=30 > 20 → apply; row 2 v1=888, ver=30; v2 untouched (still default 999).
+--   (3, 50, 555) → new PK     → insert via UPSERT path; v2 takes the column default 999.
+shell: curl --location-trusted -u root: -d "1,5,777|2,30,888|3,50,555" -XPUT -H label:lake_pcu_cond_add -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_after_add_column/tab1/_stream_load
+sync;
+select * from tab1 order by k;
+
+drop database test_lake_column_pcu_condition_after_add_column;
+
+
+-- name: test_lake_column_pcu_condition_with_order_by @sequential @cloud
+-- Document the pre-existing BE restriction that blocks column-mode (UPSERT path used by
+-- stream load) partial updates on a primary-key table with a non-PK sort key:
+-- a non-PK sort-key column can neither be omitted (sort key must be present to order new
+-- rows) nor included (column-mode UPDATE forbids touching sort-key columns), so any
+-- column-mode stream-load partial update on such a table is rejected upstream of the
+-- condition-update logic this PR adds. The condition-update plumbing therefore never runs
+-- for this case, but the test pins the rejection so a future change to either restriction
+-- shows up here.
+create database test_lake_column_pcu_condition_with_order_by;
+use test_lake_column_pcu_condition_with_order_by;
+
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  ver INT NOT NULL,
+  v1 INT NULL,
+  v2 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+ORDER BY (ver)
+PROPERTIES ("replication_num" = "1");
+
+insert into tab1 values (1, 10, 100, 1000), (2, 20, 200, 2000);
+select * from tab1 order by k;
+
+-- Expect BE to reject with the pre-existing sort-key conflict error.
+-- Filter the message through grep so the BE/CN IP prefix (which varies between runs) is
+-- stripped from the recorded result.
+shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_orderby -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_with_order_by/tab1/_stream_load 2>/dev/null | grep -oE '"Status": *"Fail"|partial update on table with sort key must provide all sort key columns' | sort -u
+sync;
+-- Data must be unchanged.
+select * from tab1 order by k;
+
+drop database test_lake_column_pcu_condition_with_order_by;
+

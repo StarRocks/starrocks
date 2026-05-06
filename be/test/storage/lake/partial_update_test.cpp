@@ -407,10 +407,6 @@ TEST_P(LakePartialUpdateTest, test_dcg_then_row_mode_with_default_and_expr_overr
 }
 
 TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
-    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-        return;
-    }
-
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     std::vector<Chunk> chunks(3);
     chunks[0] = generate_data(kChunkSize, 0, true, 2);
@@ -481,6 +477,63 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
+}
+
+// Validates that column-mode partial update rejects a merge_condition when the condition column
+// is not part of the partial update column set — the handler cannot read the new condition value
+// otherwise and must refuse rather than silently producing wrong results.
+TEST_P(LakePartialUpdateTest, test_column_mode_condition_missing_column_rejected) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
+    }
+
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 2);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // Baseline full write.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Partial update set is (c0, c1), but merge_condition references c2 which is NOT in the set.
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                               .set_merge_condition("c2")
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+    auto st = delta_writer->finish_with_txnlog().status();
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_not_supported()) << st;
+    delta_writer->close();
 }
 
 TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {

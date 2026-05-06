@@ -830,11 +830,18 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
 
-    // We can support partial update with row mode to be used with condition update at the same time.
+    // Column-mode PCU combined with condition update requires the condition column to be part of
+    // the partial update column set: the handler compares old vs new values from the partial chunk
+    // itself and cannot read the new value otherwise.
     if (is_partial_update() && !_merge_condition.empty() &&
         (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
          _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
-        return Status::NotSupported("partial update with column mode and condition update at the same time");
+        if (_write_schema->field_index(_merge_condition) == static_cast<size_t>(-1)) {
+            return Status::NotSupported(fmt::format(
+                    "partial update with column mode requires merge_condition column '{}' to be included in the "
+                    "partial update column set",
+                    _merge_condition));
+        }
     }
 
     // handle partial update

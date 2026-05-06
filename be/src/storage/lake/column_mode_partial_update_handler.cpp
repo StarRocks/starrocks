@@ -222,9 +222,14 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 }
 
 // read from upt files and update rows in source chunk.
+// When condition_idx_in_partial_schema >= 0, pairs where the old condition value is
+// strictly greater than the new one are dropped before applying the update, so the
+// corresponding source rows keep their previous values. Equal values let the new row
+// win, matching the existing upsert/row-mode condition-update semantics (see
+// UpdateManager::_process_single_chunk_update_with_condition).
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
-                                                                   const Schema& partial_schema,
-                                                                   ChunkPtr* source_chunk) {
+                                                                   const Schema& partial_schema, ChunkPtr* source_chunk,
+                                                                   int32_t condition_idx_in_partial_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
     OlapReaderStatistics stats;
@@ -250,6 +255,34 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         // Sort source rowid -> upt rowid pairs by source rowid.
         split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, nullptr);
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
+
+        // When condition update is enabled, compare the condition column value in
+        // source chunk vs upt chunk and keep winners (old <= new); equal values let
+        // the new row win, matching the upsert path.
+        if (condition_idx_in_partial_schema >= 0) {
+            const auto& source_cond = (*source_chunk)->get_column_by_index(condition_idx_in_partial_schema);
+            const auto& upt_cond = upt_chunk->get_column_by_index(condition_idx_in_partial_schema);
+            const size_t original_size = sorted_source_rowids.size();
+            std::vector<uint32_t> filtered_source_rowids;
+            std::vector<uint32_t> filtered_upt_rowids;
+            filtered_source_rowids.reserve(original_size);
+            filtered_upt_rowids.reserve(original_size);
+            for (size_t i = 0; i < original_size; ++i) {
+                const uint32_t src_rowid = sorted_source_rowids[i];
+                const uint32_t upt_rowid = unsorted_upt_rowids[i];
+                if (source_cond->compare_at(src_rowid, upt_rowid, *upt_cond, -1) <= 0) {
+                    filtered_source_rowids.push_back(src_rowid);
+                    filtered_upt_rowids.push_back(upt_rowid);
+                }
+            }
+            sorted_source_rowids.swap(filtered_source_rowids);
+            unsorted_upt_rowids.swap(filtered_upt_rowids);
+            TRACE_COUNTER_INCREMENT("pcu_condition_kept_cnt", sorted_source_rowids.size());
+            TRACE_COUNTER_INCREMENT("pcu_condition_dropped_cnt", original_size - sorted_source_rowids.size());
+        }
+        if (sorted_source_rowids.empty()) {
+            continue;
+        }
         auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
@@ -270,6 +303,35 @@ static std::vector<T> append_fixed_batch(const std::vector<T>& base_array, size_
 static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& tschema, Chunk* chunk) {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
     ChunkHelper::padding_char_columns(char_field_indexes, schema, tschema, chunk);
+}
+
+StatusOr<int32_t> ColumnModePartialUpdateHandler::_resolve_condition_cid(const RowsetTxnMetaPB& txn_meta,
+                                                                         const TabletSchema& tschema) {
+    if (txn_meta.merge_condition().empty()) {
+        return -1;
+    }
+    for (size_t i = 0; i < tschema.num_columns(); ++i) {
+        if (tschema.column(i).name() == txn_meta.merge_condition()) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return Status::InvalidArgument(
+            strings::Substitute("merge_condition column '$0' not found in tablet schema", txn_meta.merge_condition()));
+}
+
+StatusOr<int32_t> ColumnModePartialUpdateHandler::_locate_condition_idx_in_partial_schema(
+        const std::vector<ColumnId>& selective_update_column_ids, int32_t condition_cid) {
+    DCHECK_GE(condition_cid, 0);
+    for (size_t i = 0; i < selective_update_column_ids.size(); ++i) {
+        if (selective_update_column_ids[i] == static_cast<ColumnId>(condition_cid)) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    // delta_writer has validated that the condition column is in the partial column set, and
+    // execute() forces a single batch so all partial columns land here — missing means a logic
+    // bug somewhere upstream; fail loudly rather than silently disabling condition filtering.
+    return Status::InternalError(strings::Substitute(
+            "merge_condition column id $0 is missing from the partial column batch", condition_cid));
 }
 
 Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
@@ -303,7 +365,17 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     }
 
     DCHECK(update_column_ids.size() == unique_update_column_ids.size());
-    const size_t BATCH_HANDLE_COLUMN_CNT = config::vertical_compaction_max_columns_per_group;
+
+    // When condition update is enabled together with column-mode PCU, delta_writer has validated
+    // that the condition column is part of the partial column set; we force a single column batch
+    // so the condition column and the rest of the partial columns share one `partial_schema` (and
+    // one .col file), and compare_at is then performed inline inside _update_source_chunk_by_upt
+    // against the already-read source/upt chunks.
+    ASSIGN_OR_RETURN(int32_t condition_cid, _resolve_condition_cid(txn_meta, *params.tablet_schema));
+    const size_t BATCH_HANDLE_COLUMN_CNT =
+            (condition_cid >= 0 && !update_column_ids.empty())
+                    ? update_column_ids.size()
+                    : static_cast<size_t>(config::vertical_compaction_max_columns_per_group);
 
     // 2. getter all rss_rowid_to_update_rowid, and prepare .col writer by the way
     // rss_id -> update file id -> <rowid, update rowid>
@@ -348,6 +420,14 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         auto partial_tschema = TabletSchema::create_with_uid(params.tablet_schema, selective_unique_update_column_ids);
         Schema partial_schema = ChunkHelper::convert_schema(params.tablet_schema, selective_update_column_ids);
 
+        // When condition update is enabled, the single-batch invariant ensures the condition column
+        // is present in this batch's partial schema; locate its index for inline compare_at.
+        int32_t condition_idx_in_partial_schema = -1;
+        if (condition_cid >= 0) {
+            ASSIGN_OR_RETURN(condition_idx_in_partial_schema,
+                             _locate_condition_idx_in_partial_schema(selective_update_column_ids, condition_cid));
+        }
+
         // Create thread pool token for segment-level parallelism
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
@@ -367,8 +447,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             const auto* upt_pairs_ptr = &each.second;
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
-                         upt_pairs_ptr, &dcg_column_ids, &dcg_column_file_with_encryption_metas, &result_mutex,
-                         &shared_status]() {
+                         upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids,
+                         &dcg_column_file_with_encryption_metas, &result_mutex, &shared_status]() {
                 // 3.3 read from source segment
                 auto source_chunk_or = _read_from_source_segment(params, partial_schema, rssid);
                 if (!source_chunk_or.ok()) {
@@ -382,7 +462,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
 
                 // 3.4 read from update segment and apply updates
-                auto st = _update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, &source_chunk_ptr);
+                auto st = _update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, &source_chunk_ptr,
+                                                      condition_idx_in_partial_schema);
                 if (!st.ok()) {
                     std::lock_guard<std::mutex> l(result_mutex);
                     shared_status.update(st);
