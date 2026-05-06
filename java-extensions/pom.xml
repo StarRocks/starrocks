@@ -9,7 +9,6 @@
     <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
     <modules>
-        <module>adbc-jni-native</module>
         <module>jdbc-bridge</module>
         <module>udf-extensions</module>
         <module>java-utils</module>
