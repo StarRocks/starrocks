@@ -21,30 +21,39 @@ namespace starrocks::connector {
 
 Status SinkOperatorMemoryManager::init(std::vector<PartitionChunkWriterPtr>* writers, AsyncFlushStreamPoller* io_poller,
                                        CommitFunc commit_func) {
-    _candidates = writers;
+    _candidate_lists.clear();
+    _candidate_lists.push_back(writers);
     _commit_func = std::move(commit_func);
     _io_poller = io_poller;
     return Status::OK();
 }
 
-bool SinkOperatorMemoryManager::kill_victim() {
-    if (_candidates->empty()) {
-        return false;
+void SinkOperatorMemoryManager::add_candidates(std::vector<PartitionChunkWriterPtr>* writers) {
+    if (writers == nullptr) {
+        return;
     }
+    _candidate_lists.push_back(writers);
+}
 
-    // Find a target file writer to flush.
+bool SinkOperatorMemoryManager::kill_victim() {
+    // Find a target file writer to flush across all registered candidate lists.
     // For buffered partition writer, choose the the writer with the largest file size.
     // For spillable partition writer, choose the the writer with the largest memory size that can be spilled.
     PartitionChunkWriterPtr victim = nullptr;
-    for (auto& writer : *_candidates) {
-        int64_t flushable_bytes = writer->get_flushable_bytes();
-        if (flushable_bytes == 0) {
+    for (auto* candidates : _candidate_lists) {
+        if (candidates == nullptr) {
             continue;
         }
-        if (victim && flushable_bytes < victim->get_flushable_bytes()) {
-            continue;
+        for (auto& writer : *candidates) {
+            int64_t flushable_bytes = writer->get_flushable_bytes();
+            if (flushable_bytes == 0) {
+                continue;
+            }
+            if (victim && flushable_bytes < victim->get_flushable_bytes()) {
+                continue;
+            }
+            victim = writer;
         }
-        victim = writer;
     }
     if (victim == nullptr) {
         return false;
@@ -67,8 +76,13 @@ int64_t SinkOperatorMemoryManager::update_releasable_memory() {
 
 int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
     int64_t writer_occupied_memory = 0;
-    for (auto& writer : *_candidates) {
-        writer_occupied_memory += writer->get_flushable_bytes();
+    for (auto* candidates : _candidate_lists) {
+        if (candidates == nullptr) {
+            continue;
+        }
+        for (auto& writer : *candidates) {
+            writer_occupied_memory += writer->get_flushable_bytes();
+        }
     }
     _writer_occupied_memory.store(writer_occupied_memory);
     return _writer_occupied_memory;

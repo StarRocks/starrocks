@@ -16,13 +16,16 @@
 
 #include <unordered_map>
 
+#include "common/config.h"
 #include "common/runtime_profile.h"
+#include "connector/iceberg_row_delta_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
@@ -65,7 +68,8 @@ Status append_iceberg_sink_column(const SlotDescriptor* slot,
     } else if (col_name == HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
         field_id.field_id = HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID;
     } else {
-        return Status::InternalError("Iceberg sink field ids do not match output expressions");
+        return Status::InternalError(
+                fmt::format("Iceberg sink field ids do not match output expressions, col_name={}", col_name));
     }
 
     parquet_field_ids->push_back(field_id);
@@ -118,15 +122,15 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     auto* iceberg_table_desc = down_cast<IcebergTableDescriptor*>(table_desc);
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
-    // Determine if this is a delete sink (delete files) or regular sink (data files)
-    bool is_delete_sink = (thrift_sink.type == TDataSinkType::ICEBERG_DELETE_SINK);
-
     std::unique_ptr<connector::ConnectorChunkSinkProvider> sink_provider;
     std::shared_ptr<connector::ConnectorChunkSinkContext> sink_ctx;
     std::vector<TExpr> partition_expr;
     std::vector<std::string> transform_exprs = iceberg_table_desc->get_transform_exprs();
 
-    if (is_delete_sink) {
+    if (thrift_sink.type == TDataSinkType::ICEBERG_ROW_DELTA_SINK) {
+        RETURN_IF_ERROR(create_row_delta_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
+                                                      sink_provider, sink_ctx, partition_expr));
+    } else if (thrift_sink.type == TDataSinkType::ICEBERG_DELETE_SINK) {
         RETURN_IF_ERROR(create_delete_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
                                                    sink_provider, sink_ctx, partition_expr));
     } else {
@@ -200,7 +204,9 @@ Status IcebergTableSink::create_delete_sink_context(
     // Configure partition columns if table is partitioned
     delete_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
 
-    // Build column name to slot reference map for partition column updates
+    // Build column name → slot reference map.
+    // Used by IcebergDeleteSink::add() to locate _file/_pos columns by slot_id,
+    // and by update_partition_expr_slot_refs_by_map() to bind partition expressions.
     TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
     if (tuple_desc == nullptr) {
         return Status::InternalError(
@@ -358,6 +364,196 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
         }
         data_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }
+
+    return Status::OK();
+}
+
+Status IcebergTableSink::create_row_delta_sink_context(
+        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* context,
+        IcebergTableDescriptor* iceberg_table_desc,
+        std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
+        std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx, std::vector<TExpr>& partition_expr) const {
+    auto* fragment_ctx = context->fragment_context();
+    auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
+
+    // Resolve tuple descriptor
+    TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
+    if (tuple_desc == nullptr) {
+        return Status::InternalError(
+                fmt::format("Failed to find tuple descriptor with id {}", t_iceberg_sink.tuple_id));
+    }
+
+    const auto& slots = tuple_desc->slots();
+    const auto& output_exprs = this->get_output_expr();
+    if (slots.size() != output_exprs.size()) {
+        return Status::InternalError(fmt::format("Mismatched slot and output expression counts: {} vs {}", slots.size(),
+                                                 output_exprs.size()));
+    }
+
+    // Determine column layout indices:
+    //   [_file, _pos, data_col1, ..., data_colN, op_code]
+    // No partition prefix — partition columns are part of data_cols (full table schema).
+    const size_t total_slots = slots.size();
+    const int32_t data_column_start = 2; // after _file and _pos
+    const int32_t op_code_index = static_cast<int32_t>(total_slots - 1);
+    const int32_t data_column_count = op_code_index - data_column_start;
+
+    if (data_column_count < 0 || data_column_start > op_code_index) {
+        return Status::InternalError(
+                fmt::format("Invalid row delta column layout: total_slots={}, data_column_start={}", total_slots,
+                            data_column_start));
+    }
+
+    // --- Create delete sub-context ---
+    auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
+    delete_sink_ctx->writer_tag = "delete";
+    delete_sink_ctx->path = t_iceberg_sink.data_location;
+    delete_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
+    delete_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    if (t_iceberg_sink.__isset.target_max_file_size) {
+        delete_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
+    }
+    delete_sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;
+    auto* query_execution_services = runtime_state->query_execution_services();
+    delete_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
+    delete_sink_ctx->fragment_context = fragment_ctx;
+
+    // Pass the full output_exprs list (one per tuple slot) so
+    // IcebergDeleteSinkProvider::create_chunk_sink()'s strict
+    // `tuple_desc->slots().size() == ctx->output_exprs.size()` DCHECK holds in
+    // debug builds. The delete sub-sink only consumes evaluators [0]=_file and
+    // [1]=_pos at runtime; trailing data-column / op_code evaluators are held
+    // but not used.
+    delete_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
+    delete_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
+    delete_sink_ctx->output_exprs = output_exprs;
+
+    // Configure partition columns for delete context
+    delete_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
+
+    // Build column name → slot reference map from all columns (except op_code).
+    // IcebergDeleteSink::add() uses this to locate _file/_pos by slot_id,
+    // and update_partition_expr_slot_refs_by_map() uses it to bind partition exprs.
+    // Since we pass the full original chunk to sub-sinks (not sub-chunks),
+    // all slot_ids are available at runtime.
+    for (int32_t i = 0; i < op_code_index; ++i) {
+        const auto* slot = slots[i];
+        const auto& expr = output_exprs[i];
+        for (const auto& node : expr.nodes) {
+            if (node.node_type == TExprNodeType::SLOT_REF && node.__isset.slot_ref) {
+                delete_sink_ctx->column_slot_map[std::string(slot->col_name())] = node;
+                break;
+            }
+        }
+    }
+
+    // --- Create data sub-context ---
+    auto data_sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
+    data_sink_ctx->writer_tag = "data";
+    data_sink_ctx->path = t_iceberg_sink.__isset.data_location && !t_iceberg_sink.data_location.empty()
+                                  ? t_iceberg_sink.data_location
+                                  : t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
+    data_sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
+    data_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
+    data_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
+    data_sink_ctx->format = t_iceberg_sink.file_format;
+    data_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    if (t_iceberg_sink.__isset.target_max_file_size) {
+        data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
+    }
+
+    // Data output_exprs: columns from data_column_start to op_code_index-1
+    std::vector<TExpr> data_output_exprs(output_exprs.begin() + data_column_start,
+                                         output_exprs.begin() + op_code_index);
+    data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(data_output_exprs, runtime_state);
+
+    size_t num_data_evaluators = data_sink_ctx->column_evaluators.size();
+
+    // Build sink schema from data columns
+    auto field_ids_by_name = build_top_level_field_id_map(iceberg_table_desc->get_iceberg_schema()->fields);
+    data_sink_ctx->column_names.clear();
+    data_sink_ctx->parquet_field_ids.clear();
+    data_sink_ctx->column_names.reserve(num_data_evaluators);
+    data_sink_ctx->parquet_field_ids.reserve(num_data_evaluators);
+    for (size_t i = 0; i < num_data_evaluators; ++i) {
+        RETURN_IF_ERROR(append_iceberg_sink_column(slots[data_column_start + i], field_ids_by_name,
+                                                   &data_sink_ctx->column_names, &data_sink_ctx->parquet_field_ids));
+    }
+
+    if (data_sink_ctx->column_names.size() != num_data_evaluators ||
+        data_sink_ctx->parquet_field_ids.size() != num_data_evaluators) {
+        return Status::InternalError("Iceberg row delta sink schema metadata does not match output expressions");
+    }
+
+    data_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
+    data_sink_ctx->fragment_context = fragment_ctx;
+
+    // Create a data-only tuple descriptor for the data sub-sink.
+    // The full row-delta tuple includes _file, _pos, data_cols, op_code, but the data
+    // writer only has evaluators for data_cols. SpillPartitionChunkWriter sizes merged
+    // chunks from tuple_desc->slots().size(), so the full tuple causes out-of-bounds.
+    {
+        TSlotDescriptorBuilder slot_builder;
+        TTupleDescriptorBuilder tuple_builder;
+        for (size_t i = 0; i < num_data_evaluators; ++i) {
+            const auto* slot = slots[data_column_start + i];
+            tuple_builder.add_slot(slot_builder.type(slot->type().type)
+                                           .nullable(slot->is_nullable())
+                                           .is_materialized(true)
+                                           .column_name(std::string(slot->col_name()))
+                                           .build());
+        }
+        TDescriptorTableBuilder desc_tbl_builder;
+        tuple_builder.build(&desc_tbl_builder);
+        TDescriptorTable t_desc_tbl = desc_tbl_builder.desc_tbl();
+        DescriptorTbl* data_desc_tbl = nullptr;
+        RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, runtime_state->obj_pool(), t_desc_tbl, &data_desc_tbl,
+                                              config::vector_chunk_size));
+        data_sink_ctx->override_tuple_desc = data_desc_tbl->get_tuple_descriptor(0);
+        DCHECK(data_sink_ctx->override_tuple_desc != nullptr);
+    }
+    data_sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;
+
+    // Sort ordering for data files
+    auto& sort_order = iceberg_table_desc->sort_order();
+    if (!sort_order.sort_key_idxes.empty()) {
+        data_sink_ctx->sort_ordering = std::make_shared<connector::SortOrdering>();
+        data_sink_ctx->sort_ordering->sort_key_idxes.assign(sort_order.sort_key_idxes.begin(),
+                                                            sort_order.sort_key_idxes.end());
+        data_sink_ctx->sort_ordering->sort_descs.descs.reserve(sort_order.sort_key_idxes.size());
+        for (size_t idx = 0; idx < sort_order.sort_key_idxes.size(); ++idx) {
+            bool is_asc = idx < sort_order.is_ascs.size() ? sort_order.is_ascs[idx] : true;
+            bool is_null_first = false;
+            if (idx < sort_order.is_null_firsts.size()) {
+                is_null_first = sort_order.is_null_firsts[idx];
+            } else if (is_asc) {
+                is_null_first = true;
+            }
+            data_sink_ctx->sort_ordering->sort_descs.descs.emplace_back(is_asc, is_null_first);
+        }
+    }
+
+    // --- Set up partition expressions for both contexts ---
+    if (!iceberg_table_desc->is_unpartitioned_table()) {
+        partition_expr = iceberg_table_desc->get_partition_exprs();
+        const auto& partition_source_column_names = iceberg_table_desc->partition_source_column_names();
+
+        // Update partition expressions using column slot map (same approach as delete sink)
+        RETURN_IF_ERROR(update_partition_expr_slot_refs_by_map(partition_expr, delete_sink_ctx->column_slot_map,
+                                                               partition_source_column_names));
+        delete_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
+        data_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
+    }
+
+    // --- Assemble IcebergRowDeltaSinkContext ---
+    auto row_delta_ctx = std::make_shared<connector::IcebergRowDeltaSinkContext>();
+    row_delta_ctx->delete_sink_ctx = delete_sink_ctx;
+    row_delta_ctx->data_sink_ctx = data_sink_ctx;
+    row_delta_ctx->op_code_index = op_code_index;
+
+    sink_ctx = row_delta_ctx;
+    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    sink_provider = connector->create_row_delta_sink_provider();
 
     return Status::OK();
 }

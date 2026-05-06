@@ -140,6 +140,9 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
     MemTracker* query_pool_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
     MemTracker* query_tracker = _fragment_context->runtime_state()->query_mem_tracker_ptr().get();
     _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(query_pool_tracker, query_tracker);
+
+    // Pass SinkMemoryManager to RowDelta context so sub-sinks can get their own child managers
+    _sink_context->set_sink_mem_mgr(_sink_mem_mgr.get());
 }
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

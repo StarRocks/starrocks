@@ -30,6 +30,11 @@ public:
     Status init(std::vector<PartitionChunkWriterPtr>* writers, AsyncFlushStreamPoller* io_poller,
                 CommitFunc commit_func);
 
+    // Register an additional writer list. Used by composite sinks
+    // (e.g. IcebergRowDeltaSink) so memory pressure logic can see writers
+    // owned by their sub-sinks.
+    void add_candidates(std::vector<PartitionChunkWriterPtr>* writers);
+
     // return true if a victim is found and killed, otherwise return false
     bool kill_victim();
 
@@ -44,7 +49,8 @@ public:
     int64_t writer_occupied_memory() { return _writer_occupied_memory.load(); }
 
 private:
-    std::vector<PartitionChunkWriterPtr>* _candidates = nullptr; // reference, owned by sink operator
+    // One or more references to writer lists owned by sink operator(s).
+    std::vector<std::vector<PartitionChunkWriterPtr>*> _candidate_lists;
     CommitFunc _commit_func;
     AsyncFlushStreamPoller* _io_poller;
     std::atomic_int64_t _releasable_memory{0};

@@ -240,6 +240,8 @@ public:
         __builtin_unreachable();
     }
 
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_row_delta_sink_provider() const { return nullptr; }
+
     virtual ConnectorType connector_type() const = 0;
 };
 

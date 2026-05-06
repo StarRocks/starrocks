@@ -152,7 +152,8 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     }
 #ifndef __APPLE__
     case TDataSinkType::ICEBERG_TABLE_SINK:
-    case TDataSinkType::ICEBERG_DELETE_SINK: {
+    case TDataSinkType::ICEBERG_DELETE_SINK:
+    case TDataSinkType::ICEBERG_ROW_DELTA_SINK: {
         if (!thrift_sink.__isset.iceberg_table_sink) {
             return Status::InternalError("Missing iceberg table sink");
         }
@@ -161,7 +162,8 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     }
 #else
     case TDataSinkType::ICEBERG_TABLE_SINK:
-    case TDataSinkType::ICEBERG_DELETE_SINK: {
+    case TDataSinkType::ICEBERG_DELETE_SINK:
+    case TDataSinkType::ICEBERG_ROW_DELTA_SINK: {
         return Status::NotSupported("Iceberg table sink is disabled on macOS");
     }
 #endif
