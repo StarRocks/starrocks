@@ -592,24 +592,41 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         {
-            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
+            // Pick the batch that belongs to *this* parameterized invocation's table. Other
+            // parameterized invocations share the same DB and may still have an in-flight
+            // async publish whose batch is also returned here; taking get(0) blindly would
+            // race with that prior invocation and silently target the wrong table.
+            long myTableId = table.getId();
+            TransactionStateBatch readyStateBatch = null;
+            for (TransactionStateBatch batch : globalTransactionMgr.getReadyPublishTransactionsBatch()) {
+                if (batch.getTableId() == myTableId) {
+                    readyStateBatch = batch;
+                    break;
+                }
+            }
+            Assertions.assertNotNull(readyStateBatch, "no ready batch for table " + myTableId);
             Assertions.assertEquals(2, readyStateBatch.size());
 
             DatabaseTransactionMgr transactionMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
-            // keep origin version
+            // keep origin version. Wrap the mutation in try/finally: an assertion failure here
+            // would otherwise leave partition.visibleVersion=0 and corrupt every subsequent
+            // test method that uses this table (publishPartitionBatch's
+            // visibleVersion+1 == versions.get(0) check would then permanently fail).
             Map<Partition, Long> partitionVersions = new HashMap<>();
             for (Partition partition : table.getPartitions()) {
                 partitionVersions.put(partition, partition.getDefaultPhysicalPartition().getVisibleVersion());
                 partition.getDefaultPhysicalPartition().setVisibleVersion(0, System.currentTimeMillis());
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
-
-            // restore partition version
-            for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
-                entry.getKey().getDefaultPhysicalPartition()
-                        .setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+            try {
+                Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            } finally {
+                // restore partition version
+                for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
+                    entry.getKey().getDefaultPhysicalPartition()
+                            .setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+                }
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
@@ -621,11 +638,13 @@ public class LakePublishBatchTest {
                 originPartitionCommitInfos.put(partitionCommitInfo, partitionCommitInfo.getVersion());
                 partitionCommitInfo.setVersion(99);
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
-
-            // restore
-            for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
-                entry.getKey().setVersion(entry.getValue());
+            try {
+                Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            } finally {
+                // restore
+                for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
+                    entry.getKey().setVersion(entry.getValue());
+                }
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
