@@ -616,6 +616,104 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_all_new_keys) 
               }));
 }
 
+// Stresses the per-chunk compact path of the phase-2 parallel index.upsert in
+// `_do_update_with_condition`: every other row in the condition update is a loser
+// (existing c1 wins) and every other row is a winner (new c1 wins). With a 50/50
+// alternating pattern the compare phase emits the maximum number of winner ranges
+// per chunk (run-length 1), which is the worst case for the per-range slot scheme
+// the PR replaced. The expected merged state mixes baseline rows and update rows
+// row-by-row.
+TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_fragmented_winners) {
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
+
+    const int64_t chunk_size = 5 * 4096; // 20K rows, multiple per-segment chunks
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_parallel_execution_min_rows, 4096);
+
+    auto baseline = generate_data(chunk_size, 0, 3, 4); // baseline c1=k*3, c2=k*4
+    auto indexes = std::vector<uint32_t>(chunk_size);
+    for (int i = 0; i < chunk_size; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(baseline, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Build an alternating chunk: even rows have c1=k*2 (loser, < baseline c1=k*3),
+    // odd rows have c1=k*4 (winner, > baseline). c2 in update is k*9.
+    Chunk alt;
+    {
+        std::vector<int> v0(chunk_size);
+        std::vector<int> v1(chunk_size);
+        std::vector<int> v2(chunk_size);
+        std::vector<std::string> key_col_str(chunk_size);
+        std::vector<Slice> key_col(chunk_size);
+        for (int i = 0; i < chunk_size; i++) {
+            v0[i] = i;
+            key_col_str[i] = std::to_string(v0[i]);
+            key_col[i] = Slice(key_col_str[i]);
+            v1[i] = (i % 2 == 0) ? v0[i] * 2 : v0[i] * 4;
+            v2[i] = v0[i] * 9;
+        }
+        auto c0 = BinaryColumn::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        c0->append_strings(key_col.data(), key_col.size());
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        c2->append_numbers(v2.data(), v2.size() * sizeof(int));
+        alt = Chunk({std::move(c0), std::move(c1), std::move(c2)}, _schema);
+    }
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(alt, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Even rows: baseline wins, c1=k*3, c2=k*4.
+    // Odd rows: update wins, c1=k*4, c2=k*9.
+    // k=0 is a special case (every multiplier collapses to 0); both winner and loser produce
+    // c1=0, c2=0, so accept either combination there.
+    ASSERT_EQ(chunk_size, check(version, [](int c0, int c1, int c2) {
+                  if (c0 == 0) {
+                      return c1 == 0 && c2 == 0;
+                  }
+                  if (c0 % 2 == 0) {
+                      return c1 == c0 * 3 && c2 == c0 * 4;
+                  }
+                  return c1 == c0 * 4 && c2 == c0 * 9;
+              }));
+}
+
 INSTANTIATE_TEST_SUITE_P(ConditionUpdateTest, ConditionUpdateTest, ::testing::Values(PrimaryKeyParam{true}));
 
 } // namespace starrocks::lake

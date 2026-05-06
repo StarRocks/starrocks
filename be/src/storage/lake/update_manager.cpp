@@ -369,6 +369,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Check if parallel row-mode partial update is applicable.
     int32_t condition_column = _get_condition_column(op_write, *tablet_schema);
     const bool has_condition_update = (condition_column >= 0);
+    // Skip early sst compact when condition update with pregenerate sst files.
+    bool skip_early_sst_compact = false;
     const bool is_row_mode_partial_update =
             op_write.has_txn_meta() && op_write.rewrite_segments_size() > 0 && op_write.rowset().num_rows() > 0;
     const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution && is_row_mode_partial_update &&
@@ -461,6 +463,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                     dv_generated_during_merge_update->init(metadata->version(), itr->second.data(), itr->second.size());
                     builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
                 }
+                skip_early_sst_compact = true;
             } else {
                 // NON-SST CONDITION MERGE PATH:
                 // When SST files are absent, new-row condition values are read from the freshly
@@ -495,7 +498,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                     async_compact_cb = nullptr;
                 }
             }
-            if (async_compact_cb == nullptr && !has_condition_update &&
+            if (async_compact_cb == nullptr && !skip_early_sst_compact &&
                 index.current_fileset_index() - current_fileset_start_idx >=
                         config::pk_index_early_sst_compaction_threshold) {
                 TRACE_COUNTER_INCREMENT("early_sst_compact_times", 1);
@@ -1165,7 +1168,6 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     }
 
     if (token) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_condition_update_wait_us");
         // Barrier: Wait for all submitted tasks to complete before proceeding
         // IMPORTANT: Ensures all deletions are collected before returning
         token->wait();
@@ -1343,29 +1345,109 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     }
 
     if (token) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_condition_update_wait_us");
+        TRACE_COUNTER_SCOPE_LATENCY_US("condition_update_compare_phase_us");
         token->wait();
     }
     RETURN_IF_ERROR(status);
     RETURN_IF_ERROR(upsert->status());
 
-    // Serial merge: apply index.upsert to each chunk's winner ranges and record new-losers.
-    // rowid_start=chunk_offset ensures the index records rowids that match the segment file layout.
+    // PHASE 2: apply index.upsert for each chunk's winners.
+    //
+    // For cloud-native persistent index, every chunk's winning rows are compacted into a single
+    // contiguous PK column and submitted via the parallel-publish overload
+    // `index.upsert(rssid, rowids, pks, stat, ctx)`. The active-memtable write happens
+    // synchronously here (the memtable is not thread-safe), while the SST / inactive-memtable
+    // lookup of replaced old values is offloaded to ctx->token. Replaced old rowids are appended
+    // to `new_deletes` by the lookup tasks under `upsert_mutex`.
+    //
+    // WHY compact-per-chunk instead of one task per winner range:
+    //   build_persistent_keys() materializes one Slice per row of the *whole* chunk PK column
+    //   on the binary/string path, so a per-range slot would cost chunk_size Slices regardless
+    //   of range size. Fragmented winner ranges (e.g. alternating winners and losers) would
+    //   then accumulate O(num_ranges * chunk_size) live Slices across all in-flight slots, which
+    //   can blow up memory for large publishes. Compacting bounds each slot's per-row buffers
+    //   to the actual winner count.
+    //
+    // For local persistent index (non-cloud-native), the parallel-publish overload is not
+    // supported, so we fall back to the serial sliced upsert keyed by chunk_offset.
     const uint32_t rssid = rowset_id + upsert_idx;
+    const bool use_parallel_upsert = (token != nullptr) && use_cloud_native_pk_index(*params.metadata);
+    if (use_parallel_upsert) {
+        std::mutex upsert_mutex;
+        Status upsert_status = Status::OK();
+        ParallelPublishContext upsert_ctx{
+                .token = token.get(), .mutex = &upsert_mutex, .deletes = new_deletes, .status = &upsert_status};
+        for (const auto& result : chunk_results) {
+            // pk_column is guaranteed non-null when the compare task returned OK; if any task
+            // had failed we would have bailed at the RETURN_IF_ERROR(status) above the barrier.
+            DCHECK(result->pk_column != nullptr);
+            if (result->winner_ranges.empty()) {
+                continue;
+            }
+            size_t total_winners = 0;
+            for (const auto& range : result->winner_ranges) {
+                total_winners += static_cast<size_t>(range.second - range.first);
+            }
+            if (total_winners == 0) {
+                continue;
+            }
+            // Compact winner indices and absolute rowids; build a winner-only PK column so the
+            // submitted lookup task only sees `total_winners` keys.
+            std::vector<uint32_t> winner_local_indices;
+            winner_local_indices.reserve(total_winners);
+            std::vector<uint32_t> winner_rowids;
+            winner_rowids.reserve(total_winners);
+            const auto chunk_offset = static_cast<uint32_t>(result->chunk_offset);
+            for (const auto& range : result->winner_ranges) {
+                for (uint32_t i = range.first; i < range.second; ++i) {
+                    winner_local_indices.push_back(i);
+                    winner_rowids.push_back(chunk_offset + i);
+                }
+            }
+            auto winner_pk_column = result->pk_column->clone_empty();
+            winner_pk_column->append_selective(*result->pk_column, winner_local_indices.data(), 0,
+                                               winner_local_indices.size());
+            // Allocate the slot and move the compacted column into it BEFORE submission so the
+            // backing Slice array stays alive for the lookup task.
+            upsert_ctx.extend_slots();
+            auto* slot = upsert_ctx.slots.back().get();
+            slot->pk_column = std::move(winner_pk_column);
+            auto st = index.upsert(rssid, winner_rowids, *slot->pk_column, /*stat=*/nullptr, &upsert_ctx);
+            if (!st.ok()) {
+                std::lock_guard<std::mutex> lock(upsert_mutex);
+                upsert_status.update(st);
+            }
+        }
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("condition_update_upsert_phase_us");
+            token->wait();
+        }
+        RETURN_IF_ERROR(upsert_status);
+        // Persist the active-memtable batch built up by the parallel upserts.
+        RETURN_IF_ERROR(index.flush_memtable());
+    } else {
+        // Serial fallback: rowid_start=chunk_offset so the index records rowids matching the
+        // segment file layout for each contiguous winner range.
+        for (const auto& result : chunk_results) {
+            DCHECK(result->pk_column != nullptr);
+            for (const auto& range : result->winner_ranges) {
+                RETURN_IF_ERROR(index.upsert(rssid, static_cast<uint32_t>(result->chunk_offset), *result->pk_column,
+                                             range.first, range.second, new_deletes));
+            }
+        }
+    }
+
+    // Append new-loser rowids to new_deletes. Safe to do here: phase 2 lookup tasks only
+    // append old rowids for displaced index entries (whose rssids are different from the
+    // freshly-ingested segment's rssid), and we are past the token barrier anyway.
     for (const auto& result : chunk_results) {
-        if (result->pk_column == nullptr) {
+        if (result->new_loser_local_ids.empty()) {
             continue;
         }
-        for (const auto& range : result->winner_ranges) {
-            RETURN_IF_ERROR(index.upsert(rssid, static_cast<uint32_t>(result->chunk_offset), *result->pk_column,
-                                         range.first, range.second, new_deletes));
-        }
-        if (!result->new_loser_local_ids.empty()) {
-            auto& seg_deletes = (*new_deletes)[rssid];
-            seg_deletes.reserve(seg_deletes.size() + result->new_loser_local_ids.size());
-            for (uint32_t local : result->new_loser_local_ids) {
-                seg_deletes.push_back(static_cast<uint32_t>(result->chunk_offset) + local);
-            }
+        auto& seg_deletes = (*new_deletes)[rssid];
+        seg_deletes.reserve(seg_deletes.size() + result->new_loser_local_ids.size());
+        for (uint32_t local : result->new_loser_local_ids) {
+            seg_deletes.push_back(static_cast<uint32_t>(result->chunk_offset) + local);
         }
     }
     return Status::OK();
