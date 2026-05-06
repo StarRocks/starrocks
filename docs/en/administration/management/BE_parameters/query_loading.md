@@ -446,7 +446,7 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable large column detection in the pipeline execution framework. When enabled, queries fail with a capacity limit error if an intermediate column reaches the chunk capacity limit in pipeline execution or spill serialization.
-- Introduced in: -
+- Introduced in: v4.0.0
 
 ### pipeline_poller_timeout_guard_ms
 
