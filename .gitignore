@@ -74,7 +74,6 @@ fe/plugin/spark-dpp/bin/
 
 # ignore generated files
 StarRocksLex.tokens
-packaging
 
 #ignore eclipse project file & idea project file
 .cproject
