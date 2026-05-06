@@ -633,6 +633,15 @@ This topic introduces the following types of FE configurations:
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
+### `lake_vi_build_load_tail_delay_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Delay before dispatching async vector index build for a tablet whose latest pending version is load-only (no pending compaction product). Within this window, if a new compaction arrives, its version is built together with the tail; compaction products themselves are always dispatched immediately. Only effective in shared-data mode for tables with an async vector index.
+- Introduced in: v4.2.0
+
 ### `lake_repair_metadata_fetch_max_version_batch_size`
 
 - Default: 160

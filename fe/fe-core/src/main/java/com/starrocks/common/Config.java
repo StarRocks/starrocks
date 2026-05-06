@@ -3377,6 +3377,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_vector_index_build_warehouse = "default_warehouse";
 
+    @ConfField(mutable = true, comment =
+            "Delay (ms) before dispatching async vector index build for a tablet " +
+                    "whose latest pending version is load-only (no pending compaction product). " +
+                    "Within this window, if a new compaction arrives, its version is built " +
+                    "together with the tail, avoiding wasted VI build on rowsets soon to be " +
+                    "compacted. Compaction products are always dispatched immediately.")
+    public static long lake_vi_build_load_tail_delay_ms = 5 * 60 * 1000L;
+
     @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
 
