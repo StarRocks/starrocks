@@ -23,6 +23,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.statistic.ExternalFullStatisticsCollectJob;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.type.IntegerType;
@@ -53,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ADBCMetadataTest {
@@ -494,5 +496,66 @@ public class ADBCMetadataTest {
             );
             assertNotNull(job);
         });
+    }
+
+    @Test
+    public void testConnectionPoolReusesConnections() throws Exception {
+        // If the pool were absent, connect() would be invoked 10 times and jmockit
+        // would fail at iteration 9. With pooling, sequential calls reuse one
+        // connection, so connect() is invoked exactly 1 time. maxTimes=8 is the
+        // pool's hard ceiling and a generous upper bound.
+        new Expectations() {{
+                mockDatabase.connect();
+                result = mockConnection;
+                maxTimes = 8;
+
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, anyString);
+                result = mockReader;
+                minTimes = 0;
+
+                mockReader.loadNextBatch();
+                result = false;
+            }};
+
+        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
+        for (int i = 0; i < 10; i++) {
+            List<String> dbNames = metadata.listDbNames(null);
+            assertNotNull(dbNames);
+            assertEquals(1, dbNames.size());
+            assertEquals("main", dbNames.get(0));
+        }
+    }
+
+    @Test
+    public void testShutdownClosesPoolAndDatabase() throws Exception {
+        new Expectations() {{
+                mockDatabase.connect();
+                result = mockConnection;
+                minTimes = 0;
+
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, anyString);
+                result = mockReader;
+                minTimes = 0;
+
+                mockReader.loadNextBatch();
+                result = false;
+
+                mockDatabase.close();
+                times = 1;
+            }};
+
+        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
+        List<String> dbNames = metadata.listDbNames(null);
+        assertNotNull(dbNames);
+        assertEquals(1, dbNames.size());
+        assertEquals("main", dbNames.get(0));
+
+        metadata.shutdown();
+
+        assertThrows(StarRocksConnectorException.class, () -> metadata.listDbNames(null));
     }
 }
