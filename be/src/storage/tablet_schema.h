@@ -58,6 +58,7 @@ class TabletSchemaMap;
 class MemTracker;
 class SegmentReaderWriterTest;
 class POlapTableIndexSchema;
+class Schema;
 class TColumn;
 
 struct ExtendedColumnInfo {
