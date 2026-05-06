@@ -64,6 +64,7 @@
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
     </properties>
 
     <profiles>
@@ -139,6 +140,22 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+
             <!-- jni connector -->
             <dependency>
                 <groupId>com.starrocks</groupId>
