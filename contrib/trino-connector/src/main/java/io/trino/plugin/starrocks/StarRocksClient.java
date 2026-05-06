@@ -431,7 +431,11 @@ public class StarRocksClient
                     return Optional.of(decimalColumnMapping(createDecimalType(Decimals.MAX_PRECISION, scale), getDecimalRoundingMode(session)));
                 }
                 precision = precision + max(-decimalDigits, 0); // Map decimal(p, -s) (negative scale) to decimal(p+s, 0).
-                if (precision > Decimals.MAX_PRECISION) {
+                // Defense in depth: Trino's createDecimalType(p, s) rejects p <= 0, so fall through
+                // to the CONVERT_TO_VARCHAR / IGNORE handler at the bottom of the method if the
+                // remote reported bogus precision (e.g. COLUMN_SIZE = -1 that slipped past upstream
+                // normalization) instead of throwing IllegalArgumentException here.
+                if (precision <= 0 || precision > Decimals.MAX_PRECISION) {
                     break;
                 }
                 return Optional.of(decimalColumnMapping(createDecimalType(precision, max(decimalDigits, 0))));
@@ -1199,9 +1203,14 @@ public class StarRocksClient
                 }
                 allColumns++;
                 String columnName = resultSet.getString("COLUMN_NAME");
-                // StarRocks may return null COLUMN_SIZE for certain types (STRING, JSON, etc.)
-                // Provide a safe fallback to avoid "column size not present" errors
-                Optional<Integer> columnSize = getInteger(resultSet, "COLUMN_SIZE");
+                // StarRocks may report null or non-positive COLUMN_SIZE for certain types
+                // (STRING, JSON, LARGEINT, unbounded VARCHAR, etc.). Treat any non-positive
+                // value the same as absent to avoid "Invalid VARCHAR length -1" /
+                // "Invalid CHAR length -1" / "DECIMAL precision must be > 0" errors when
+                // the value flows into Trino type factories via `orElse(...)` (which does
+                // not replace a *present* negative value).
+                Optional<Integer> columnSize = getInteger(resultSet, "COLUMN_SIZE")
+                        .filter(size -> size > 0);
                 if (columnSize.isEmpty()) {
                     int dataType = getInteger(resultSet, "DATA_TYPE").orElse(Types.VARCHAR);
                     columnSize = switch (dataType) {
@@ -1211,11 +1220,17 @@ public class StarRocksClient
                         default -> Optional.of(Integer.MAX_VALUE);
                     };
                 }
+                // Same defensive normalization for DECIMAL_DIGITS: drop negative scales here
+                // since downstream arithmetic already handles missing scale via orElse(0) and
+                // explicitly compensates for legitimately-negative Oracle-style scales only
+                // when both precision and scale are present.
+                Optional<Integer> decimalDigits = getInteger(resultSet, "DECIMAL_DIGITS")
+                        .filter(digits -> digits >= 0);
                 JdbcTypeHandle typeHandle = new JdbcTypeHandle(
                         getInteger(resultSet, "DATA_TYPE").orElseThrow(() -> new IllegalStateException("DATA_TYPE is null")),
                         Optional.ofNullable(resultSet.getString("TYPE_NAME")),
                         columnSize,
-                        getInteger(resultSet, "DECIMAL_DIGITS"),
+                        decimalDigits,
                         Optional.empty(),
                         Optional.empty());
                 Optional<ColumnMapping> columnMapping = toColumnMapping(session, connection, typeHandle);
