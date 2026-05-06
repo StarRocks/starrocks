@@ -24,7 +24,7 @@ set(STARROCKS_LIBS
     ${WL_START_GROUP}
     Base
     Common
-    Column
+    ChunkCore
     ColumnCore
     Connector
     Exec

@@ -37,6 +37,7 @@ set(EXPR_CORE_FILES
   cast_expr_map.cpp
   chunk_predicate_evaluator.cpp
   column_ref.cpp
+  column_access_path_resolver.cpp
   compound_predicate.cpp
   condition_expr.cpp
   encryption_functions.cpp

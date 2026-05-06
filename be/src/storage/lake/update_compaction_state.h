@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "column/column.h"
 #include "common/status.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"

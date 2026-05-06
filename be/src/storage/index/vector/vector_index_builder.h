@@ -18,6 +18,8 @@
 
 namespace starrocks {
 
+class Column;
+
 enum IndexBuilderType { TEN_ANN = 0, UNKNOWN = 100 };
 
 class VectorIndexBuilder {

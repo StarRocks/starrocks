@@ -33,6 +33,7 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
@@ -108,8 +109,9 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     // init column access paths
     if (thrift_lake_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
         for (int i = 0; i < thrift_lake_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], state, state->obj_pool());
+            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {
