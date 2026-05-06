@@ -140,4 +140,80 @@ public class ColocateRangeUtilsTest {
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ColocateRangeUtils.expandToFullSortKey(colocateRange, SORT_KEY_COLUMNS, 4));
     }
+
+    // ---- extractColocatePrefix ----
+
+    @Test
+    public void testExtractPrefixFromAllRange() {
+        // Range.all() has -inf lower bound: caller must fall back to first colocate range.
+        Assertions.assertNull(ColocateRangeUtils.extractColocatePrefix(Range.all(), 1));
+    }
+
+    @Test
+    public void testExtractPrefixFromLowerUnbounded() {
+        // (-inf, (200, NULL, NULL)) -> still unbounded below.
+        Range<Tuple> expanded = ColocateRangeUtils.expandToFullSortKey(
+                Range.lt(makeTuple(200)), SORT_KEY_COLUMNS, 1);
+        Assertions.assertNull(ColocateRangeUtils.extractColocatePrefix(expanded, 1));
+    }
+
+    @Test
+    public void testExtractPrefixTruncatesFullSortKeyTuple() {
+        // [(100, NULL, NULL), (200, NULL, NULL)) with 1 colocate column -> (100,)
+        Range<Tuple> expanded = ColocateRangeUtils.expandToFullSortKey(
+                Range.gelt(makeTuple(100), makeTuple(200)), SORT_KEY_COLUMNS, 1);
+        Tuple prefix = ColocateRangeUtils.extractColocatePrefix(expanded, 1);
+        Assertions.assertNotNull(prefix);
+        Assertions.assertEquals(1, prefix.getValues().size());
+        Assertions.assertEquals("100", prefix.getValues().get(0).getStringValue());
+    }
+
+    @Test
+    public void testExtractPrefixReturnsLowerBoundWhenSizesMatch() {
+        // Tablet whose range was created with colocateColumnCount == sort key count:
+        // expansion is a no-op, lower bound itself IS the colocate prefix.
+        List<Column> singleColumnSortKey = Arrays.asList(new Column("k1", IntegerType.INT));
+        Range<Tuple> expanded = ColocateRangeUtils.expandToFullSortKey(
+                Range.gelt(makeTuple(100), makeTuple(200)), singleColumnSortKey, 1);
+        Tuple prefix = ColocateRangeUtils.extractColocatePrefix(expanded, 1);
+        Assertions.assertSame(expanded.getLowerBound(), prefix);
+    }
+
+    @Test
+    public void testExtractPrefixWithIntraColocateSplit() {
+        // After P3 intra-colocate split, a tablet may be [(100, "a", 1), (100, "z", 9)).
+        Tuple lower = new Tuple(Arrays.asList(
+                Variant.of(IntegerType.INT, "100"),
+                Variant.of(VarcharType.VARCHAR, "a"),
+                Variant.of(IntegerType.BIGINT, "1")));
+        Tuple upper = new Tuple(Arrays.asList(
+                Variant.of(IntegerType.INT, "100"),
+                Variant.of(VarcharType.VARCHAR, "z"),
+                Variant.of(IntegerType.BIGINT, "9")));
+        Range<Tuple> tabletRange = Range.gelt(lower, upper);
+        Tuple prefix = ColocateRangeUtils.extractColocatePrefix(tabletRange, 1);
+        Assertions.assertNotNull(prefix);
+        Assertions.assertEquals(1, prefix.getValues().size());
+        Assertions.assertEquals("100", prefix.getValues().get(0).getStringValue());
+    }
+
+    @Test
+    public void testExtractPrefixRejectsZeroOrNegativeCount() {
+        Range<Tuple> tabletRange = ColocateRangeUtils.expandToFullSortKey(
+                Range.gelt(makeTuple(100), makeTuple(200)), SORT_KEY_COLUMNS, 1);
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ColocateRangeUtils.extractColocatePrefix(tabletRange, 0));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ColocateRangeUtils.extractColocatePrefix(tabletRange, -1));
+    }
+
+    @Test
+    public void testExtractPrefixRejectsLowerBoundShorterThanColocateCount() {
+        Tuple lower = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "100")));
+        Tuple upper = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "200")));
+        Range<Tuple> tabletRange = Range.gelt(lower, upper);
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ColocateRangeUtils.extractColocatePrefix(tabletRange, 2));
+    }
+
 }

@@ -151,6 +151,6 @@ public class ParseUtil {
         if (StringUtils.isEmpty(str)) {
             return str;
         }
-        return "`" + str + "`";
+        return "`" + str.replace("`", "``") + "`";
     }
 }

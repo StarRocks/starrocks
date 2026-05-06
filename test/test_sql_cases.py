@@ -440,7 +440,9 @@ Start to run: %s
                     uncheck = True
                     sql = sql[len(sr_sql_lib.UNCHECK_FLAG) :]
 
-                actual_res, actual_res_log, var, order = self.execute_single_statement(sql, sql_id, record_mode)
+                actual_res, actual_res_log, var, order = self.execute_single_statement(
+                    sql, sql_id, record_mode and not uncheck
+                )
 
                 if not record_mode and not uncheck:
                     # check mode only work in validating mode

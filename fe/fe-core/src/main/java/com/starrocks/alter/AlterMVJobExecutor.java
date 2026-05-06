@@ -63,7 +63,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -244,49 +243,29 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                     List<Runnable> appliers,
                                     ConnectContext context) {
         String mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
-        // cannot alter original pct based mv to incremental or auto, only support original ivm/pct based mv
-        MaterializedView.RefreshMode currentRefreshMode =
+        MaterializedView.RefreshMode targetMode =
                 MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT));
-        if (currentRefreshMode.isIncrementalOrAuto()) {
-            ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
-            if ((mvDefinedQueryParseNode instanceof QueryStatement queryStatement)) {
-                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, null, queryStatement);
+        MaterializedView.RefreshMode originalMode = materializedView.getCurrentRefreshMode();
 
-                Optional<IVMAnalyzer.IVMAnalyzeResult> result;
-                try {
-                    result = ivmAnalyzer.rewrite(
-                            MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT)));
-                } catch (SemanticException e) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s: %s",
-                            mvRefreshMode, e.getMessage());
-                }
-                if (result.isEmpty()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " because the materialized view is not eligible for %s refresh mode",
-                            mvRefreshMode, mvRefreshMode);
-                }
-                // if materialized's original refresh mode is not auto or ivm, throw exception
-                if (!materializedView.getCurrentRefreshMode().isIncrementalOrAuto()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " only support alter original incremental/auto based materialized view",
-                            mvRefreshMode);
-                }
-                currentRefreshMode = result.get().currentRefreshMode();
-            } else {
-                throw new SemanticException("Cannot alter materialized view refresh mode to %s", mvRefreshMode);
-            }
+        // Cross-mode ALTER is not supported. The recovery path for changing refresh_mode is
+        // drop-and-recreate. Same-mode ALTER is allowed and behaves as a no-op (modulo the
+        // applier below, which keeps the persisted property and the in-memory mode in sync).
+        if (originalMode != targetMode) {
+            throw new SemanticException(
+                    "Altering refresh_mode from %s to %s is not supported. " +
+                            "Please drop and re-create the materialized view if a mode change is required.",
+                    originalMode, targetMode);
         }
 
-        MaterializedView.RefreshMode finalCurrentRefreshMode = currentRefreshMode;
         // Trigger applier when either the persisted property or the in-memory current mode
         // would change. Comparing only the persisted string would miss cases where the two
         // are out of sync (e.g. mode promoted internally without rewriting the property).
         if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)
-                || materializedView.getCurrentRefreshMode() != finalCurrentRefreshMode) {
+                || materializedView.getCurrentRefreshMode() != targetMode) {
             appliers.add(() -> {
                 tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
                 tableProperty.setMvRefreshMode(mvRefreshMode);
-                materializedView.setCurrentRefreshMode(finalCurrentRefreshMode);
+                materializedView.setCurrentRefreshMode(targetMode);
             });
         }
     }

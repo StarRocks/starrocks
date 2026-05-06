@@ -258,7 +258,7 @@ public class TypeTest {
                 {TypeFactory.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
                 {new ArrayType(IntegerType.INT), "array<int(11)>"},
                 {new MapType(IntegerType.INT, IntegerType.INT), "map<int(11),int(11)>"},
-                {new StructType(Lists.newArrayList(IntegerType.INT)), "struct<col1 int(11)>"},
+                {new StructType(Lists.newArrayList(IntegerType.INT)), "struct<`col1` int(11)>"},
         };
 
         for (Object[] tc : testCases) {
@@ -280,7 +280,7 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assertions.assertTrue(deType.isMapType());
-        Assertions.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1073741824)>>", deType.toString());
+        Assertions.assertEquals("MAP<INT,struct<`c1` int(11), `cc1` varchar(1073741824)>>", deType.toString());
         // Make sure select fields are false when initialized
         Assertions.assertFalse(deType.getSelectedFields()[0]);
         Assertions.assertFalse(deType.getSelectedFields()[1]);
@@ -301,7 +301,8 @@ public class TypeTest {
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assertions.assertTrue(deType.isStructType());
         Assertions.assertEquals(
-                "struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1073741824)>>",
+                "struct<`struct_test` int(11) COMMENT 'comment test', `c1` struct<`c1` int(11), `cc1` " +
+                        "varchar(1073741824)>>",
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assertions.assertEquals(1, ((StructType) deType).getFieldPos("c1"));

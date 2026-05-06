@@ -23,6 +23,19 @@ EXTRA_MESSAGE	varchar(2048)	YES	false	None
 SELECT * FROM information_schema.warehouse_queries;
 -- result:
 -- !result
+SET enable_evaluate_schema_scan_rule=false;
+-- result:
+-- !result
+SELECT * FROM information_schema.warehouse_queries;
+-- result:
+-- !result
+SELECT COUNT(*) FROM information_schema.warehouse_queries;
+-- result:
+0
+-- !result
+SET enable_evaluate_schema_scan_rule=true;
+-- result:
+-- !result
 DROP DATABASE db_${uuid0};
 -- result:
 -- !result
