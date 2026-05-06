@@ -58,6 +58,7 @@
 #include "base/string/faststring.h"
 #include "common/bloom_filter.h"
 #include "storage/rowset/array_column_writer.h"
+#include "storage/rowset/binary_page_utils.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
@@ -920,10 +921,14 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const Binary
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
 
-    if (row_count > dictionary_min_rowcount) {
-        phmap::flat_hash_set<size_t> hash_set;
-        for (size_t i = 0; i < row_count; i++) {
-            size_t hash = SliceHash()(bin_col.get_slice(i));
+    phmap::flat_hash_set<size_t> hash_set;
+    for (size_t i = 0; i < row_count; i++) {
+        const Slice& slice = bin_col.get_slice(i);
+        if (is_huge_slice(slice)) {
+            return PLAIN_ENCODING;
+        }
+        if (row_count > dictionary_min_rowcount) {
+            size_t hash = SliceHash()(slice);
             hash_set.insert(hash);
             if (hash_set.size() > max_card) {
                 return PLAIN_ENCODING;

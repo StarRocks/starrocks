@@ -55,6 +55,7 @@
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
+#include "storage/rowset/binary_page_utils.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
@@ -94,6 +95,9 @@ public:
 
     bool add_slice(const Slice& s) {
         if (is_page_full()) {
+            return false;
+        }
+        if (!_offsets.empty() && is_huge_slice(s)) {
             return false;
         }
         DCHECK_EQ(_buffer.size(), _reserved_head_size + _next_offset);

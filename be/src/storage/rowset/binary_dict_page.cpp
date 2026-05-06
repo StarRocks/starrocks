@@ -51,6 +51,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
+#include "storage/rowset/binary_page_utils.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "types/logical_type.h"
 
@@ -87,14 +88,23 @@ uint32_t BinaryDictPageBuilder::add(const uint8_t* vals, uint32_t count) {
         uint32_t value_code = -1;
         // Manually devirtualization.
         auto* code_page = down_cast<BitshufflePageBuilder<TYPE_INT>*>(_data_page_builder.get());
-
-        if (_data_page_builder->count() == 0) {
-            auto s = unaligned_load<Slice>(src);
-            _first_value.assign_copy(reinterpret_cast<const uint8_t*>(s.get_data()), s.get_size());
-        }
+        const bool save_first_value = _data_page_builder->count() == 0;
 
         for (int i = 0; i < count; ++i, ++src) {
             auto s = unaligned_load<Slice>(src);
+            if (is_huge_slice(s)) {
+                _hit_huge_slice = true;
+                if (i > 0 || _data_page_builder->count() > 0) {
+                    return i;
+                }
+                _data_page_builder = std::make_unique<BinaryPlainPageBuilder>(_options);
+                _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
+                _encoding_type = PLAIN_ENCODING;
+                return _data_page_builder->add(reinterpret_cast<const uint8_t*>(src), count - i);
+            }
+            if (save_first_value && i == 0) {
+                _first_value.assign_copy(reinterpret_cast<const uint8_t*>(s.get_data()), s.get_size());
+            }
             auto iter = _dictionary.find(s);
             if (iter != _dictionary.end()) {
                 value_code = iter->second;
@@ -126,7 +136,7 @@ faststring* BinaryDictPageBuilder::finish() {
 
 void BinaryDictPageBuilder::reset() {
     _finished = false;
-    if (_encoding_type == DICT_ENCODING && _dict_builder->is_page_full()) {
+    if (_encoding_type == DICT_ENCODING && (_dict_builder->is_page_full() || _hit_huge_slice)) {
         _data_page_builder = std::make_unique<BinaryPlainPageBuilder>(_options);
         _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
         _encoding_type = PLAIN_ENCODING;
@@ -175,6 +185,9 @@ Status BinaryDictPageBuilder::get_last_value(void* value) const {
 }
 
 bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dict) const {
+    if (_encoding_type != DICT_ENCODING) {
+        return false;
+    }
     for (const auto& it : _dictionary) {
         if (auto iter = global_dict->find(it.first); iter == global_dict->end()) {
             return false;
