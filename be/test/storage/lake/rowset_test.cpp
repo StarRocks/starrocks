@@ -875,7 +875,9 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_parallel) {
     set_rowset_shared_segments(rs_meta, true);
     set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
 
-    ConfigResetGuard<bool> guard(&config::enable_load_segment_iterator_parallel, true);
+    // Rowset captures _parallel_load (= enable_load_segment_parallel) at construction time,
+    // so the guard must be in place before the Rowset is created.
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
 
     auto rowset =
             std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);

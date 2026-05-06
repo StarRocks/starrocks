@@ -401,7 +401,6 @@
         "load_diagnose_rpc_timeout_stack_trace_threshold_ms",
         "load_fp_brpc_timeout_ms",
         "enable_load_segment_parallel",
-        "enable_load_segment_iterator_parallel",
         "write_buffer_size",
         "load_process_max_memory_hard_limit_ratio",
         "enable_new_load_on_memory_limit_exceeded",

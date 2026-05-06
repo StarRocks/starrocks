@@ -657,13 +657,6 @@ CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
 CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 
-// Construct per-segment iterators in parallel inside
-// Rowset::get_each_segment_iterator_with_delvec. Each task runs SegmentIterator
-// construction on load_segment_thread_pool so the eager delvec / dcg remote reads
-// inside the constructor can overlap across segments. Independent of
-// enable_load_segment_parallel, which only parallelizes segment footer loading.
-CONF_mBool(enable_load_segment_iterator_parallel, "false");
-
 // Enable segment metadata filter for lake tables.
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");

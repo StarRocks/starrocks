@@ -519,7 +519,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         return opts;
     };
 
-    const bool parallel = config::enable_load_segment_iterator_parallel && segments.size() > 1;
+    // Reuse _parallel_load (initialized from config::enable_load_segment_parallel) so the
+    // segment-range-mode constructor — which forces _parallel_load=false to keep segment
+    // order — keeps the serial path here too.
+    const bool parallel = _parallel_load && segments.size() > 1;
 
     if (!parallel) {
         std::vector<ChunkIteratorPtr> seg_iterators;
