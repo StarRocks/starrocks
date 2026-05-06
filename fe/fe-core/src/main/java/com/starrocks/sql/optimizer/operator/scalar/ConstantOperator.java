@@ -81,8 +81,8 @@ import static java.util.Collections.emptyList;
  */
 public final class ConstantOperator extends ScalarOperator implements Comparable<ConstantOperator> {
 
-    private static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
-    private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
+    public static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
+    public static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
     public static final ConstantOperator NULL = ConstantOperator.createNull(BooleanType.BOOLEAN);
     public static final ConstantOperator TRUE = ConstantOperator.createBoolean(true);
