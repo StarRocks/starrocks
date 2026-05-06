@@ -84,12 +84,7 @@ under the License.
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
         <lz4-java.version>1.10.1</lz4-java.version>
-<<<<<<< HEAD
-=======
-        <async-profiler.version>4.0</async-profiler.version>
-        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <bouncycastle.version>1.84</bouncycastle.version>
->>>>>>> dfa0198b3e ([BugFix][CVE] bump pgjdbc to 42.7.11 and BouncyCastle to 1.84 (#72797))
     </properties>
 
     <profiles>
