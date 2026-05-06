@@ -45,9 +45,9 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
+#include "testutil/sync_point.h"
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
-#include "util/lru_cache.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_util.h"
@@ -473,7 +473,9 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
 void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
                                           PLoadReplicaStatusResult* response) {
     TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
-    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(get_tablets_channel(key).get());
+    auto tablets_channel = get_tablets_channel(key);
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(tablets_channel.get());
+    TEST_SYNC_POINT("LoadChannel::get_load_replica_status::after_raw_ptr");
     if (local_tablets_channel == nullptr) {
         for (int64_t tablet_id : request->tablet_ids()) {
             auto replica_status = response->add_replica_statuses();
