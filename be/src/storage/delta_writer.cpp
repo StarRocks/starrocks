@@ -761,20 +761,9 @@ Status DeltaWriter::commit() {
         return res.status();
     }
     auto rowset_build_ts = watch.elapsed_time();
-
-    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
-        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) &&
-        !_storage_engine->update_manager()->update_state_mem_tracker()->any_limit_exceeded()) {
-        Status st;
-        FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
-                load_pk_preload, st, PK_PRELOAD_FP_ACTION(_opt.txn_id, _opt.tablet_id),
-                _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get()));
-        if (!st.ok() && !st.is_uninitialized()) {
-            _set_state(kAborted, st);
-            return st;
-        }
-    }
-    auto pk_preload_ts = watch.elapsed_time();
+    // PK preload was removed; pk_preload_ts is kept equal to rowset_build_ts so existing
+    // metric/counter fields below stay populated (with zero pk-preload duration).
+    auto pk_preload_ts = rowset_build_ts;
 
     if (_replicate_token != nullptr) {
         if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {

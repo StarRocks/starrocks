@@ -768,7 +768,6 @@
         "primary_key_batch_get_index_memory_limit",
         "pk_dump_interval_seconds",
         "enable_pk_strict_memcheck",
-        "skip_pk_preload",
         "apply_version_slow_log_sec",
         "pk_column_lazy_load_threshold_bytes",
         "column_mode_partial_update_insert_batch_size"
