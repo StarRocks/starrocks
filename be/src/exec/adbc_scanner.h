@@ -25,10 +25,10 @@
 #include <string>
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "connector/adbc_connector.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
