@@ -22,6 +22,7 @@ import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -774,5 +775,36 @@ public class CreateLakeTableTest {
             Assertions.assertEquals(TStatusCode.OK, batchResp.getStatus().getStatus_code());
             Assertions.assertFalse(batchResp.isSetResponses());
         }
+    }
+
+    @Test
+    public void testGetTabletMetadataBatchSizeRejected() throws Exception {
+        // Multi-request batches are intentionally not implemented: see comment on
+        // getTabletMetadata. Verify that any batch with more than one request is rejected
+        // at the batch level and no per-request response is produced.
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.tablet_metadata_batch_reject_test\n" +
+                        "(c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+        LakeTable lakeTable = getLakeTable("lake_test", "tablet_metadata_batch_reject_test");
+        Partition partition = lakeTable.getPartitions().stream().findFirst().get();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(null);
+        TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+        for (Tablet tablet : index.getTablets()) {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tablet.getId());
+            req.setVersion(1);
+            batchReq.addToRequests(req);
+        }
+
+        TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+        Assertions.assertEquals(TStatusCode.NOT_IMPLEMENTED_ERROR, batchResp.getStatus().getStatus_code());
+        Assertions.assertFalse(batchResp.isSetResponses());
     }
 }
