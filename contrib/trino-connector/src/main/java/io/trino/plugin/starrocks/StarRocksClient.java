@@ -427,7 +427,10 @@ public class StarRocksClient
                 int decimalDigits = typeHandle.decimalDigits().orElse(0);
                 int precision = typeHandle.columnSize().orElse(38);
                 if (getDecimalRounding(session) == ALLOW_OVERFLOW && precision > Decimals.MAX_PRECISION) {
-                    int scale = min(decimalDigits, getDecimalDefaultScale(session));
+                    // Clamp scale into [0, getDecimalDefaultScale(session)] so that a bogus
+                    // decimalDigits (negative or larger than MAX_PRECISION) never reaches
+                    // createDecimalType(MAX_PRECISION, scale), which would throw.
+                    int scale = min(max(decimalDigits, 0), getDecimalDefaultScale(session));
                     return Optional.of(decimalColumnMapping(createDecimalType(Decimals.MAX_PRECISION, scale), getDecimalRoundingMode(session)));
                 }
                 precision = precision + max(-decimalDigits, 0); // Map decimal(p, -s) (negative scale) to decimal(p+s, 0).
@@ -1217,6 +1220,13 @@ public class StarRocksClient
                         case Types.CHAR -> Optional.of(255);
                         case Types.TIME -> Optional.of(ZERO_PRECISION_TIME_COLUMN_SIZE);
                         case Types.TIMESTAMP -> Optional.of(ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE);
+                        // DECIMAL/NUMERIC: leave unknown and let the Types.DECIMAL branch in
+                        // toColumnMapping() apply its own precision fallback (orElse(38)).
+                        // Substituting Integer.MAX_VALUE here would force that branch to reject
+                        // the column as precision > MAX_PRECISION and silently drop it, which
+                        // manifests as TableNotFoundException for views whose only column is a
+                        // derived DECIMAL (e.g. CREATE VIEW v AS SELECT SUM(x) FROM t).
+                        case Types.DECIMAL, Types.NUMERIC -> Optional.empty();
                         default -> Optional.of(Integer.MAX_VALUE);
                     };
                 }
