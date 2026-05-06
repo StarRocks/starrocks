@@ -913,9 +913,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     ADD_COUNTER_RELAXED(_stats.finish_put_txn_log_time_ns, commit_txn_duration_ns);
     StorageMetrics::instance()->delta_writer_txn_commit_duration_us.increment(commit_txn_duration_ns /
                                                                               NANOSECS_PER_USEC);
-    // PK preload was removed; existing pk-preload metric/counter fields are kept (always 0)
-    // to preserve compatibility with downstream dashboards.
-    ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, 0);
     VLOG(2) << "txn_log: " << txn_log->DebugString();
 
     if (config::enable_tablet_write_log) {

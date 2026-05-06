@@ -761,9 +761,6 @@ Status DeltaWriter::commit() {
         return res.status();
     }
     auto rowset_build_ts = watch.elapsed_time();
-    // PK preload was removed; pk_preload_ts is kept equal to rowset_build_ts so existing
-    // metric/counter fields below stay populated (with zero pk-preload duration).
-    auto pk_preload_ts = rowset_build_ts;
 
     if (_replicate_token != nullptr) {
         if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {
@@ -801,14 +798,12 @@ Status DeltaWriter::commit() {
     ADD_COUNTER_RELAXED(_stats.commit_time_ns, watch.elapsed_time());
     ADD_COUNTER_RELAXED(_stats.commit_wait_flush_time_ns, flush_ts);
     ADD_COUNTER_RELAXED(_stats.commit_rowset_build_time_ns, rowset_build_ts - flush_ts);
-    ADD_COUNTER_RELAXED(_stats.commit_pk_preload_time_ns, pk_preload_ts - rowset_build_ts);
-    ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - pk_preload_ts);
+    ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - rowset_build_ts);
     ADD_COUNTER_RELAXED(_stats.commit_txn_commit_time_ns, commit_txn_ts - replica_ts);
     StorageMetrics::instance()->delta_writer_commit_task_total.increment(1);
     StorageMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
     StorageMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
-    StorageMetrics::instance()->delta_writer_pk_preload_duration_us.increment((pk_preload_ts - rowset_build_ts) / 1000);
-    StorageMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_preload_ts) / 1000);
+    StorageMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - rowset_build_ts) / 1000);
     StorageMetrics::instance()->delta_writer_txn_commit_duration_us.increment((commit_txn_ts - replica_ts) / 1000);
     return Status::OK();
 }

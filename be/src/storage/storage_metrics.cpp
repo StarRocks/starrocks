@@ -189,7 +189,6 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(delta_writer_commit_task_total);
     REGISTER_STORAGE_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STORAGE_METRIC(delta_writer_wait_flush_duration_us);
-    REGISTER_STORAGE_METRIC(delta_writer_pk_preload_duration_us);
     REGISTER_STORAGE_METRIC(delta_writer_wait_replica_duration_us);
     REGISTER_STORAGE_METRIC(delta_writer_txn_commit_duration_us);
 
