@@ -559,8 +559,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     std::mutex err_mutex;
     Status first_err = Status::OK();
 
-    auto token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(
-            ThreadPool::ExecutionMode::CONCURRENT);
+    auto token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
 
     for (int i = 0; i < (int)segments.size(); i++) {
         auto seg_ptr = segments[i];
