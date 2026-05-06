@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class DataSkew {
@@ -62,12 +63,27 @@ public class DataSkew {
             this(type, additionalInfo, Optional.empty());
         }
 
-        public SkewInfo(SkewType type, Optional<List<Pair<String, Long>>> maybeMcvs) {
-            this(type, AdditionalInfo.NONE, maybeMcvs);
-        }
-
         public boolean isSkewed() {
             return type != SkewType.NOT_SKEWED;
+        }
+
+        public long getOverlappingMcvRowCount(SkewInfo other) {
+            if (type != SkewType.SKEWED_MCV || other.type() != SkewType.SKEWED_MCV) {
+                return 0;
+            }
+            if (maybeMcvs.isEmpty() || other.maybeMcvs().isEmpty()) {
+                return 0;
+            }
+
+            final var otherMcvs = other.maybeMcvs().get().stream() //
+                    .map(mcv -> mcv.first) //
+                    .collect(Collectors.toSet());
+
+            // Sum the row counts of the MCVs that overlap with the other side.
+            return maybeMcvs.get().stream() //
+                    .filter(mcv -> otherMcvs.contains(mcv.first)) //
+                    .mapToLong(mcv -> mcv.second) //
+                    .sum();
         }
     }
 
@@ -158,7 +174,8 @@ public class DataSkew {
      */
     public static SkewInfo getColumnSkewInfo(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic,
                                              Thresholds thresholds) {
-        if (statistics.isTableRowCountMayInaccurate() || statistics.getOutputRowCount() < 1) {
+        final var rowCount = statistics.getOutputRowCount();
+        if (statistics.isTableRowCountMayInaccurate() || rowCount < 1) {
             // Without sufficient information we can not make a decision.
             return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.INACCURATE_ROW_COUNT);
         }

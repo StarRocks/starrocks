@@ -165,10 +165,27 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
             final var mcvLimit = context.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
             final var rowPercentageThreshold = context.getSessionVariable().getSkewJoinDataSkewThreshold();
-            final var skewInfo = DataSkew.getColumnSkewInfo(leftChildStats, skewColumnStats,
-                    new DataSkew.Thresholds(mcvLimit, rowPercentageThreshold));
+            final var skewThresholds = new DataSkew.Thresholds(mcvLimit, rowPercentageThreshold);
+            final var skewInfo = DataSkew.getColumnSkewInfo(leftChildStats, skewColumnStats, skewThresholds);
 
             if (skewInfo.isSkewed()) {
+                // Check how many rows on the other side would be affected by salting, as this can lead to a
+                // cardinality blow up. We only check for MCVs since for NULLs this is not an issue as NULL does not join.
+                final var otherColumn = skewJoinColumn.equals(leftColumn) ? rightColumn : leftColumn;
+                final var rightChildStats = input.inputAt(1).getStatistics();
+                if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(otherColumn)) {
+                    final var otherColumnStats = rightChildStats.getColumnStatistic(otherColumn);
+                    if (otherColumnStats != null) {
+                        final var otherSkewInfo = DataSkew.getColumnSkewInfo(rightChildStats, otherColumnStats, skewThresholds);
+                        if (otherSkewInfo.isSkewed() && skewInfo.type() == DataSkew.SkewType.SKEWED_MCV) {
+                            final var maxOverlapRowCount = context.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+                            if (otherSkewInfo.getOverlappingMcvRowCount(skewInfo) > maxOverlapRowCount) {
+                                continue;
+                            }
+                        }
+                    }
+                }
+
                 joinOperator.setSkewColumn(skewJoinColumn);
 
                 // Handle NULL-only skew case: when MCV is empty but NULL fraction indicates skew
