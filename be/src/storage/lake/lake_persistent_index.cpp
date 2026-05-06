@@ -645,8 +645,7 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
                                                    base_level_merge, tablet_mgr, metadata->id(), false);
     while (iter_ptr->Valid()) {
         const Slice cur_key = iter_ptr->key();
-        if (!seek_range.stop_key.empty() &&
-            options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
+        if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
             // meet the scan range boundary, quit.
             break;
         }
