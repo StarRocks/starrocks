@@ -22,7 +22,7 @@ Status InvertedIndexIterator::read_from_inverted_index(const std::string& column
     return Status::OK();
 }
 
-Status InvertedIndexIterator::read_null(const std::string& column_name, roaring::Roaring* bit_map) {
+Status InvertedIndexIterator::read_null(const std::string_view column_name, roaring::Roaring* bit_map) {
     RETURN_IF_ERROR(_reader->query_null(_stats, column_name, bit_map));
     return Status::OK();
 }
