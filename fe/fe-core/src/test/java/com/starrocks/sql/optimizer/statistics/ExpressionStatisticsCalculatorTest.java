@@ -37,7 +37,9 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -1138,5 +1140,337 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNotNull(ifStat.getHistogram().getMCV());
         Assertions.assertTrue(ifStat.getHistogram().getMCV().containsKey("42"));
     }
-}
 
+    private void assertDateTruncStatistics(Type type, String fmt, LocalDateTime min, LocalDateTime max,
+                                           double inputDistinctValues, double nullsFraction,
+                                           LocalDateTime expectedMin, LocalDateTime expectedMax,
+                                           double expectedDistinctValues) {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, type, "dt", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(2048)
+                .addColumnStatistic(columnRefOperator, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(min))
+                        .setMaxValue(getLongFromDateTime(max))
+                        .setNullsFraction(nullsFraction)
+                        .setAverageRowSize(type.getTypeSize())
+                        .setDistinctValuesCount(inputDistinctValues)
+                        .build())
+                .build();
+
+        CallOperator callOperator = new CallOperator(
+                FunctionSet.DATE_TRUNC,
+                type,
+                Lists.newArrayList(ConstantOperator.createVarchar(fmt), columnRefOperator));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+
+        Assertions.assertEquals(getLongFromDateTime(expectedMin), columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(getLongFromDateTime(expectedMax), columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(nullsFraction, columnStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(type.getTypeSize(), columnStatistic.getAverageRowSize(), 0.001);
+    }
+
+    @Test
+    public void testDateTruncStatisticsWithMinMaxStats() {
+        // DATETIME month
+        assertDateTruncStatistics(
+                Type.DATETIME, "month",
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 3, 20, 12, 34, 56),
+                1000, 0.25,
+                LocalDateTime.of(2024, 1, 1, 0, 0),
+                LocalDateTime.of(2024, 3, 1, 0, 0),
+                3);
+
+        // DATETIME week
+        assertDateTruncStatistics(
+                Type.DATETIME, "week",
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 3, 20, 12, 34, 56),
+                1000, 0.25,
+                LocalDateTime.of(2024, 1, 15, 0, 0),
+                LocalDateTime.of(2024, 3, 18, 0, 0),
+                10);
+
+        // DATETIME day
+        assertDateTruncStatistics(
+                Type.DATETIME, "day",
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 3, 20, 12, 34, 56),
+                1000, 0.25,
+                LocalDateTime.of(2024, 1, 15, 0, 0),
+                LocalDateTime.of(2024, 3, 20, 0, 0),
+                66);
+
+        // DATETIME hour
+        assertDateTruncStatistics(
+                Type.DATETIME, "hour",
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 1, 15, 12, 22, 32),
+                1000, 0.25,
+                LocalDateTime.of(2024, 1, 15, 10, 0),
+                LocalDateTime.of(2024, 1, 15, 12, 0),
+                3);
+
+        // DATETIME minute
+        assertDateTruncStatistics(
+                Type.DATETIME, "minute",
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 1, 15, 10, 22, 32),
+                1000, 0.25,
+                LocalDateTime.of(2024, 1, 15, 10, 20),
+                LocalDateTime.of(2024, 1, 15, 10, 22),
+                3);
+
+        // DATETIME second
+        assertDateTruncStatistics(
+                Type.DATETIME, "second",
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 1, 15, 10, 20, 32),
+                1000, 0.25,
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 1, 15, 10, 20, 32),
+                3);
+
+        // DATE year
+        assertDateTruncStatistics(
+                Type.DATE, "year",
+                LocalDateTime.of(2023, 2, 15, 0, 0),
+                LocalDateTime.of(2025, 8, 20, 0, 0),
+                1000, 0.4,
+                LocalDateTime.of(2023, 1, 1, 0, 0),
+                LocalDateTime.of(2025, 1, 1, 0, 0),
+                3);
+
+        // DATE quarter
+        assertDateTruncStatistics(
+                Type.DATE, "quarter",
+                LocalDateTime.of(2023, 2, 15, 0, 0),
+                LocalDateTime.of(2023, 8, 20, 0, 0),
+                1000, 0.4,
+                LocalDateTime.of(2023, 1, 1, 0, 0),
+                LocalDateTime.of(2023, 7, 1, 0, 0),
+                3);
+
+        // DATE month
+        assertDateTruncStatistics(
+                Type.DATE, "month",
+                LocalDateTime.of(2024, 1, 15, 0, 0),
+                LocalDateTime.of(2024, 3, 20, 0, 0),
+                1000, 0.4,
+                LocalDateTime.of(2024, 1, 1, 0, 0),
+                LocalDateTime.of(2024, 3, 1, 0, 0),
+                3);
+
+        // DATE week
+        assertDateTruncStatistics(
+                Type.DATE, "week",
+                LocalDateTime.of(2024, 1, 16, 0, 0),
+                LocalDateTime.of(2024, 2, 1, 0, 0),
+                1000, 0.4,
+                LocalDateTime.of(2024, 1, 15, 0, 0),
+                LocalDateTime.of(2024, 1, 29, 0, 0),
+                3);
+
+        // DATE day
+        assertDateTruncStatistics(
+                Type.DATE, "day",
+                LocalDateTime.of(2024, 1, 15, 0, 0),
+                LocalDateTime.of(2024, 3, 20, 0, 0),
+                5, 0.4,
+                LocalDateTime.of(2024, 1, 15, 0, 0),
+                LocalDateTime.of(2024, 3, 20, 0, 0),
+                5);
+    }
+
+    @Test
+    public void testDateTruncFallbackStatistics() {
+        // Infinite range, NDV capped at truncated(MIN_DATETIME)..truncated(MAX_DATETIME) domain
+        assertDateTruncFallbackStatistics("year", 100_000, 10000);
+        assertDateTruncFallbackStatistics("quarter", 100_000, 40000);
+        assertDateTruncFallbackStatistics("month", 200_000, 120000);
+        // week: date_trunc('week', 0000-01-01) underflows (Saturday → previous Monday is year -1),
+        // so fallback cannot determine valid bounds and input NDV is preserved
+        assertDateTruncFallbackStatistics("week", 1_000_000, 1_000_000);
+        assertDateTruncFallbackStatistics("day", 10_000_000, 3652425);
+        assertDateTruncFallbackStatistics("hour", 100_000_000, 87658200);
+
+        // Minute/second fallback too precise, NDV preserved from input
+        assertDateTruncFallbackStatistics("minute", 500, 500);
+        assertDateTruncFallbackStatistics("second", 500, 500);
+
+        // Input NDV smaller than max, stays at input NDV
+        assertDateTruncFallbackStatistics("year", 10, 10);
+    }
+
+    /**
+     * Tests the fallback path of date_trunc NDV estimation when column statistics have
+     * infinite min/max (no range information available).
+     */
+    private void assertDateTruncFallbackStatistics(String fmt, double inputDistinctValues,
+                                                   double expectedDistinctValues) {
+        // GIVEN
+        final var columnRefOperator = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(10_000_000)
+                .addColumnStatistic(columnRefOperator, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(Type.DATETIME.getTypeSize())
+                        .setDistinctValuesCount(inputDistinctValues)
+                        .build())
+                .build();
+
+        // WHEN
+        final var callOperator = new CallOperator(
+                FunctionSet.DATE_TRUNC,
+                Type.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar(fmt), columnRefOperator));
+        final var result = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+
+        // THEN
+        Assertions.assertEquals(expectedDistinctValues, result.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, result.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, result.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testDateTruncMinMaxResetToInfinityWhenTruncationFails() {
+        // date_trunc('week', 0000-01-01) underflows before MIN_DATETIME → truncation fails.
+        // min/max must be set to ±INF (unknown), not left as untruncated input values.
+        final var col = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
+        final var minDt = LocalDateTime.of(0, 1, 1, 0, 0, 0);   // 0000-01-01, a Monday-ish boundary
+        final var maxDt = LocalDateTime.of(0, 1, 10, 0, 0, 0);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(100)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(minDt))
+                        .setMaxValue(getLongFromDateTime(maxDt))
+                        .setDistinctValuesCount(5)
+                        .build())
+                .build();
+
+        final var call = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("week"), col));
+        final var result = ExpressionStatisticCalculator.calculate(call, statistics);
+
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, result.getMinValue());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, result.getMaxValue());
+    }
+
+    @Test
+    public void testDateTruncMcvPropagation() {
+        // GIVEN
+        final var col = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
+        Map<String, Long> inputMcv = Map.of(
+                "2024-01-15 10:20:30", 100L,
+                "2024-01-15 14:45:00", 200L,  // same day as above
+                "2024-02-20 08:00:00", 150L
+        );
+        final var colStat = ColumnStatistic.builder()
+                .setDistinctValuesCount(1000)
+                .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                .build();
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(10000)
+                .addColumnStatistic(col, colStat)
+                .build();
+
+        // WHEN
+        final var dateTruncDay = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("day"), col));
+        final var result = ExpressionStatisticCalculator.calculate(dateTruncDay, statistics);
+
+        // THEN
+        Assertions.assertNotNull(result.getHistogram());
+        final var mcv = result.getHistogram().getMCV();
+        Assertions.assertEquals(2, mcv.size());
+        Assertions.assertEquals(100L + 200L, mcv.get("2024-01-15 00:00:00"));
+        Assertions.assertEquals(150L, mcv.get("2024-02-20 00:00:00"));
+    }
+
+    @Test
+    public void testDateTruncMcvPropagationWithMonthTruncation() {
+        // GIVEN
+        final var col = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
+        final var inputMcv = Map.of(
+                "2024-03-10 12:00:00", 50L,
+                "2024-03-25 18:30:00", 70L,
+                "2024-04-05 09:00:00", 30L
+        );
+        final var colStat = ColumnStatistic.builder()
+                .setDistinctValuesCount(500)
+                .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                .build();
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(5000)
+                .addColumnStatistic(col, colStat)
+                .build();
+
+        // WHEN
+        final var dateTruncMonth = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("month"), col));
+        final var result = ExpressionStatisticCalculator.calculate(dateTruncMonth, statistics);
+
+        // THEN
+        Assertions.assertNotNull(result.getHistogram());
+        final var mcv = result.getHistogram().getMCV();
+        Assertions.assertEquals(2, mcv.size());
+        Assertions.assertEquals(50L + 70L, mcv.get("2024-03-01 00:00:00"));
+        Assertions.assertEquals(30L, mcv.get("2024-04-01 00:00:00"));
+    }
+
+    @Test
+    public void testDateTruncMcvPropagationWithoutHistogram() {
+        // GIVEN
+        final var col = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
+        final var colStat = ColumnStatistic.builder()
+                .setDistinctValuesCount(100)
+                .build();
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col, colStat)
+                .build();
+
+        // WHEN
+        final var call = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("month"), col));
+        final var result = ExpressionStatisticCalculator.calculate(call, statistics);
+
+        // THEN
+        Assertions.assertNull(result.getHistogram());
+    }
+
+    @Test
+    public void testDateTruncMcvPropagationWithDateType() {
+        // GIVEN
+        final var col = new ColumnRefOperator(0, Type.DATE, "dt", true);
+        final var inputMcv = Map.of(
+                "2024-01-15", 100L,
+                "2024-01-28", 200L,
+                "2024-02-10", 50L
+        );
+        final var colStat = ColumnStatistic.builder()
+                .setDistinctValuesCount(365)
+                .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                .build();
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(5000)
+                .addColumnStatistic(col, colStat)
+                .build();
+
+        // WHEN
+        final var call = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATE,
+                Lists.newArrayList(ConstantOperator.createVarchar("month"), col));
+        final var result = ExpressionStatisticCalculator.calculate(call, statistics);
+
+        // THEN
+        Assertions.assertNotNull(result.getHistogram());
+        final var mcv = result.getHistogram().getMCV();
+        Assertions.assertEquals(2, mcv.size());
+        Assertions.assertEquals(100L + 200L, mcv.get("2024-01-01"));
+        Assertions.assertEquals(50L, mcv.get("2024-02-01"));
+    }
+
+}
