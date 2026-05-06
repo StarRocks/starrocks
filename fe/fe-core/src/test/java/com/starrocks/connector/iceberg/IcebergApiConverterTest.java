@@ -60,6 +60,7 @@ import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPar
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static org.apache.iceberg.TableProperties.AVRO_COMPRESSION;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -313,6 +314,18 @@ public class IcebergApiConverterTest {
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
         assertEquals("parquet", target.get(DEFAULT_FILE_FORMAT));
         assertEquals("snappy", target.get(PARQUET_COMPRESSION));
+
+        source = ImmutableMap.of(FORMAT_VERSION, "2");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        assertEquals("2", target.get(FORMAT_VERSION));
+
+        source = ImmutableMap.of(FORMAT_VERSION, "1");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        assertEquals("1", target.get(FORMAT_VERSION));
+
+        source = ImmutableMap.of("file_format", "parquet");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        assertEquals("2", target.get(FORMAT_VERSION));
     }
 
     @Test
