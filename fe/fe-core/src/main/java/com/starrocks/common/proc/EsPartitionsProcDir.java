@@ -81,7 +81,8 @@ public class EsPartitionsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = esTable.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             Joiner joiner = Joiner.on(", ");
             Map<String, EsShardPartitions> unPartitionedIndices =
@@ -121,7 +122,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         // set result
@@ -145,14 +146,11 @@ public class EsPartitionsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String indexName) throws AnalysisException {
-
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            return new EsShardProcDir(db, esTable, indexName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
+        // Lock-free: this method only stashes db / esTable / indexName into a new
+        // EsShardProcDir. It does not read any mutable per-table state and does not
+        // iterate any catalog collection. The resulting EsShardProcDir takes its
+        // own per-table READ when it actually fetches data.
+        return new EsShardProcDir(db, esTable, indexName);
     }
 
 }

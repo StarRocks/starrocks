@@ -70,6 +70,36 @@ public class PartitionsProcDirTest {
     }
 
     @Test
+    public void testLookupNonExistentPartitionNameThrowsAnalysisException() {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
+        olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
+
+        db.registerTableUnlocked(olapTable);
+
+        PartitionsProcDir dir = new PartitionsProcDir(db, olapTable, false);
+
+        // Regression: lookup() previously dereferenced table.getPartition(name, ...) without
+        // a null-guard, so a missing name produced an NPE instead of the documented
+        // AnalysisException. The non-numeric name forces the catch-NumberFormatException
+        // branch that hits both getPartition(name, false) and getPartition(name, true) and
+        // resolves them as null.
+        AnalysisException ex = Assertions.assertThrows(AnalysisException.class,
+                () -> dir.lookup("no_such_partition"));
+        Assertions.assertTrue(ex.getMessage().contains("no_such_partition"),
+                "Expected message to mention the missing partition name, got: " + ex.getMessage());
+    }
+
+    @Test
     public void testFetchResultForOlapTable() throws AnalysisException {
         Database db = new Database(10000L, "PartitionsProcDirTestDB");
 
