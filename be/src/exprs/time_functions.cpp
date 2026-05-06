@@ -2716,8 +2716,11 @@ StatusOr<ColumnPtr> standard_format(const std::string& fmt, int len, const starr
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2766,8 +2769,11 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
-        builder->append(Slice(std::string(buf)), !b);
+        if (!standard_format_one_row(ts, buf, viewer_format->value(i).to_string())) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 
@@ -2909,8 +2915,11 @@ StatusOr<ColumnPtr> joda_standard_format(const std::string& fmt, int len, const 
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = joda_standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!joda_standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2959,8 +2968,11 @@ void common_joda_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TY
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = joda_standard_format_one_row(ts, buf, format);
-        builder->append(Slice(std::string(buf)), !b);
+        if (!joda_standard_format_one_row(ts, buf, format)) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 
