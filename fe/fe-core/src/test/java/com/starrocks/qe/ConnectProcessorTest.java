@@ -39,6 +39,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
@@ -50,6 +51,7 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,6 +78,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -762,6 +765,43 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertTrue(tracersInitialized.get(), "Tracers should be initialized for query statements");
         Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
         Assertions.assertEquals("SELECT 1 + 2 AS `1 + 2`", processor.executor.getOriginStmtInString());
+    }
+
+    @Test
+    public void testQueryAuditRelations() throws Exception {
+        auditBuilder.reset();
+        starRocksAssert.withView("create or replace view relation_view_cp as select v1 from testTable1");
+
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString("select rv.v1 from relation_view_cp rv "
+                + "join (select v1 from testTable1) sq on rv.v1 = sq.v1 "
+                + "join relation_view_cp rv2 on rv2.v1 = sq.v1");
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(UserIdentity.ROOT.getUser());
+        myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        myContext.setDatabase("testDb1");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        processor.processOnce();
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        Assertions.assertEquals(Arrays.asList(
+                qualifiedRelationName("testDb1", "relation_view_cp"),
+                qualifiedRelationName("testDb1", "testTable1")),
+                auditEvent.queriedRelations);
+    }
+
+    private String qualifiedRelationName(String dbName, String tableName) {
+        return String.format("%s.%s.%s", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tableName);
     }
 
     /**

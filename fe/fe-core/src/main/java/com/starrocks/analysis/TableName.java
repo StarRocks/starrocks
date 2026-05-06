@@ -67,7 +67,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     private String db;
     @SerializedName(value = "fullDb")
     private String fullDb;
-
     private final NodePosition pos;
 
     public TableName() {

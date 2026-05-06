@@ -50,6 +50,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Field;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -126,6 +127,18 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (value instanceof Double) {
                     double doubleValue = (Double) value;
                     if (doubleValue == -1 || (doubleValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
+                }
+                if (value instanceof String) {
+                    String stringValue = (String) value;
+                    if (stringValue.isEmpty() && af.ignore_empty()) {
+                        continue;
+                    }
+                }
+                if (value instanceof Collection) {
+                    Collection<?> collectionValue = (Collection<?>) value;
+                    if (collectionValue.isEmpty() && af.ignore_empty()) {
                         continue;
                     }
                 }
