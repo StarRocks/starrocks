@@ -541,8 +541,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 
     std::unique_ptr<ThreadPoolToken> token;
     if (_parallel_load && segments.size() > 1) {
-        token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(
-                ThreadPool::ExecutionMode::CONCURRENT);
+        token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
 
     for (int i = 0; i < (int)segments.size(); i++) {
