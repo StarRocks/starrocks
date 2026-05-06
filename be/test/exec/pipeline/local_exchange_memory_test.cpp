@@ -17,7 +17,6 @@
 #include <memory>
 #include <numeric>
 
-#include "testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -27,6 +26,7 @@
 #include "exec/pipeline/query_context.h"
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
+#include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
