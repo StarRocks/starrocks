@@ -37,10 +37,13 @@ import java.util.List;
 import static java.lang.Math.max;
 
 public class MysqlSchemaResolver extends JDBCSchemaResolver {
+    private static final String INFORMATION_SCHEMA = "information_schema";
+    private static final String PARTITIONS_TABLE = "partitions";
+    private static final String PARTITIONS_TABLE_UPPERCASE = "PARTITIONS";
 
     @Override
     protected boolean isInternalSchema(String schemaName) {
-        return schemaName.equalsIgnoreCase("information_schema") ||
+        return schemaName.equalsIgnoreCase(INFORMATION_SCHEMA) ||
                 schemaName.equalsIgnoreCase("mysql") ||
                 schemaName.equalsIgnoreCase("performance_schema") ||
                 schemaName.equalsIgnoreCase("sys");
@@ -82,28 +85,26 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public boolean checkAndSetSupportPartitionInformation(Connection connection) {
-        String catalogSchema = "information_schema";
-        String partitionInfoTable = "partitions";
-        // Different types of MySQL protocol databases have different case names for schema and table names,
-        // which need to be converted to lowercase for comparison
-        try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
-            while (catalogSet.next()) {
-                String schemaName = catalogSet.getString("TABLE_CAT");
-                if (schemaName.equalsIgnoreCase(catalogSchema)) {
-                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null, null)) {
-                        while (tableSet.next()) {
-                            String tableName = tableSet.getString("TABLE_NAME");
-                            if (tableName.equalsIgnoreCase(partitionInfoTable)) {
-                                return this.supportPartitionInformation = true;
-                            }
-                        }
-                    }
-                }
-            }
+        try {
+            return this.supportPartitionInformation =
+                    partitionInfoTableExists(connection, PARTITIONS_TABLE_UPPERCASE) ||
+                            partitionInfoTableExists(connection, PARTITIONS_TABLE);
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
-        return this.supportPartitionInformation = false;
+    }
+
+    private boolean partitionInfoTableExists(Connection connection, String tableNamePattern) throws SQLException {
+        try (ResultSet tableSet = connection.getMetaData().getTables(
+                INFORMATION_SCHEMA, null, tableNamePattern, null)) {
+            while (tableSet != null && tableSet.next()) {
+                String tableName = tableSet.getString("TABLE_NAME");
+                if (tableName != null && tableName.equalsIgnoreCase(PARTITIONS_TABLE)) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     @Override
