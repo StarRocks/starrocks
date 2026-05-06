@@ -36,6 +36,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 查询引擎
 
+### clear_udf_cache_when_start
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否在 BE 启动时清除所有本地缓存的用户函数库。启用后，BE 将在 UserFunctionCache 初始化时删除 UDF 目录下的 `.jar`/`.py` 文件，并在首次使用时重新下载，会增加网络流量和首次使用延迟。禁用（默认）时，BE 直接加载已有缓存文件。
+- 引入版本：v4.0.0
+
 ### dictionary_speculate_min_chunk_size
 
 - 默认值：10000
@@ -258,7 +267,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### json_flat_sparsity_factor
 
-- 默认值：0.9
+- 默认值：0.3
 - 类型：Double
 - 单位：
 - 是否动态：是
@@ -273,6 +282,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制是否忽略 tablet rowset 元数据中可能由逻辑删除在列名重命名后引入到重复键（duplicate key）表中的无效 delete predicates 的布尔值。
 - 引入版本：v4.0
+
+### late_materialization_ratio
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：控制 SegmentIterator 延迟物化策略的整数比率，取值范围 [0-1000]。`0` 禁用延迟物化；`1000` 强制所有读取使用延迟物化；1–999 时根据谓词过滤率动态决策，值越大越倾向使用延迟物化。当 Segment 包含复杂 Metric 类型时，改用 `metric_late_materialization_ratio`。启用 `lake_io_opts.cache_file_only` 时延迟物化自动禁用。
+- 引入版本：v3.2.0
 
 ### max_hdfs_file_handle
 
@@ -309,6 +327,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：查询最多拆分的 Scan Key 数目。
 - 引入版本：-
+
+### metric_late_materialization_ratio
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：当读取包含复杂 Metric 列时，控制延迟物化行访问策略的比率，取值范围 [0-1000]。`0` 禁用延迟物化；`1000` 强制所有适用读取使用延迟物化；1–999 时根据选择率动态决策。存在复杂 Metric 类型时，此参数优先于 `late_materialization_ratio`。`cache_file_only` I/O 模式下延迟物化始终禁用。
+- 引入版本：v3.2.0
 
 ### min_file_descriptor_number
 
@@ -589,6 +616,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
+### vector_chunk_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：Rows
+- 是否动态：否
+- 描述：向量化执行中每个 Chunk（批次）的行数，贯穿执行引擎和存储层。影响算子吞吐量、内存占用、Spill/Sort 缓冲区大小及 I/O 启发式策略。增大可提升宽表/CPU 密集型场景的效率，但会提高峰值内存并增加小结果集查询的延迟。除非分析显示批大小是瓶颈，否则建议保持默认值。
+- 引入版本：v3.2.0
+
 ## 导入导出
 
 ### clear_transaction_task_worker_count
@@ -611,7 +647,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### partial_update_memory_limit_per_worker
 
-- 默认值：1073741824
+- 默认值：2147483648
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
@@ -793,7 +829,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0
 - 类型：Int
 - 单位：Threads
-- 是否动态：否
+- 是否动态：是
 - 描述：Publish Version 线程池的最小线程数，空闲时可收缩到该值。0 表示不设固定下限。
 - 引入版本：-
 
@@ -871,16 +907,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_channel_rpc_thread_pool_num
 
-- 默认值：64
+- 默认值：-1
 - 类型：Int
 - 单位：Threads
-- 是否动态：否
+- 是否动态：是
 - 描述：异步处理 load channel Open RPC 的线程池大小。过小可能导致提交失败，过大增加线程开销。
 - 引入版本：v3.5.0
 
 ### load_channel_rpc_thread_pool_queue_size
 
-- 默认值：2048
+- 默认值：1024000
 - 类型：Int
 - 单位：-
 - 是否动态：否
@@ -898,7 +934,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### streaming_load_thread_pool_idle_time_ms
 
-- 默认值：600000
+- 默认值：2000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -913,6 +949,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：streaming load 线程池的最小线程数。空闲时可收缩到该值，0 表示不设固定下限。
 - 引入版本：-
+### es_http_timeout_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：ESScanReader 在执行 Elasticsearch Scroll 请求时，ES 网络客户端的 HTTP 连接超时时间。在网络较慢或查询量较大时可适当调大，以避免过早超时；调小则可以更快感知 ES 节点无响应。与控制 Scroll 上下文存活时间的 `es_scroll_keepalive` 配合使用。
+- 引入版本：v3.2.0
+
 ### es_index_max_result_window
 
 - 默认值：10000
@@ -920,6 +965,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：否
 - 描述：限制 StarRocks 在单个批次中从 Elasticsearch 请求的最大文档数。StarRocks 在为 ES reader 构建 `KEY_BATCH_SIZE` 时将 ES 请求批大小设置为 min(`es_index_max_result_window`, `chunk_size`)。如果 ES 请求超过 Elasticsearch 索引设置 `index.max_result_window`，Elasticsearch 会返回 HTTP 400 (Bad Request)。在扫描大型索引时调整此值，或在 Elasticsearch 端增加 ES `index.max_result_window` 以允许更大的单次请求。
+- 引入版本：v3.2.0
+
+### ignore_load_tablet_failure
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：设置为 `false` 时，任何 Tablet Header 加载失败（非 NotFound 和非 AlreadyExist 的错误）均视为致命错误，BE 进程将调用 LOG(FATAL) 停止。设置为 `true` 时，BE 在启动时跳过加载失败的 Tablet，并继续加载其他 Tablet。注意：此参数不抑制 RocksDB 元数据扫描本身的致命错误，这类错误始终会导致进程退出。
 - 引入版本：v3.2.0
 
 ### load_channel_abort_clean_up_delay_seconds
@@ -942,7 +996,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_diagnose_rpc_timeout_profile_threshold_ms
 
-- 默认值：30000
+- 默认值：60000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -951,7 +1005,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_diagnose_send_rpc_timeout_ms
 
-- 默认值：10000
+- 默认值：2000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -969,7 +1023,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_fp_tablets_channel_add_chunk_block_ms
 
-- 默认值：10000
+- 默认值：-1
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -978,7 +1032,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_segment_thread_pool_num_max
 
-- 默认值：16
+- 默认值：128
 - 类型：Int
 - 单位：Threads
 - 是否动态：否
@@ -987,7 +1041,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_segment_thread_pool_queue_size
 
-- 默认值：2048
+- 默认值：10240
 - 类型：Int
 - 单位：-
 - 是否动态：否
