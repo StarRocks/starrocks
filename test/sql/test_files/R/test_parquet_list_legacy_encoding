@@ -34,7 +34,7 @@ desc files(
     "aws.s3.secret_key" = "${oss_sk}",
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
-field1	struct<list1 array<varchar(1048576)>>	YES
+field1	struct<`list1` array<varchar(1048576)>>	YES
 -- !result
 
 select count(*) from files(
@@ -76,7 +76,7 @@ desc files(
     "aws.s3.secret_key" = "${oss_sk}",
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
-field1	struct<list1 array<varchar(1048576)>, list2 array<array<varchar(1048576)>>, map1 map<varchar(1048576),array<varchar(1048576)>>>	YES
+field1	struct<`list1` array<varchar(1048576)>, `list2` array<array<varchar(1048576)>>, `map1` map<varchar(1048576),array<varchar(1048576)>>>	YES
 -- !result
 
 select count(*) from files(

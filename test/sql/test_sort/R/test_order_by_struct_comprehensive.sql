@@ -725,7 +725,7 @@ SELECT s FROM t20_where
 WHERE s > row(1, 1) 
 ORDER BY s;
 -- result:
-E: (1064, 'Getting analyzing error from line 2, column 6 to line 2, column 18. Detail message: Column type struct<a int(11), b int(11)> does not support binary predicate operation with type struct<col1 tinyint(4), col2 tinyint(4)>.')
+E: (1064, 'Getting analyzing error from line 2, column 6 to line 2, column 18. Detail message: Column type struct<`a` int(11), `b` int(11)> does not support binary predicate operation with type struct<`col1` tinyint(4), `col2` tinyint(4)>.')
 -- !result
 SELECT s FROM t20_where 
 WHERE s = row(2, 1)

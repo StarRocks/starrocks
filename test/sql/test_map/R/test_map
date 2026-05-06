@@ -150,7 +150,7 @@ E: (1064, "Getting analyzing error from line 2, column 29 to line 2, column 41. 
 select map_concat(c1, map(named_struct('1',2), named_struct('A', [map()])))
 from (select c1 from (values(map())) as t(c1)) t;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 22 to line 1, column 73. Detail message: Map key doesn't support type: struct<1 tinyint(4)>.")
+E: (1064, "Getting analyzing error from line 1, column 22 to line 1, column 73. Detail message: Map key doesn't support type: struct<`1` tinyint(4)>.")
 -- !result
 select map_concat(c1, map(named_struct('1',2), named_struct('A', [map([],[[named_struct('C', [[map()]])]])])))
 from (select c1 from (values(map())) as t(c1)) t;
