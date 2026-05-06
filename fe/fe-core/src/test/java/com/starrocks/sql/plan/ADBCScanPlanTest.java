@@ -80,7 +80,8 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN ADBC");
         assertContains(plan, "DRIVER: ");
-        assertContains(plan, "libadbc_driver_sqlite.so");
-        assertContains(plan, "URI: file::memory:");
+        // Match the values mockADBCCatalogImpl actually configures.
+        assertContains(plan, "libadbc_driver.so");
+        assertContains(plan, "URI: :memory:");
     }
 }

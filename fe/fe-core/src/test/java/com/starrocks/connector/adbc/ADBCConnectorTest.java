@@ -92,24 +92,19 @@ public class ADBCConnectorTest {
     }
 
     @Test
-    public void testLegacyCatalogDropSafety() {
-        // Legacy v1 catalog shape: adbc.driver + adbc.url but no driver_url/driver_name
+    public void testLegacyCatalogRejectedWithClearMessage() {
+        // Legacy v1 catalog shape: adbc.driver + adbc.url but no driver_url/driver_name.
+        // The legacy property schema was removed in commit 58e940d41a; constructing such
+        // a catalog must now fail fast with a clear message, not silently degrade.
         Map<String, String> props = new HashMap<>();
         props.put("adbc.driver", "flight_sql");
         props.put("adbc.url", "grpc://localhost:8815");
 
-        // Constructor should NOT throw -- legacy fallback returns early with metadata=null
-        ADBCConnector connector = new ADBCConnector(createContext(props));
-
-        // shutdown should NOT throw on legacy catalog
-        connector.shutdown();
-
-        // getMetadata should throw with legacy property schema message
         StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            connector.getMetadata();
+            new ADBCConnector(createContext(props));
         });
-        assertTrue(ex.getMessage().contains("legacy property schema"),
-                "Expected 'legacy property schema' in: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("'driver_url' or 'driver_name' is required"),
+                "Expected driver_url/driver_name guidance in: " + ex.getMessage());
     }
 
     @Test
@@ -119,7 +114,7 @@ public class ADBCConnectorTest {
         props.put("type", "adbc");
         props.put("driver_url", "/some/path");
         props.put("uri", ":memory:");
-        props.put("user", "admin");
+        props.put("username", "admin");
         props.put("password", "secret");
         props.put("path", "/data");
         props.put("driver_entrypoint", "my_init");

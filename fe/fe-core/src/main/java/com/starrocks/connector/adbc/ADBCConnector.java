@@ -69,7 +69,14 @@ public class ADBCConnector implements Connector {
         // the actual content, not a file path.
         resolveFileProperties(properties);
 
-        // Eager driver loading
+        // Try to load driver and create metadata eagerly. Mirror the JDBCConnector
+        // pattern: if it fails, log and defer to first getMetadata() call. Two
+        // reasons to defer rather than throw at construction:
+        //   1. Edit log replay on a Follower whose filesystem layout differs from
+        //      the Leader would otherwise wedge the FE on startup.
+        //   2. Unit tests register a MockedADBCMetadata via MockedMetadataMgr
+        //      after the catalog is created, so the eager dlopen on a fake
+        //      driver_url path is wasted work.
         this.allocator = new RootAllocator();
         try {
             AdbcDriver driver = loadOrGetDriver(properties, allocator);
@@ -77,16 +84,15 @@ public class ADBCConnector implements Connector {
             String driverIdentifier = getDriverIdentifier(properties);
             probeDriverAndDiscoverQuoting(db, driverIdentifier, properties);
             this.metadata = new ADBCMetadata(properties, catalogName, allocator, db);
-        } catch (AdbcException e) {
-            allocator.close();
-            String driverIdentifier = getDriverIdentifier(properties);
-            throw new StarRocksConnectorException(classifyAdbcError(e, driverIdentifier), e);
         } catch (Exception e) {
-            allocator.close();
-            if (e instanceof StarRocksConnectorException) {
-                throw (StarRocksConnectorException) e;
+            this.metadata = null;
+            try {
+                allocator.close();
+            } catch (Exception ignored) {
+                // best-effort cleanup
             }
-            throw new StarRocksConnectorException("ADBC catalog: unexpected error during creation: " + e.getMessage(), e);
+            this.allocator = null;
+            LOG.error("Failed to create ADBC metadata on [catalog : {}]", catalogName, e);
         }
     }
 
