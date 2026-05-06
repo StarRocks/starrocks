@@ -302,7 +302,11 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
     void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
-    static constexpr bool supports_inline_state = true;
+    // SmallFixedSizeHashMap (Int8AggHashMap, used for bool/tinyint keys) uses nullptr as
+    // its empty-slot sentinel and returns a temporary PPair from operator->. Both conflict
+    // with inline-state insertion which stores nullptr in the slot for zero-init initial
+    // state and takes &iter->second. Disable inline state for it.
+    static constexpr bool supports_inline_state = !is_no_prefetch_map<HashMap>;
 
     template <typename Func, typename HTBuildOp, typename UpdateFunc = NullUpdateFunc>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, [[maybe_unused]] MemPool* pool,
