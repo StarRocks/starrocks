@@ -1106,10 +1106,6 @@ public class TabletScheduler extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         try {
-<<<<<<< HEAD
-            locker.lockDatabase(db.getId(), LockType.WRITE);
-=======
->>>>>>> c58f7ce3f0 ([BugFix] clone: relax DB locks in TabletScheduler / TabletSchedCtx hot paths (#72475))
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1353,10 +1349,6 @@ public class TabletScheduler extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         try {
-<<<<<<< HEAD
-            locker.lockDatabase(db.getId(), LockType.WRITE);
-=======
->>>>>>> c58f7ce3f0 ([BugFix] clone: relax DB locks in TabletScheduler / TabletSchedCtx hot paths (#72475))
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
