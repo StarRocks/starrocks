@@ -407,7 +407,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：是否在 Pipeline 执行框架中启用大列检测。启用后，如果中间列在 Pipeline 执行或 Spill 序列化过程中达到 Chunk 容量限制，查询将报容量超限错误。
-- 引入版本：-
+- 引入版本：v4.0.0
 
 ### pipeline_poller_timeout_guard_ms
 
