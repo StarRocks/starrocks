@@ -35,9 +35,15 @@
 #include "exec/data_sinks/mysql_result_writer.h"
 
 #include <column/column_helper.h>
+#include <fmt/format.h>
+
+#include <algorithm>
+#include <limits>
 
 #include "column/chunk.h"
 #include "column/mysql_row_buffer.h"
+#include "common/config_network_fwd.h"
+#include "common/config_thrift_server_fwd.h"
 #include "common/statusor.h"
 #include "exec/data_sinks/buffer_control_result_writer.h"
 #include "exprs/expr.h"
@@ -51,6 +57,8 @@
 namespace starrocks {
 
 namespace {
+
+constexpr size_t MYSQL_ROW_BUFFER_SPECULATIVE_RESERVE_LIMIT = 16ULL << 20; // 16 MiB
 
 MysqlRowBufferOptions make_mysql_row_buffer_options(const TQueryOptions& query_options) {
     MysqlRowBufferOptions options;
@@ -80,6 +88,20 @@ MysqlRowBufferOptions make_mysql_row_buffer_options(const TQueryOptions& query_o
         }
     }
     return options;
+}
+
+size_t next_mysql_row_buffer_reserve_size(size_t row_size) {
+    if (row_size >= MYSQL_ROW_BUFFER_SPECULATIVE_RESERVE_LIMIT) {
+        return MYSQL_ROW_BUFFER_SPECULATIVE_RESERVE_LIMIT;
+    }
+    return std::min(MYSQL_ROW_BUFFER_SPECULATIVE_RESERVE_LIMIT, row_size + row_size / 10);
+}
+
+size_t mysql_result_row_hard_limit() {
+    size_t limit = static_cast<size_t>(std::numeric_limits<int32_t>::max());
+    limit = std::min(limit, static_cast<size_t>(config::thrift_max_message_size));
+    limit = std::min(limit, static_cast<size_t>(config::brpc_max_body_size));
+    return limit;
 }
 
 } // namespace
@@ -210,10 +232,11 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
         _row_buffer->reserve(128);
         size_t current_bytes = 0;
         int current_rows = 0;
+        const size_t row_hard_limit = mysql_result_row_hard_limit();
         SCOPED_TIMER(_convert_tuple_timer);
         auto result = std::make_unique<TFetchDataResult>();
-        auto& result_rows = result->result_batch.rows;
-        result_rows.resize(num_rows);
+        auto* result_rows = &result->result_batch.rows;
+        result_rows->resize(num_rows);
 
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
@@ -228,25 +251,29 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
             }
             size_t len = _row_buffer->length();
 
-            if (UNLIKELY(current_bytes + len >= _max_row_buffer_size)) {
-                result_rows.resize(current_rows);
+            if (UNLIKELY(len >= row_hard_limit)) {
+                return Status::NotSupported(
+                        fmt::format("mysql result row size {} exceeds limit {}", len, row_hard_limit));
+            }
+            if (UNLIKELY(current_bytes > 0 && current_bytes + len >= _result_batch_soft_limit_bytes)) {
+                result_rows->resize(current_rows);
                 results.emplace_back(std::move(result));
 
                 result = std::make_unique<TFetchDataResult>();
-                result_rows = result->result_batch.rows;
-                result_rows.resize(num_rows - i);
+                result_rows = &result->result_batch.rows;
+                result_rows->resize(num_rows - i);
 
                 current_bytes = 0;
                 current_rows = 0;
             }
-            _row_buffer->move_content(&result_rows[current_rows]);
-            _row_buffer->reserve(len * 1.1);
+            _row_buffer->move_content(&(*result_rows)[current_rows]);
+            _row_buffer->reserve(next_mysql_row_buffer_reserve_size(len));
 
             current_bytes += len;
             current_rows += 1;
         }
         if (current_rows > 0) {
-            result_rows.resize(current_rows);
+            result_rows->resize(current_rows);
             results.emplace_back(std::move(result));
         }
         TRY_CATCH_ALLOC_SCOPE_END()
