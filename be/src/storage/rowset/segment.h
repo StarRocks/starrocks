@@ -195,7 +195,10 @@ public:
 
     uint32_t num_rows() const { return _num_rows; }
 
-    // Returns true when footer explicitly marks vector_index_storage_type as NONE
+    // True when the segment footer explicitly marks no .vi file for this segment
+    // (e.g. the writer's vector index build threshold was not met). The
+    // SegmentIterator uses this to skip opening the .vi file and go straight to
+    // the brute-force distance-computation fallback.
     bool skip_vector_index() const { return _skip_vector_index; }
 
     // Load and decode short key index.
