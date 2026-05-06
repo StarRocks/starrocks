@@ -73,15 +73,15 @@ public class PartitionsProcDirTest {
     public void testLookupNonExistentPartitionNameThrowsAnalysisException() {
         Database db = new Database(10000L, "PartitionsProcDirTestDB");
 
-        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         long partitionId = 1025;
         listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         listPartition.setReplicationNum(partitionId, (short) 1);
         OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
-        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
-        indexNameToMetaId.put("index1", index.getMetaId());
+        Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+        indexNameToId.put("index1", index.getId());
         olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
 
         db.registerTableUnlocked(olapTable);
