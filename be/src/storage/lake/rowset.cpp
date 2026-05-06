@@ -560,14 +560,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         auto task = std::make_shared<std::packaged_task<StatusOr<ChunkIteratorPtr>()>>(
                 [seg_ptr, schema, opts]() { return seg_ptr->new_iterator(schema, opts); });
         auto fut = task->get_future();
-        auto submit_st =
-                ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func([task]() { (*task)(); });
+        auto submit_st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func([task]() { (*task)(); });
         if (!submit_st.ok()) {
             // Thread pool busy / shutting down: run inline so we still make forward progress.
             // The future becomes ready as soon as (*task)() returns.
             LOG(WARNING) << "submit_func failed for new_iterator: " << submit_st.code_as_string()
-                         << ", falling back to inline construction, seg_idx: " << i
-                         << ", tablet: " << _tablet_id << ", rowset: " << metadata().id();
+                         << ", falling back to inline construction, seg_idx: " << i << ", tablet: " << _tablet_id
+                         << ", rowset: " << metadata().id();
             (*task)();
         }
         iter_futures.push_back(std::move(fut));
