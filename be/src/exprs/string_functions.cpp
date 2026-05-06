@@ -39,6 +39,7 @@
 #include <string>
 
 #include "base/container/raw_container.h"
+#include "base/crypto/blake3_hash.h"
 #include "base/crypto/sm3.h"
 #include "base/string/utf8.h"
 #include "base/types/int128.h"
@@ -2769,6 +2770,39 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
 
 StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(blake3Impl, str) {
+    const Slice& input_str = str;
+    std::stringstream result;
+
+    const unsigned char* message = (unsigned char*)input_str.data;
+    size_t message_len = input_str.size;
+    if (message_len > 0) {
+        uint8_t output[Blake3Hash::BLAKE3_HASH_BYTES];
+
+        Blake3Hash::blake3_compute(message, message_len, output);
+        result << std::hex << std::setfill('0');
+
+        // first 4 bytes
+        for (int i = 0; i < 4; ++i) {
+            result << std::setw(2) << (output[i] & 0xFF);
+        }
+
+        // remaining bytes with space separator every 4 bytes
+        for (int i = 4; i < Blake3Hash::BLAKE3_HASH_BYTES; ++i) {
+            if ((i % 4) == 0) {
+                result << " ";
+            }
+            result << std::setw(2) << (output[i] & 0xFF);
+        }
+    }
+
+    return result.str();
+}
+
+StatusOr<ColumnPtr> StringFunctions::blake3(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<blake3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
 // ascii
