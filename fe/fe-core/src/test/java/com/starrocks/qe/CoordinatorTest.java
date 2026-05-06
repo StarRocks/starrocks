@@ -29,6 +29,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
@@ -40,6 +41,8 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
@@ -55,6 +58,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -178,6 +182,34 @@ public class CoordinatorTest extends PlanTestBase {
         // After catch, hint falls back to session variable query_timeout.
         Assertions.assertTrue(ex.getMessage().contains("query_timeout"));
         Assertions.assertTrue(ex.getMessage().contains("please increase"));
+    }
+
+    @Test
+    public void testClearExternalResourcesOnlyOnce() {
+        AtomicInteger clearCount = new AtomicInteger();
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        ScanNode scanNode = new ScanNode(new PlanNodeId(0), desc, "counting-scan") {
+            @Override
+            public void clear() {
+                clearCount.incrementAndGet();
+            }
+
+            @Override
+            public java.util.List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+                return Collections.emptyList();
+            }
+
+            @Override
+            protected void toThrift(TPlanNode msg) {
+            }
+        };
+        DefaultCoordinator coordinatorWithScan = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, Lists.newArrayList(), Collections.singletonList(scanNode), new TDescriptorTable(), null);
+
+        coordinatorWithScan.clearExternalResources();
+        coordinatorWithScan.clearExternalResources();
+
+        Assertions.assertEquals(1, clearCount.get());
     }
 
 }
