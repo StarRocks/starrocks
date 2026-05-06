@@ -24,6 +24,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -100,6 +101,7 @@ import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.RangeColocateScanDispatch;
 import com.starrocks.planner.RawValuesNode;
 import com.starrocks.planner.RepeatNode;
 import com.starrocks.planner.RuntimeFilterId;
@@ -965,6 +967,12 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
+                DistributionInfo distInfo = referenceTable.getDefaultDistributionInfo();
+                RangeColocateScanDispatch dispatch = null;
+                if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+                    dispatch = RangeColocateScanDispatch.forTable(referenceTable);
+                }
+
                 // Filter out empty partitions from all selected partitions, original selected partition ids may be
                 // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
                 // eg:
@@ -996,8 +1004,25 @@ public class PlanFragmentBuilder {
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        for (int i = 0; i < allTabletIds.size(); i++) {
-                            tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                        // Range-colocate scans use the dispatch facade when alignment
+                        // holds; if alignment is transiently broken the same scan still
+                        // needs a bucketSeq for non-colocate consumers, so fall back to
+                        // position-based and let the dispatch-time alignment guard in
+                        // OlapScanNode.getBucketNums() handle the colocate-dispatch path.
+                        if (dispatch != null) {
+                            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
+                            if (rangeColocateMap != null) {
+                                tabletId2BucketSeq.putAll(rangeColocateMap);
+                            } else {
+                                for (int i = 0; i < allTabletIds.size(); i++) {
+                                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                                }
+                            }
+                        } else {
+                            // HASH or range non-colocate: position-based bucketSeq.
+                            for (int i = 0; i < allTabletIds.size(); i++) {
+                                tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                            }
                         }
                         scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                         List<Tablet> tablets =
