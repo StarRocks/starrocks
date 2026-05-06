@@ -423,6 +423,23 @@ public class InsertAnalyzer {
      * Type-only push-down — only rewrites types of columns that already exist in the inferred files() schema.
      */
     private static void pushDownTargetTableSchemaToFiles(InsertStmt insertStmt, ConnectContext session) {
+        // Reject 'enable_push_down_schema' on INSERT combined with 'schema' property
+        // on FILES() — including any FILES() reached through a subquery / CTE / join,
+        // not just a top-level FileTableFunctionRelation. Must run before the
+        // shape-based early returns below so the conflict is shape-independent.
+        if (insertStmt.isEnablePushDownSchema()) {
+            for (FileTableFunctionRelation rel :
+                    AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement())) {
+                Map<String, String> relProps = rel.getProperties();
+                if (relProps != null && relProps.containsKey(TableFunctionTable.PROPERTY_SCHEMA)) {
+                    throw new SemanticException(
+                            "'enable_push_down_schema' on INSERT cannot be combined with " +
+                            "'schema' property on FILES(); the explicit schema already fixes " +
+                            "read columns — remove one");
+                }
+            }
+        }
+
         if (!insertStmt.isEnablePushDownSchema() && !Config.files_enable_insert_push_down_column_type) {
             return;
         }
@@ -455,14 +472,11 @@ public class InsertAnalyzer {
         }
 
         Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
+            // The schema-vs-enable_push_down_schema conflict is rejected upstream
+            // (shape-independent walk above). Here we only need silent-skip for
+            // Mode 1 (config-level type push-down) when the user declared schema.
             if (fileTable.hasExplicitSchema()) {
-                if (insertStmt.isEnablePushDownSchema()) {
-                    throw new SemanticException(
-                            "'enable_push_down_schema' on INSERT cannot be combined with " +
-                            "'schema' property on FILES(); the explicit schema already fixes " +
-                            "read columns — remove one");
-                }
-                return;  // Mode 1 (config-level): silent skip; explicit schema is authoritative
+                return;
             }
             Locker locker = new Locker(session.getQueryId());
             locker.lockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);

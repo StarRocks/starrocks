@@ -63,4 +63,38 @@ public class InsertAnalyzerFilesSchemaPushDownTest extends PlanTestBase {
         assertTrue(e.getMessage().contains("'enable_push_down_schema'")
                 && e.getMessage().contains("'schema'"));
     }
+
+    @Test
+    public void testInsertPushDownSchemaPropertyConflictsThroughSubquery() {
+        // Regression for the shape-dependent bypass: FILES() reached through a subquery
+        // (or CTE / join) must still trigger the conflict. The check now walks all
+        // FileTableFunctionRelation instances under the InsertStmt rather than only
+        // looking at the top-level fromRelation.
+        String sql = "INSERT INTO t_sink PROPERTIES('enable_push_down_schema' = 'true') " +
+                "SELECT x, y FROM (SELECT x, y FROM FILES(" +
+                "  'path' = 'fake://bucket/dir/'," +
+                "  'format' = 'parquet'," +
+                "  'schema' = 'x TINYINT, y VARCHAR(64)')) t";
+        AnalysisException e = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
+        assertInstanceOf(SemanticException.class, e.getCause());
+        assertTrue(e.getMessage().contains("'enable_push_down_schema'")
+                && e.getMessage().contains("'schema'"));
+    }
+
+    @Test
+    public void testInsertPushDownSchemaPropertyConflictsThroughCte() {
+        // Same shape-independent guarantee for CTE-wrapped FILES().
+        String sql = "INSERT INTO t_sink PROPERTIES('enable_push_down_schema' = 'true') " +
+                "WITH cte AS (SELECT x, y FROM FILES(" +
+                "  'path' = 'fake://bucket/dir/'," +
+                "  'format' = 'parquet'," +
+                "  'schema' = 'x TINYINT, y VARCHAR(64)')) " +
+                "SELECT x, y FROM cte";
+        AnalysisException e = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
+        assertInstanceOf(SemanticException.class, e.getCause());
+        assertTrue(e.getMessage().contains("'enable_push_down_schema'")
+                && e.getMessage().contains("'schema'"));
+    }
 }
