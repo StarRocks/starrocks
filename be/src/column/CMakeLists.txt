@@ -37,7 +37,9 @@ ADD_BE_LIB(ColumnCore
         decimalv3_column.cpp
         json_column.cpp
         adaptive_nullable_column.cpp
+        append_with_mask.cpp
         column_helper.cpp
+        column_helper_time.cpp
         datum_convert.cpp
         runtime_type_traits.cpp
         column_viewer.cpp
@@ -54,16 +56,15 @@ ADD_BE_LIB(ChunkCore
         field.cpp
         schema.cpp
         chunk.cpp
+        chunk_extra_data.cpp
+        chunk_slice.cpp
+        datum_tuple.cpp
+        segmented_chunk.cpp
 )
 
 ADD_BE_LIB(Column
-        chunk_extra_data.cpp
         column_access_path.cpp
-        chunk_slice.cpp
-        column_helper_time.cpp
-        append_with_mask.cpp
-        datum_tuple.cpp
 )
 
 target_link_libraries(ChunkCore PUBLIC ColumnCore)
-target_link_libraries(Column PUBLIC ColumnCore ChunkCore SerdeCore)
+target_link_libraries(Column PUBLIC ColumnCore ChunkCore)
