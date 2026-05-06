@@ -97,10 +97,10 @@ OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
 OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
-THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.22.0/thrift-0.22.0.tar.gz"
-THRIFT_NAME=thrift-0.22.0.tar.gz
-THRIFT_SOURCE=thrift-0.22.0
-THRIFT_MD5SUM="29f4ef82e6ebc336c69ef4f26fb4d2a1"
+THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
+THRIFT_NAME=thrift-0.20.0.tar.gz
+THRIFT_SOURCE=thrift-0.20.0
+THRIFT_MD5SUM="aadebde599e1f5235acd3c730721b873"
 
 # protobuf
 PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
@@ -253,10 +253,10 @@ ARROW_SOURCE="arrow-apache-arrow-19.0.1"
 ARROW_MD5SUM="8c5091da0f8fb41a47d7f4dad7b712df"
 
 # ADBC C++ library (Apache Arrow ADBC - for BE native data scanning)
-ADBC_DOWNLOAD="https://github.com/apache/arrow-adbc/archive/refs/tags/apache-arrow-adbc-19.tar.gz"
-ADBC_NAME="arrow-adbc-apache-arrow-adbc-19.tar.gz"
-ADBC_SOURCE="arrow-adbc-apache-arrow-adbc-19"
-ADBC_MD5SUM="014c722841fecbd58e5c00b5620ffdac"
+ADBC_DOWNLOAD="https://github.com/apache/arrow-adbc/archive/refs/tags/apache-adbc-1.1.0.tar.gz"
+ADBC_NAME="arrow-adbc-apache-adbc-1.1.0.tar.gz"
+ADBC_SOURCE="arrow-adbc-apache-adbc-1.1.0"
+ADBC_MD5SUM=""
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
@@ -350,10 +350,10 @@ OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.2.0
 OPENTELEMETRY_MD5SUM="c084abc742c6b3cd4c9c3684e559d4e1"
 
 # benchmark
-BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz"
-BENCHMARK_NAME=google_benchmark-1.9.5.tar.gz
-BENCHMARK_SOURCE=benchmark-1.9.5
-BENCHMARK_MD5SUM="12c6c0c228fc07106c62634222bd2541"
+BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.5.5.tar.gz"
+BENCHMARK_NAME=google_benchmark-1.5.5.tar.gz
+BENCHMARK_SOURCE=benchmark-1.5.5
+BENCHMARK_MD5SUM="6f852815d48db788f5bb87e2e561dc5e"
 
 # fast-float
 FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
@@ -416,10 +416,10 @@ LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2026.04.09.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2026.04.09"
-CLUCENE_MD5SUM="a06ce32908dad5b2b834b19a8879a2c8"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2024.06.03.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2024.06.03.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2024.06.03"
+CLUCENE_MD5SUM="c218eb0fbbfe7f295e81ab1c8a9317cb"
 
 
 #absl
@@ -482,10 +482,10 @@ FLAMEGRAPH_NAME="FlameGraph-20251015.tar.gz"
 FLAMEGRAPH_SOURCE="FlameGraph"
 FLAMEGRAPH_MD5SUM="bddefda5f1271a3dd5324b02ad61d4a5"
 
-HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.3/hadoop-3.4.3-src.tar.gz"
-HADOOPSRC_NAME="hadoop-3.4.3-src.tar.gz"
-HADOOPSRC_SOURCE="hadoop-3.4.3-src"
-HADOOPSRC_MD5SUM="c5ac53ca70cc667189ec824c6048914a"
+HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.2/hadoop-3.4.2-src.tar.gz"
+HADOOPSRC_NAME="hadoop-3.4.2-src.tar.gz"
+HADOOPSRC_SOURCE="hadoop-3.4.2-src"
+HADOOPSRC_MD5SUM="7fa559909899a2e45bcd2e192358d93b"
 
 # xxhash
 XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"
@@ -494,19 +494,15 @@ XXHASH_SOURCE=xxHash-0.8.3
 XXHASH_MD5SUM="599804eb9555e51c05f1b821f9212a07"
 
 # benchgen
-BENCHGEN_DOWNLOAD="https://github.com/StarRocks/benchgen/archive/refs/tags/v26.03.11.tar.gz"
-BENCHGEN_NAME=benchgen-26.03.11.tar.gz
-BENCHGEN_SOURCE=benchgen-26.03.11
-BENCHGEN_MD5SUM="fd97eb82eb4c629d7916b6d012c7e81d"
+BENCHGEN_DOWNLOAD="https://github.com/StarRocks/benchgen/archive/refs/tags/v26.01.1.tar.gz"
+BENCHGEN_NAME=benchgen-26.01.1.tar.gz
+BENCHGEN_SOURCE=benchgen-26.01.1
+BENCHGEN_MD5SUM="8867ada51fc9a4ab6e711edee3f1b8e0"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
-            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW ADBC BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
+            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
             BENCHGEN"
-
-if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
-    . "${STARROCKS_TP_VARS_OVERRIDE}"
-fi
