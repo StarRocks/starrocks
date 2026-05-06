@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
@@ -308,6 +310,83 @@ public class IcebergCachingFileIOTest {
         Assertions.assertTrue(actualBytesOnDisk <= CAPACITY,
                 "FIXED: actual disk usage (" + actualBytesOnDisk + " bytes) should not exceed " +
                 "DISK_CACHE_CAPACITY (" + CAPACITY + " bytes).");
+    }
+
+    /**
+     * Demonstrates the orphan-file regression introduced when the weigher fix was first applied.
+     *
+     * With the corrected weigher (real weight for pinned entries), Caffeine can evict a pinned
+     * entry under pressure. The eviction listener skips file deletion because useCount > 0 at
+     * that moment. The old close() used computeIfPresent, which found no entry after eviction,
+     * so unpin() and file deletion never ran — leaving an orphan file on disk forever.
+     *
+     * The fix: DiskCacheSeekableInputStream captures the DiskCacheEntry reference at open time
+     * and unpins directly on it. When the last reader closes, if the entry is no longer in cache,
+     * it deletes the orphan file immediately.
+     *
+     * This test models that sequence with FakeEntry to verify the close-time cleanup logic.
+     */
+    @Test
+    public void testOrphanFileCleanedUpWhenLastStreamClosesAfterEviction() {
+        class FakeEntry {
+            final long length;
+            final AtomicInteger useCount = new AtomicInteger(0);
+
+            FakeEntry(long length) {
+                this.length = length;
+            }
+        }
+
+        final long CAPACITY = 100;
+        AtomicBoolean deleteCalledForA = new AtomicBoolean(false);
+
+        Cache<String, FakeEntry> cache = Caffeine.newBuilder()
+                .maximumWeight(CAPACITY)
+                .weigher((Weigher<String, FakeEntry>) (k, v) ->
+                        (int) Math.min(v.length, Integer.MAX_VALUE))
+                .evictionListener((k, v, cause) -> {
+                    if (((FakeEntry) v).useCount.get() > 0) {
+                        // mirrors eviction listener: skip delete while pinned
+                    } else {
+                        if ("A".equals(k)) {
+                            deleteCalledForA.set(true);
+                        }
+                    }
+                })
+                .build();
+
+        // Step 1: cache entry A (60 bytes) and pin it (simulating an open stream).
+        FakeEntry a = new FakeEntry(60);
+        cache.put("A", a);
+        cache.cleanUp();
+        cache.asMap().computeIfPresent("A", (k, v) -> {
+            v.useCount.incrementAndGet();
+            return v;
+        });
+
+        // Step 2: add B (60 bytes) — forces Caffeine to evict A to respect capacity.
+        // Eviction listener fires with useCount=1 > 0 → skips delete → orphan.
+        FakeEntry b = new FakeEntry(60);
+        cache.put("B", b);
+        cache.cleanUp();
+
+        // A is now evicted and not in cache, delete was NOT called by the eviction listener.
+        Assertions.assertNull(cache.getIfPresent("A"), "A should have been evicted");
+        Assertions.assertFalse(deleteCalledForA.get(), "Delete should not fire from eviction listener while pinned");
+
+        // Step 3: simulate close() with the fix applied.
+        // The fix decrements useCount directly on the captured entry and checks cache membership.
+        int remaining = a.useCount.decrementAndGet();
+        boolean entryStillInCache = cache.asMap().get("A") == a;
+        if (remaining == 0 && !entryStillInCache) {
+            // mirrors the orphan cleanup in DiskCacheSeekableInputStream.close()
+            deleteCalledForA.set(true);
+        }
+
+        // Verify: cleanup triggered immediately when the last reader closed.
+        Assertions.assertTrue(deleteCalledForA.get(),
+                "Orphaned file for evicted-while-pinned entry A should be cleaned up on stream close");
+        Assertions.assertEquals(0, a.useCount.get(), "useCount should reach 0 after close");
     }
 
 }

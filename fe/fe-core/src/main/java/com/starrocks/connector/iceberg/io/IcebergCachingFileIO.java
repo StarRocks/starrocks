@@ -556,7 +556,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             if (diskCacheEntry != null) {
                 try {
                     SeekableInputStream stream = diskCacheEntry.toSeekableInputStream();
-                    return new DiskCacheSeekableInputStream(stream, diskCache, key);
+                    return new DiskCacheSeekableInputStream(stream, diskCache, key, diskCacheEntry);
                 } catch (Exception e) {
                     diskCache.asMap().computeIfPresent(key, (k, v) -> {
                         v.unpin();
@@ -579,11 +579,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         private final SeekableInputStream stream;
         private final Cache<String, DiskCacheEntry> diskCache;
         private final String key;
+        private final DiskCacheEntry entry;
 
-        DiskCacheSeekableInputStream(SeekableInputStream stream, Cache<String, DiskCacheEntry> diskCache, String key) {
+        DiskCacheSeekableInputStream(SeekableInputStream stream, Cache<String, DiskCacheEntry> diskCache,
+                                     String key, DiskCacheEntry entry) {
             this.stream = stream;
             this.diskCache = diskCache;
             this.key = key;
+            this.entry = entry;
         }
 
         @Override
@@ -591,12 +594,16 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             try {
                 stream.close();
             } finally {
-                diskCache.asMap().computeIfPresent(key, (k, v) -> {
-                    v.unpin();
-                    LOG.debug("diskCache unpin: key={}, useCount={}, size={}MB, stats=[{}]",
-                            k, v.useCount.get(), v.length >> 20, diskCache.stats());
-                    return v;
-                });
+                int remaining = entry.useCount.decrementAndGet();
+                LOG.debug("diskCache unpin: key={}, useCount={}, size={}MB, stats=[{}]",
+                        key, remaining, entry.length >> 20, diskCache.stats());
+                if (remaining == 0 && diskCache.asMap().get(key) != entry) {
+                    // Entry was evicted by Caffeine while this stream held it open.
+                    // The eviction listener skipped deletion because useCount was > 0 at that time.
+                    // Now that the last reader has closed, clean up the orphaned file immediately.
+                    LOG.warn("diskCache cleaning up orphaned file for evicted-while-pinned entry: key={}", key);
+                    IOUtil.deleteLocalFileWithRemotePath(key);
+                }
             }
         }
 
