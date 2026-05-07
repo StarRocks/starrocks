@@ -246,9 +246,17 @@ public class JDBCTable extends Table {
                 if (delimiterIndex > 0) {
                     String urlPrefix = uri.substring(0, delimiterIndex);
                     String urlSuffix = uri.substring(delimiterIndex + 1);
-                    tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                    if (urlPrefix.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(urlPrefix + dbName + "?" + urlSuffix);
+                    } else {
+                        tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                    }
                 } else {
-                    tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                    if (uri.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(uri + dbName);
+                    } else {
+                        tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                    }
                 }
             }
             tJDBCTable.setJdbc_table(jdbcTable);

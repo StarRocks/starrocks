@@ -173,6 +173,75 @@ public class JDBCTableTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testToThriftWithTrailingSlash(@Mocked GlobalStateMgr globalStateMgr,
+                                              @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306/";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assertions.assertEquals("jdbc:mysql://127.0.0.1:3306/db0", jdbcTable.getJdbc_url());
+    }
+
+    @Test
+    public void testToThriftWithJdbcParamAndTrailingSlash(@Mocked GlobalStateMgr globalStateMgr,
+                                                          @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306/?key=value";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assertions.assertEquals("jdbc:mysql://127.0.0.1:3306/db0?key=value", jdbcTable.getJdbc_url());
+    }
+    public void testQueryTableToThriftKeepsOriginalJdbcUrl(@Mocked GlobalStateMgr globalStateMgr,
+                                                           @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:oracle:thin:@//127.0.0.1:1521/xe";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, null, "catalog0", jdbcProperties);
+        table.setPassThroughQuery("select * from system.t2");
+
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assertions.assertEquals(uri, jdbcTable.getJdbc_url());
+        Assertions.assertEquals("(select * from system.t2) starrocks_query", jdbcTable.getJdbc_table());
+    }
+
+    @Test
+    public void testOriginalJdbcColumnTypesAccessor() throws Exception {
+        Map<String, String> jdbcProperties = getMockedJDBCProperties("jdbc:mysql://127.0.0.1:3306");
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        Map<String, Integer> originalTypes = new HashMap<>();
+        originalTypes.put("col1", java.sql.Types.BIGINT);
+
+        table.setOriginalJdbcColumnTypes(originalTypes);
+
+        Assertions.assertEquals(java.sql.Types.BIGINT, table.getOriginalJdbcColumnTypes().get("col1"));
+    }
+
+    @Test
+    public void testNormalizePassThroughQueryRejectsInsert() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> JDBCTable.normalizePassThroughQuery("insert into t values (1)"));
+    }
+
+    @Test
+    public void testNormalizePassThroughQueryRejectsDdl() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> JDBCTable.normalizePassThroughQuery("create table t (id int)"));
+    }
+
+    @Test
+    public void testNormalizePassThroughQueryRejectsWithQuery() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> JDBCTable.normalizePassThroughQuery("with cte as (select 1) select * from cte;"));
+    }
+
+    @Test
+>>>>>>> d328970f62 ([BugFix]: handle trailing slash when constructing JDBC URL (#70992))
     public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                            @Mocked ResourceMgr resourceMgr) {
         assertThrows(DdlException.class, () -> {
