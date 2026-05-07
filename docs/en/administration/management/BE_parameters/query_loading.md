@@ -439,6 +439,15 @@ This topic introduces the following types of FE configurations:
 - Description: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
+### pipeline_enable_large_column_checker
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable large column detection in the pipeline execution framework. When enabled, queries fail with a capacity limit error if an intermediate column reaches the chunk capacity limit in pipeline execution or spill serialization.
+- Introduced in: v4.0.0
+
 ### pipeline_poller_timeout_guard_ms
 
 - Default: -1

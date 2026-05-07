@@ -78,7 +78,7 @@ CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
 CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
 
 // whether to enable large column detection in the pipeline execution framework.
-CONF_mBool(pipeline_enable_large_column_checker, "false");
+CONF_mBool(pipeline_enable_large_column_checker, "true");
 
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
