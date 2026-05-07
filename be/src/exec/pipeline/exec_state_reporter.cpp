@@ -31,7 +31,6 @@
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {

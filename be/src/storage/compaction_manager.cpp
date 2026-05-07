@@ -20,10 +20,8 @@
 #include "common/config_compaction_fwd.h"
 #include "common/thread/thread.h"
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/storage_metrics.h"
-#include "util/global_metrics_registry.h"
 
 using namespace std::chrono_literals;
 
@@ -82,7 +80,7 @@ void CompactionManager::schedule() {
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
     DCHECK(st.ok());
-    REGISTER_THREAD_POOL_METRICS(compact_pool, _compaction_pool);
+    StorageMetrics::instance()->register_thread_pool_metrics("compact_pool", _compaction_pool.get());
 
     _scheduler_thread = std::thread([this] { _schedule(); });
     Thread::set_thread_name(_scheduler_thread, "compact_sched");

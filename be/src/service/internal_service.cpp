@@ -82,6 +82,7 @@
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
+#include "service/service_metrics.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
@@ -1322,7 +1323,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
                                                      google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
 
-    StarRocksMetrics::instance()->short_circuit_request_total.increment(1);
+    ServiceMetrics::instance()->short_circuit_request_total.increment(1);
     MonotonicStopWatch watch;
     watch.start();
 
@@ -1335,7 +1336,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     auto st = _exec_short_circuit(cntl, request, response);
     st.to_protobuf(response->mutable_status());
     uint64_t elapsed_time_ns = watch.elapsed_time();
-    StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
+    ServiceMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
 template <typename T>

@@ -22,7 +22,6 @@
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/vector_index_file_writer.h"
 

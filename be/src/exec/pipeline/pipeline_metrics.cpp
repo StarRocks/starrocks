@@ -15,6 +15,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 
 #include <numeric>
+#include <utility>
 
 #include "base/metrics.h"
 #include "common/thread/threadpool.h"
@@ -135,6 +136,7 @@ void PollerMetrics::register_all_metrics(MetricRegistry* registry) {
 
 void DriverExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
     registry->register_metric("pipe_driver_schedule_count", &driver_schedule_count);
+    registry->register_metric("pipe_driver_overloaded", &driver_overloaded);
     driver_execution_time.register_metrics(registry, "pipe_driver_execution_time");
     registry->register_metric("pipe_exec_running_tasks", &exec_running_tasks);
     registry->register_metric("pipe_exec_finished_tasks", &exec_finished_tasks);
@@ -151,6 +153,11 @@ void PipelineExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
     scan_executor_metrics.register_all_metrics(registry, "scan");
     connector_scan_executor_metrics.register_all_metrics(registry, "connector_scan");
     exec_state_reporter_metrics.register_all_metrics(registry);
+
+    for (auto& pending : _pending_int_gauge_hooks) {
+        _register_int_gauge_hook(pending.name, pending.metric, std::move(pending.value_fn));
+    }
+    _pending_int_gauge_hooks.clear();
 }
 
 PipelineExecutorMetrics* PipelineExecutorMetrics::instance() {
@@ -158,6 +165,31 @@ PipelineExecutorMetrics* PipelineExecutorMetrics::instance() {
     // to MetricRegistry, so avoid exit-time destruction after registry teardown.
     static auto* instance = new PipelineExecutorMetrics();
     return instance;
+}
+
+void PipelineExecutorMetrics::register_pipe_prepare_pool_queue_len_hook(std::function<int64_t()> value_fn) {
+    if (_registry == nullptr) {
+        _pending_int_gauge_hooks.emplace_back(
+                PendingIntGaugeHook{"pipe_prepare_pool_queue_len", &pipe_prepare_pool_queue_len, std::move(value_fn)});
+        return;
+    }
+    _register_int_gauge_hook("pipe_prepare_pool_queue_len", &pipe_prepare_pool_queue_len, std::move(value_fn));
+}
+
+void PipelineExecutorMetrics::register_pipe_drivers_hook(std::function<int64_t()> value_fn) {
+    if (_registry == nullptr) {
+        _pending_int_gauge_hooks.emplace_back(PendingIntGaugeHook{"pipe_drivers", &pipe_drivers, std::move(value_fn)});
+        return;
+    }
+    _register_int_gauge_hook("pipe_drivers", &pipe_drivers, std::move(value_fn));
+}
+
+void PipelineExecutorMetrics::_register_int_gauge_hook(const std::string& name, IntGauge* metric,
+                                                       std::function<int64_t()> value_fn) {
+    DCHECK(_registry != nullptr);
+    DCHECK(metric != nullptr);
+    _registry->register_metric(name, metric);
+    _registry->register_hook(name, [metric, value_fn = std::move(value_fn)] { metric->set_value(value_fn()); });
 }
 
 } // namespace starrocks::pipeline

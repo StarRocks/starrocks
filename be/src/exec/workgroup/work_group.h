@@ -27,7 +27,6 @@
 #include "mem_tracker_manager.h"
 #include "pipeline_executor_set_manager.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
 #include "util/priority_thread_pool.hpp"
 

@@ -45,7 +45,6 @@
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
@@ -1104,8 +1103,8 @@ void TabletUpdates::stop_and_wait_apply_done() {
     _apply_stopped = true;
     _wait_apply_done();
     int64_t duration = MonotonicMicros() - start_time;
-    StarRocksMetrics::instance()->primary_key_wait_apply_done_duration_ms.increment(duration / 1000);
-    StarRocksMetrics::instance()->primary_key_wait_apply_done_total.increment(1);
+    StorageMetrics::instance()->primary_key_wait_apply_done_duration_ms.increment(duration / 1000);
+    StorageMetrics::instance()->primary_key_wait_apply_done_total.increment(1);
 }
 
 Status TabletUpdates::breakpoint_check() {
@@ -1313,13 +1312,13 @@ Status TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) 
     uint32_t rowset_id = version_info.deltas[0];
     RowsetSharedPtr rowset = get_rowset(rowset_id);
     if (rowset->is_column_mode_partial_update()) {
-        StarRocksMetrics::instance()->column_partial_update_apply_total.increment(1);
+        StorageMetrics::instance()->column_partial_update_apply_total.increment(1);
         int64_t duration_ns = 0;
         {
             SCOPED_RAW_TIMER(&duration_ns);
             st = _apply_column_partial_update_commit(version_info, rowset);
         }
-        StarRocksMetrics::instance()->column_partial_update_apply_duration_us.increment(duration_ns / 1000);
+        StorageMetrics::instance()->column_partial_update_apply_duration_us.increment(duration_ns / 1000);
     } else {
         st = _apply_normal_rowset_commit(version_info, rowset);
     }
@@ -1743,8 +1742,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
 
         idx++;
     }
-    StarRocksMetrics::instance()->update_del_vector_deletes_total.increment(total_del);
-    StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
+    StorageMetrics::instance()->update_del_vector_deletes_total.increment(total_del);
+    StorageMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
     {
@@ -3843,7 +3842,7 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
 }
 
 void TabletUpdates::_set_error(const string& msg) {
-    StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
+    StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
     _error_msg = msg;
     _error = true;
     _apply_version_changed.notify_all();

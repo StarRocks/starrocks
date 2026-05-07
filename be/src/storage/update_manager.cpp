@@ -27,7 +27,6 @@
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
@@ -35,9 +34,9 @@
 #include "storage/persistent_index_load_executor.h"
 #include "storage/rowset_column_update_state.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -122,7 +121,7 @@ Status UpdateManager::init() {
                     .set_min_threads(config::transaction_apply_thread_pool_num_min)
                     .set_max_threads(max_thread_cnt)
                     .build(&_apply_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(update_apply, _apply_thread_pool);
+    StorageMetrics::instance()->register_thread_pool_metrics("update_apply", _apply_thread_pool.get());
 
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
@@ -172,14 +171,14 @@ Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& 
 
 Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                              DeltaColumnGroupList* dcgs) {
-    StarRocksMetrics::instance()->delta_column_group_get_total.increment(1);
+    StorageMetrics::instance()->delta_column_group_get_total.increment(1);
     {
         // find in delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
             StorageEngine::instance()->search_delta_column_groups_by_version(itr->second, version, dcgs);
-            StarRocksMetrics::instance()->delta_column_group_get_hit_cache.increment(1);
+            StorageMetrics::instance()->delta_column_group_get_hit_cache.increment(1);
             return Status::OK();
         }
     }
@@ -245,16 +244,16 @@ void UpdateManager::clear_cache() {
     if (_index_cache_mem_tracker) {
         _index_cache_mem_tracker->release(_index_cache_mem_tracker->consumption());
     }
-    StarRocksMetrics::instance()->update_primary_index_num.set_value(0);
-    StarRocksMetrics::instance()->update_primary_index_bytes_total.set_value(0);
+    StorageMetrics::instance()->update_primary_index_num.set_value(0);
+    StorageMetrics::instance()->update_primary_index_bytes_total.set_value(0);
     {
         std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
         _del_vec_cache.clear();
         if (_del_vec_cache_mem_tracker) {
             _del_vec_cache_mem_tracker->release(_del_vec_cache_mem_tracker->consumption());
         }
-        StarRocksMetrics::instance()->update_del_vector_num.set_value(0);
-        StarRocksMetrics::instance()->update_del_vector_bytes_total.set_value(0);
+        StorageMetrics::instance()->update_del_vector_num.set_value(0);
+        StorageMetrics::instance()->update_del_vector_bytes_total.set_value(0);
     }
     {
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
@@ -434,12 +433,12 @@ Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletS
 }
 
 void UpdateManager::expire_cache() {
-    StarRocksMetrics::instance()->update_primary_index_num.set_value(_index_cache.object_size());
-    StarRocksMetrics::instance()->update_primary_index_bytes_total.set_value(_index_cache.size());
+    StorageMetrics::instance()->update_primary_index_num.set_value(_index_cache.object_size());
+    StorageMetrics::instance()->update_primary_index_bytes_total.set_value(_index_cache.size());
     {
         std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-        StarRocksMetrics::instance()->update_del_vector_num.set_value(_del_vec_cache.size());
-        StarRocksMetrics::instance()->update_del_vector_bytes_total.set_value(std::accumulate(
+        StorageMetrics::instance()->update_del_vector_num.set_value(_del_vec_cache.size());
+        StorageMetrics::instance()->update_del_vector_bytes_total.set_value(std::accumulate(
                 _del_vec_cache.cbegin(), _del_vec_cache.cend(), 0,
                 [](const int& accumulated, const auto& p) { return accumulated + p.second->memory_usage(); }));
     }

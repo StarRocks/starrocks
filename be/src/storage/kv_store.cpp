@@ -50,10 +50,10 @@
 #include "rocksdb/slice_transform.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rocksdb_status_adapter.h"
+#include "storage/storage_metrics.h"
 #include "storage/store_path.h"
 
 using rocksdb::DB;
@@ -192,7 +192,7 @@ Status KVStore::init(bool read_only) {
 }
 
 Status KVStore::get(ColumnFamilyIndex column_family_index, const std::string& key, std::string* value) {
-    StarRocksMetrics::instance()->meta_read_request_total.increment(1);
+    StorageMetrics::instance()->meta_read_request_total.increment(1);
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     int64_t duration_ns = 0;
     rocksdb::Status s;
@@ -200,12 +200,12 @@ Status KVStore::get(ColumnFamilyIndex column_family_index, const std::string& ke
         SCOPED_RAW_TIMER(&duration_ns);
         s = _db->Get(ReadOptions(), handle, key, value);
     }
-    StarRocksMetrics::instance()->meta_read_request_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->meta_read_request_duration_us.increment(duration_ns / 1000);
     return to_status(s);
 }
 
 Status KVStore::put(ColumnFamilyIndex column_family_index, const std::string& key, const std::string& value) {
-    StarRocksMetrics::instance()->meta_write_request_total.increment(1);
+    StorageMetrics::instance()->meta_write_request_total.increment(1);
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     int64_t duration_ns = 0;
     rocksdb::Status s;
@@ -215,13 +215,13 @@ Status KVStore::put(ColumnFamilyIndex column_family_index, const std::string& ke
         write_options.sync = config::sync_tablet_meta;
         s = _db->Put(write_options, handle, key, value);
     }
-    StarRocksMetrics::instance()->meta_write_request_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->meta_write_request_duration_us.increment(duration_ns / 1000);
     LOG_IF(WARNING, !s.ok()) << s.ToString();
     return to_status(s);
 }
 
 Status KVStore::write_batch(rocksdb::WriteBatch* batch) {
-    StarRocksMetrics::instance()->meta_write_request_total.increment(1);
+    StorageMetrics::instance()->meta_write_request_total.increment(1);
     int64_t duration_ns = 0;
     rocksdb::Status s;
     {
@@ -230,13 +230,13 @@ Status KVStore::write_batch(rocksdb::WriteBatch* batch) {
         write_options.sync = config::sync_tablet_meta;
         s = _db->Write(write_options, batch);
     }
-    StarRocksMetrics::instance()->meta_write_request_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->meta_write_request_duration_us.increment(duration_ns / 1000);
     LOG_IF(WARNING, !s.ok()) << s.ToString();
     return to_status(s);
 }
 
 Status KVStore::remove(ColumnFamilyIndex column_family_index, const std::string& key) {
-    StarRocksMetrics::instance()->meta_write_request_total.increment(1);
+    StorageMetrics::instance()->meta_write_request_total.increment(1);
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     rocksdb::Status s;
     int64_t duration_ns = 0;
@@ -246,7 +246,7 @@ Status KVStore::remove(ColumnFamilyIndex column_family_index, const std::string&
         write_options.sync = config::sync_tablet_meta;
         s = _db->Delete(write_options, handle, key);
     }
-    StarRocksMetrics::instance()->meta_write_request_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->meta_write_request_duration_us.increment(duration_ns / 1000);
     LOG_IF(WARNING, !s.ok()) << s.ToString();
     return to_status(s);
 }

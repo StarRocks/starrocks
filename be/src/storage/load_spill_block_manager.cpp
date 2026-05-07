@@ -27,8 +27,7 @@
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -61,7 +60,8 @@ Status LoadSpillBlockMergeExecutor::init() {
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&_tablet_internal_parallel_merge_pool));
-    REGISTER_THREAD_POOL_METRICS(tablet_internal_parallel_merge, _tablet_internal_parallel_merge_pool);
+    StorageMetrics::instance()->register_thread_pool_metrics("tablet_internal_parallel_merge",
+                                                             _tablet_internal_parallel_merge_pool.get());
     return Status::OK();
 }
 

@@ -25,6 +25,7 @@ set(EXEC_FILES
     daemon.cpp
     greplog.cpp
     internal_service.cpp
+    service_metrics.cpp
     staros_worker.cpp
     mem_hook.cpp
 )

@@ -29,7 +29,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "util/global_metrics_registry.h"
 

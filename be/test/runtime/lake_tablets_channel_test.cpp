@@ -36,7 +36,7 @@
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/async_delta_writer.h"
@@ -1358,7 +1358,7 @@ protected:
 // collects all" branch, so `lake_txn_log_collect_legacy_total` increments and
 // the per-partition counter does not.
 TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_unset_bumps_legacy_metric) {
-    auto* m = StarRocksMetrics::instance();
+    auto* m = RuntimeMetrics::instance();
     int64_t legacy_before = m->lake_txn_log_collect_legacy_total.value();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
 
@@ -1374,7 +1374,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_unset_bumps_lega
 // Flag = false: same as unset, legacy path. Covers the case where FE is new but
 // Config.lake_enable_per_partition_coordinator_txn_log has been flipped off.
 TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_false_bumps_legacy_metric) {
-    auto* m = StarRocksMetrics::instance();
+    auto* m = RuntimeMetrics::instance();
     int64_t legacy_before = m->lake_txn_log_collect_legacy_total.value();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
 
@@ -1390,7 +1390,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_false_bumps_lega
 // elected coordinator for both, so it collects every log just like the legacy
 // path would — but routed through the new per-partition dispatch branch.
 TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_true_bumps_per_partition_metric) {
-    auto* m = StarRocksMetrics::instance();
+    auto* m = RuntimeMetrics::instance();
     int64_t legacy_before = m->lake_txn_log_collect_legacy_total.value();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
 
@@ -1406,7 +1406,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_true_bumps_per_p
 // emitted by FE, but defensively handled): AND semantics pulls the channel
 // back to legacy.
 TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_disagreement_falls_back_to_legacy) {
-    auto* m = StarRocksMetrics::instance();
+    auto* m = RuntimeMetrics::instance();
     int64_t legacy_before = m->lake_txn_log_collect_legacy_total.value();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
 
@@ -1472,7 +1472,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_disagreement_fal
 // 11 and therefore the elected coordinator for it. Each sender's eos should
 // return ONLY the logs for partitions it coordinates.
 TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_two_senders_split_partitions_each_collects_own) {
-    auto* m = StarRocksMetrics::instance();
+    auto* m = RuntimeMetrics::instance();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
     int64_t orphan_before = m->lake_txn_log_collect_orphan_partition_total.value();
 

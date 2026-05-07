@@ -30,6 +30,7 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
@@ -46,7 +47,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
@@ -516,7 +516,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 }
             }
             if (time_spent >= OVERLOADED_MAX_TIME_SPEND_NS) {
-                StarRocksMetrics::instance()->pipe_driver_overloaded.increment(1);
+                PipelineExecutorMetrics::instance()->get_driver_executor_metrics()->driver_overloaded.increment(1);
             }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.

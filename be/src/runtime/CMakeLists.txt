@@ -32,7 +32,6 @@ set(RUNTIME_CORE_FILES
     bucket_aware_partition.cpp
     query_statistics.cpp
     record_batch_queue.cpp
-    starrocks_metrics.cpp
     runtime_metrics.cpp
     stream_load/stream_load_metrics.cpp
     global_dict/decoder.cpp

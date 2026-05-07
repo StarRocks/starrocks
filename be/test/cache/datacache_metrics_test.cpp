@@ -21,7 +21,6 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
-#include "runtime/starrocks_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "util/global_metrics_registry.h"
 
@@ -41,8 +40,7 @@ void init_backend_metrics_for_test() {
         options.collect_hook_enabled = true;
         options.init_system_metrics = false;
         options.init_jvm_metrics = false;
-        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(),
-                                              StarRocksMetrics::instance(), options);
+        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(), options);
     });
 }
 

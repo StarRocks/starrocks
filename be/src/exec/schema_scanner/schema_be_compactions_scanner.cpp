@@ -18,7 +18,6 @@
 #include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
