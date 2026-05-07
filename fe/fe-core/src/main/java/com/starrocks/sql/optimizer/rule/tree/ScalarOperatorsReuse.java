@@ -318,12 +318,34 @@ public class ScalarOperatorsReuse {
         private final Map<Integer, Set<ScalarOperator>> operatorsByDepth = new HashMap<>();
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
 
+        // Normalize children group ids for commutative compound predicates (AND/OR) so that
+        // expressions like `a AND b` and `b AND a` map to the same OperatorId. This mirrors
+        // CompoundPredicateOperator#equals, which sorts AND/OR children before comparing;
+        // without this normalization, the two forms would be tracked as distinct common
+        // subexpressions and later collide as a single key in the rewritten ImmutableMap.
+        private static List<Integer> normalizeChildrenGroup(ScalarOperator operator, List<Integer> groups) {
+            if (operator instanceof CompoundPredicateOperator) {
+                CompoundPredicateOperator compound = (CompoundPredicateOperator) operator;
+                if (compound.isAnd() || compound.isOr()) {
+                    return groups.stream().sorted().toList();
+                }
+            }
+            return groups;
+        }
+
         public boolean hasLambdaFunction() {
             return hasLambdaFunction;
         }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/ScalarOperatorsReuse.java
         // enable some special logic codes only for lambda functions.
         private boolean hasLambdaFunction;
+=======
+        private CommonResult collectCommonOperatorsByDepth(int depth, ScalarOperator operator, List<Integer> groups,
+                                                           CommonOperatorContext context) {
+            OperatorId id = new OperatorId(operator, normalizeChildrenGroup(operator, groups));
+            Map<OperatorId, Integer> level = operatorsByDepth.computeIfAbsent(depth, c -> Maps.newHashMap());
+>>>>>>> ebea5f7201 ([BugFix] Dedupe commutative AND/OR in scalar operator CSE (#72823)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/exprreuse/ScalarOperatorsReuse.java
 
         private CommonSubScalarOperatorCollector() {
         }
