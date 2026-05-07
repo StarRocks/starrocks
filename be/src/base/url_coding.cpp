@@ -156,10 +156,10 @@ bool base64_decode(const std::string& in, std::string* out) {
 }
 
 // refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
-std::string url_encode(const std::string& decoded) {
+StatusOr<std::string> url_encode(const std::string& decoded) {
     char* encoded_value = curl_easy_escape(nullptr, decoded.c_str(), static_cast<int>(decoded.length()));
     if (encoded_value == nullptr) {
-        return {};
+        return Status::InternalError("curl_easy_escape returned NULL (libcurl out of memory)");
     }
     DeferOp guard([&] { curl_free(encoded_value); });
     return std::string(encoded_value);

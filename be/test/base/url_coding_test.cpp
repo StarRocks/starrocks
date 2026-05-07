@@ -51,16 +51,24 @@ TEST(UrlCodingTest, UrlDecodeEdgeCases) {
 }
 
 TEST(UrlCodingTest, UrlEncodeBasic) {
-    EXPECT_EQ(url_encode("abc"), "abc");
+    auto r = url_encode("abc");
+    ASSERT_TRUE(r.ok());
+    EXPECT_EQ(r.value(), "abc");
     // Reserved characters get percent-encoded.
-    EXPECT_EQ(url_encode("a b!c"), "a%20b%21c");
-    EXPECT_EQ(url_encode("a&b=c?d"), "a%26b%3Dc%3Fd");
+    r = url_encode("a b!c");
+    ASSERT_TRUE(r.ok());
+    EXPECT_EQ(r.value(), "a%20b%21c");
+    r = url_encode("a&b=c?d");
+    ASSERT_TRUE(r.ok());
+    EXPECT_EQ(r.value(), "a%26b%3Dc%3Fd");
 }
 
 TEST(UrlCodingTest, UrlEncodeEmpty) {
-    // Must not crash on empty input. libcurl returns NULL or an empty buffer
-    // depending on version; either way the wrapper should produce "".
-    EXPECT_EQ(url_encode(""), "");
+    // Must not crash on empty input. libcurl returns an empty buffer
+    // for empty input on the versions we ship, which encodes to "".
+    auto r = url_encode("");
+    ASSERT_TRUE(r.ok());
+    EXPECT_EQ(r.value(), "");
 }
 
 TEST(UrlCodingTest, UrlEncodeDecodeRoundtrip) {
@@ -74,8 +82,9 @@ TEST(UrlCodingTest, UrlEncodeDecodeRoundtrip) {
             std::string("\x00\x01\x02 binary", 10),
     };
     for (const auto& original : cases) {
-        std::string encoded = url_encode(original);
-        auto decoded = url_decode(encoded);
+        auto encoded = url_encode(original);
+        ASSERT_TRUE(encoded.ok()) << "encode failed for: " << original;
+        auto decoded = url_decode(encoded.value());
         ASSERT_TRUE(decoded.ok()) << "round-trip failed for: " << original;
         EXPECT_EQ(decoded.value(), original);
     }
