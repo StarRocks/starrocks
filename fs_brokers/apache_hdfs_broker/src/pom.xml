@@ -50,13 +50,8 @@ under the License.
         <jackson.version>2.21.1</jackson.version>
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.58.v20250814</jetty.version>
-<<<<<<< HEAD
         <io.netty.version>4.1.128.Final</io.netty.version>
-=======
-        <io.netty.version>4.1.132.Final</io.netty.version>
-        <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <bouncycastle.version>1.84</bouncycastle.version>
->>>>>>> dfa0198b3e ([BugFix][CVE] bump pgjdbc to 42.7.11 and BouncyCastle to 1.84 (#72797))
     </properties>
 
     <profiles>
