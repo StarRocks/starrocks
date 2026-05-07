@@ -427,6 +427,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
 - 引入版本：-
 
+### pipeline_enable_large_column_checker
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 Pipeline 执行框架中启用大列检测。启用后，如果中间列在 Pipeline 执行或 Spill 序列化过程中达到 Chunk 容量限制，查询将报容量超限错误。
+- 引入版本：v4.0.0
+
 ### pipeline_poller_timeout_guard_ms
 
 - 默认值：-1
