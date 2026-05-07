@@ -15,11 +15,11 @@
 #include "cache/peer_cache_engine.h"
 
 #include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/logging.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -33,9 +33,12 @@ Status PeerCacheEngine::read(const std::string& key, size_t off, size_t size, IO
     if (options->use_adaptor && !_cache_adaptor->check_read_cache()) {
         return Status::ResourceBusy("resource is busy");
     }
+    if (_stub_cache == nullptr) {
+        return Status::ServiceUnavailable("peer cache BRPC stub cache is unavailable");
+    }
 
     std::shared_ptr<PInternalService_RecoverableStub> stub =
-            ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(options->remote_host, options->remote_port);
+            _stub_cache->get_stub(options->remote_host, options->remote_port);
     PFetchDataCacheRequest request;
     PFetchDataCacheResponse response;
     request.set_request_id(butil::monotonic_time_ns());

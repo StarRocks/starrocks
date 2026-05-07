@@ -102,20 +102,13 @@ Core shared infrastructure above Base/Gutil and generated code only. Higher-leve
 - Core tests: `common_test`
 - Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code.
 
-### CacheCore (`cachecore`)
-Neutral cache contracts and value types without concrete engines, process bootstrap, storage, service, or runtime integration.
-- Targets: `CacheCore`
-- Allowed internal include prefixes: `cache/cache_options.h`, `cache/cache_metrics.h`, `cache/data_cache_hit_rate_counter.hpp`, `cache/status.h`, `cache/disk_cache/io_buffer.h`, `cache/disk_cache/local_disk_cache_engine.h`, `cache/mem_cache/local_mem_cache_engine.h`, `cache/remote_cache_engine.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Remediation: Keep CacheCore limited to neutral cache contracts; move concrete engines, DataCache bootstrap, peer RPC, and process integration into higher cache modules.
-
-### CacheDataPlane (`cachedataplane`)
-Block cache and storage page cache behavior without concrete engine bootstrap, process facade, storage, service, or ExecEnv coupling.
-- Targets: `CacheDataPlane`
-- Allowed internal include prefixes: `cache/disk_cache/block_cache.h`, `cache/mem_cache/lrucache_engine.h`, `cache/mem_cache/page_cache.h`, `cache/disk_cache/local_disk_cache_engine.h`, `cache/mem_cache/local_mem_cache_engine.h`, `cache/remote_cache_engine.h`, `cache/disk_cache/io_buffer.h`, `cache/cache_metrics.h`, `runtime/current_thread.h`, `base/container/lru_cache.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `CacheCore`, `RuntimeCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `cache_data_plane_test`
-- Remediation: Keep CacheDataPlane limited to BlockCache and StoragePageCache mechanics; put singleton compatibility, bootstrap, concrete engines, and peer RPC in higher cache modules.
+### Cache (`cache`)
+Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
+- Targets: `Cache`
+- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `RuntimeCore`, `FSCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `cache_test`
+- Remediation: Keep Cache self-contained within cache engines, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache.
 
 ### HttpCore (`httpcore`)
 Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.

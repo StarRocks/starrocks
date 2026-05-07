@@ -37,6 +37,7 @@ class MemTracker;
 class MemSpaceMonitor;
 class StoragePageCache;
 class Cache;
+class BrpcStubCache;
 
 struct DataCacheInitOptions {
     std::vector<std::string> storage_root_paths;
@@ -50,6 +51,7 @@ public:
     static DataCache* GetInstance();
 
     Status init(const DataCacheInitOptions& options);
+    void attach_peer_cache_stub_cache(BrpcStubCache* brpc_stub_cache);
     void destroy();
 
     void try_release_resource_before_core_dump();
