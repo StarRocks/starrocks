@@ -483,4 +483,34 @@ public class GlobalStateMgrTest {
 
         Assertions.assertTrue(ran.get(), "action should still run");
     }
+
+    @Test
+    public void testStopLeaderOnlyDaemonThreadsDrivesEveryWiredDaemon() throws Exception {
+        // Sanity test for the demotion drain wiring: every daemon listed in
+        // stopLeaderOnlyDaemonThreads must be reachable and its stopGracefully invocation must
+        // be shielded by stopOne, so a misbehaving daemon cannot abort the drain. The lazily
+        // initialized timePrinter / txnTimeoutChecker fields are still null here, exercising the
+        // null-skip branches.
+        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
+
+        Method stop = GlobalStateMgr.class.getDeclaredMethod("stopLeaderOnlyDaemonThreads");
+        stop.setAccessible(true);
+        // None of the daemons are running; every stopGracefully is effectively a state reset.
+        // Any throwable from a daemon's onStopped is contained by stopOne, so the call must
+        // complete without propagating.
+        stop.invoke(mgr);
+    }
+
+    @Test
+    public void testStopLeaderOnlyDaemonThreadsCoversLazilyInitializedDaemons() throws Exception {
+        // timePrinter and txnTimeoutChecker are created lazily after the leader has activated;
+        // exercise the non-null branch so the drain stops them too.
+        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
+        mgr.createTxnTimeoutChecker();
+        mgr.createTimePrinter();
+
+        Method stop = GlobalStateMgr.class.getDeclaredMethod("stopLeaderOnlyDaemonThreads");
+        stop.setAccessible(true);
+        stop.invoke(mgr);
+    }
 }

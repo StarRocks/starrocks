@@ -216,4 +216,30 @@ public class ConsistencyCheckerTest {
         Assertions.assertEquals(0L, FieldUtils.readField(checker, "lastTabletMetaCheckTime", true),
                 "lastTabletMetaCheckTime watermark reset on demotion");
     }
+
+    @Test
+    public void testOnStoppedSwallowsClearException() throws Exception {
+        // A misbehaving CheckConsistencyJob.clear() must not abort the demotion drain - the
+        // remaining jobs still need to be removed and the watermark/counters still need to be
+        // reset. Exercises the per-job catch around job.clear().
+        ConsistencyChecker checker = new ConsistencyChecker();
+
+        @SuppressWarnings("unchecked")
+        Map<Long, CheckConsistencyJob> jobs =
+                (Map<Long, CheckConsistencyJob>) FieldUtils.readField(checker, "jobs", true);
+
+        CheckConsistencyJob throwingJob = new CheckConsistencyJob(201L) {
+            @Override
+            public synchronized void clear() {
+                throw new RuntimeException("simulated AgentTaskQueue failure");
+            }
+        };
+        jobs.put(201L, throwingJob);
+        jobs.put(202L, new CheckConsistencyJob(202L));
+
+        MethodUtils.invokeMethod(checker, true, "onStopped");
+
+        Assertions.assertTrue(jobs.isEmpty(),
+                "jobs map must be cleared even when an individual job's clear() throws");
+    }
 }
