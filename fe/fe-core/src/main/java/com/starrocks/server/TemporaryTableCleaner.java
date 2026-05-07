@@ -16,7 +16,6 @@ package com.starrocks.server;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -35,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 
 // TemporaryTableCleaner is used to automatically clean up temporary tables.
 // It is only executed on the FE leader.
@@ -43,17 +41,9 @@ import java.util.concurrent.ExecutorService;
 // automatically cleans up temporary tables that are no longer active.
 public class TemporaryTableCleaner extends LeaderDaemon  {
     private static final Logger LOG = LogManager.getLogger(TemporaryTableCleaner.class);
-    private static final int TEMP_TABLE_CLEANER_THREAD_NUM = 1;
-    private static final int TEMP_TABLE_CLEANER_QUEUE_SIZE = 100000;
-
-    // Reserved for future async cleanup work; currently never used. Kept so a follow-up PR can
-    // dispatch table-level cleanups in parallel without changing this class' lifecycle wiring.
-    private final ExecutorService executor;
 
     public TemporaryTableCleaner() {
         super("temporary-table-cleaner");
-        this.executor = ThreadPoolManager.newDaemonFixedThreadPool(TEMP_TABLE_CLEANER_THREAD_NUM, TEMP_TABLE_CLEANER_QUEUE_SIZE,
-                "temp-table-cleaner-pool", false);
     }
 
     @Override
