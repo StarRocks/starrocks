@@ -67,23 +67,9 @@ public class DataSkew {
             return type != SkewType.NOT_SKEWED;
         }
 
-        public long getOverlappingMcvRowCount(SkewInfo other) {
-            if (type != SkewType.SKEWED_MCV || other.type() != SkewType.SKEWED_MCV) {
-                return 0;
-            }
-            if (maybeMcvs.isEmpty() || other.maybeMcvs().isEmpty()) {
-                return 0;
-            }
-
-            final var otherMcvs = other.maybeMcvs().get().stream() //
-                    .map(mcv -> mcv.first) //
-                    .collect(Collectors.toSet());
-
-            // Sum the row counts of the MCVs that overlap with the other side.
-            return maybeMcvs.get().stream() //
-                    .filter(mcv -> otherMcvs.contains(mcv.first)) //
-                    .mapToLong(mcv -> mcv.second) //
-                    .sum();
+        public Optional<Map<String, Long>> getMcvs() {
+            return maybeMcvs.map(mcvs -> mcvs.stream() //
+                    .collect(Collectors.toMap(pair -> pair.first, pair -> pair.second)));
         }
     }
 
@@ -253,5 +239,16 @@ public class DataSkew {
     /* Always using default thresholds */
     public static boolean isColumnSkewed(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic) {
         return isColumnSkewed(statistics, columnStatistic, DEFAULT_THRESHOLDS);
+    }
+
+    public static long getOverlappingMcvRowCount(Map<String, Long> mcvs, Map<String, Long> otherMcvs) {
+        if (mcvs == null || mcvs.isEmpty() || otherMcvs == null || otherMcvs.isEmpty()) {
+            return 0;
+        }
+
+        return mcvs.entrySet().stream() //
+                .filter(mcv -> otherMcvs.containsKey(mcv.getKey())) //
+                .mapToLong(Map.Entry::getValue) //
+                .sum();
     }
 }

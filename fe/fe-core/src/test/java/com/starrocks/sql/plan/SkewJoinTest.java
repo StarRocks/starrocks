@@ -324,8 +324,10 @@ public class SkewJoinTest extends PlanTestBase {
     @Test
     public void testIntSkewColumnVarchar() throws Exception {
         double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        long oldMaxOverlap = connectContext.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
         try {
-            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.00001);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.0);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(Long.MAX_VALUE);
             ((MockHistogramStatisticStorage) connectContext.getGlobalStateMgr()
                     .getStatisticStorage()).addHistogramStatistis("c_nationkey", IntegerType.INT, 100);
 
@@ -334,6 +336,7 @@ public class SkewJoinTest extends PlanTestBase {
             assertCContains(sqlPlan, "C_NATIONKEY IN (22, 23, 24, 10, 11)");
         } finally {
             connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(oldMaxOverlap);
         }
     }
 
