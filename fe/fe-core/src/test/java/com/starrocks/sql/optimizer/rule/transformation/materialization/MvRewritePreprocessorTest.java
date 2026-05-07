@@ -1674,8 +1674,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                         "as select v1, sum(v3) as total from t0 group by v1",
                 (obj) -> {
                     MaterializedView mv = getMv(DB_NAME, "test_rewrite_imv");
-                    // Flip the persisted refresh_mode to "incremental" without rerouting the MV through the
-                    // SQL path (IVMAnalyzer rejects INCREMENTAL on non-Iceberg base tables).
+                    // IVMAnalyzer rejects INCREMENTAL on non-Iceberg, so set the property directly.
                     mv.getTableProperty().setMvRefreshMode("incremental");
                     MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
                             connectContext, mv, ImmutableSet.of(), true, false,

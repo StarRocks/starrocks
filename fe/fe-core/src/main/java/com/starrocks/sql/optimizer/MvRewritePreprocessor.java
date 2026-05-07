@@ -522,7 +522,6 @@ public class MvRewritePreprocessor {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
             return MVPlanValidationResult.invalid("MV is not active");
         }
-        // Query rewrite is not supported for IMV (INCREMENTAL/AUTO refresh_mode).
         if (mv.getRefreshMode().isIncrementalOrAuto()) {
             String message = "query rewrite is not supported for refresh_mode=" + mv.getRefreshMode().name();
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
