@@ -17,12 +17,14 @@ package com.starrocks.connector.odps;
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.OdpsException;
 import com.aliyun.odps.Partition;
+import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.Project;
 import com.aliyun.odps.Table;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.security.SecurityManager;
 import com.starrocks.catalog.OdpsTable;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -49,6 +51,19 @@ public class OdpsUtils {
 
     public static List<Partition> getOdpsTablePartitions(Odps odps, OdpsTableName odpsTableName) {
         return odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName()).getPartitions();
+    }
+
+    public static List<Partition> getOdpsTablePartitionsByNames(Odps odps, OdpsTableName odpsTableName,
+                                                                List<String> partitionNames) {
+        Table table = odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
+        List<Partition> result = new ArrayList<>(partitionNames.size());
+        for (String partitionName : partitionNames) {
+            Partition partition = table.getPartition(new PartitionSpec(partitionName));
+            if (partition != null) {
+                result.add(partition);
+            }
+        }
+        return result;
     }
 
     public static OdpsTableName getOdpsTableName(OdpsTable odpsTable) {

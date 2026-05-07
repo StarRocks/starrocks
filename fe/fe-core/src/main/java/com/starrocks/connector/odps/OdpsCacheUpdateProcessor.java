@@ -22,14 +22,14 @@ import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.CacheUpdateProcessor;
 import com.starrocks.connector.DatabaseTableName;
-import org.apache.groovy.util.Maps;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 
 public class OdpsCacheUpdateProcessor implements CacheUpdateProcessor {
     private static final Logger LOG = LogManager.getLogger(OdpsCacheUpdateProcessor.class);
@@ -133,10 +133,26 @@ public class OdpsCacheUpdateProcessor implements CacheUpdateProcessor {
 
         OdpsTableName odpsTableName = OdpsUtils.getOdpsTableName(odpsTable);
 
-        Map<OdpsTableName, List<Partition>> latestPartitions =
-                Maps.of(odpsTableName, OdpsUtils.getOdpsTablePartitions(odps, odpsTable));
-        partitionCache.invalidate(odpsTableName);
-        partitionCache.putAll(latestPartitions);
+        List<Partition> refreshed = OdpsUtils.getOdpsTablePartitionsByNames(odps, odpsTableName, partitionNames);
+
+        Set<String> refreshedSpecs = refreshed.stream()
+                .map(p -> p.getPartitionSpec().toString(false, true))
+                .collect(Collectors.toSet());
+
+        List<Partition> existing = partitionCache.getIfPresent(odpsTableName);
+        List<Partition> merged = new ArrayList<>();
+        if (existing != null) {
+            for (Partition p : existing) {
+                if (!refreshedSpecs.contains(p.getPartitionSpec().toString(false, true))) {
+                    merged.add(p);
+                }
+            }
+        }
+        merged.addAll(refreshed);
+
+        partitionCache.put(odpsTableName, merged);
+        LOG.debug("Refreshed {} partition(s) for table {}.{} in catalog {}",
+                refreshed.size(), odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName(), catalogName);
     }
 }
 

@@ -121,6 +121,10 @@ public class OdpsMetadata implements ConnectorMetadata {
                 catalogName, odps, tableNameCache, tableCache, partitionCache));
     }
 
+    public Optional<OdpsCacheUpdateProcessor> getCacheUpdateProcessor() {
+        return cacheUpdateProcessor;
+    }
+
     private void initMetaCache() {
         Executor executor = MoreExecutors.newDirectExecutorService();
         if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_TABLE_NAME_CACHE))) {

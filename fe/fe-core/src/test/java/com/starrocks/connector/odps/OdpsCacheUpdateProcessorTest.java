@@ -16,6 +16,7 @@ package com.starrocks.connector.odps;
 
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.Partition;
+import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.Tables;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -207,12 +208,13 @@ public class OdpsCacheUpdateProcessorTest {
         com.aliyun.odps.Table odpsApiTable = mock(com.aliyun.odps.Table.class);
         Partition p = mock(Partition.class);
         when(tables.get("db1", "t1")).thenReturn(odpsApiTable);
-        when(odpsApiTable.getPartitions()).thenReturn(ImmutableList.of(p));
+        when(odpsApiTable.getPartition(new PartitionSpec("p1=1"))).thenReturn(p);
+        when(p.getPartitionSpec()).thenReturn(new PartitionSpec("p1=1"));
 
         processor.refreshPartition(odpsTable, ImmutableList.of("p1=1"));
 
         verify(tables).get("db1", "t1");
-        verify(odpsApiTable).getPartitions();
+        verify(odpsApiTable).getPartition(new PartitionSpec("p1=1"));
         List<Partition> cached = partitionCache.getIfPresent(OdpsTableName.of("db1", "t1"));
         assertTrue(cached != null && cached.size() == 1);
     }
