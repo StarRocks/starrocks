@@ -160,10 +160,6 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             }
             ColumnRefSet inputCols = optExpression.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
-            if (optExpression.getOp() instanceof PhysicalOperator) {
-                usedCols.union(((PhysicalOperator) optExpression.getOp()).getUsedColumns());
-            }
-
             if (optExpression.getOp().getPredicate() != null) {
                 ColumnRefSet predicateCols = optExpression.getOp().getPredicate().getUsedColumns();
                 // The predicate cols should be from the input cols or the output cols of this operator
