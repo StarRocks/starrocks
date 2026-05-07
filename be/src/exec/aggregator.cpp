@@ -381,7 +381,8 @@ Status Aggregator::open(RuntimeState* state) {
             // so that InlineAllocFunc can initialize hash map slots correctly (handles both
             // zero-init functions like COUNT/SUM and non-zero-init functions like MIN/MAX).
             if (state->enable_inline_agg_state() && _allow_inline_agg_state && _agg_fn_ctxs.size() == 1 &&
-                _agg_functions[0]->size() <= sizeof(AggDataPtr) && _agg_functions[0]->is_pod_state()) {
+                _agg_functions[0]->size() <= sizeof(AggDataPtr) && _agg_functions[0]->is_pod_state() &&
+                !_agg_functions[0]->is_agg_state_combinator()) {
                 _hash_map_variant.visit([&](auto& variant) {
                     using MapType = std::remove_reference_t<decltype(*variant)>;
                     if constexpr (MapType::supports_inline_state) {

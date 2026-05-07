@@ -124,6 +124,11 @@ public:
     virtual size_t size() const = 0;
     virtual size_t alignof_size() const = 0;
     virtual bool is_pod_state() const { return false; }
+    // True for combinators (agg_state, agg_state_if, agg_state_merge, agg_state_union) which
+    // wrap another aggregate function. Such wrappers either throw on per-row update() or
+    // need their update_batch logic (predicate filtering, merge-vs-update routing) and are
+    // therefore incompatible with the inline build_hash_map* path that calls update() per row.
+    virtual bool is_agg_state_combinator() const { return false; }
     virtual void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
     virtual void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
 
