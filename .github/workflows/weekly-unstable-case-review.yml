@@ -3,10 +3,6 @@ name: WEEKLY UNSTABLE CASE REVIEW
 # Runs every Monday to re-execute blacklisted unstable cases.
 # Cases that now pass are auto-removed from unstable_case.json.
 # Still-failing cases get AI analysis in an HTML report uploaded to OSS.
-#
-# SQL-Tester review only works correctly when triggered by schedule (not
-# workflow_dispatch), because run-sql-tester.sh skips unstable cases when
-# GITHUB_EVENT_NAME == 'workflow_dispatch'.
 
 on:
   schedule:
@@ -278,7 +274,9 @@ jobs:
         id: upload
         run: |
           WORK_DIR="${{ steps.gen.outputs.WORK_DIR }}"
-          REPORT_OSS="oss://starrocks-ci-release/unstable-case-review/${BRANCH}/${COMMIT_SHA:0:8}/"
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
+          REPORT_OSS="oss://${bucket}/unstable-case-review/${BRANCH}/${COMMIT_SHA:0:8}/"
           /var/local/env/ossutil64 --config-file /root/.ossutilconfig \
             cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
