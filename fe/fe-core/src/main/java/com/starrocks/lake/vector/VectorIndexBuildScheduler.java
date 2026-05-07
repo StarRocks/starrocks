@@ -234,8 +234,21 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                                 final long v = visibleVersion;
                                 pendingTablets.merge(tablet.getId(),
                                         Pending.conservativeImmediate(v),
-                                        (existing, scan) -> existing.latestVersion >= scan.latestVersion
-                                                ? existing : scan);
+                                        (existing, scan) -> {
+                                            if (existing.latestVersion > scan.latestVersion) {
+                                                return existing;
+                                            }
+                                            if (existing.latestVersion < scan.latestVersion) {
+                                                return scan;
+                                            }
+                                            // tie on latestVersion: prefer the higher
+                                            // latestCompactionVersion so recovery's
+                                            // conservative-immediate wins over a load-only
+                                            // entry that raced ahead of the scan.
+                                            return existing.latestCompactionVersion
+                                                    >= scan.latestCompactionVersion
+                                                    ? existing : scan;
+                                        });
                                 count++;
                             }
                         }
@@ -403,6 +416,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                 // Tablet / partition / table deleted after enqueue → clean up.
                 it.remove();
                 preferredNodes.remove(tabletId);
+                cooldownUntil.remove(tabletId);
                 continue;
             }
 
@@ -422,9 +436,20 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                 long caughtUp = p.compactionCaughtUpMs;
                 if (caughtUp < 0) {
                     caughtUp = now;
+                    // Only stamp if the frontier hasn't moved underneath us. A concurrent
+                    // addPendingTablet that advanced latestCompactionVersion (and reset
+                    // caughtUp to -1) must not be overwritten — that race would bury a
+                    // phase-1 tablet under the load-tail delay for up to delay_ms.
+                    final long expectedLC = p.latestCompactionVersion;
                     final long stamp = caughtUp;
-                    pendingTablets.compute(tabletId, (k, cur) -> cur == null ? null :
-                            new Pending(cur.latestVersion, cur.latestCompactionVersion, stamp));
+                    pendingTablets.compute(tabletId, (k, cur) -> {
+                        if (cur == null
+                                || cur.latestCompactionVersion != expectedLC
+                                || cur.compactionCaughtUpMs >= 0) {
+                            return cur;
+                        }
+                        return new Pending(cur.latestVersion, cur.latestCompactionVersion, stamp);
+                    });
                 }
                 if (now - caughtUp < Config.lake_vi_build_load_tail_delay_ms) {
                     continue;
