@@ -14,8 +14,11 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -23,6 +26,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+
+import java.util.Map;
 
 public abstract class MVIVMTestBase extends MVTestBase {
 
@@ -84,6 +89,9 @@ public abstract class MVIVMTestBase extends MVTestBase {
                 "AS %s;", mvQuery);
         starRocksAssert.withMaterializedView(ddl);
         MaterializedView mv = getMv("test_mv1");
+        // Pre-populate the TVR baseline so the factory routes to pure IVM and these tests
+        // exercise IVM plan generation directly instead of the first-refresh PCT path.
+        seedTvrBaselineAtVersionZero(mv);
         // 1th run
         {
             ExecPlan execPlan = getIVMRefreshedExecPlan(mv);
@@ -108,6 +116,18 @@ public abstract class MVIVMTestBase extends MVTestBase {
             ExecPlan execPlan = getIVMRefreshedExecPlan(mv);
             Assertions.assertTrue(execPlan != null);
             run3.check(execPlan);
+        }
+    }
+
+    /**
+     * Seed every base table's TVR baseline at version 0 so the factory routes the next
+     * refresh to the pure IVM processor instead of the first-refresh PCT path.
+     */
+    protected static void seedTvrBaselineAtVersionZero(MaterializedView mv) {
+        Map<BaseTableInfo, TvrVersionRange> tvrMap = mv.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap();
+        for (BaseTableInfo info : mv.getBaseTableInfos()) {
+            tvrMap.put(info, TvrTableSnapshot.of(0L));
         }
     }
 }
