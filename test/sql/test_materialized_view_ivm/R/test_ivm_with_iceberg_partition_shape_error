@@ -103,7 +103,7 @@ SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}'
 -- result:
 FAILED
 -- !result
-SELECT ERROR_MESSAGE REGEXP '(non-append-only|snapshot ancestry broken)' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%snapshot ancestry broken%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
 -- result:
 1
 -- !result

@@ -178,7 +178,7 @@ ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(r
 -- partition-shape change error and drop-and-recreate guidance.
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
-SELECT ERROR_MESSAGE REGEXP '(non-append-only|snapshot ancestry broken)' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%snapshot ancestry broken%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
 SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
 
 DROP MATERIALIZED VIEW test_mv2;
