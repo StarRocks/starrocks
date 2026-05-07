@@ -204,7 +204,7 @@ Status JDBCScanner::_init_jdbc_scanner() {
 
     auto jdbc_scanner_cls = env->FindClass(JDBC_SCANNER_CLASS_NAME);
     _jdbc_scanner_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_scanner_cls));
-    LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
+    LOCAL_REF_GUARD_ENV(env, jdbc_scanner_cls);
 
     DCHECK(_jdbc_scanner_cls != nullptr);
     // init jmethod
