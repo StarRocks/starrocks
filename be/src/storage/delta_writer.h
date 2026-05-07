@@ -125,8 +125,6 @@ struct DeltaWriterStat {
     std::atomic_int64_t commit_wait_flush_time_ns = 0;
     // Time to build rowset in commit()
     std::atomic_int64_t commit_rowset_build_time_ns = 0;
-    // Time to deal with primary key in commit() which may load data from disk
-    std::atomic_int64_t commit_pk_preload_time_ns = 0;
     // Time to wait for replica sync in commit()
     std::atomic_int64_t commit_wait_replica_time_ns = 0;
     // Time to commit txn in commit()
