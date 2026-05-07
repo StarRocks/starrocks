@@ -54,6 +54,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -277,6 +278,9 @@ public class ColocateTableIndex implements Writable {
                                         0 /* partitionId: not partition-specific */,
                                         0 /* indexId: not index-specific */,
                                         PlacementPolicy.PACK);
+                        // In-memory only; OP_COLOCATE_RANGE_UPDATE is journaled from OlapTable.onCreate
+                        // after OP_CREATE_TABLE is durably written, so the range record cannot precede the
+                        // table-create record.
                         colocateRangeMgr.initColocateGroup(groupId.grpId, packShardGroupId);
                     }
                 } else if (distributionInfo instanceof HashDistributionInfo) {
@@ -423,6 +427,8 @@ public class ColocateTableIndex implements Writable {
             group2Tables.remove(groupId, tableId);
             if (!group2Tables.containsKey(groupId)) {
                 // all tables of this group are removed, remove the group
+                ColocateGroupSchema schema = group2Schema.get(groupId);
+                boolean wasRangeColocate = schema != null && schema.isRangeColocate();
                 group2BackendsPerBucketSeq.remove(groupId);
                 group2Schema.remove(groupId);
                 unstableGroups.remove(groupId);
@@ -436,6 +442,21 @@ public class ColocateTableIndex implements Writable {
                 }
                 if (fullGroupName != null) {
                     groupName2Id.remove(fullGroupName);
+                }
+                if (wasRangeColocate) {
+                    // colocateRangeMgr is keyed by grpId, which is shared across DBs for cross-DB
+                    // colocation. Only drop the entry when no other DB still holds a GroupId with
+                    // the same grpId; otherwise we would corrupt a peer DB's view.
+                    boolean otherDbStillHasGroup = false;
+                    for (GroupId otherGroupId : group2Schema.keySet()) {
+                        if (Objects.equals(otherGroupId.grpId, groupId.grpId)) {
+                            otherDbStillHasGroup = true;
+                            break;
+                        }
+                    }
+                    if (!otherDbStillHasGroup) {
+                        colocateRangeMgr.removeColocateGroup(groupId.grpId);
+                    }
                 }
             }
         } finally {
@@ -725,6 +746,15 @@ public class ColocateTableIndex implements Writable {
         removeTable(info.getTableId(), null, true /* isReplay */);
     }
 
+    public void replayColocateRangeUpdate(ColocateRangePersistInfo info) {
+        writeLock();
+        try {
+            colocateRangeMgr.setColocateRanges(info.getColocateGroupId(), info.getColocateRanges());
+        } finally {
+            writeUnlock();
+        }
+    }
+
     // only for test
     public void clear() {
         writeLock();
@@ -939,6 +969,14 @@ public class ColocateTableIndex implements Writable {
                                                GroupId assignedGroupId) throws DdlException {
         if (!table.getDefaultDistributionInfo().supportColocate()) {
             throw new DdlException("Table " + table.getName() + " does not support colocation");
+        }
+        // Range colocate group membership is established at CREATE TABLE and tied to a PACK shard
+        // group that owns physical placement; ALTER ... colocate_with cannot atomically rewrite
+        // the OP_MODIFY_TABLE_COLOCATE_V2 + OP_COLOCATE_RANGE_UPDATE ordering, so a crash
+        // between them would leave a follower with schema but no range mgr entry.
+        if (table.isRangeDistribution()) {
+            throw new DdlException(
+                    "ALTER ... colocate_with is not supported for range distribution tables");
         }
 
         String oldGroup = table.getColocateGroup();
