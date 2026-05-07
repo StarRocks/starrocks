@@ -569,6 +569,7 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:TypesCore>
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IOCore>
+    StarOSIntegration
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
     $<TARGET_FILE:Gutil>
@@ -953,6 +954,7 @@ add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
+add_subdirectory(${SRC_DIR}/staros_integration)
 add_subdirectory(${SRC_DIR}/fs)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)

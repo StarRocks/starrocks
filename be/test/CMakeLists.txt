@@ -332,7 +332,6 @@ set(EXEC_FILES
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
-        ./service/staros_worker_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
@@ -369,6 +368,7 @@ add_subdirectory(fs)
 add_subdirectory(http)
 add_subdirectory(cache)
 add_subdirectory(spill)
+add_subdirectory(staros_integration)
 
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/src/service/macos_link_stubs.cpp)

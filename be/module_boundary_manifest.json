@@ -528,6 +528,18 @@
       "allowed_test_targets": ["exec_join_core_test"],
       "allowed_test_link_deps": ["ExecJoinCore", "ExecSortingCore", "ExprCore", "SerdeCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
+    },
+    {
+      "id": "starosintegration",
+      "doc_label": "StarOSIntegration",
+      "summary": "StarRocks-owned Starlet integration for worker runtime, shard metadata, status conversion, StarCache updates, and worker metrics outside service bootstrap.",
+      "owned_targets": ["StarOSIntegration"],
+      "owned_roots": ["be/src/staros_integration"],
+      "allowed_include_prefixes": ["staros_integration/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["staros_integration_test"],
+      "allowed_test_link_deps": ["StarOSIntegration", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep the Starlet adapter independent of service/bootstrap, storage, runtime, and filesystem modules; expose narrow accessors instead of pulling higher layers into lower layers."
     }
   ]
 }

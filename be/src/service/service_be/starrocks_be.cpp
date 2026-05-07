@@ -51,7 +51,7 @@
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
 #include "runtime/thrift_rpc_helper.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 

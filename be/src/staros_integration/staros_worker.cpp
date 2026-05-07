@@ -13,56 +13,24 @@
 // limitations under the License.
 
 #ifdef USE_STAROS
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker.h"
 
-#include <fslib/fslib_all_initializer.h>
 #include <starlet.h>
-#include <worker.h>
 
 #include "base/concurrency/await.h"
 #include "base/container/lru_cache.h"
 #include "base/crypto/sha.h"
 #include "base/utility/defer_op.h"
 #include "common/config_staros_worker_fwd.h"
-#include "common/gflags_utils.h"
 #include "common/logging.h"
-#include "common/shutdown_hook.h"
 #include "common/util/debug_util.h"
 #include "common/util/table_metrics.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
-#include "fs/fs_factory.h"
-#include "fslib/star_cache_configuration.h"
-#include "fslib/star_cache_handler.h"
-#include "gflags/gflags.h"
-#include "service/service_metrics.h"
-
-// cachemgr thread pool size
-DECLARE_int32(cachemgr_threadpool_size);
-// buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
-DECLARE_int32(fs_stream_buffer_size_bytes);
-// domain allow list to force starlet using s3 virtual address style
-DECLARE_string(fslib_s3_virtual_address_domainlist);
-// s3client factory cache capacity
-DECLARE_int32(fslib_s3client_max_items);
-// s3client max connections
-DECLARE_int32(fslib_s3client_max_connections);
-// s3client max instances per cache item, allow using multiple client instances per cache
-DECLARE_int32(fslib_s3client_max_instance_per_item);
-DECLARE_int32(fslib_s3client_nonread_max_retries);
-DECLARE_int32(fslib_s3client_nonread_retry_scale_factor);
-DECLARE_int32(fslib_s3client_connect_timeout_ms);
-DECLARE_int32(fslib_s3client_request_timeout_ms);
-DECLARE_bool(fslib_s3client_use_list_objects_v1);
-// threadpool size for buffer prefetch task
-DECLARE_int32(fs_buffer_prefetch_threadpool_size);
-// switch to turn on/off buffer prefetch when read
-DECLARE_bool(fs_enable_buffer_prefetch);
+#include "staros_integration/staros_worker_metrics.h"
+#include "staros_integration/staros_worker_runtime.h"
 
 namespace starrocks {
-
-std::shared_ptr<StarOSWorker> g_worker;
-std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 namespace fslib = staros::starlet::fslib;
 
@@ -265,7 +233,7 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
-    auto cond = []() { return g_starlet->is_ready(); };
+    auto cond = []() { return get_starlet()->is_ready(); };
     auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
     if (!ret) {
         return absl::UnavailableError("starlet is still not ready!");
@@ -275,10 +243,10 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     // Count every actual starmgr RPC issued from this fallback path. A high rate signals that
     // FE-side task/node selection is scheduling work on a BE whose local cache does not have
     // the shard (the FE did not push it in time, or the placement was wrong).
-    ServiceMetrics::instance()->staros_shard_info_fallback_total.increment(1);
-    auto info_or = g_starlet->get_shard_info(id);
+    StarOSWorkerMetrics::instance()->staros_shard_info_fallback_total.increment(1);
+    auto info_or = get_starlet()->get_shard_info(id);
     if (!info_or.ok()) {
-        ServiceMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
+        StarOSWorkerMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
     }
     return info_or;
 }
@@ -401,8 +369,9 @@ std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configura
 std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& key,
                                                            const std::shared_ptr<FileSystem>& fs) {
     std::shared_ptr<std::string> fs_cache_key(new std::string(key), [](std::string* key) {
-        if (g_worker) {
-            g_worker->erase_fs_cache(*key);
+        auto worker = get_staros_worker();
+        if (worker) {
+            worker->erase_fs_cache(*key);
         }
         delete key;
     });
@@ -470,111 +439,6 @@ absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::Fi
     // In this situation, this function will return a null key and a valid fs instance.
     // So the caller cannot assume the returned key always valid.
     return std::make_pair(value->key.lock(), value->fs);
-}
-
-Status to_status(const absl::Status& absl_status) {
-    switch (absl_status.code()) {
-    case absl::StatusCode::kOk:
-        return Status::OK();
-    case absl::StatusCode::kAlreadyExists:
-        return Status::AlreadyExist(fmt::format("starlet err {}", absl_status.message()));
-    case absl::StatusCode::kOutOfRange:
-        return Status::InvalidArgument(fmt::format("starlet err {}", absl_status.message()));
-    case absl::StatusCode::kInvalidArgument:
-        return Status::InvalidArgument(fmt::format("starlet err {}", absl_status.message()));
-    case absl::StatusCode::kNotFound:
-        return Status::NotFound(fmt::format("starlet err {}", absl_status.message()));
-    case absl::StatusCode::kResourceExhausted:
-        return Status::ResourceBusy(fmt::format("starlet err {}", absl_status.message()));
-    default:
-        return Status::InternalError(fmt::format("starlet err {}", absl_status.message()));
-    }
-}
-
-void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
-                        TableMetricsManager* table_metrics_mgr) {
-    if (g_starlet.get() != nullptr) {
-        return;
-    }
-
-    if (star_cache) {
-        (void)fslib::set_star_cache(star_cache);
-    }
-
-    // skip staros reinit aws sdk
-    staros::starlet::fslib::skip_aws_init_api = true;
-
-    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size",
-                                                          std::to_string(config::starlet_cache_thread_num));
-    staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_stream_buffer_size_bytes",
-                                                          std::to_string(config::starlet_fs_stream_buffer_size_bytes));
-    staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch",
-                                                          std::to_string(config::starlet_fs_read_prefetch_enable));
-    staros::starlet::common::GFlagsUtils::UpdateFlagValue(
-            "fs_buffer_prefetch_threadpool_size", std::to_string(config::starlet_fs_read_prefetch_threadpool_size));
-
-    FLAGS_fslib_s3_virtual_address_domainlist = config::starlet_s3_virtual_address_domainlist;
-    // use the same configuration as the external query
-    FLAGS_fslib_s3client_max_connections = config::object_storage_max_connection;
-    FLAGS_fslib_s3client_max_items = config::starlet_s3_client_max_cache_capacity;
-    FLAGS_fslib_s3client_max_instance_per_item = config::starlet_s3_client_num_instances_per_cache;
-    FLAGS_fslib_s3client_nonread_max_retries = config::starlet_fslib_s3client_nonread_max_retries;
-    FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
-    FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
-    FLAGS_fslib_s3client_use_list_objects_v1 = config::s3_use_list_objects_v1;
-    if (config::object_storage_request_timeout_ms >= 0) {
-        FLAGS_fslib_s3client_request_timeout_ms = static_cast<int32_t>(config::object_storage_request_timeout_ms);
-    }
-    fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
-
-    fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
-    fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
-    fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
-    fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
-    fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;
-    fslib::FLAGS_star_cache_disk_size_bytes = config::starlet_star_cache_disk_size_bytes;
-    fslib::FLAGS_star_cache_block_size_bytes = config::starlet_star_cache_block_size_bytes;
-
-    staros::starlet::StarletConfig starlet_config;
-    starlet_config.rpc_port = config::starlet_port;
-    g_worker = std::make_shared<StarOSWorker>(table_metrics_mgr);
-    g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
-    g_starlet->init(starlet_config);
-    g_starlet->start();
-}
-
-void shutdown_staros_worker() {
-    g_starlet->stop();
-    g_starlet.reset();
-    g_worker = nullptr;
-
-    LOG(INFO) << "Executing starlet shutdown hooks ...";
-    staros::starlet::common::ShutdownHook::shutdown();
-}
-
-// must keep each config the same
-void update_staros_starcache() {
-    if (fslib::FLAGS_use_star_cache != config::starlet_use_star_cache) {
-        fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
-        (void)fslib::star_cache_init(fslib::FLAGS_use_star_cache);
-    }
-
-    if (fslib::FLAGS_star_cache_mem_size_percent != config::starlet_star_cache_mem_size_percent) {
-        fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
-        (void)fslib::star_cache_update_memory_quota_percent(fslib::FLAGS_star_cache_mem_size_percent);
-    }
-
-    if (fslib::FLAGS_star_cache_mem_size_bytes != config::starlet_star_cache_mem_size_bytes) {
-        fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
-        (void)fslib::star_cache_update_memory_quota_bytes(fslib::FLAGS_star_cache_mem_size_bytes);
-    }
-}
-
-void set_starlet_in_shutdown() {
-    auto* starlet = g_starlet.get();
-    if (starlet) {
-        starlet->on_shutdown();
-    }
 }
 
 } // namespace starrocks

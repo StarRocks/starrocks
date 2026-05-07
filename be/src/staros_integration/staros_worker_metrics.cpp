@@ -12,28 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "service/service_metrics.h"
+#include "staros_integration/staros_worker_metrics.h"
 
 #include "gutil/macros.h"
 
 namespace starrocks {
 
-ServiceMetrics* ServiceMetrics::instance() {
+StarOSWorkerMetrics* StarOSWorkerMetrics::instance() {
     // Process-lifetime singleton: registered Metric objects keep back-pointers
     // to MetricRegistry, so avoid exit-time destruction after registry teardown.
-    static auto* instance = new ServiceMetrics();
+    static auto* instance = new StarOSWorkerMetrics();
     return instance;
 }
 
-void ServiceMetrics::install(MetricRegistry* registry) {
+void StarOSWorkerMetrics::install(MetricRegistry* registry) {
     if (_registry != nullptr) {
         DCHECK_EQ(_registry, registry);
         return;
     }
     _registry = registry;
 
-    registry->register_metric("short_circuit_request_total", &short_circuit_request_total);
-    registry->register_metric("short_circuit_request_duration_us", &short_circuit_request_duration_us);
+    registry->register_metric("staros_shard_info_fallback_total", &staros_shard_info_fallback_total);
+    registry->register_metric("staros_shard_info_fallback_failed_total", &staros_shard_info_fallback_failed_total);
 }
 
 } // namespace starrocks

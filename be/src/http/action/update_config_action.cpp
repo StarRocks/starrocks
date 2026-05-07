@@ -79,7 +79,9 @@
 
 #ifdef USE_STAROS
 #include "common/gflags_utils.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_starcache.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #endif // USE_STAROS
 
 namespace starrocks {
@@ -483,8 +485,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("starlet_filesystem_instance_cache_capacity", [&]() -> Status {
             LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
                       << config::starlet_filesystem_instance_cache_capacity;
-            if (g_worker) {
-                g_worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
+            auto worker = get_staros_worker();
+            if (worker) {
+                worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
             }
             return Status::OK();
         });

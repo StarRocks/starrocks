@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "service/service_metrics.h"
+#include "staros_integration/staros_worker_metrics.h"
 
 #include <gtest/gtest.h>
 
@@ -30,16 +30,16 @@ void assert_metric_value(MetricRegistry* registry, const std::string& name, cons
 
 } // namespace
 
-TEST(ServiceMetricsTest, InstallRegistersServiceMetrics) {
+TEST(StarOSWorkerMetricsTest, InstallRegistersFallbackMetrics) {
     MetricRegistry registry("test_registry");
-    ServiceMetrics metrics(&registry);
+    StarOSWorkerMetrics metrics(&registry);
     metrics.install(&registry);
 
-    metrics.short_circuit_request_total.increment(5);
-    assert_metric_value(&registry, "short_circuit_request_total", "5");
+    metrics.staros_shard_info_fallback_total.increment(3);
+    assert_metric_value(&registry, "staros_shard_info_fallback_total", "3");
 
-    metrics.short_circuit_request_duration_us.increment(6);
-    assert_metric_value(&registry, "short_circuit_request_duration_us", "6");
+    metrics.staros_shard_info_fallback_failed_total.increment(4);
+    assert_metric_value(&registry, "staros_shard_info_fallback_failed_total", "4");
 }
 
 } // namespace starrocks
