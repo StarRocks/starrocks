@@ -308,7 +308,12 @@ public class TextMatchBasedRewriteRule extends Rule {
             logMVRewrite(context, this, "MV is not active: {}", mv.getName());
             return Pair.create(false, "MV is not active");
         }
-
+        // Query rewrite is not supported for IMV (INCREMENTAL/AUTO refresh_mode).
+        if (mv.getRefreshMode().isIncrementalOrAuto()) {
+            String message = "query rewrite is not supported for refresh_mode=" + mv.getRefreshMode().name();
+            logMVRewrite(context, this, message);
+            return Pair.create(false, message);
+        }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();

@@ -98,11 +98,12 @@ public abstract class MVIVMTestBase extends MVTestBase {
             Assertions.assertTrue(execPlan != null);
             run1.check(execPlan);
         }
-        // test mv rewrite
+        // Query rewrite is intentionally disabled for INCREMENTAL/AUTO MVs.
         {
             String plan = getFragmentPlan(mvQuery);
             if (isCheckRewrite) {
-                Assertions.assertTrue(plan.contains("test_mv1"));
+                Assertions.assertFalse(plan.contains("test_mv1"),
+                        "Query rewrite should be disabled for INCREMENTAL MV, got plan: " + plan);
             }
         }
         // 2th run
