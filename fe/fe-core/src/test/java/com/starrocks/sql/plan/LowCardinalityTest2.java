@@ -1676,17 +1676,23 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
     @Test
     public void testCTEWithDecode() throws Exception {
-        connectContext.getSessionVariable().setCboCteReuse(true);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        String sql = "with v1 as( select S_ADDRESS a, count(*) b from supplier group by S_ADDRESS) " +
-                "select x1.a, x1.b from v1 x1 join v1 x2 on x1.a=x2.a";
-        String plan = getThriftPlan(sql);
-        connectContext.getSessionVariable().setCboCteReuse(false);
-        connectContext.getSessionVariable().setEnablePipelineEngine(false);
-
-        Assertions.assertTrue(
-                plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1]"));
+        boolean cboCteReuse = connectContext.getSessionVariable().isCboCteReuse();
+        boolean enablePipelineEngine = connectContext.getSessionVariable().isEnablePipelineEngine();
+        double cboCTERuseRatio = connectContext.getSessionVariable().getCboCTERuseRatio();
+        try {
+            connectContext.getSessionVariable().setCboCteReuse(true);
+            connectContext.getSessionVariable().setEnablePipelineEngine(true);
+            connectContext.getSessionVariable().setCboCTERuseRatio(0);
+            String sql = "with v1 as( select S_ADDRESS a, count(*) b from supplier group by S_ADDRESS) " +
+                    "select x1.a, x1.b from v1 x1 join v1 x2 on x1.a=x2.a";
+            String plan = getThriftPlan(sql);
+            Assertions.assertFalse(
+                    plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1]"));
+        } finally {
+            connectContext.getSessionVariable().setCboCteReuse(cboCteReuse);
+            connectContext.getSessionVariable().setEnablePipelineEngine(enablePipelineEngine);
+            connectContext.getSessionVariable().setCboCTERuseRatio(cboCTERuseRatio);
+        }
     }
 
     @Test
@@ -2363,6 +2369,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
     @Test
     public void testPartitionTopNChildProjectKeepsLowCardinalityPartitionColumns() throws Exception {
+        boolean enablePipelineEngine = connectContext.getSessionVariable().isEnablePipelineEngine();
         starRocksAssert.withTable("CREATE TABLE `wat_topn_basic` (\n" +
                 "  `id` bigint NOT NULL,\n" +
                 "  `fab` varchar(64),\n" +
@@ -2402,90 +2409,95 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 ") ENGINE=OLAP DUPLICATE KEY(`item_name`, `product_id`) DISTRIBUTED BY HASH(`product_id`) BUCKETS 16\n" +
                 "PROPERTIES (\"replication_num\" = \"1\")");
 
-        String sql = "SELECT item_parameter.lot_id, item_parameter.item_number, item_parameter.limit_filename,\n" +
-                "       item_parameter.mapping_item_name, item_parameter.limit_version, item_parameter.item_unit,\n" +
-                "       item_parameter.product_id, item_parameter.test_program, item_parameter.item_name,\n" +
-                "       item_parameter.itemParamMatch\n" +
-                "FROM (\n" +
-                "  SELECT t.product_id, t.lot_id, t.test_program,\n" +
-                "    t6.item_number, t6.item_name, t6.limit_filename, t6.limit_version,\n" +
-                "    ifnull(t6.item_unit, ' ') AS item_unit,\n" +
-                "    t7.mapping_item_name,\n" +
-                "    t6.item_number AS itemParamMatch,\n" +
-                "    ROW_NUMBER() OVER (\n" +
-                "      PARTITION BY t.product_id, t.lot_id, t.test_program, t6.item_name,\n" +
-                "        t6.item_number, t7.mapping_item_name, t6.limit_filename, t6.limit_version\n" +
-                "      ORDER BY t.product_id, t.lot_id, t.test_program, t6.item_name, t7.mapping_item_name\n" +
-                "    ) AS row_num\n" +
-                "  FROM (\n" +
-                "    SELECT tt.fab, tt.product_id, tt.lot_id, tt.item_list_id,\n" +
-                "      tt.test_program, tt.limit_filename, tt.limit_version\n" +
-                "    FROM (\n" +
-                "      SELECT t.fab, t.product_id, t.lot_id, t.item_list_id,\n" +
-                "        t.test_program, t.limit_filename, t.limit_version,\n" +
-                "        ROW_NUMBER() OVER (\n" +
-                "          PARTITION BY t.fab, t.lot_id, t.test_program, b.wafer_id\n" +
-                "          ORDER BY t.lot_metrology_start_time\n" +
-                "        ) AS row_num\n" +
-                "      FROM wat_topn_basic t\n" +
-                "      JOIN wat_topn_wafer b ON t.id = b.basic_id AND b.status = '1'\n" +
-                "      WHERE t.status = '1'\n" +
-                "        AND t.product_id = 'ES0008AA'\n" +
-                "        AND t.test_program = 'RFsample_ES0008AA'\n" +
-                "        AND t.lot_id = 'AP59051'\n" +
-                "        AND t.limit_filename = 'ES0008AA_RFsample_ES0008AA.lim'\n" +
-                "        AND b.wafer_id = 'AP59051_09'\n" +
-                "    ) tt\n" +
-                "    WHERE tt.row_num = 1\n" +
-                "  ) t\n" +
-                "  JOIN wat_topn_item_param t6 ON t6.status = '1'\n" +
-                "    AND t.item_list_id = t6.item_list_id\n" +
-                "    AND t.test_program = t6.test_program\n" +
-                "    AND t.limit_filename = t6.limit_filename\n" +
-                "    AND t.limit_version = t6.limit_version\n" +
-                "  LEFT JOIN wat_topn_mapping t7 ON t6.item_name = t7.item_name\n" +
-                "    AND t7.product_id = t.product_id\n" +
-                "    AND t7.status = '1'\n" +
-                "    AND t7.station = 'WAT'\n" +
-                "  WHERE t6.test_program = 'RFsample_ES0008AA'\n" +
-                "    AND t6.limit_filename = 'ES0008AA_RFsample_ES0008AA.lim'\n" +
-                "    AND t6.item_number = 'R54'\n" +
-                "    AND ifnull(t6.item_name, t6.item_number) = 'RFdie_STRM04_STRM04_RF_S11_Zp_i'\n" +
-                ") item_parameter\n" +
-                "WHERE item_parameter.row_num = 1";
-        String plan = getCostExplain(sql);
-        assertContains(plan, "PARTITION-TOP-N", "Decode");
-        Assertions.assertEquals(2, plan.split("PARTITION-TOP-N", -1).length - 1, plan);
-        assertContains(plan, "  24:PARTITION-TOP-N\n" +
-                "  |  partition by: [37: product_id, INT, true] , [38: lot_id, INT, true] , " +
-                "[39: test_program, INT, true] , [34: item_name, INT, true] , " +
-                "[33: item_number, INT, true] , [48: mapping_item_name, INT, true] , " +
-                "[32: limit_filename, INT, true] , [19: limit_version, BIGINT, true]",
-                "  23:Project\n" +
-                        "  |  output columns:\n" +
-                        "  |  19 <-> [19: limit_version, BIGINT, true]\n" +
-                        "  |  32 <-> [32: limit_filename, INT, true]\n" +
-                        "  |  33 <-> [33: item_number, INT, true]\n" +
-                        "  |  34 <-> [34: item_name, INT, true]\n" +
-                        "  |  35 <-> [35: item_unit, INT, true]\n" +
-                        "  |  37 <-> [37: product_id, INT, true]\n" +
-                        "  |  38 <-> [38: lot_id, INT, true]\n" +
-                        "  |  39 <-> [39: test_program, INT, true]\n" +
-                        "  |  48 <-> [48: mapping_item_name, INT, true]",
-                "  10:PARTITION-TOP-N\n" +
-                        "  |  partition by: [36: fab, INT, true] , [38: lot_id, INT, true] , " +
-                        "[39: test_program, INT, true] , [43: wafer_id, INT, true]",
-                "  9:Project\n" +
-                        "  |  output columns:\n" +
-                        "  |  5 <-> [5: item_list_id, BIGINT, true]\n" +
-                        "  |  7 <-> [7: lot_metrology_start_time, DATETIME, true]\n" +
-                        "  |  10 <-> [10: limit_version, BIGINT, true]\n" +
-                        "  |  36 <-> [36: fab, INT, true]\n" +
-                        "  |  37 <-> [37: product_id, INT, true]\n" +
-                        "  |  38 <-> [38: lot_id, INT, true]\n" +
-                        "  |  39 <-> [39: test_program, INT, true]\n" +
-                        "  |  41 <-> [41: limit_filename, INT, true]\n" +
-                        "  |  43 <-> [43: wafer_id, INT, true]");
+        try {
+            connectContext.getSessionVariable().setEnablePipelineEngine(true);
+            String sql = "SELECT item_parameter.lot_id, item_parameter.item_number, item_parameter.limit_filename,\n" +
+                    "       item_parameter.mapping_item_name, item_parameter.limit_version, item_parameter.item_unit,\n" +
+                    "       item_parameter.product_id, item_parameter.test_program, item_parameter.item_name,\n" +
+                    "       item_parameter.itemParamMatch\n" +
+                    "FROM (\n" +
+                    "  SELECT t.product_id, t.lot_id, t.test_program,\n" +
+                    "    t6.item_number, t6.item_name, t6.limit_filename, t6.limit_version,\n" +
+                    "    ifnull(t6.item_unit, ' ') AS item_unit,\n" +
+                    "    t7.mapping_item_name,\n" +
+                    "    t6.item_number AS itemParamMatch,\n" +
+                    "    ROW_NUMBER() OVER (\n" +
+                    "      PARTITION BY t.product_id, t.lot_id, t.test_program, t6.item_name,\n" +
+                    "        t6.item_number, t7.mapping_item_name, t6.limit_filename, t6.limit_version\n" +
+                    "      ORDER BY t.product_id, t.lot_id, t.test_program, t6.item_name, t7.mapping_item_name\n" +
+                    "    ) AS row_num\n" +
+                    "  FROM (\n" +
+                    "    SELECT tt.fab, tt.product_id, tt.lot_id, tt.item_list_id,\n" +
+                    "      tt.test_program, tt.limit_filename, tt.limit_version\n" +
+                    "    FROM (\n" +
+                    "      SELECT t.fab, t.product_id, t.lot_id, t.item_list_id,\n" +
+                    "        t.test_program, t.limit_filename, t.limit_version,\n" +
+                    "        ROW_NUMBER() OVER (\n" +
+                    "          PARTITION BY t.fab, t.lot_id, t.test_program, b.wafer_id\n" +
+                    "          ORDER BY t.lot_metrology_start_time\n" +
+                    "        ) AS row_num\n" +
+                    "      FROM wat_topn_basic t\n" +
+                    "      JOIN wat_topn_wafer b ON t.id = b.basic_id AND b.status = '1'\n" +
+                    "      WHERE t.status = '1'\n" +
+                    "        AND t.product_id = 'ES0008AA'\n" +
+                    "        AND t.test_program = 'RFsample_ES0008AA'\n" +
+                    "        AND t.lot_id = 'AP59051'\n" +
+                    "        AND t.limit_filename = 'ES0008AA_RFsample_ES0008AA.lim'\n" +
+                    "        AND b.wafer_id = 'AP59051_09'\n" +
+                    "    ) tt\n" +
+                    "    WHERE tt.row_num = 1\n" +
+                    "  ) t\n" +
+                    "  JOIN wat_topn_item_param t6 ON t6.status = '1'\n" +
+                    "    AND t.item_list_id = t6.item_list_id\n" +
+                    "    AND t.test_program = t6.test_program\n" +
+                    "    AND t.limit_filename = t6.limit_filename\n" +
+                    "    AND t.limit_version = t6.limit_version\n" +
+                    "  LEFT JOIN wat_topn_mapping t7 ON t6.item_name = t7.item_name\n" +
+                    "    AND t7.product_id = t.product_id\n" +
+                    "    AND t7.status = '1'\n" +
+                    "    AND t7.station = 'WAT'\n" +
+                    "  WHERE t6.test_program = 'RFsample_ES0008AA'\n" +
+                    "    AND t6.limit_filename = 'ES0008AA_RFsample_ES0008AA.lim'\n" +
+                    "    AND t6.item_number = 'R54'\n" +
+                    "    AND ifnull(t6.item_name, t6.item_number) = 'RFdie_STRM04_STRM04_RF_S11_Zp_i'\n" +
+                    ") item_parameter\n" +
+                    "WHERE item_parameter.row_num = 1";
+            String plan = getCostExplain(sql);
+            assertContains(plan, "PARTITION-TOP-N", "Decode");
+            Assertions.assertEquals(2, plan.split("PARTITION-TOP-N", -1).length - 1, plan);
+            assertContains(plan, "  24:PARTITION-TOP-N\n" +
+                    "  |  partition by: [37: product_id, INT, true] , [38: lot_id, INT, true] , " +
+                    "[39: test_program, INT, true] , [34: item_name, INT, true] , " +
+                    "[33: item_number, INT, true] , [48: mapping_item_name, INT, true] , " +
+                    "[32: limit_filename, INT, true] , [19: limit_version, BIGINT, true]",
+                    "  23:Project\n" +
+                            "  |  output columns:\n" +
+                            "  |  19 <-> [19: limit_version, BIGINT, true]\n" +
+                            "  |  32 <-> [32: limit_filename, INT, true]\n" +
+                            "  |  33 <-> [33: item_number, INT, true]\n" +
+                            "  |  34 <-> [34: item_name, INT, true]\n" +
+                            "  |  35 <-> [35: item_unit, INT, true]\n" +
+                            "  |  37 <-> [37: product_id, INT, true]\n" +
+                            "  |  38 <-> [38: lot_id, INT, true]\n" +
+                            "  |  39 <-> [39: test_program, INT, true]\n" +
+                            "  |  48 <-> [48: mapping_item_name, INT, true]",
+                    "  10:PARTITION-TOP-N\n" +
+                            "  |  partition by: [36: fab, INT, true] , [38: lot_id, INT, true] , " +
+                            "[39: test_program, INT, true] , [43: wafer_id, INT, true]",
+                    "  9:Project\n" +
+                            "  |  output columns:\n" +
+                            "  |  5 <-> [5: item_list_id, BIGINT, true]\n" +
+                            "  |  7 <-> [7: lot_metrology_start_time, DATETIME, true]\n" +
+                            "  |  10 <-> [10: limit_version, BIGINT, true]\n" +
+                            "  |  36 <-> [36: fab, INT, true]\n" +
+                            "  |  37 <-> [37: product_id, INT, true]\n" +
+                            "  |  38 <-> [38: lot_id, INT, true]\n" +
+                            "  |  39 <-> [39: test_program, INT, true]\n" +
+                            "  |  41 <-> [41: limit_filename, INT, true]\n" +
+                            "  |  43 <-> [43: wafer_id, INT, true]");
+        } finally {
+            connectContext.getSessionVariable().setEnablePipelineEngine(enablePipelineEngine);
+        }
     }
 
     @Test
