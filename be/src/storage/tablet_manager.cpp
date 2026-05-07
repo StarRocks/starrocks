@@ -41,6 +41,7 @@
 #include <ctime>
 #include <memory>
 
+#include "agent/agent_metrics.h"
 #include "base/format.h"
 #include "base/path/path_util.h"
 #include "base/testutil/sync_point.h"
@@ -51,7 +52,6 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -186,7 +186,7 @@ Status TabletManager::_update_tablet_map_and_partition_info(const TabletSharedPt
 }
 
 Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores) {
-    StarRocksMetrics::instance()->create_tablet_requests_total.increment(1);
+    AgentMetrics::instance()->create_tablet_requests_total.increment(1);
 
     int64_t tablet_id = request.tablet_id;
     int32_t schema_hash = request.tablet_schema.schema_hash;
@@ -225,7 +225,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     if (tablet != nullptr && tablet->tablet_state() != TABLET_SHUTDOWN) {
         return Status::OK();
     } else if (tablet != nullptr) {
-        StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
+        AgentMetrics::instance()->create_tablet_requests_failed.increment(1);
         DCHECK_EQ(TABLET_SHUTDOWN, tablet->tablet_state());
         return Status::InternalError("tablet still resident in shutdown queue");
     }
@@ -241,7 +241,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
                          << "new_tablet_id=" << tablet_id << " new_schema_hash=" << schema_hash
                          << " base_tablet_id=" << request.base_tablet_id
                          << " base_schema_hash=" << request.base_schema_hash;
-            StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
+            AgentMetrics::instance()->create_tablet_requests_failed.increment(1);
             return Status::InternalError("base tablet not exist");
         }
         // If we are doing schema-change, we should use the same data dir
@@ -256,7 +256,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
                                               base_tablet.get(), stores);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to create tablet " << request.tablet_id;
-        StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
+        AgentMetrics::instance()->create_tablet_requests_failed.increment(1);
         return Status::InternalError("fail to create tablet");
     }
 
@@ -404,7 +404,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
     TabletSharedPtr dropped_tablet = nullptr;
     {
         std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
-        StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
+        AgentMetrics::instance()->drop_tablet_requests_total.increment(1);
 
         if (flag != kDeleteFiles && flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
             return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
@@ -1010,7 +1010,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
 }
 
 Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
-    StarRocksMetrics::instance()->report_tablet_requests_total.increment(1);
+    AgentMetrics::instance()->report_tablet_requests_total.increment(1);
 
     TabletSharedPtr tablet = get_tablet(tablet_info->tablet_id, false);
     if (tablet == nullptr) {
@@ -1037,7 +1037,7 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
         LOG(INFO) << "Found " << expire_txn_map.size() << " expired tablet transactions";
     }
 
-    StarRocksMetrics::instance()->report_all_tablets_requests_total.increment(1);
+    AgentMetrics::instance()->report_all_tablets_requests_total.increment(1);
 
     size_t max_tablet_rowset_num = 0;
     TTabletId max_tablet_id = 0;
@@ -1572,7 +1572,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
 }
 
 Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
-    StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
+    AgentMetrics::instance()->drop_tablet_requests_total.increment(1);
 
     if (flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
         return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));

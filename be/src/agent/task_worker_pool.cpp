@@ -41,6 +41,7 @@
 #include <sstream>
 #include <string>
 
+#include "agent/agent_metrics.h"
 #include "agent/agent_server.h"
 #include "agent/finish_task.h"
 #include "agent/publish_version.h"
@@ -66,7 +67,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
@@ -559,7 +559,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (enable_sync_publish) {
             wait_time = 0;
         }
-        StarRocksMetrics::instance()->publish_task_request_total.increment(1);
+        AgentMetrics::instance()->publish_task_request_total.increment(1);
         auto& finish_task_request = finish_task_requests.emplace_back();
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
@@ -637,12 +637,12 @@ void* ReportTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         request.__set_tasks(tasks);
         request.__set_backend(BackendOptions::get_localBackend());
 
-        StarRocksMetrics::instance()->report_task_requests_total.increment(1);
+        AgentMetrics::instance()->report_task_requests_total.increment(1);
         TMasterResult result;
         AgentStatus status = report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
-            StarRocksMetrics::instance()->report_task_requests_failed.increment(1);
+            AgentMetrics::instance()->report_task_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report task to " << master_address.hostname << ":" << master_address.port
                          << ", err=" << status;
         }
@@ -682,23 +682,19 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             disk.__set_used(root_path_info.is_used);
             disks[root_path_info.path] = disk;
 
-            StarRocksMetrics::instance()->disks_total_capacity.set_metric(root_path_info.path,
-                                                                          root_path_info.disk_capacity);
-            StarRocksMetrics::instance()->disks_avail_capacity.set_metric(root_path_info.path,
-                                                                          root_path_info.available);
-            StarRocksMetrics::instance()->disks_data_used_capacity.set_metric(root_path_info.path,
-                                                                              root_path_info.data_used_capacity);
-            StarRocksMetrics::instance()->disks_state.set_metric(root_path_info.path, root_path_info.is_used ? 1L : 0L);
+            AgentMetrics::instance()->set_disk_metrics(root_path_info.path, root_path_info.disk_capacity,
+                                                       root_path_info.available, root_path_info.data_used_capacity,
+                                                       root_path_info.is_used ? 1L : 0L);
         }
         request.__set_disks(disks);
         request.__set_backend(BackendOptions::get_localBackend());
 
-        StarRocksMetrics::instance()->report_disk_requests_total.increment(1);
+        AgentMetrics::instance()->report_disk_requests_total.increment(1);
         TMasterResult result;
         AgentStatus status = report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
-            StarRocksMetrics::instance()->report_disk_requests_failed.increment(1);
+            AgentMetrics::instance()->report_disk_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report disk state to " << master_address.hostname << ":" << master_address.port
                          << ", err=" << status;
         }
@@ -746,7 +742,7 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         status = report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
-            StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
+            AgentMetrics::instance()->report_all_tablets_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report olap table state to " << master_address.hostname << ":"
                          << master_address.port << ", err=" << status;
         } else {
@@ -777,7 +773,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             continue;
         }
 
-        StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
+        AgentMetrics::instance()->report_workgroup_requests_total.increment(1);
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         auto workgroups = ExecEnv::GetInstance()->workgroup_manager()->list_workgroups();
         request.__set_active_workgroups(workgroups);
@@ -786,7 +782,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         status = report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
-            StarRocksMetrics::instance()->report_workgroup_requests_failed.increment(1);
+            AgentMetrics::instance()->report_workgroup_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report workgroup to " << master_address.hostname << ":" << master_address.port
                          << ", err=" << status;
         }
@@ -817,7 +813,7 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
             continue;
         }
 
-        StarRocksMetrics::instance()->report_resource_usage_requests_total.increment(1);
+        AgentMetrics::instance()->report_resource_usage_requests_total.increment(1);
         request.__set_backend(BackendOptions::get_localBackend());
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
@@ -835,7 +831,7 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
         status = report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
-            StarRocksMetrics::instance()->report_resource_usage_requests_failed.increment(1);
+            AgentMetrics::instance()->report_resource_usage_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report resource_usage to " << master_address.hostname << ":" << master_address.port
                          << ", err=" << status;
         }
@@ -862,7 +858,7 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
             continue;
         }
 
-        StarRocksMetrics::instance()->report_datacache_metrics_requests_total.increment(1);
+        AgentMetrics::instance()->report_datacache_metrics_requests_total.increment(1);
         request.__set_backend(BackendOptions::get_localBackend());
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
@@ -889,7 +885,7 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         status = report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
-            StarRocksMetrics::instance()->report_datacache_metrics_requests_failed.increment(1);
+            AgentMetrics::instance()->report_datacache_metrics_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report resource_usage to " << master_address.hostname << ":" << master_address.port
                          << ", err=" << status;
         }

@@ -14,12 +14,12 @@
 
 #include "finish_task.h"
 
+#include "agent/agent_metrics.h"
 #include "agent/status.h"
 #include "agent/utils.h"
 #include "base/testutil/sync_point.h"
 #include "common/logging.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -38,7 +38,7 @@ void finish_task(const TFinishTaskRequest& finish_task_request) {
     MasterServerClient client;
 
     while (try_time < max_retry_times) {
-        StarRocksMetrics::instance()->finish_task_requests_total.increment(1);
+        AgentMetrics::instance()->finish_task_requests_total.increment(1);
         AgentStatus client_status = client.finish_task(finish_task_request, &result);
 
         if (client_status == STARROCKS_SUCCESS) {
@@ -56,7 +56,7 @@ void finish_task(const TFinishTaskRequest& finish_task_request) {
             }
         }
         try_time += 1;
-        StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
+        AgentMetrics::instance()->finish_task_requests_failed.increment(1);
         LOG(WARNING) << "finish task failed retry: " << try_time << "/" << TASK_FINISH_MAX_RETRY
                      << "client_status: " << client_status << " status_code: " << result.status.status_code;
 
