@@ -384,7 +384,11 @@ SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' 
 -- result:
 FAILED
 -- !result
-SELECT ERROR_MESSAGE LIKE '%not append-only%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%non-append-only%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+1
+-- !result
+SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
 -- result:
 1
 -- !result
