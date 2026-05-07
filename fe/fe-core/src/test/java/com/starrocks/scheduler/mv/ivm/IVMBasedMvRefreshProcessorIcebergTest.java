@@ -1336,4 +1336,67 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
         Assertions.assertInstanceOf(MVHybridRefreshProcessor.class, mvTaskRunProcessor.getMVRefreshProcessor());
     }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenNoDeltaTraits() throws Exception {
+        // listTableDeltaTraits returns empty -> snapshot lineage is unrecoverable for IVM.
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of());
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        Throwable root = thrown;
+        while (root.getCause() != null && root != root.getCause()) {
+            root = root.getCause();
+        }
+        Assertions.assertTrue(root.getMessage().contains("no tvr delta traits"),
+                "expected 'no tvr delta traits' in message, got: " + root.getMessage());
+        Assertions.assertTrue(root.getMessage().contains("Drop and recreate"),
+                "expected drop-and-recreate guidance, got: " + root.getMessage());
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenLineageBroken() throws Exception {
+        // Connector throws ancestry error -> wrapped with drop-and-recreate hint.
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraitsThrowsConnector(
+                "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        Throwable root = thrown;
+        while (root.getCause() != null && root != root.getCause()) {
+            root = root.getCause();
+        }
+        Assertions.assertTrue(root.getMessage().contains("snapshot ancestry broken"),
+                "expected 'snapshot ancestry broken' in message, got: " + root.getMessage());
+        Assertions.assertTrue(root.getMessage().contains("Drop and recreate"),
+                "expected drop-and-recreate guidance, got: " + root.getMessage());
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeOnNonAppendOnly() throws Exception {
+        // Non-append-only delta (DELETE / OVERWRITE / DROP PARTITION) -> dropAndRecreate error.
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofRetractable(
+                        TvrTableDelta.of(0L, 1L), TvrDeltaStats.EMPTY)));
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        Throwable root = thrown;
+        while (root.getCause() != null && root != root.getCause()) {
+            root = root.getCause();
+        }
+        Assertions.assertTrue(root.getMessage().contains("non-append-only"),
+                "expected 'non-append-only' in message, got: " + root.getMessage());
+        Assertions.assertTrue(root.getMessage().contains("Drop and recreate"),
+                "expected drop-and-recreate guidance, got: " + root.getMessage());
+    }
 }
