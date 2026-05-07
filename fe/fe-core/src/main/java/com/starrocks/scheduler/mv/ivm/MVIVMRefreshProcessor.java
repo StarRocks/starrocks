@@ -220,13 +220,19 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
                             maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
         } catch (StarRocksConnectorException e) {
-            // Snapshot ancestry is broken (e.g., expire_snapshots, branch reset, table replaced).
-            // Incremental refresh cannot recover; the user must drop and recreate the MV.
-            logger.warn("Snapshot ancestry broken for base table: {}.{}: {}",
-                    baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage(), e);
-            throw new SemanticException(formatPartitionShapeChangeError(
-                    String.format("snapshot ancestry broken for base table %s.%s (%s)",
-                            baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())));
+            // Only ancestry-break failures (e.g. expire_snapshots, branch reset, table replaced)
+            // are user-actionable as drop-and-recreate. Other connector failures (transient I/O,
+            // auth, programmer error like missing snapshot id) must surface unmodified so the
+            // user/operator can diagnose the real cause and not be told to recreate the MV.
+            if (isAncestryBrokenError(e)) {
+                logger.warn("Snapshot ancestry broken for base table: {}.{}: {}",
+                        baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage(), e);
+                throw new SemanticException(formatPartitionShapeChangeError(
+                        String.format("snapshot ancestry broken for base table %s.%s (%s)",
+                                baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
+                        e);
+            }
+            throw e;
         }
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
@@ -269,6 +275,18 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     baseTableInfo.getTableName(), baseTableInfo.getDbName(), maxTvrDelta);
             return maxTvrDelta;
         }
+    }
+
+    /**
+     * True only for connector failures that signal the IVM anchor snapshot is no longer reachable
+     * from the current snapshot (expire_snapshots, branch reset, table replacement). The Iceberg
+     * connector surfaces this as "Starting snapshot (exclusive) X is not a parent ancestor of end
+     * snapshot Y". Other StarRocksConnectorException reasons (e.g. transient I/O, auth, missing
+     * snapshot id) must propagate unchanged so the operator can act on the real root cause.
+     */
+    private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
+        String message = e.getMessage();
+        return message != null && message.contains("is not a parent ancestor");
     }
 
     /**

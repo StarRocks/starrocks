@@ -1347,19 +1347,17 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         mockListTableDeltaTraits(ImmutableList.of());
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
-        Throwable root = thrown;
-        while (root.getCause() != null && root != root.getCause()) {
-            root = root.getCause();
-        }
-        Assertions.assertTrue(root.getMessage().contains("no tvr delta traits"),
-                "expected 'no tvr delta traits' in message, got: " + root.getMessage());
-        Assertions.assertTrue(root.getMessage().contains("Drop and recreate"),
-                "expected drop-and-recreate guidance, got: " + root.getMessage());
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("no tvr delta traits"),
+                "expected 'no tvr delta traits' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
     }
 
     @Test
     public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenLineageBroken() throws Exception {
         // Connector throws ancestry error -> wrapped with drop-and-recreate hint.
+        // The original StarRocksConnectorException is preserved as the cause for diagnostics.
         String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);
@@ -1368,14 +1366,26 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
-        Throwable root = thrown;
-        while (root.getCause() != null && root != root.getCause()) {
-            root = root.getCause();
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("snapshot ancestry broken"),
+                "expected 'snapshot ancestry broken' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("is not a parent ancestor"),
+                "expected original connector reason preserved in chain, got: " + chain);
+    }
+
+    private static String collectMessages(Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        Throwable cur = t;
+        while (cur != null) {
+            sb.append(cur.getMessage()).append('\n');
+            if (cur.getCause() == cur) {
+                break;
+            }
+            cur = cur.getCause();
         }
-        Assertions.assertTrue(root.getMessage().contains("snapshot ancestry broken"),
-                "expected 'snapshot ancestry broken' in message, got: " + root.getMessage());
-        Assertions.assertTrue(root.getMessage().contains("Drop and recreate"),
-                "expected drop-and-recreate guidance, got: " + root.getMessage());
+        return sb.toString();
     }
 
     @Test
@@ -1390,13 +1400,34 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                         TvrTableDelta.of(0L, 1L), TvrDeltaStats.EMPTY)));
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
-        Throwable root = thrown;
-        while (root.getCause() != null && root != root.getCause()) {
-            root = root.getCause();
-        }
-        Assertions.assertTrue(root.getMessage().contains("non-append-only"),
-                "expected 'non-append-only' in message, got: " + root.getMessage());
-        Assertions.assertTrue(root.getMessage().contains("Drop and recreate"),
-                "expected drop-and-recreate guidance, got: " + root.getMessage());
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("non-append-only"),
+                "expected 'non-append-only' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+    }
+
+    @Test
+    public void testIncrementalRefreshPropagatesNonAncestryConnectorError() throws Exception {
+        // A non-ancestry connector failure (e.g. transient I/O or programmer error from the
+        // metadata implementation) must NOT be rewritten as a drop-and-recreate hint. The
+        // original message should reach the user so the real root cause stays visible.
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        String unrelatedConnectorMessage = "transient connector failure: io error reading manifest list";
+        mockListTableDeltaTraitsThrowsConnector(unrelatedConnectorMessage);
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains(unrelatedConnectorMessage),
+                "expected original connector message preserved in chain, got: " + chain);
+        Assertions.assertFalse(chain.contains("Drop and recreate"),
+                "drop-and-recreate hint must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains("snapshot ancestry broken"),
+                "ancestry-broken framing must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains("INCREMENTAL materialized views do not support partition-shape"),
+                "partition-shape framing must not apply to non-ancestry connector failures, got: " + chain);
     }
 }
