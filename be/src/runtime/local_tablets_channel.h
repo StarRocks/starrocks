@@ -34,11 +34,14 @@ namespace starrocks {
 
 class MemTracker;
 class BrpcStubCache;
+class MetricRegistry;
+class TableMetricsManager;
 
 class LocalTabletsChannel : public TabletsChannel {
 public:
     LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker,
-                        RuntimeProfile* parent_profile, BrpcStubCache* brpc_stub_cache);
+                        RuntimeProfile* parent_profile, BrpcStubCache* brpc_stub_cache,
+                        MetricRegistry* metrics = nullptr, TableMetricsManager* table_metrics_mgr = nullptr);
     ~LocalTabletsChannel() override;
 
     LocalTabletsChannel(const LocalTabletsChannel&) = delete;
@@ -222,6 +225,7 @@ private:
 
     LoadChannel* _load_channel;
     BrpcStubCache* _brpc_stub_cache;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
 
     TabletsChannelKey _key;
 
@@ -328,6 +332,8 @@ private:
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
                                                                MemTracker* mem_tracker, RuntimeProfile* parent_profile,
-                                                               BrpcStubCache* brpc_stub_cache);
+                                                               BrpcStubCache* brpc_stub_cache,
+                                                               MetricRegistry* metrics = nullptr,
+                                                               TableMetricsManager* table_metrics_mgr = nullptr);
 
 } // namespace starrocks

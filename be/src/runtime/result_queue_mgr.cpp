@@ -38,17 +38,18 @@
 #include "common/status.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "runtime/runtime_metrics.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
-ResultQueueMgr::ResultQueueMgr() {
+ResultQueueMgr::ResultQueueMgr(MetricRegistry* metrics) {
     // Each TimedBlockingQueue has a limited size (default 20, by config::max_memory_sink_batch_count),
     // it's not needed to count the actual size of all TimedBlockingQueue.
-    REGISTER_GAUGE_RUNTIME_METRIC(result_block_queue_count, [this]() {
-        std::lock_guard<std::mutex> l(_lock);
-        return _fragment_queue_map.size();
-    });
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, result_block_queue_count, [this]() {
+            std::lock_guard<std::mutex> l(_lock);
+            return _fragment_queue_map.size();
+        });
+    }
 }
 
 ResultQueueMgr::~ResultQueueMgr() = default;

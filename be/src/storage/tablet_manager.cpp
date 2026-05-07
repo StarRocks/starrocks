@@ -87,8 +87,10 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
-        : _tablets_shards(tablet_map_lock_shard_size), _tablets_shards_mask(tablet_map_lock_shard_size - 1) {
+TabletManager::TabletManager(int64_t tablet_map_lock_shard_size, TableMetricsManager* table_metrics_mgr)
+        : _tablets_shards(tablet_map_lock_shard_size),
+          _table_metrics_mgr(table_metrics_mgr),
+          _tablets_shards_mask(tablet_map_lock_shard_size - 1) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
@@ -373,7 +375,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             continue;
         }
 
-        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir, _table_metrics_mgr);
         st = fs::create_directories(new_tablet->schema_hash_path());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
@@ -924,7 +926,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         tablet_meta->set_tablet_state(TABLET_RUNNING);
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir, _table_metrics_mgr);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet_id=" << tablet_id;
         return Status::InternalError("Fail to create tablet");
@@ -1816,7 +1818,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         return Status::InternalError("tablet state is shutdown");
     }
     // DO NOT access tablet->updates() until tablet has been init()-ed.
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, store);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, store, _table_metrics_mgr);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet " << tablet_id;
         return Status::InternalError("Fail to create tablet");

@@ -70,11 +70,14 @@ namespace starrocks {
 LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, DiagnoseDaemon* diagnose_daemon,
                          BrpcStubCache* brpc_stub_cache, const UniqueId& load_id, int64_t txn_id,
                          const std::string& txn_trace_parent, int64_t timeout_s,
-                         std::unique_ptr<MemTracker> mem_tracker)
+                         std::unique_ptr<MemTracker> mem_tracker, MetricRegistry* metrics,
+                         TableMetricsManager* table_metrics_mgr)
         : _load_mgr(mgr),
           _lake_tablet_mgr(lake_tablet_mgr),
           _diagnose_daemon(diagnose_daemon),
           _brpc_stub_cache(brpc_stub_cache),
+          _metrics(metrics),
+          _table_metrics_mgr(table_metrics_mgr),
           _load_id(load_id),
           _txn_id(txn_id),
           _timeout_s(timeout_s),
@@ -154,10 +157,12 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
                 channel = nullptr;
                 st = Status::NotSupported("lake tablet is not supported on MacOS");
 #else
-                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
+                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile,
+                                                   _table_metrics_mgr);
 #endif
             } else {
-                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile, _brpc_stub_cache);
+                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile, _brpc_stub_cache, _metrics,
+                                                    _table_metrics_mgr);
             }
             if (st.ok()) {
                 if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {

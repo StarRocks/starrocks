@@ -50,7 +50,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
-#include "util/global_metrics_registry.h"
 
 // TODO: test multi thread
 // TODO: test runtime filter
@@ -63,9 +62,9 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->metrics()->set_collect_hook_enabled(true);
 
         const auto& params = _request.params;
         const auto& query_id = params.query_id;

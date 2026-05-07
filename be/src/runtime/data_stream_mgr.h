@@ -62,6 +62,7 @@ class DescriptorTbl;
 class DataStreamRecvr;
 class QueryStatisticsRecvr;
 class RuntimeState;
+class MetricRegistry;
 class PUniqueId;
 class PTransmitChunkParams;
 
@@ -82,7 +83,7 @@ class PTransmitChunkParams;
 
 class DataStreamMgr {
 public:
-    DataStreamMgr();
+    explicit DataStreamMgr(MetricRegistry* metrics = nullptr);
     ~DataStreamMgr();
 
     // Create a receiver for a specific fragment_instance_id/node_id destination;

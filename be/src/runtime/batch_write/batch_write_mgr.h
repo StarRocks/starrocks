@@ -35,11 +35,12 @@ class PStreamLoadResponse;
 class StreamLoadContext;
 class PUpdateTransactionStateRequest;
 class PUpdateTransactionStateResponse;
+class MetricRegistry;
 
 class BatchWriteMgr {
 public:
     BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor);
-    Status init();
+    Status init(MetricRegistry* metrics = nullptr);
 
     Status register_stream_load_pipe(StreamLoadContext* pipe_ctx);
     void unregister_stream_load_pipe(StreamLoadContext* pipe_ctx);

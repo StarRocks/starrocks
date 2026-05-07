@@ -27,6 +27,7 @@
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
@@ -779,12 +780,15 @@ int main(int argc, char** argv) {
     }
 
     auto* global_env = starrocks::GlobalEnv::GetInstance();
-    (void)global_env->init();
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    (void)global_env->init(process_metrics_registry->root_registry());
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.compaction_mem_tracker = global_env->process_mem_tracker();
     options.update_mem_tracker = global_env->update_mem_tracker();
+    options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
     if (!s.ok()) {
         starrocks::fs::remove_all(root_path_1);
@@ -794,7 +798,7 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    (void)exec_env->init(paths);
+    (void)exec_env->init(paths, process_metrics_registry);
     int r = RUN_ALL_TESTS();
 
     sleep(10);

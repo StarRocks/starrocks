@@ -32,6 +32,7 @@
 
 namespace starrocks {
 
+class MetricRegistry;
 class TWorkGroup;
 
 namespace workgroup {
@@ -279,7 +280,7 @@ private:
 // pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
 public:
-    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf);
+    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics = nullptr);
 
     ~WorkGroupManager();
 
@@ -344,6 +345,7 @@ private:
     std::chrono::seconds _workgroup_expiration_time{120};
 
     std::atomic<size_t> _sum_cpu_weight = 0;
+    MetricRegistry* _metrics = nullptr;
     MemTrackerManager _shared_mem_tracker_manager;
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;

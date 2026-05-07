@@ -39,7 +39,6 @@
 #include "base/container/lru_cache.h"
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -114,8 +113,10 @@ void PageCacheMetrics::_update_pinned_count() {
     page_cache_pinned_count.set_value(_cache == nullptr ? 0 : _cache->get_pinned_count());
 }
 
-void StoragePageCache::init_metrics() {
-    PageCacheMetrics::instance()->install(GlobalMetricsRegistry::instance()->metrics(), this);
+void StoragePageCache::init_metrics(MetricRegistry* metrics) {
+    if (metrics != nullptr) {
+        PageCacheMetrics::instance()->install(metrics, this);
+    }
 }
 
 void StoragePageCache::prune() {

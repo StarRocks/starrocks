@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 
 #include "common/statusor.h"
 #include "fs/encryption.h"
@@ -22,6 +23,7 @@
 namespace starrocks {
 
 class KeyCache;
+class MetricRegistry;
 
 struct FileEncryptionPair {
     FileEncryptionInfo info;
@@ -86,6 +88,7 @@ public:
     static KeyCache& instance();
 
     KeyCache();
+    void install_metrics(MetricRegistry* metrics);
 
     StatusOr<FileEncryptionPair> create_encryption_meta_pair(const std::string& encryption_meta_prefix);
 
@@ -115,6 +118,7 @@ private:
                                     std::vector<std::unique_ptr<EncryptionKey>>& owned_keys, bool cache_last_key);
 
     mutable std::mutex _lock;
+    MetricRegistry* _metrics_registry = nullptr;
     std::unordered_map<std::string, std::unique_ptr<EncryptionKey>> _identifier_to_keys;
     std::atomic<EncryptionKey*> _current_kek;
     std::atomic<EncryptionKey*> _default_root;

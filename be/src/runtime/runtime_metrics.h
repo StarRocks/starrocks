@@ -22,23 +22,26 @@
 
 namespace starrocks {
 
-#define REGISTER_GAUGE_RUNTIME_METRIC(name, func)                                                            \
-    GlobalMetricsRegistry::instance()->metrics()->register_metric(#name, &RuntimeMetrics::instance()->name); \
-    GlobalMetricsRegistry::instance()->metrics()->register_hook(                                             \
-            #name, [&]() { RuntimeMetrics::instance()->name.set_value(func()); });
+#define REGISTER_GAUGE_RUNTIME_METRIC(registry, name, func)                \
+    (registry)->register_metric(#name, &RuntimeMetrics::instance()->name); \
+    (registry)->register_hook(#name, [&]() { RuntimeMetrics::instance()->name.set_value(func()); });
 
-#define REGISTER_THREAD_POOL_RUNTIME_METRICS(name, threadpool)                                                  \
-    do {                                                                                                        \
-        REGISTER_GAUGE_RUNTIME_METRIC(name##_threadpool_size, [this]() { return threadpool->max_threads(); })   \
-        REGISTER_GAUGE_RUNTIME_METRIC(name##_executed_tasks_total,                                              \
-                                      [this]() { return threadpool->total_executed_tasks(); })                  \
-        REGISTER_GAUGE_RUNTIME_METRIC(name##_pending_time_ns_total,                                             \
-                                      [this]() { return threadpool->total_pending_time_ns(); })                 \
-        REGISTER_GAUGE_RUNTIME_METRIC(name##_execute_time_ns_total,                                             \
-                                      [this]() { return threadpool->total_execute_time_ns(); })                 \
-        REGISTER_GAUGE_RUNTIME_METRIC(name##_queue_count, [this]() { return threadpool->num_queued_tasks(); })  \
-        REGISTER_GAUGE_RUNTIME_METRIC(name##_running_threads, [this]() { return threadpool->num_threads(); })   \
-        REGISTER_GAUGE_RUNTIME_METRIC(name##_active_threads, [this]() { return threadpool->active_threads(); }) \
+#define REGISTER_THREAD_POOL_RUNTIME_METRICS(registry, name, threadpool)                        \
+    do {                                                                                        \
+        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_threadpool_size,                         \
+                                      [this]() { return threadpool->max_threads(); })           \
+        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_executed_tasks_total,                    \
+                                      [this]() { return threadpool->total_executed_tasks(); })  \
+        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_pending_time_ns_total,                   \
+                                      [this]() { return threadpool->total_pending_time_ns(); }) \
+        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_execute_time_ns_total,                   \
+                                      [this]() { return threadpool->total_execute_time_ns(); }) \
+        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_queue_count,                             \
+                                      [this]() { return threadpool->num_queued_tasks(); })      \
+        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_running_threads,                         \
+                                      [this]() { return threadpool->num_threads(); })           \
+        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_active_threads,                          \
+                                      [this]() { return threadpool->active_threads(); })        \
     } while (false)
 
 class RuntimeMetrics {

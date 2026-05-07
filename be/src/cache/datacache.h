@@ -29,6 +29,7 @@ class RemoteCacheEngine;
 class DiskCacheOptions;
 class GlobalEnv;
 class DiskSpaceMonitor;
+class MetricRegistry;
 class MemSpaceMonitor;
 class StoragePageCache;
 class Cache;
@@ -37,7 +38,7 @@ class DataCache {
 public:
     static DataCache* GetInstance();
 
-    Status init(const std::vector<StorePath>& store_paths);
+    Status init(const std::vector<StorePath>& store_paths, MetricRegistry* metrics = nullptr);
     void destroy();
 
     void try_release_resource_before_core_dump();
@@ -72,7 +73,7 @@ private:
     Status _init_peer_cache(const RemoteCacheOptions& cache_options);
 #endif
     Status _init_lrucache_engine(const MemCacheOptions& cache_options);
-    Status _init_page_cache();
+    Status _init_page_cache(MetricRegistry* metrics);
 
     GlobalEnv* _global_env;
     std::vector<StorePath> _store_paths;

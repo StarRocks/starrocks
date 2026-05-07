@@ -29,6 +29,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_object_storage_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
@@ -68,13 +69,15 @@ DECLARE_bool(socket_keepalive);
 
 namespace starrocks {
 
-StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
+StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn,
+                                   TableMetricsManager* table_metrics_mgr) {
     // Init and open storage engine.
     EngineOptions options;
     options.store_paths = std::move(paths);
     options.backend_uid = UniqueId::gen_uid();
     options.compaction_mem_tracker = global_env->compaction_mem_tracker();
     options.update_mem_tracker = global_env->update_mem_tracker();
+    options.table_metrics_mgr = table_metrics_mgr;
     options.need_write_cluster_id = !as_cn;
     StorageEngine* engine = nullptr;
 
@@ -89,9 +92,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     std::string process_name = as_cn ? "CN" : "BE";
 
     int start_step = 1;
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
 
     auto daemon = std::make_unique<Daemon>();
-    daemon->init(as_cn, paths);
+    daemon->init(as_cn, paths, process_metrics_registry);
     LOG(INFO) << process_name << " start step " << start_step++ << ": daemon threads start successfully";
 
 #ifndef __APPLE__
@@ -108,25 +113,25 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // init global env
     auto* global_env = GlobalEnv::GetInstance();
-    EXIT_IF_ERROR(global_env->init());
+    EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
 #ifndef __APPLE__
     auto* cache_env = DataCache::GetInstance();
-    EXIT_IF_ERROR(cache_env->init(paths));
+    EXIT_IF_ERROR(cache_env->init(paths, process_metrics_registry->root_registry()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 #else
     // On macOS, skip DataCache initialization
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env disabled on macOS";
 #endif
 
-    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
+    auto* storage_engine = init_storage_engine(global_env, paths, as_cn, process_metrics_registry->table_metrics_mgr());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
+    EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
     // Start all background threads of storage engine.
@@ -140,14 +145,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* local_cache = cache_env->local_disk_cache();
     if (config::datacache_unified_instance_enable && local_cache && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
-        init_staros_worker(starcache->starcache_instance());
+        init_staros_worker(starcache->starcache_instance(), process_metrics_registry->table_metrics_mgr());
         use_same_datacache_instance = true;
     } else {
-        init_staros_worker(nullptr);
+        init_staros_worker(nullptr, process_metrics_registry->table_metrics_mgr());
     }
 #else
     // On macOS, disable staros worker with starcache
-    init_staros_worker(nullptr);
+    init_staros_worker(nullptr, process_metrics_registry->table_metrics_mgr());
 #endif
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
@@ -243,12 +248,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server =
-            std::make_unique<HttpServiceBE>(cache_env, exec_env, config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, process_metrics_registry,
+                                                       config::be_http_port, config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server =
-            std::make_unique<HttpServiceBE>(nullptr, exec_env, config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, process_metrics_registry,
+                                                       config::be_http_port, config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();

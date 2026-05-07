@@ -41,6 +41,7 @@
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_metrics_fwd.h"
 #include "common/config_path_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/util/minidump.h"
 #include "exec/workgroup/work_group.h"
@@ -76,7 +77,6 @@
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "types/time_types.h"
-#include "util/global_metrics_registry.h"
 #include "util/logging.h"
 #include "util/memory_lock.h"
 #include "util/metrics/query_scan_metrics.h"
@@ -95,7 +95,7 @@ std::string dump_memory_tracker();
  * 5. max network receive bytes rate
  * 6. datacache memory usage
  */
-void calculate_metrics(void* arg_this) {
+void calculate_metrics(Daemon* daemon, ProcessMetricsRegistry* process_metrics_registry) {
     int64_t last_ts = -1L;
     int64_t lst_push_bytes = -1;
     int64_t lst_query_bytes = -1;
@@ -104,9 +104,8 @@ void calculate_metrics(void* arg_this) {
     std::map<std::string, int64_t> lst_net_send_bytes;
     std::map<std::string, int64_t> lst_net_receive_bytes;
 
-    auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
-        GlobalMetricsRegistry::instance()->metrics()->trigger_hook();
+        process_metrics_registry->root_registry()->trigger_hook();
 
         if (last_ts == -1L) {
             last_ts = MonotonicSeconds();
@@ -150,7 +149,7 @@ void calculate_metrics(void* arg_this) {
 
         LOG(INFO) << dump_memory_tracker();
 
-        GlobalMetricsRegistry::instance()->table_metrics_mgr()->cleanup();
+        process_metrics_registry->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }
@@ -244,14 +243,15 @@ std::string dump_memory_tracker() {
     return fmt::to_string(buffer);
 }
 
-static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
+static void init_starrocks_metrics(const std::vector<StorePath>& store_paths,
+                                   ProcessMetricsRegistry* process_metrics_registry) {
     std::vector<std::string> paths;
     paths.reserve(store_paths.size());
     for (auto& store_path : store_paths) {
         paths.emplace_back(store_path.path);
     }
     auto options = BackendMetricsInitializer::from_config(std::move(paths));
-    BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(), options);
+    BackendMetricsInitializer::initialize(process_metrics_registry, options);
 }
 
 Slice get_process_comm(pid_t pid, char* buffer, int max_size) {
@@ -339,7 +339,8 @@ void init_minidump() {
 #endif
 }
 
-void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
+void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetricsRegistry* process_metrics_registry) {
+    DCHECK(process_metrics_registry != nullptr);
     if (as_cn) {
         init_glog("cn", true);
     } else {
@@ -376,11 +377,11 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     TimezoneUtils::init_time_zones();
 
-    init_starrocks_metrics(paths);
+    init_starrocks_metrics(paths, process_metrics_registry);
 
 #ifndef __APPLE__
     if (config::enable_metric_calculator) {
-        std::thread calculate_metrics_thread(calculate_metrics, this);
+        std::thread calculate_metrics_thread(calculate_metrics, this, process_metrics_registry);
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }

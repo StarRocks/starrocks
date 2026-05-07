@@ -415,7 +415,7 @@ class QueryContextManager {
 public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
-    Status init();
+    Status init(MetricRegistry* metrics = nullptr);
     StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
@@ -452,6 +452,7 @@ private:
 
     std::atomic<bool> _stop{false};
     std::shared_ptr<std::thread> _clean_thread;
+    MetricRegistry* _metrics = nullptr;
 
     inline static const char* _metric_name = "pip_query_ctx_cnt";
     std::unique_ptr<UIntGauge> _query_ctx_cnt;

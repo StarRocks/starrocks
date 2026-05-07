@@ -32,6 +32,7 @@
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
 #include "common/util/stack_trace_mutex.h"
+#include "common/util/table_metrics.h"
 #include "exec/tablet_info.h"
 #include "fs/bundle_file.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -50,7 +51,6 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -65,7 +65,7 @@ class LakeTabletsChannel : public TabletsChannel {
 
 public:
     LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
-                       RuntimeProfile* parent_profile);
+                       RuntimeProfile* parent_profile, TableMetricsManager* table_metrics_mgr);
 
     ~LakeTabletsChannel() override;
 
@@ -282,6 +282,7 @@ private:
     };
 
     lake::TabletManager* _tablet_manager;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
 
     TabletsChannelKey _key;
 
@@ -368,9 +369,11 @@ private:
 };
 
 LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                       TableMetricsManager* table_metrics_mgr)
         : TabletsChannel(),
           _tablet_manager(tablet_manager),
+          _table_metrics_mgr(table_metrics_mgr),
           _key(key),
           _mem_tracker(mem_tracker),
           _mem_pool(std::make_unique<MemPool>()) {
@@ -400,9 +403,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
-#ifndef BE_TEST
-    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
-#endif
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics = _table_metrics_mgr->get_table_metrics(_schema->table_id());
+    }
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
         _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
@@ -1220,10 +1223,11 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                                         RuntimeProfile* parent_profile) {
+                                                         RuntimeProfile* parent_profile,
+                                                         TableMetricsManager* table_metrics_mgr) {
     // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
     // be consistent with LocalTabletsChannel.
-    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile, table_metrics_mgr);
 }
 
 } // namespace starrocks

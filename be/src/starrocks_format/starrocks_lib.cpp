@@ -23,6 +23,7 @@
 #include "base/time/timezone_utils.h"
 #include "common/config_lake_fwd.h"
 #include "common/configbase.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/mem_info.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_s3.h"
@@ -36,6 +37,11 @@ namespace starrocks::lake {
 
 static bool _starrocks_format_inited = false;
 Aws::SDKOptions aws_sdk_options;
+static starrocks::ProcessMetricsRegistry* process_metrics_registry() {
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    return registry;
+}
 
 lake::TabletManager* _lake_tablet_manager = nullptr;
 
@@ -68,7 +74,7 @@ void starrocks_format_initialize(void) {
 
         TimezoneUtils::init_time_zones();
 
-        auto ge_init_stat = GlobalEnv::GetInstance()->init();
+        auto ge_init_stat = GlobalEnv::GetInstance()->init(process_metrics_registry()->root_registry());
         CHECK(ge_init_stat.ok()) << "init global env error";
 
         auto lake_location_provider = std::make_shared<FixedLocationProvider>("");

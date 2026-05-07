@@ -73,7 +73,6 @@
 #include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
-#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -355,10 +354,12 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
 FragmentMgr::FragmentMgr(ExecEnv* exec_env) : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
     Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
-    REGISTER_GAUGE_RUNTIME_METRIC(plan_fragment_count, [this]() {
-        std::lock_guard<std::mutex> lock(_lock);
-        return _fragment_map.size();
-    });
+    if (_exec_env->metrics() != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(_exec_env->metrics(), plan_fragment_count, [this]() {
+            std::lock_guard<std::mutex> lock(_lock);
+            return _fragment_map.size();
+        });
+    }
     // TODO(zc): we need a better thread-pool
     // now one user can use all the thread pool, others have no resource.
     auto st = ThreadPoolBuilder("fragment_mgr")

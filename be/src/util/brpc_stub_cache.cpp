@@ -21,7 +21,6 @@
 #endif
 #include "base/failpoint/fail_point.h"
 #include "runtime/runtime_metrics.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -41,12 +40,15 @@ std::mutex& singleton_cache_mutex() {
 
 } // namespace
 
-BrpcStubCache::BrpcStubCache(pipeline::PipelineTimer* pipeline_timer) : _pipeline_timer(pipeline_timer) {
+BrpcStubCache::BrpcStubCache(pipeline::PipelineTimer* pipeline_timer, MetricRegistry* metrics)
+        : _pipeline_timer(pipeline_timer) {
     _stub_map.init(239);
-    REGISTER_GAUGE_RUNTIME_METRIC(brpc_endpoint_stub_count, [this]() {
-        std::lock_guard<SpinLock> l(_lock);
-        return _stub_map.size();
-    });
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, brpc_endpoint_stub_count, [this]() {
+            std::lock_guard<SpinLock> l(_lock);
+            return _stub_map.size();
+        });
+    }
 }
 
 BrpcStubCache::~BrpcStubCache() {

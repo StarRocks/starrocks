@@ -66,6 +66,7 @@ class RowsetReadOptions;
 class Tablet;
 class TabletMeta;
 class TabletUpdates;
+class TableMetricsManager;
 class CompactionTask;
 class BaseRowset;
 struct CompactionCandidate;
@@ -81,9 +82,10 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
-    static TabletSharedPtr create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir = nullptr);
+    static TabletSharedPtr create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir = nullptr,
+                                                   TableMetricsManager* table_metrics_mgr = nullptr);
 
-    Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
+    Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableMetricsManager* table_metrics_mgr = nullptr);
 
     Tablet() = delete;
     Tablet(const Tablet&) = delete;
@@ -487,6 +489,7 @@ private:
     // The KeysType of a Tablet cannot be changed after creation. It is retrieved from the TabletSchema,
     // and the redundant storage is designed to avoid unnecessary locking and reduce performance overhead.
     KeysType _keys_type;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
 };
 
 inline bool Tablet::init_succeeded() {

@@ -28,7 +28,7 @@ Map the BE development surface for execution, storage, runtime, services, and th
 
 - `be/src/base/metrics.h` owns only low-level metric primitives such as `Metric`, `MetricRegistry`, labels, visitors, and hooks.
 - `be/src/common/metrics/process_metrics_registry.h` is the dependency-neutral owner for BE/CN process metric registries. Keep it free of concrete storage, exec, runtime, service, HTTP, cache, and connector includes.
-- New module metrics should be defined in the owning module and installed by top-level composition code. Do not add new production includes of `runtime/starrocks_metrics.h` or `util/global_metrics_registry.h`; the existing include allowlists are shrink-only during the migration.
+- New module metrics should be defined in the owning module and installed by top-level composition code.
 
 ## Test and Validation
 

@@ -1,2 +1,0 @@
-# Existing production includes of runtime/starrocks_metrics.h.
-# This list is shrink-only during the BE metrics ownership migration.

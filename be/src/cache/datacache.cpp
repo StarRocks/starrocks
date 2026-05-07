@@ -41,7 +41,7 @@ DataCache* DataCache::GetInstance() {
     return &s_cache_env;
 }
 
-Status DataCache::init(const std::vector<StorePath>& store_paths) {
+Status DataCache::init(const std::vector<StorePath>& store_paths, MetricRegistry* metrics) {
     _global_env = GlobalEnv::GetInstance();
     _store_paths = store_paths;
     _block_cache = std::make_shared<BlockCache>();
@@ -70,7 +70,7 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
 
     RETURN_IF_ERROR(_init_lrucache_engine(mem_cache_options));
 
-    RETURN_IF_ERROR(_init_page_cache());
+    RETURN_IF_ERROR(_init_page_cache(metrics));
 
     _mem_space_monitor = std::make_shared<MemSpaceMonitor>(this);
     _mem_space_monitor->start();
@@ -128,9 +128,9 @@ Status DataCache::_init_lrucache_engine(const MemCacheOptions& cache_options) {
     return Status::OK();
 }
 
-Status DataCache::_init_page_cache() {
+Status DataCache::_init_page_cache(MetricRegistry* metrics) {
     _page_cache->init(_local_mem_cache.get());
-    _page_cache->init_metrics();
+    _page_cache->init_metrics(metrics);
     LOG(INFO) << "storage page cache init successfully";
     return Status::OK();
 }

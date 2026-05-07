@@ -16,9 +16,9 @@
 
 #include <memory>
 
+#include "base/metrics.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "util/global_metrics_registry.h"
 #include "work_group.h"
 
 namespace starrocks::workgroup {
@@ -81,10 +81,11 @@ void MemTrackerManager::deregister_workgroup(const std::string& mem_pool) {
 }
 
 void MemTrackerManager::_add_metrics_unlocked(const std::string& mem_pool, UniqueLockType& lock) {
-    std::call_once(_register_metrics_hook_once_flag, [this] {
-        GlobalMetricsRegistry::instance()->metrics()->register_hook("mem_pool_metrics_hook",
-                                                                    [this] { _update_metrics(); });
-    });
+    if (_metrics == nullptr) {
+        return;
+    }
+    std::call_once(_register_metrics_hook_once_flag,
+                   [this] { _metrics->register_hook("mem_pool_metrics_hook", [this] { _update_metrics(); }); });
 
     if (_shared_mem_trackers_metrics.contains(mem_pool)) {
         return;
@@ -96,7 +97,7 @@ void MemTrackerManager::_add_metrics_unlocked(const std::string& mem_pool, Uniqu
     // MetricsRegistry::mutex after calling register_metric. Without unlocking, we would run into a deadlock.
     lock.unlock();
 
-    auto* registry = GlobalMetricsRegistry::instance()->metrics();
+    auto* registry = _metrics;
 
     auto mem_limit = std::make_unique<IntGauge>(MetricUnit::BYTES);
     const bool mem_limit_registered = registry->register_metric("mem_pool_mem_limit_bytes",

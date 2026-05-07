@@ -62,6 +62,8 @@ namespace starrocks {
 
 class Cache;
 class StatusPB;
+class MetricRegistry;
+class TableMetricsManager;
 
 // LoadChannelMgr -> LoadChannel -> TabletsChannel -> DeltaWriter
 // All dispatched load data for this backend is routed from this class
@@ -104,7 +106,8 @@ class StatusPB;
 //
 class LoadChannelMgr {
 public:
-    explicit LoadChannelMgr(lake::TabletManager* lake_tablet_manager);
+    explicit LoadChannelMgr(lake::TabletManager* lake_tablet_manager, MetricRegistry* metrics = nullptr,
+                            TableMetricsManager* table_metrics_mgr = nullptr);
     ~LoadChannelMgr();
 
     Status init(MemTracker* mem_tracker);
@@ -181,6 +184,8 @@ private:
     // Thread pool used to handle rpc request asynchronously
     std::unique_ptr<ThreadPool> _async_rpc_pool;
     lake::TabletManager* _lake_tablet_manager;
+    MetricRegistry* _metrics = nullptr;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
 };
 
 } // namespace starrocks

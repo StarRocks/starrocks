@@ -50,6 +50,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/tracer.h"
+#include "common/util/table_metrics.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -69,24 +70,26 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
-TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir) {
-    return std::make_shared<Tablet>(tablet_meta, data_dir);
+TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir,
+                                                TableMetricsManager* table_metrics_mgr) {
+    return std::make_shared<Tablet>(tablet_meta, data_dir, table_metrics_mgr);
 }
 
-Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
-        : BaseTablet(tablet_meta, data_dir), _cumulative_point(kInvalidCumulativePoint) {
+Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableMetricsManager* table_metrics_mgr)
+        : BaseTablet(tablet_meta, data_dir),
+          _cumulative_point(kInvalidCumulativePoint),
+          _table_metrics_mgr(table_metrics_mgr) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
     _keys_type = _max_version_schema->keys_type();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
-#ifndef BE_TEST
-    GlobalMetricsRegistry::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
-#endif
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics_mgr->register_table(_tablet_meta->table_id());
+    }
 }
 
 Tablet::Tablet(KeysType keys_type) {
@@ -96,9 +99,9 @@ Tablet::Tablet(KeysType keys_type) {
 
 Tablet::~Tablet() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
-#ifndef BE_TEST
-    GlobalMetricsRegistry::instance()->table_metrics_mgr()->unregister_table(_tablet_meta->table_id());
-#endif
+    if (_table_metrics_mgr != nullptr && _tablet_meta != nullptr) {
+        _table_metrics_mgr->unregister_table(_tablet_meta->table_id());
+    }
 }
 
 Status Tablet::_init_once_action() {

@@ -41,14 +41,15 @@
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "http/http_metrics.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/service_metrics.h"
 #include "storage/storage_metrics.h"
-#include "util/global_metrics_registry.h"
 #include "util/metrics/catalog_scan_metrics.h"
 #include "util/metrics/query_scan_metrics.h"
 
@@ -58,6 +59,18 @@ namespace {
 
 const char* const kTestDiskPath = "test_metric_path";
 
+ProcessMetricsRegistry* backend_process_metrics_registry_for_test() {
+    if (auto* registry = ExecEnv::GetInstance()->process_metrics_registry(); registry != nullptr) {
+        return registry;
+    }
+    static auto* registry = new ProcessMetricsRegistry("starrocks_be");
+    return registry;
+}
+
+MetricRegistry* backend_metrics_registry_for_test() {
+    return backend_process_metrics_registry_for_test()->root_registry();
+}
+
 void init_backend_metrics_for_test() {
     static std::once_flag once;
     std::call_once(once, [] {
@@ -66,7 +79,7 @@ void init_backend_metrics_for_test() {
         options.collect_hook_enabled = true;
         options.init_system_metrics = false;
         options.init_jvm_metrics = false;
-        BackendMetricsInitializer::initialize(GlobalMetricsRegistry::instance()->process_metrics_registry(), options);
+        BackendMetricsInitializer::initialize(backend_process_metrics_registry_for_test(), options);
     });
 }
 
@@ -87,7 +100,7 @@ protected:
 
         _page_cache = std::make_shared<StoragePageCache>();
         _page_cache->init(_lru_cache.get());
-        _page_cache->init_metrics();
+        _page_cache->init_metrics(backend_metrics_registry_for_test());
     }
 
     void TearDown() override {}
@@ -147,7 +160,7 @@ TEST_F(BackendMetricsTest, Normal) {
     auto runtime_metrics = RuntimeMetrics::instance();
     auto service_metrics = ServiceMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
+    auto metrics = backend_metrics_registry_for_test();
     metrics->collect(&visitor);
     // check metric
     {
@@ -328,7 +341,7 @@ TEST_F(BackendMetricsTest, Normal) {
 
 TEST_F(BackendMetricsTest, PageCacheMetrics) {
     TestMetricsVisitor visitor;
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
+    auto metrics = backend_metrics_registry_for_test();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
 
@@ -372,7 +385,7 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
 }
 
 TEST_F(BackendMetricsTest, test_metrics_register) {
-    auto instance = GlobalMetricsRegistry::instance()->metrics();
+    auto instance = backend_metrics_registry_for_test();
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_io_time_us"));
