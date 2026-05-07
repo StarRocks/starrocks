@@ -2724,6 +2724,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testCreateDecodeInfoDoesNotReturnSharedMutableSingleton() {
+        DecodeInfo empty1 = DecodeInfo.create();
+        DecodeInfo empty2 = DecodeInfo.create();
+
+        DecodeInfo d1 = empty1.createDecodeInfo();
+        d1.getDecodeStringColumns().union(new com.starrocks.sql.optimizer.base.ColumnRefSet(1));
+
+        DecodeInfo d2 = empty2.createDecodeInfo();
+        Assertions.assertTrue(d2.getOutputStringColumns().isEmpty());
+        Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
+        Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
+    }
+
+    @Test
     public void testPhysicalFilter() throws Exception {
         String sql = """
                   SELECT *
@@ -2771,16 +2785,31 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
-    public void testCreateDecodeInfoDoesNotReturnSharedMutableSingleton() {
-        DecodeInfo empty1 = DecodeInfo.create();
-        DecodeInfo empty2 = DecodeInfo.create();
-
-        DecodeInfo d1 = empty1.createDecodeInfo();
-        d1.getDecodeStringColumns().union(new com.starrocks.sql.optimizer.base.ColumnRefSet(1));
-
-        DecodeInfo d2 = empty2.createDecodeInfo();
-        Assertions.assertTrue(d2.getOutputStringColumns().isEmpty());
-        Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
-        Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
+    public void testCTEConsumeWithProjection() throws Exception {
+        String sql = """
+                  WITH CTE AS (
+                    SELECT
+                      C_USER
+                    FROM
+                      low_card_t1
+                  ) [materialized]
+                  SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+                    UPPER(C_USER) s1
+                  FROM
+                    CTE
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    16: DictDefine(14: c_user, [upper(<place-holder>)])\n" +
+                "    15: DictDefine(14: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  4:Decode\n" +
+                "  |  <dict id 16> : <string id 13>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  16 <-> DictDefine(15: c_user, [upper(<place-holder>)])\n" +
+                "  |  cardinality: 1", plan);
     }
 }
