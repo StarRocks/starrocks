@@ -170,7 +170,9 @@ Status KeyValueMerger::flush() {
             RETURN_IF_ERROR(create_table_builder());
         }
         _flush_serialized_scratch.clear();
-        index_value_pb.SerializeToString(&_flush_serialized_scratch);
+        if (!index_value_pb.SerializeToString(&_flush_serialized_scratch)) {
+            return Status::InternalError("Failed to serialize IndexValuesWithVerPB");
+        }
         RETURN_IF_ERROR(_output_builders.back().table_builder->Add(Slice(_key), Slice(_flush_serialized_scratch)));
     }
     _current_value.reset();
