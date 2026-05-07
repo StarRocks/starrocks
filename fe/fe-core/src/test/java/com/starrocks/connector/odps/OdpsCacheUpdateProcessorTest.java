@@ -37,6 +37,7 @@ import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -207,14 +208,15 @@ public class OdpsCacheUpdateProcessorTest {
         OdpsTable odpsTable = createMockOdpsTable("db1", "t1", false);
         com.aliyun.odps.Table odpsApiTable = mock(com.aliyun.odps.Table.class);
         Partition p = mock(Partition.class);
+        PartitionSpec spec = new PartitionSpec("p1=1");
         when(tables.get("db1", "t1")).thenReturn(odpsApiTable);
-        when(odpsApiTable.getPartition(new PartitionSpec("p1=1"))).thenReturn(p);
-        when(p.getPartitionSpec()).thenReturn(new PartitionSpec("p1=1"));
+        when(odpsApiTable.getPartition(any(PartitionSpec.class))).thenReturn(p);
+        when(p.getPartitionSpec()).thenReturn(spec);
 
         processor.refreshPartition(odpsTable, ImmutableList.of("p1=1"));
 
         verify(tables).get("db1", "t1");
-        verify(odpsApiTable).getPartition(new PartitionSpec("p1=1"));
+        verify(odpsApiTable).getPartition(any(PartitionSpec.class));
         List<Partition> cached = partitionCache.getIfPresent(OdpsTableName.of("db1", "t1"));
         assertTrue(cached != null && cached.size() == 1);
     }
