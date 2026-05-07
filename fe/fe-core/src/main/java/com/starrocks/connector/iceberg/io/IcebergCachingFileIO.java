@@ -597,12 +597,18 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 int remaining = entry.useCount.decrementAndGet();
                 LOG.debug("diskCache unpin: key={}, useCount={}, size={}MB, stats=[{}]",
                         key, remaining, entry.length >> 20, diskCache.stats());
-                if (remaining == 0 && diskCache.asMap().get(key) != entry) {
-                    // Entry was evicted by Caffeine while this stream held it open.
-                    // The eviction listener skipped deletion because useCount was > 0 at that time.
-                    // Now that the last reader has closed, clean up the orphaned file immediately.
-                    LOG.warn("diskCache cleaning up orphaned file for evicted-while-pinned entry: key={}", key);
-                    IOUtil.deleteLocalFileWithRemotePath(key);
+                if (remaining == 0) {
+                    DiskCacheEntry current = diskCache.asMap().get(key);
+                    if (current == null) {
+                        // Entry was evicted while this stream held it open and no replacement exists.
+                        // The eviction listener skipped deletion because useCount was > 0 at that time.
+                        // Clean up the orphaned file now that the last reader has closed.
+                        LOG.warn("diskCache cleaning up orphaned file for evicted-while-pinned entry: key={}", key);
+                        IOUtil.deleteLocalFileWithRemotePath(key);
+                    }
+                    // current == entry: still live, Caffeine will handle eviction normally.
+                    // current != null && current != entry: a new entry was loaded for this key;
+                    //   do not delete — the local file path is shared and belongs to the new entry.
                 }
             }
         }

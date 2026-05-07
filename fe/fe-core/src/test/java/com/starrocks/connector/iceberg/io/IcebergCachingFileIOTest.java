@@ -375,12 +375,14 @@ public class IcebergCachingFileIOTest {
         Assertions.assertFalse(deleteCalledForA.get(), "Delete should not fire from eviction listener while pinned");
 
         // Step 3: simulate close() with the fix applied.
-        // The fix decrements useCount directly on the captured entry and checks cache membership.
+        // Only delete when current == null (evicted, no replacement).
         int remaining = a.useCount.decrementAndGet();
-        boolean entryStillInCache = cache.asMap().get("A") == a;
-        if (remaining == 0 && !entryStillInCache) {
-            // mirrors the orphan cleanup in DiskCacheSeekableInputStream.close()
-            deleteCalledForA.set(true);
+        if (remaining == 0) {
+            FakeEntry current = cache.asMap().get("A");
+            if (current == null) {
+                // mirrors the orphan cleanup in DiskCacheSeekableInputStream.close()
+                deleteCalledForA.set(true);
+            }
         }
 
         // Verify: cleanup triggered immediately when the last reader closed.
