@@ -29,6 +29,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
+#include "exec/catalog_scan_metrics.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
@@ -36,6 +37,7 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/query_scan_metrics.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/jsonpath.h"
@@ -51,6 +53,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/extends_column_utils.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
@@ -60,9 +63,6 @@
 #include "storage/virtual_column_utils.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/metrics/catalog_scan_metrics.h"
-#include "util/metrics/flat_json_metrics.h"
-#include "util/metrics/query_scan_metrics.h"
 
 namespace starrocks::pipeline {
 

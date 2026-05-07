@@ -26,6 +26,7 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_config.cpp
+    flat_json_metrics.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp

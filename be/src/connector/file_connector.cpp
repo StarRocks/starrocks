@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "connector/file_scan_metrics.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/avro_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
@@ -24,7 +25,6 @@
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
 #include "runtime/runtime_state.h"
-#include "util/metrics/file_scan_metrics.h"
 
 namespace starrocks::connector {
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/metrics/flat_json_metrics.h"
+#include "storage/flat_json_metrics.h"
 
 #include "gutil/macros.h"
 

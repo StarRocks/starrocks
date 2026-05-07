@@ -158,7 +158,7 @@ protected:
     TFileScanType::type _file_scan_type{TFileScanType::LOAD};
 
     // string of _params.format_type: "avro", "csv", "json", "parquet", "orc", etc.
-    // NOTE: remember to check the labels defined in be/src/util/metrics/file_scan_metrics.cpp, update the labels when necessary.
+    // NOTE: remember to check the labels defined in be/src/connector/file_scan_metrics.cpp, update the labels when necessary.
     std::string _file_format_str;
 
     // sources

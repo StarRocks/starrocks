@@ -15,6 +15,7 @@
 set(SPILL_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     spill_block_manager_test.cpp
+    spill_metrics_test.cpp
 )
 
 set(SPILL_CORE_TEST_LINK_LIBS
