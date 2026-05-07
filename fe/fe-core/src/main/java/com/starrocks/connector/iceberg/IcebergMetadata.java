@@ -42,8 +42,8 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorType;
@@ -71,7 +71,8 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.metric.IcebergMetricsMgr;
+import com.starrocks.metric.ConnectorMetricsMgr;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -131,6 +132,7 @@ import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -195,6 +197,7 @@ import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -556,8 +559,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Convert ScalarOperator to Iceberg Expression
         Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
         if (deleteExpr == null) {
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail("Failed to convert predicate to Iceberg expression", deleteType);
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    "Failed to convert predicate to Iceberg expression", deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
             throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
         }
 
@@ -580,19 +585,20 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.DELETED_RECORDS_PROP, "0"));
                 long deletedBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.REMOVED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteRows(deletedRows, deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteBytes(deletedBytes, deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedRows, deleteType);
+                ConnectorMetricsMgr.increaseDeleteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedBytes, deleteType);
             } else {
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
             }
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail(e, deleteType);
+            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
             throw new StarRocksConnectorException("Failed to execute metadata delete on %s.%s: %s",
                     dbName, tableName, e.getMessage());
         } finally {
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
         }
 
         // Invalidate cache after commit
@@ -662,7 +668,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             Database db = getDb(context, dbName);
             IcebergTable table =
                     IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
-            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             tables.put(identifier, icebergTable);
             updateTableProperty(db, table);
             return table;
@@ -671,6 +676,23 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw e;
         } catch (NoSuchTableException e) {
             return getView(context, dbName, tblName);
+        }
+    }
+
+    static void checkUnsupportedEncryption(org.apache.iceberg.Table icebergTable) {
+        if (icebergTable.properties().containsKey(ENCRYPTION_TABLE_KEY)) {
+            throw new StarRocksConnectorException(
+                    "Iceberg table encryption is not supported. Table '%s' has encryption property '%s' set.",
+                    icebergTable.name(), ENCRYPTION_TABLE_KEY);
+        }
+
+        if (icebergTable instanceof BaseTable) {
+            TableMetadata metadata = ((BaseTable) icebergTable).operations().current();
+            if (metadata.encryptionKeys() != null && !metadata.encryptionKeys().isEmpty()) {
+                throw new StarRocksConnectorException(
+                        "Iceberg table encryption is not supported. Table '%s' has encryption keys set.",
+                        icebergTable.name());
+            }
         }
     }
 
@@ -764,12 +786,20 @@ public class IcebergMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         // fromSnapshotExclusive can be empty, but toSnapshotInclusive must have a valid snapshot ID
-        final long fromSnapshotIdExclusive = fromSnapshotExclusive.getSnapshotId();
+        final Long fromSnapshotIdExclusive = fromSnapshotExclusive.isEmpty() ? null : fromSnapshotExclusive.getSnapshotId();
         final long toSnapshotIdInclusive =
                 toSnapshotInclusive.end().orElseThrow(() -> new StarRocksConnectorException(
                         "toSnapshotInclusive must have a valid snapshot ID"));
         final IcebergTable icebergTable = (IcebergTable) table;
         final org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+
+        if (fromSnapshotIdExclusive != null &&
+                !SnapshotUtil.isParentAncestorOf(nativeTable, toSnapshotIdInclusive, fromSnapshotIdExclusive)) {
+            throw new StarRocksConnectorException(
+                    "Starting snapshot (exclusive) %s is not a parent ancestor of end snapshot %s",
+                    fromSnapshotIdExclusive, toSnapshotIdInclusive);
+        }
+
         long lastSnapshotId = toSnapshotIdInclusive;
 
         final List<TvrTableDeltaTrait> tvrDeltaTraits = Lists.newArrayList();
@@ -777,6 +807,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         final Iterable<Snapshot> snapshots = SnapshotUtil.ancestorsBetween(
                 toSnapshotIdInclusive, fromSnapshotIdExclusive, nativeTable::snapshot);
         for (Snapshot snapshot : snapshots) {
+            // Skip REPLACE (compaction) snapshots - they rewrite files without changing logical data,
+            // consistent with Iceberg's IncrementalAppendScan and IncrementalChangelogScan behavior.
+            if (DataOperations.REPLACE.equals(snapshot.operation())) {
+                lastSnapshotId = snapshot.snapshotId();
+                continue;
+            }
             long currentSnapshotId = snapshot.snapshotId();
             TvrTableDelta delta = TvrTableDelta.of(currentSnapshotId, lastSnapshotId);
             TvrDeltaStats stats = TvrDeltaStats.of(snapshot);
@@ -814,7 +850,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadataRequestContext requestContext) {
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             Table table = getTable(scope.getContext(), dbName, tblName);
             return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
@@ -842,6 +878,15 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         List<Partition> ans =
                 icebergCatalog.getPartitionsByNames((IcebergTable) table, null, partitionNames);
+        return new ArrayList<>(ans);
+    }
+
+    @Override
+    public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                             ConnectorMetadataRequestContext requestContext) {
+        long snapshotId = requestContext.getSnapshotId();
+        List<Partition> ans =
+                icebergCatalog.getPartitionsByNames((IcebergTable) table, snapshotId, null, partitionNames);
         return new ArrayList<>(ans);
     }
 
@@ -886,6 +931,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId, String serializedPredicate,
                                                     MetadataTableType metadataTableType) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null || !connectContext.isMetadataContext()) {
+            MetricRepo.COUNTER_ICEBERG_METADATA_TABLE_QUERY_TOTAL
+                    .getMetric(metadataTableType.typeString)
+                    .increase(1L);
+        }
+
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -1222,6 +1274,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = icebergTable.getCatalogTableName();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        checkUnsupportedEncryption(nativeTbl);
         traceIcebergMetricsConfig(nativeTbl);
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
@@ -1863,17 +1916,19 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
                 long deletedBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteRows(deletedRows, deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteBytes(deletedBytes, deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedRows, deleteType);
+                ConnectorMetricsMgr.increaseDeleteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedBytes, deleteType);
             } else {
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
             }
         } catch (Exception e) {
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail(e, deleteType);
+            // Delete failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
             throw e;
         } finally {
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
@@ -1955,18 +2010,20 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
                 long writtenBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
-                IcebergMetricsMgr.increaseIcebergWriteRows(writtenRows, writeType);
-                IcebergMetricsMgr.increaseIcebergWriteBytes(writtenBytes, writeType);
-                IcebergMetricsMgr.increaseIcebergWriteFiles(dataFiles.size(), writeType);
+                ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writeType);
+                ConnectorMetricsMgr.increaseWriteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writtenRows, writeType);
+                ConnectorMetricsMgr.increaseWriteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writtenBytes, writeType);
+                ConnectorMetricsMgr.increaseWriteFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG, dataFiles.size(), writeType);
             } else {
-                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
+                ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writeType);
             }
         } catch (Exception e) {
-            IcebergMetricsMgr.increaseIcebergWriteTotalFail(e, writeType);
+            // Write failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
             throw e;
         } finally {
-            IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(System.currentTimeMillis() - startMs, writeType);
+            ConnectorMetricsMgr.increaseWriteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, writeType);
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);

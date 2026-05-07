@@ -28,11 +28,12 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+#include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks::formats {
@@ -718,6 +719,33 @@ TEST_F(ParquetFileWriterTest, TestWriteWithFieldID) {
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 8);
+}
+
+TEST_F(ParquetFileWriterTest, TestWriteWithIcebergRowLineageFieldIDs) {
+    std::vector type_descs{TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC, TYPE_BIGINT_DESC};
+    _writer_options->column_ids = {FileColumnId{1, {}}, FileColumnId{2, {}}, FileColumnId{2147483540, {}},
+                                   FileColumnId{2147483539, {}}};
+    ASSIGN_OR_ASSERT_FAIL(auto writer,
+                          _create_writer(type_descs, {}, {"id", "name", "_row_id", "_last_updated_sequence_number"}));
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto id_col = ColumnTestHelper::build_nullable_column<int32_t>({1, 2}, {0, 0});
+        auto name_col = ColumnTestHelper::build_nullable_column<Slice>({"alice", "bob"}, {0, 0});
+        auto row_id_col = ColumnTestHelper::build_nullable_column<int64_t>({10, 11}, {0, 0});
+        auto seq_col = ColumnTestHelper::build_nullable_column<int64_t>({20, 21}, {0, 0});
+
+        chunk->append_column(std::move(id_col), 0);
+        chunk->append_column(std::move(name_col), 1);
+        chunk->append_column(std::move(row_id_col), 2);
+        chunk->append_column(std::move(seq_col), 3);
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 2);
 }
 
 TEST_F(ParquetFileWriterTest, TestUnknownCompression) {

@@ -25,6 +25,7 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
@@ -105,11 +106,7 @@ class Analytor final : public pipeline::ContextWithDependency {
     };
 
 public:
-    ~Analytor() override {
-        if (_state != nullptr) {
-            close(_state);
-        }
-    }
+    ~Analytor() override;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
              bool use_hash_based_partition);
 
@@ -322,6 +319,9 @@ private:
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _partition_search_timer = nullptr;
     RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
+    RuntimeProfile::Counter* _udaf_load_timer = nullptr;
+    RuntimeProfile::Counter* _udaf_cache_hit_count = nullptr;
+    RuntimeProfile::Counter* _udaf_cache_populate_count = nullptr;
 
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit

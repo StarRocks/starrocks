@@ -46,8 +46,8 @@ private:
     // Record the latest two time points, where the current recorded point is at `_curr_idx`,
     // and the previous recorded point is at `(_curr_idx+1)%2`.
     int _curr_idx = ABSENT_INDEX;
-    int64_t _timestamp[2];
-    uint64_t _proc_time[2];
+    int64_t _timestamp[2]{0, 0};
+    uint64_t _proc_time[2]{0, 0};
 };
 
 } // namespace starrocks

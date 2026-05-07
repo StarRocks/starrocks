@@ -21,13 +21,15 @@
 #include "column/fixed_length_column.h"
 #include "gutil/casts.h"
 #include "json2pb/pb_to_json.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
+#ifndef __APPLE__
 static void append_bigint(MutableColumnPtr& col, int64_t value) {
     [[maybe_unused]] auto n = col->append_numbers(&value, sizeof(value));
     DCHECK_EQ(1, n);
@@ -76,6 +78,7 @@ static void fill_rowset_row(MutableColumns& columns, const RowsetMetadataPB& row
         (void)columns[5]->append_strings(std::vector<Slice>{Slice{json}});
     }
 }
+#endif
 
 std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime_state,
                                                            TableFunctionState* base_state) const {
@@ -88,7 +91,10 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
         return {};
     }
 
-    auto tablet_mgr = runtime_state->exec_env()->lake_tablet_manager();
+    const auto* query_execution_services = runtime_state->query_execution_services();
+    auto* tablet_mgr = query_execution_services != nullptr && query_execution_services->lake != nullptr
+                               ? query_execution_services->lake->lake_tablet_manager
+                               : nullptr;
     if (UNLIKELY(tablet_mgr == nullptr)) {
         state->set_status(Status::InternalError("Only works for tablets in the cloud-native table"));
         return {};
@@ -101,12 +107,12 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     auto row_offset = state->get_offset();
     auto offsets = UInt32Column::create();
     MutableColumns result;
-    result.push_back(Int64Column::create());                                     // id
-    result.push_back(Int64Column::create());                                     // segments
-    result.push_back(Int64Column::create());                                     // rows
-    result.push_back(Int64Column::create());                                     // size
-    result.push_back(BooleanColumn::create());                                   // overlapped
-    result.push_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
+    result.emplace_back(Int64Column::create());                                     // id
+    result.emplace_back(Int64Column::create());                                     // segments
+    result.emplace_back(Int64Column::create());                                     // rows
+    result.emplace_back(Int64Column::create());                                     // size
+    result.emplace_back(BooleanColumn::create());                                   // overlapped
+    result.emplace_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
 
     while (result[0]->size() < max_column_size && curr_row < num_rows) {
         offsets->append_datum(Datum((uint32_t)result[0]->size()));

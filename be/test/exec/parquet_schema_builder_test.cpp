@@ -109,6 +109,44 @@ TEST_F(ParquetSchemaBuilderTest, PrimitiveTypes) {
     }
 }
 
+// Test FIXED_LEN_BYTE_ARRAY schema inference
+TEST_F(ParquetSchemaBuilderTest, FixedLenByteArrayTypes) {
+    TypeDescriptor type_desc;
+    Status st;
+
+    // FIXED_LEN_BYTE_ARRAY with UUID annotation -> VARCHAR(36)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("uuid_col", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::UUID(),
+                                                           ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_VARCHAR, type_desc.type);
+        ASSERT_EQ(36, type_desc.len);
+    }
+
+    // FIXED_LEN_BYTE_ARRAY without annotation -> VARBINARY
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("binary_col", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::None(),
+                                                           ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 8);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_VARBINARY, type_desc.type);
+    }
+
+    // FIXED_LEN_BYTE_ARRAY with DECIMAL annotation -> DECIMAL (unchanged)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("decimal_col", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::DecimalLogicalType::Make(10, 2),
+                                                           ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 8);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(type_desc.type == TYPE_DECIMAL32 || type_desc.type == TYPE_DECIMAL64 ||
+                    type_desc.type == TYPE_DECIMAL128);
+    }
+}
+
 // Test variant type with valid unshredded structure (2 fields: metadata and value)
 TEST_F(ParquetSchemaBuilderTest, VariantTypeUnshredded) {
     TypeDescriptor type_desc;
@@ -216,8 +254,8 @@ TEST_F(ParquetSchemaBuilderTest, VariantInvalidWrongValueType) {
     ASSERT_EQ(TYPE_STRUCT, type_desc.type);
 }
 
-// Test shredded variant type (3 fields) - not yet supported
-TEST_F(ParquetSchemaBuilderTest, VariantShreddedNotSupported) {
+// Test shredded variant type (3 fields) - supported as TYPE_VARIANT.
+TEST_F(ParquetSchemaBuilderTest, VariantShreddedSupported) {
     TypeDescriptor type_desc;
     Status st;
 
@@ -231,9 +269,8 @@ TEST_F(ParquetSchemaBuilderTest, VariantShreddedNotSupported) {
     auto node = create_group_node("variant_col", ::parquet::Repetition::OPTIONAL, fields);
 
     st = get_parquet_type(node, &type_desc);
-    // Should return NotSupported status for shredded variant
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(TYPE_VARIANT, type_desc.type);
 }
 
 // Test invalid variant - extra field

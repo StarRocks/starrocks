@@ -85,8 +85,6 @@ import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.SlotId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -269,6 +267,11 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxIndexId")
     protected long maxIndexId = -1;
 
+    // Persisted primary key encoding type. null means the table was created before this field was introduced,
+    // in which case we fall back to the legacy computed logic in getPrimaryKeyEncodingType().
+    @SerializedName(value = "primaryKeyEncodingType")
+    private TPrimaryKeyEncodingType primaryKeyEncodingType = null;
+
     // the id of the session that created this table, only used in temporary table
     @SerializedName(value = "sessionId")
     protected UUID sessionId = null;
@@ -431,6 +434,7 @@ public class OlapTable extends Table {
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.sessionId = this.sessionId;
+        olapTable.primaryKeyEncodingType = this.primaryKeyEncodingType;
 
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
@@ -2772,20 +2776,19 @@ public class OlapTable extends Table {
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, automatic partition only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
-        // for Partition slot ref, the SlotDescriptor is not serialized, so should
-        // recover it here.
-        // the SlotDescriptor is used by toThrift, which influences the execution
-        // process.
+        // for Partition slot ref, type/nullable are not serialized, so should recover them here.
+        // The type and nullable information will be used by toThrift, which influences the execution process.
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
-        // schema change should update slot id
-        for (int i = 0; i < fullSchema.size(); i++) {
-            Column column = fullSchema.get(i);
-            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
-                        column.getType(), column.isAllowNull());
-                slotRefs.get(0).setDesc(slotDescriptor);
+        SlotRef slotRef = slotRefs.get(0);
+        // Recover type/nullable (not serialized in metadata).
+        // Schema change should update these.
+        for (Column column : fullSchema) {
+            if (column.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                slotRef.setType(column.getType());
+                slotRef.setNullable(column.isAllowNull());
+                break;
             }
         }
     }
@@ -3392,11 +3395,21 @@ public class OlapTable extends Table {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
     }
 
+    public void setPrimaryKeyEncodingType(TPrimaryKeyEncodingType type) {
+        this.primaryKeyEncodingType = type;
+    }
+
     public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
         if (getKeysType() != KeysType.PRIMARY_KEYS) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
         }
 
+        // Use persisted value if available (new tables created after this field was introduced)
+        if (primaryKeyEncodingType != null) {
+            return primaryKeyEncodingType;
+        }
+
+        // Legacy fallback for tables created before primaryKeyEncodingType was persisted
         if (!isCloudNativeTableOrMaterializedView()) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
         }

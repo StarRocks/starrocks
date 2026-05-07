@@ -409,6 +409,7 @@ struct TMaterializedViewStatus {
     28: optional string creator
     29: optional string last_refresh_process_time
     30: optional string last_refresh_job_id
+    31: optional string last_refresh_time
 }
 
 struct TListPipesParams {
@@ -532,8 +533,10 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
-    15: optional string job_id
-    16: optional i64 process_time
+    15: optional string warehouse
+
+    16: optional string job_id
+    17: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -851,6 +854,8 @@ struct TMasterOpRequest {
 
     39: optional bool is_arrow_flight_sql;
 
+    40: optional list<string> user_groups;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
 
@@ -896,6 +901,8 @@ struct TMasterOpResult {
     9: optional i64 txn_id;
     // SQL digest computed by Leader after analyze
     10:optional string sql_digest;
+    // StarMgr max journal ID for shared-data mode follower sync
+    11:optional i64 maxStarMgrJournalId;
 }
 
 struct TIsMethodSupportedRequest {
@@ -996,6 +1003,8 @@ struct TStreamLoadPutRequest {
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
     56: optional string payload_compression_type
+    // CDC envelope format
+    57: optional PlanNodes.TEnvelopeType envelope
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1047,6 +1056,8 @@ struct TRLTaskTxnCommitAttachment {
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
+    // If true, the error is non-retryable and routine load job should be paused
+    13: optional bool nonRetryable
 }
 
 struct TMiniLoadTxnCommitAttachment {
@@ -1450,6 +1461,8 @@ struct TCreatePartitionRequest {
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
     5: optional bool is_temp
+    // timeout in seconds for partition creation request
+    6: optional i32 timeout_s
 }
 
 struct TCreatePartitionResult {
@@ -2282,6 +2295,51 @@ struct TBatchGetTableSchemaResponse {
     2: optional list<TGetTableSchemaResponse> responses;
 }
 
+struct TGetTabletMetadataRequest {
+    1: optional i64 tablet_id;
+    2: optional i64 table_id;
+    3: optional i64 partition_id;
+    4: optional i64 index_id;
+    // The metadata version to fetch. Defaults to 1 when unset.
+    // The current implementation only serves version 1 (the initial empty metadata
+    // produced by tablet creation). Other versions return NOT_IMPLEMENTED until a
+    // future change extends the response with the fields needed for higher versions
+    // (rowsets, historical schemas, etc.).
+    5: optional i64 version;
+}
+
+// Subset of tablet metadata fields needed to construct a version-1 TabletMetadataPB
+// on CN. The shape currently overlaps with AgentService.TCreateTabletReq; the two
+// must be kept in sync per the NOTE on TCreateTabletReq. Higher versions will need
+// additional fields (rowsets, sstable meta, historical schemas, etc.) which can be
+// added without breaking compatibility since all fields are optional.
+struct TCloudTabletMeta {
+    1: optional i64 tablet_id;
+    2: optional AgentService.TTabletSchema schema;
+    3: optional bool enable_persistent_index;
+    4: optional AgentService.TPersistentIndexType persistent_index_type;
+    5: optional AgentService.TCompactionStrategy compaction_strategy;
+    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    7: optional map<i64, Types.TTabletRange> tablet_ranges;
+    8: optional i64 gtid;
+    9: optional Types.TCompressionType compression_type;
+    10: optional i32 compression_level;
+}
+
+struct TGetTabletMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional TCloudTabletMeta meta;
+}
+
+struct TBatchGetTabletMetadataRequest {
+    1: optional list<TGetTabletMetadataRequest> requests;
+}
+
+struct TBatchGetTabletMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTabletMetadataResponse> responses;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2433,4 +2491,6 @@ service FrontendService {
     TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
 
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
+
+    TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
 }

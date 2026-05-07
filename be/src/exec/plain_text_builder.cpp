@@ -23,8 +23,7 @@ PlainTextBuilder::PlainTextBuilder(PlainTextBuilderOptions options, std::unique_
         : _options(std::move(options)),
           _output_expr_ctxs(output_expr_ctxs),
           _output_stream(std::make_unique<io::FormattedOutputStreamFile>(std::move(writable_file),
-                                                                         OUTSTREAM_BUFFER_SIZE_BYTES)),
-          _init(false) {}
+                                                                         OUTSTREAM_BUFFER_SIZE_BYTES)) {}
 
 PlainTextBuilder::~PlainTextBuilder() = default;
 
@@ -92,7 +91,7 @@ Status PlainTextBuilder::add_chunk(Chunk* chunk) {
         if (col == nullptr) {
             return Status::InternalError(strings::Substitute("Column not found by slot id %0", column_ref->slot_id()));
         }
-        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, std::move(col));
+        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, col);
         columns.emplace_back(col);
     }
 

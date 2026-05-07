@@ -43,7 +43,7 @@
 #include "base/system/errno.h"
 #include "base/time/monotime.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "common/system/backend_options.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -70,13 +70,11 @@ static const char* const kTestFilePath = "/.testfile";
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
                  TxnManager* txn_manager)
         : _path(path),
-          _available_bytes(0),
-          _disk_capacity_bytes(0),
+
           _storage_medium(storage_medium),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
-          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
-          _current_shard(0) {}
+          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)) {}
 
 DataDir::~DataDir() {
     delete _id_generator;

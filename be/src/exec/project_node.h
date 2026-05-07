@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exprs/expr_context.h"
 #include "runtime/global_dict/parser.h"
@@ -39,8 +40,7 @@ public:
     void push_down_tuple_slot_mappings(RuntimeState* state,
                                        const std::vector<TupleSlotMapping>& parent_mappings) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     std::vector<SlotId> _slot_ids;

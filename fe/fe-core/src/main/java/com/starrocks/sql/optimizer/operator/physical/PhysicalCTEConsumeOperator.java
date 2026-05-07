@@ -35,14 +35,18 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
 
     private final Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
+    private final Map<Integer, ScalarOperator> globalDictsExpr;
+
     public PhysicalCTEConsumeOperator(int cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap,
-                                      long limit, ScalarOperator predicate, Projection projection) {
+                                      long limit, ScalarOperator predicate, Projection projection,
+                                      Map<Integer, ScalarOperator> globalDictExprs) {
         super(OperatorType.PHYSICAL_CTE_CONSUME);
         this.cteId = cteId;
         this.cteOutputColumnRefMap = cteOutputColumnRefMap;
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.globalDictsExpr = globalDictExprs;
     }
 
     public int getCteId() {
@@ -85,6 +89,10 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
         PhysicalCTEConsumeOperator that = (PhysicalCTEConsumeOperator) o;
         return Objects.equals(cteId, that.cteId) &&
                 Objects.equals(cteOutputColumnRefMap, that.cteOutputColumnRefMap);
+    }
+
+    public Map<Integer, ScalarOperator> getGlobalDictsExpr() {
+        return this.globalDictsExpr;
     }
 
     @Override

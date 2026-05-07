@@ -16,7 +16,7 @@
 
 #include <brpc/controller.h>
 
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 
 namespace starrocks {
 

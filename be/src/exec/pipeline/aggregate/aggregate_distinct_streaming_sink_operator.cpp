@@ -18,7 +18,7 @@
 
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {

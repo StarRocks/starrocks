@@ -45,9 +45,11 @@
 
 namespace starrocks {
 
+class MetricRegistry;
+
 class BrokerMgr {
 public:
-    BrokerMgr();
+    explicit BrokerMgr(MetricRegistry* metrics = nullptr);
     ~BrokerMgr();
     void init();
     const std::string& get_client_id(const TNetworkAddress& address);
@@ -58,7 +60,7 @@ private:
     std::string _client_id;
     std::mutex _mutex;
     std::unordered_set<TNetworkAddress> _broker_set;
-    bool _thread_stop;
+    bool _thread_stop{false};
     std::thread _ping_thread;
 };
 

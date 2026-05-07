@@ -80,7 +80,7 @@ void PredicateCompoundNode<Type>::add_child(const PredicateCompoundNode<ChildTyp
 
 template <CompoundNodeType Type>
 void PredicateCompoundNode<Type>::add_child(PredicateColumnNode&& child) {
-    _col_children_map[child.col_pred()->column_id()].emplace_back(std::move(child));
+    _col_children_map[child.col_pred()->column_id()].emplace_back(child);
 }
 
 template <CompoundNodeType Type>

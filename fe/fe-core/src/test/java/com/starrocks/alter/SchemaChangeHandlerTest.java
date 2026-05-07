@@ -906,6 +906,36 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_uniq_sort_key");
     }
 
+    @Test
+    public void testSortKeyFallbackToIndexesWhenUniqueIdsMissing() throws Exception {
+        createTable("CREATE TABLE test.sc_agg_sort_key_fallback (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 INT SUM DEFAULT '0'\n"
+                + ") AGGREGATE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg_sort_key_fallback");
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), indexMeta.getSortKeyIdxes());
+        Assertions.assertNotNull(indexMeta.getSortKeyUniqueIds());
+
+        // Emulate legacy metadata: sort key indexes exist but unique ids are absent.
+        indexMeta.setSortKeyUniqueIds(null);
+        indexMeta.getSchema().get(1).setUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+
+        executeAlterAndWaitDone("alter table test.sc_agg_sort_key_fallback add column new_v1 int MAX default '0'");
+
+        MaterializedIndexMeta updatedIndexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), updatedIndexMeta.getSortKeyIdxes());
+        Assertions.assertNull(updatedIndexMeta.getSortKeyUniqueIds());
+    }
+
     private void doTestSortKeyUpdatedAfterAddKeyColumn(OlapTable tbl, String qualifiedName) throws Exception {
         Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId()).getSortKeyIdxes());
 

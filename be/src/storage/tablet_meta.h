@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -385,7 +387,7 @@ inline size_t TabletMeta::version_count() const {
 
 inline size_t TabletMeta::segment_count() const {
     size_t num_segments = 0;
-    for (auto rowset_meta : _rs_metas) {
+    for (const auto& rowset_meta : _rs_metas) {
         num_segments += rowset_meta->num_segments();
     }
     return num_segments;
@@ -424,3 +426,8 @@ bool operator==(const TabletMeta& a, const TabletMeta& b);
 bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::TabletState> : formatter<std::underlying_type_t<starrocks::TabletState>> {
+    auto format(starrocks::TabletState value, format_context& ctx) const -> format_context::iterator;
+};

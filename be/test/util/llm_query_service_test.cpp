@@ -25,7 +25,6 @@
 #include <thread>
 
 #include "boost/algorithm/string.hpp"
-#include "common/config.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"

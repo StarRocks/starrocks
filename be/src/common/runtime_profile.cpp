@@ -63,13 +63,11 @@ static const std::string THREAD_INVOLUNTARY_CONTEXT_SWITCHES = "InvoluntaryConte
 const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
-        : _parent(nullptr),
-          _pool(new ObjectPool()),
+        : _pool(new ObjectPool()),
           _name(std::move(name)),
-          _metadata(-1),
+
           _is_averaged_profile(is_averaged_profile),
-          _counter_total_time(TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS), 0),
-          _local_time_percent(0) {
+          _counter_total_time(TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS), 0) {
     _counter_map["TotalTime"] = std::make_pair(&_counter_total_time, ROOT_COUNTER);
 }
 
@@ -131,7 +129,7 @@ void RuntimeProfile::merge(RuntimeProfile* other) {
                 child->_metadata = other_child->_metadata;
                 bool indent_other_child = i.second;
                 _child_map[child->_name] = child;
-                _children.push_back(std::make_pair(child, indent_other_child));
+                _children.emplace_back(child, indent_other_child);
             }
 
             child->merge(other_child);
@@ -208,7 +206,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
 
     if (!is_node_old) {
         std::lock_guard<std::mutex> l(_info_strings_lock);
-        const InfoStrings& info_strings = node.info_strings;
+        const auto& info_strings = node.info_strings;
         for (const std::string& key : node.info_strings_display_order) {
             // Look for existing info strings and update in place. If there
             // are new strings, add them to the end of the display order.
@@ -243,7 +241,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
                 child = _pool->add(new RuntimeProfile(tchild.name));
                 child->_metadata = tchild.metadata;
                 _child_map[tchild.name] = child;
-                _children.push_back(std::make_pair(child, tchild.indent));
+                _children.emplace_back(child, tchild.indent);
             }
 
             child->update(nodes, idx, is_node_old);
@@ -410,27 +408,37 @@ void RuntimeProfile::get_all_children(std::vector<RuntimeProfile*>* children) {
     }
 }
 
-void RuntimeProfile::add_info_string(const std::string& key, const std::string& value) {
+void RuntimeProfile::add_info_string(std::string_view key, std::string_view value) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
     auto it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
         _info_strings.emplace(key, value);
-        _info_strings_display_order.push_back(key);
+        _info_strings_display_order.push_back(std::string(key));
     } else {
         it->second = value;
     }
 }
 
-std::string* RuntimeProfile::get_info_string(const std::string& key) {
+void RuntimeProfile::add_info_string_if_not_exists(std::string_view key, std::string_view value) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
     auto it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
-        return nullptr;
+        _info_strings.emplace(key, value);
+        _info_strings_display_order.push_back(std::string(key));
+    }
+}
+
+std::optional<std::string> RuntimeProfile::get_info_string(std::string_view key) {
+    std::lock_guard<std::mutex> l(_info_strings_lock);
+    auto it = _info_strings.find(key);
+
+    if (it == _info_strings.end()) {
+        return std::nullopt;
     }
 
-    return &it->second;
+    return std::string(it->second);
 }
 
 void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
@@ -441,10 +449,10 @@ void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
 
     std::lock_guard<std::mutex> l(src_profile->_info_strings_lock);
     for (const auto& [key, value] : src_profile->_info_strings) {
-        const std::string* exist_ptr = get_info_string(key);
-        if (exist_ptr == nullptr) {
+        const auto info = get_info_string(key);
+        if (!info.has_value()) {
             add_info_string(key, value);
-        } else if (value != *exist_ptr) {
+        } else if (value != *info) {
             std::string original_key = key;
             if (size_t pos; (pos = key.find("__DUP(")) != std::string::npos) {
                 original_key = key.substr(0, pos);
@@ -456,7 +464,7 @@ void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
                 previous_offset = offset;
                 offset += step;
                 const std::string indexed_key = strings::Substitute("$0__DUP($1)", original_key, offset);
-                if (get_info_string(indexed_key) == nullptr) {
+                if (!get_info_string(indexed_key).has_value()) {
                     if (step == 1) {
                         add_info_string(indexed_key, value);
                         break;
@@ -558,7 +566,7 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const s
     std::lock_guard<std::mutex> l2(_counter_lock);
 
     std::queue<std::pair<std::string, std::string>> name_queue;
-    name_queue.push(std::make_pair(ROOT_COUNTER, ROOT_COUNTER));
+    name_queue.emplace(ROOT_COUNTER, ROOT_COUNTER);
     while (!name_queue.empty()) {
         auto top_pair = std::move(name_queue.front());
         name_queue.pop();
@@ -589,7 +597,7 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const s
         }
 
         for (auto& child_name : names_it->second) {
-            name_queue.push(std::make_pair(child_name, name));
+            name_queue.emplace(child_name, name);
         }
     }
 }
@@ -828,7 +836,7 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
 
     {
         std::lock_guard<std::mutex> l(_info_strings_lock);
-        node.info_strings = _info_strings;
+        node.info_strings.insert(_info_strings.begin(), _info_strings.end());
         node.info_strings_display_order = _info_strings_display_order;
     }
 

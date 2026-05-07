@@ -89,6 +89,11 @@ std::vector<string> split_path(const string& path) {
 // but std::unique_ptr use delete to free memory by default, so it should specify free memory using free
 
 std::string dir_name(const string& path) {
+    // dirname("//") is implementation-defined; normalize it so tests and callers see
+    // the same result across libc variants.
+    if (path == "//") {
+        return "//";
+    }
     std::vector<char> path_copy(path.c_str(), path.c_str() + path.size() + 1);
     return dirname(&path_copy[0]);
 }

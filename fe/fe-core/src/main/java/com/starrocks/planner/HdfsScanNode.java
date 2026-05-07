@@ -166,6 +166,7 @@ public class HdfsScanNode extends ScanNode {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
 
             output.append(explainColumnDict(prefix));
+            output.append(explainColumnAccessPath(prefix));
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
@@ -198,6 +199,11 @@ public class HdfsScanNode extends ScanNode {
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+        if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {
+            tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
+        }
+
+        setConnectorCatalogType(msg);
     }
 
     public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {
@@ -300,5 +306,11 @@ public class HdfsScanNode extends ScanNode {
     @Override
     public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
         scanRangeSource.setSampleStrategy(strategy);
+    }
+
+    @Override
+    public void prepareRetry() {
+        reachLimit = false;
+        this.scanRangeSource.reset();
     }
 }

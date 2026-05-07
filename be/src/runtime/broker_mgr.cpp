@@ -36,7 +36,7 @@
 
 #include <sstream>
 
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "common/util/misc.h"
@@ -44,18 +44,19 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/runtime_metrics.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 
-BrokerMgr::BrokerMgr() : _thread_stop(false), _ping_thread(&BrokerMgr::ping_worker, this) {
+BrokerMgr::BrokerMgr(MetricRegistry* metrics) : _ping_thread(&BrokerMgr::ping_worker, this) {
     Thread::set_thread_name(_ping_thread, "broker_hrtbeat"); // broker heart beat
-    REGISTER_GAUGE_STARROCKS_METRIC(broker_count, [this]() {
-        std::lock_guard<std::mutex> l(_mutex);
-        return _broker_set.size();
-    });
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, broker_count, [this]() {
+            std::lock_guard<std::mutex> l(_mutex);
+            return _broker_set.size();
+        });
+    }
 }
 
 BrokerMgr::~BrokerMgr() {

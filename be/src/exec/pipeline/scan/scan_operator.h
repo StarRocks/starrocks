@@ -99,7 +99,7 @@ public:
 
     virtual int64_t get_scan_table_id() const { return -1; }
 
-    void update_exec_stats(RuntimeState* state) override;
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override;
 
     bool has_full_events() { return get_chunk_buffer().limiter()->has_full_events(); }
     virtual bool need_notify_all() { return true; }
@@ -177,7 +177,7 @@ protected:
         if (chunk == nullptr || chunk->is_empty() || !_topn_filter_back_pressure) {
             return;
         }
-        if (auto* topn_runtime_filters = runtime_bloom_filters()) {
+        if (auto* topn_runtime_filters = get_factory()->get_runtime_bloom_filters()) {
             auto input_num_rows = chunk->num_rows();
             _init_topn_runtime_filter_counters();
             topn_runtime_filters->evaluate(chunk, _topn_filter_eval_context);
@@ -214,14 +214,14 @@ protected:
             return;
         }
 
-        if (auto* bloom_filters = runtime_bloom_filters()) {
+        if (auto* bloom_filters = get_factory()->get_runtime_bloom_filters()) {
             _init_rf_counters(true);
             if (_topn_filter_back_pressure) {
                 _bloom_filter_eval_context.mode = RuntimeMembershipFilterEvalContext::Mode::M_WITHOUT_TOPN;
             }
             bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
         }
-        ChunkPredicateEvaluator::eval_filter_null_values(chunk, filter_null_value_columns());
+        ChunkPredicateEvaluator::eval_filter_null_values(chunk, get_factory()->get_filter_null_value_columns());
     }
 
 protected:

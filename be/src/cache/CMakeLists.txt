@@ -19,23 +19,30 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 
 set(CACHE_FILES
+  data_cache_hit_rate_counter.hpp
+  disk_cache/io_buffer.cpp
+  disk_cache/block_cache.cpp
+  mem_cache/lrucache_engine.cpp
+  mem_cache/page_cache.cpp
   disk_space_monitor.cpp
   mem_space_monitor.cpp
   datacache.cpp
+  datacache_runtime_compat.cpp
   datacache_metrics.cpp
   datacache_utils.cpp
-  data_cache_hit_rate_counter.hpp
-  mem_cache/lrucache_engine.cpp
-  mem_cache/page_cache.cpp
-  disk_cache/block_cache.cpp
-  disk_cache/io_buffer.cpp
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")
-    list(APPEND CACHE_FILES disk_cache/starcache_engine.cpp)
-    list(APPEND CACHE_FILES peer_cache_engine.cpp)
+    list(APPEND CACHE_FILES
+      disk_cache/starcache_engine.cpp
+      peer_cache_engine.cpp
+    )
 endif()
 
 ADD_BE_LIB(Cache
     ${CACHE_FILES}
+)
+
+target_link_libraries(Cache
+    PUBLIC RuntimeCore FSCore Common Base Gutil StarRocksGen
 )

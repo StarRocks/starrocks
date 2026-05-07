@@ -26,6 +26,8 @@
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -38,7 +40,7 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
                              std::move(partition_chunk_writer_factory), state, true) {}
 
 void FileChunkSink::callback_on_commit(const CommitResult& result) {
-    _rollback_actions.push_back(std::move(result.rollback_action));
+    _rollback_actions.push_back(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
         COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
@@ -89,11 +91,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
     // Disable the load spill for file sink temperarily
     if (/* config::enable_connector_sink_spill */ false) {
+        auto* query_execution_services = runtime_state->query_execution_services();
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
                         fs,
                         ctx->fragment_context,
+                        query_execution_services->runtime->connector_sink_spill_executor,
                         nullptr,
                         nullptr});
         partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);

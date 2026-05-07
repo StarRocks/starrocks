@@ -28,6 +28,7 @@ import com.starrocks.type.Type;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
@@ -36,6 +37,7 @@ import java.util.Map;
 public abstract class JDBCSchemaResolver {
 
     boolean supportPartitionInformation = false;
+    protected String[] defaultTableTypes = new String[] {"TABLE", "VIEW"};
 
     /**
      * Get the query timeout in seconds for JDBC statement execution.
@@ -102,8 +104,11 @@ public abstract class JDBCSchemaResolver {
     }
 
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(dbName, null, null,
-                new String[] {"TABLE", "VIEW"});
+        return connection.getMetaData().getTables(dbName, null, null, defaultTableTypes);
+    }
+
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(dbName, null, tblName, defaultTableTypes);
     }
 
     public ResultSet getColumns(Connection connection, String dbName, String tblName) throws SQLException {
@@ -120,6 +125,30 @@ public abstract class JDBCSchemaResolver {
         return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, properties);
     }
 
+    /**
+     * Get table comment from JDBC metadata, typically from the "REMARKS" column of DatabaseMetaData#getTables().
+     *
+     * <p>Notes:
+     * - Some JDBC drivers don't support REMARKS or may throw SQLException when accessing it.
+     * - Some drivers return empty REMARKS unless certain connection properties are enabled.
+     */
+    public String getTableComment(Connection connection, String dbName, String tblName) {
+        try (ResultSet resultSet = getTables(connection, dbName, tblName)) {
+            if (!resultSet.next()) {
+                return "";
+            }
+            try {
+                String remarks = resultSet.getString("REMARKS");
+                return remarks != null ? remarks : "";
+            } catch (SQLException ignored) {
+                // ignore
+            }
+        } catch (SQLException ignored) {
+            // ignore
+        }
+        return "";
+    }
+
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
         return Lists.newArrayList();
     }
@@ -133,12 +162,22 @@ public abstract class JDBCSchemaResolver {
     }
 
     public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {
+        return convertToSRTable(columnSet, null);
+    }
+
+    public List<Column> convertToSRTable(ResultSet columnSet, Map<String, Integer> originalJdbcTypes) throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         while (columnSet.next()) {
-            Type type = convertColumnType(columnSet.getInt("DATA_TYPE"),
+            int dataType = columnSet.getInt("DATA_TYPE");
+            String columnName = columnSet.getString("COLUMN_NAME");
+            Type type = convertColumnType(dataType,
                     columnSet.getString("TYPE_NAME"),
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
+
+            if (originalJdbcTypes != null) {
+                originalJdbcTypes.put(columnName.toLowerCase(java.util.Locale.ROOT), dataType);
+            }
 
             String comment = "";
             // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
@@ -148,10 +187,39 @@ public abstract class JDBCSchemaResolver {
                 }
             } catch (SQLException ignored) { }
 
-            fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
+            fullSchema.add(new Column(normalizeColumnName(columnSet.getString("COLUMN_NAME")), type,
                     columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
         }
         return fullSchema;
+    }
+
+    public List<Column> convertToSRTable(ResultSetMetaData metaData) throws SQLException {
+        return convertToSRTable(metaData, null);
+    }
+
+    public List<Column> convertToSRTable(ResultSetMetaData metaData, Map<String, Integer> originalJdbcTypes)
+            throws SQLException {
+        List<Column> fullSchema = Lists.newArrayList();
+        for (int i = 1; i <= metaData.getColumnCount(); i++) {
+            Type type = convertColumnType(metaData.getColumnType(i),
+                    metaData.getColumnTypeName(i),
+                    metaData.getPrecision(i),
+                    metaData.getScale(i));
+            String columnName = metaData.getColumnLabel(i);
+            if (columnName == null || columnName.isEmpty()) {
+                columnName = metaData.getColumnName(i);
+            }
+            if (originalJdbcTypes != null) {
+                originalJdbcTypes.put(columnName.toLowerCase(java.util.Locale.ROOT), metaData.getColumnType(i));
+            }
+            boolean nullable = metaData.isNullable(i) != ResultSetMetaData.columnNoNulls;
+            fullSchema.add(new Column(normalizeColumnName(columnName), type, nullable));
+        }
+        return fullSchema;
+    }
+
+    protected String normalizeColumnName(String columnName) {
+        return columnName;
     }
 
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) throws SQLException {

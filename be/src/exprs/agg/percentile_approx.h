@@ -35,7 +35,7 @@ public:
     // This is used when the state is already constructed (e.g., as part of NullableAggregateFunctionState)
     // but we need to apply a different compression factor from FunctionContext
     void reinit_with_compression(double compression) {
-        percentile.reset(new PercentileValue(compression));
+        percentile = std::make_unique<PercentileValue>(compression);
         compression_initialized = true;
     }
 

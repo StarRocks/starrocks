@@ -30,7 +30,7 @@ class DataDir;
 class PersistentIndexTabletLoader : public TabletLoader {
 public:
     PersistentIndexTabletLoader(Tablet* tablet) : _tablet(tablet) {}
-    ~PersistentIndexTabletLoader() = default;
+    ~PersistentIndexTabletLoader() override = default;
     starrocks::Schema generate_pkey_schema() override;
     DataDir* data_dir() override;
     TTabletId tablet_id() override;

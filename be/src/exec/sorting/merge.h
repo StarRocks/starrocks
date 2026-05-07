@@ -21,9 +21,9 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exec/sorting/sort_cursor.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "runtime/chunk_cursor.h"
 #include "types/datum.h"
 
 namespace starrocks {
@@ -101,7 +101,7 @@ struct SortedRuns {
     SortedRuns() = default;
     ~SortedRuns() = default;
     SortedRuns(const SortedRuns& run) = default;
-    SortedRuns(SortedRuns&& run) = default;
+    SortedRuns(SortedRuns&& run) noexcept = default;
     SortedRuns(const SortedRun& run) : chunks{run} {}
     SortedRuns& operator=(SortedRuns&& run) = default;
 
@@ -271,8 +271,6 @@ private:
     std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
     std::unique_ptr<SimpleChunkSortCursor> _root_cursor;
 };
-
-class SimpleChunkSortCursor;
 
 // Merge implementations
 // Underlying algorithm is multi-level cascade-merge, which could be streaming and short-circuit

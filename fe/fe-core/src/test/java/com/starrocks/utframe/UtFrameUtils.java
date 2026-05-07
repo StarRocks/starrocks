@@ -64,7 +64,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -106,7 +105,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -307,10 +305,6 @@ public class UtFrameUtils {
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
-        // TODO: support startBDB = false in shared-data mode
-        if (!startBDB && runMode == RunMode.SHARED_DATA) {
-            throw new NotImplementedException("Have to set 'startBDB = true' when creating a shared-data cluster");
-        }
         // set additional fe config
         if (startBDB) {
             feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
@@ -396,9 +390,7 @@ public class UtFrameUtils {
 
     // create a min starrocks cluster with the given runMode
     public static void createMinStarRocksCluster(RunMode runMode) {
-        // TODO: support creating shared-data cluster without the real BDBJE journal
-        boolean startBdb = (runMode == RunMode.SHARED_DATA);
-        createMinStarRocksCluster(startBdb, runMode);
+        createMinStarRocksCluster(false, runMode);
     }
 
     public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
@@ -562,35 +554,6 @@ public class UtFrameUtils {
 
         Assertions.assertEquals(plan.getFragments().size(), visitedFragments.size(),
                 "Some fragments do not belong to the fragment tree");
-    }
-
-    /*
-     * Return analyzed statement and execution plan for MV maintenance
-     */
-    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
-                                                                                    String sql)
-            throws DdlException, CloneNotSupportedException {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-
-        List<StatementBase> statements =
-                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
-        connectContext.getDumpInfo().setOriginStmt(sql);
-        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
-        StatementBase statementBase = statements.get(0);
-
-        try {
-            // update session variable by adding optional hints.
-            if (statementBase.isExistQueryScopeHint()) {
-                processQueryScopeHint(statementBase, connectContext);
-            }
-
-            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
-            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
-            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
-            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
-        } finally {
-            clearQueryScopeHintContext(connectContext, oldSessionVariable);
-        }
     }
 
     private interface GetPlanHook<R> {
@@ -1351,6 +1314,7 @@ public class UtFrameUtils {
 
     public static void setPartitionVersion(Partition partition, long version) {
         partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setDataVersion(version);
         MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
@@ -1558,6 +1522,8 @@ public class UtFrameUtils {
                 iterator.remove();
             }
         }
+        // Reset compute resource to avoid leaking a stale warehouse binding from query-scope hints.
+        context.resetComputeResource();
     }
 
     /***

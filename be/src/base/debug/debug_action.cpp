@@ -20,13 +20,23 @@
 
 namespace starrocks {
 void DebugActionMgr::add_action(const TExecDebugOption& debug_action) {
-    if (debug_action.debug_action == TDebugAction::WAIT) {
-        DebugAction action;
-        action.node_id = debug_action.debug_node_id;
+    DebugAction action;
+    action.node_id = debug_action.debug_node_id;
+    action.value = debug_action.value;
+    switch (debug_action.debug_action) {
+    case TDebugAction::WAIT:
         action.action = EnumDebugAction::WAIT;
-        action.value = debug_action.value;
-        _debug_actions.emplace(action.node_id, action);
+        break;
+    case TDebugAction::BLOCK_SOURCE_OPERATOR:
+        action.action = EnumDebugAction::BLOCK_SOURCE_OPERATOR;
+        break;
+    case TDebugAction::BLOCK_SINK_OPERATOR:
+        action.action = EnumDebugAction::BLOCK_SINK_OPERATOR;
+        break;
+    default:
+        return;
     }
+    _debug_actions.emplace(action.node_id, action);
 }
 
 } // namespace starrocks

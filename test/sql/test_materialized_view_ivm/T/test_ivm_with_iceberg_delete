@@ -1,0 +1,232 @@
+-- name: test_ivm_with_iceberg_delete
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+
+create table t2 (
+  id int,
+  val string
+);
+
+insert into t1 values
+  ('a', 1, '2023-12-01'), ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'), ('b', 4, '2023-12-02'),
+  ('c', 5, '2023-12-03'), ('c', 6, '2023-12-03'),
+  ('d', 7, '2023-12-04'), ('d', 8, '2023-12-04');
+
+insert into t2 values (1,'x'), (2,'y'), (3,'z'), (5,'p'), (7,'q');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+set enable_materialized_view_rewrite = false;
+
+-- ==============================================================
+-- Part A: refresh_mode = "auto" — IVM -> PCT fallback -> IVM recovery
+-- ==============================================================
+
+-- --- MV shape (1): SELECT * — row-level DELETE ---
+-- Expected refreshMode sequence: PCT, INCREMENTAL, PCT, INCREMENTAL
+-- Note: First refresh after MV creation is PCT (no prior anchor snapshot,
+-- full-build establishes the baseline). Subsequent append-only refreshes
+-- are INCREMENTAL; DELETE triggers PCT fallback; next append recovers.
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+
+-- Second INSERT: still append-only, should remain IVM
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('e', 9, '2023-12-05');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+
+-- Row-level DELETE: non-append-only delta -> expect PCT fallback
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 2;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+
+-- Subsequent INSERT: append-only -> IVM should recover
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('f', 10, '2023-12-06');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- --- MV shape (2): aggregation — DELETE outside then inside MV WHERE ---
+-- Expected refreshMode sequence: PCT, INCREMENTAL, PCT, PCT, INCREMENTAL
+-- Note: count(col_int) is used instead of count(*) because IVM requires
+-- aggregate functions with combine semantics; count(*) has no combine
+-- implementation (would fail with "No matching function: count_combine()").
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT dt, sum(col_int) AS sum_col_int, count(col_int) AS cnt
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   WHERE col_int > 3
+   GROUP BY dt;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- Second INSERT: append-only -> still IVM
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('g', 10, '2023-12-07');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- DELETE OUTSIDE MV WHERE: col_int = 1 rows are not in MV (filter: col_int > 3).
+-- Expected: PCT fallback (non-append-only delta), MV aggregated rows unchanged.
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 1;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- DELETE INSIDE MV WHERE: col_int = 5 is inside filter.
+-- Expected: PCT fallback + MV aggregation reflects deletion.
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 5;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- Subsequent INSERT: recover to IVM
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('h', 11, '2023-12-08');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- --- MV shape (3): JOIN — cross-partition DELETE ---
+-- Expected refreshMode sequence: PCT, INCREMENTAL, PCT, INCREMENTAL
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT t1.dt, t1.col_str, t2.val
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 t1
+   JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 t2 ON t1.col_int = t2.id;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+
+-- Second INSERT: append-only -> still IVM
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('i', 3, '2023-12-09');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+
+-- Cross-partition DELETE: col_int IN (3, 7) hits 2023-12-02, 2023-12-04, 2023-12-09
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int IN (3, 7);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+
+-- Subsequent INSERT: recover to IVM
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('j', 2, '2023-12-10');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, col_str, val FROM test_mv1 ORDER BY dt, col_str, val;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- ==============================================================
+-- Part A extra: partition-level DELETE (metadata delete optimization)
+-- Expected refreshMode sequence: PCT, PCT, PCT, INCREMENTAL
+--
+-- Partition-level DELETE triggers Iceberg metadata-delete; the PCT
+-- refresh that follows produces only partition drops (no INSERT),
+-- so MVPCTBasedRefreshProcessor returns SKIPPED before
+-- updateVersionMeta runs and TVR is NOT committed. Step 3's INSERT
+-- therefore still sees the stale anchor and must fall back to PCT
+-- again (but this PCT has INSERT work, so TVR finally commits).
+-- Step 4 verifies that after TVR catches up, a subsequent append
+-- recovers to INCREMENTAL, i.e., the delayed-by-one-refresh effect
+-- self-heals.
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+-- Partition-level DELETE: removes dt=2023-12-04 entirely (metadata delete path)
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE dt = '2023-12-04';
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT count(*) FROM test_mv1 WHERE dt = '2023-12-04';
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt <= '2023-12-05' ORDER BY col_str, col_int, dt;
+
+-- Step 3: Insert new rows into the dropped partition.
+-- Expected PCT (still): TVR anchor is stale (not committed in Step 2's
+-- SKIPPED path), so the range spans the drop snapshot and IVM rejects
+-- as non-append-only. This PCT has real INSERT work and will commit TVR.
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('new_d', 99, '2023-12-04');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt = '2023-12-04' ORDER BY col_str, col_int;
+
+-- Step 4: Another append after Step 3's PCT committed TVR.
+-- Expected INCREMENTAL — verifies the "delayed by one refresh" bug
+-- self-heals once a PCT with INSERT work succeeds.
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('new_e', 100, '2023-12-11');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt IN ('2023-12-04', '2023-12-11') ORDER BY col_str, col_int, dt;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- ==============================================================
+-- Part B: refresh_mode = "incremental" — expect refresh FAILED on DELETE
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "incremental")
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 2;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- Refresh must FAIL because incremental mode does not allow non-append-only delta
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%not append-only%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- ==============================================================
+-- Cleanup
+-- ==============================================================
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;

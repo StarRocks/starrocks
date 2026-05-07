@@ -20,6 +20,7 @@
 #include <typeindex>
 
 #include "base/hash/hash_util.hpp"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
@@ -384,6 +385,11 @@ public:
     }
 
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("AdaptiveNullableColumn is not supported");
+    }
 
     template <typename ObjectType>
     Status do_visit(const ObjectColumn<ObjectType>& column) {

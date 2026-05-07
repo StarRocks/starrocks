@@ -14,11 +14,17 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricLabel;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.SqlTaskRunProcessor;
@@ -27,16 +33,21 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
+import org.apache.iceberg.SnapshotRef;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class QueryDetailTest {
@@ -69,6 +80,45 @@ public class QueryDetailTest {
         connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         starRocksAssert = new StarRocksAssert(connectContext);
         Config.enable_collect_query_detail_info = true;
+    }
+
+    private ConnectContext createQueryContext() {
+        ConnectContext testContext = new ConnectContext();
+        testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
+        testContext.setQueryId(UUIDUtil.genUUID());
+        testContext.setStartTime();
+        testContext.getState().setIsQuery(true);
+        return testContext;
+    }
+
+    private long getTimeTravelCounterValue(String timeTravelType) {
+        return MetricRepo.getMetricsByName("iceberg_time_travel_query_total").stream()
+                .filter(metric -> hasTimeTravelTypeLabel(metric, timeTravelType))
+                .map(Metric::getValue)
+                .map(Long.class::cast)
+                .findFirst()
+                .orElse(0L);
+    }
+
+    private boolean hasTimeTravelTypeLabel(Metric metric, String timeTravelType) {
+        for (Object labelObject : metric.getLabels()) {
+            MetricLabel label = (MetricLabel) labelObject;
+            if ("time_travel_type".equals(label.getKey()) && timeTravelType.equals(label.getValue())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private IcebergTable createIcebergTableWithRef(String refName, SnapshotRef snapshotRef) {
+        org.apache.iceberg.Table nativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        Mockito.when(nativeTable.refs()).thenReturn(Map.of(refName, snapshotRef));
+        return new IcebergTable(1L, "t0", "iceberg_catalog", null,
+                "db0", "t0", "", Collections.emptyList(), nativeTable, Collections.emptyMap());
     }
 
     @Test
@@ -147,6 +197,108 @@ public class QueryDetailTest {
         // Verify AuditEvent query source is INTERNAL
         AuditEvent event = testContext.getAuditEventBuilder().build();
         Assertions.assertEquals("INTERNAL", event.querySource);
+    }
+
+    @Test
+    public void testIcebergTimeTravelQueryMetric() throws Exception {
+        String sql = "SELECT * FROM db0.t0 FOR VERSION AS OF 1 JOIN db0.t1 FOR VERSION AS OF 2 ON 1 = 1";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        AnalyzerUtils.collectTableRelations(statement).forEach(tableRelation -> tableRelation.setTable(new IcebergTable()));
+        ConnectContext testContext = createQueryContext();
+
+        long before = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+        long snapshotBefore = getTimeTravelCounterValue("snapshot");
+        new ConnectProcessor(testContext).auditAfterExec(sql, statement, null);
+        long after = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+        long snapshotAfter = getTimeTravelCounterValue("snapshot");
+
+        Assertions.assertEquals(before + 1, after);
+        Assertions.assertEquals(snapshotBefore + 1, snapshotAfter);
+    }
+
+    @Test
+    public void testIcebergTimeTravelQueryMetricByBranch() throws Exception {
+        String sql = "SELECT * FROM db0.t0 FOR VERSION AS OF 'test_branch'";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        AnalyzerUtils.collectTableRelations(statement).forEach(tableRelation ->
+                tableRelation.setTable(createIcebergTableWithRef("test_branch", SnapshotRef.branchBuilder(1L).build())));
+
+        ConnectContext testContext = createQueryContext();
+        long before = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+        long branchBefore = getTimeTravelCounterValue("branch");
+
+        new ConnectProcessor(testContext).auditAfterExec(sql, statement, null);
+
+        Assertions.assertEquals(before + 1, MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue());
+        Assertions.assertEquals(branchBefore + 1, getTimeTravelCounterValue("branch"));
+    }
+
+    @Test
+    public void testIcebergTimeTravelQueryMetricByTag() throws Exception {
+        String sql = "SELECT * FROM db0.t0 FOR VERSION AS OF 'test_tag'";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        AnalyzerUtils.collectTableRelations(statement).forEach(tableRelation ->
+                tableRelation.setTable(createIcebergTableWithRef("test_tag", SnapshotRef.tagBuilder(1L).build())));
+
+        ConnectContext testContext = createQueryContext();
+        long before = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+        long tagBefore = getTimeTravelCounterValue("tag");
+
+        new ConnectProcessor(testContext).auditAfterExec(sql, statement, null);
+
+        Assertions.assertEquals(before + 1, MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue());
+        Assertions.assertEquals(tagBefore + 1, getTimeTravelCounterValue("tag"));
+    }
+
+    @Test
+    public void testIcebergTimeTravelQueryMetricByTimestamp() throws Exception {
+        String sql = "SELECT * FROM db0.t0 FOR TIMESTAMP AS OF '2024-01-01 00:00:00'";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        AnalyzerUtils.collectTableRelations(statement).forEach(tableRelation -> tableRelation.setTable(new IcebergTable()));
+
+        ConnectContext testContext = createQueryContext();
+        long before = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+        long timestampBefore = getTimeTravelCounterValue("timestamp");
+
+        new ConnectProcessor(testContext).auditAfterExec(sql, statement, null);
+
+        Assertions.assertEquals(before + 1, MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue());
+        Assertions.assertEquals(timestampBefore + 1, getTimeTravelCounterValue("timestamp"));
+    }
+
+    @Test
+    public void testIcebergTimeTravelQueryMetricWithMultipleTypes() throws Exception {
+        String sql = "SELECT * FROM db0.t0 FOR VERSION AS OF 'test_branch' " +
+                "JOIN db0.t1 FOR TIMESTAMP AS OF '2024-01-01 00:00:00' ON 1 = 1";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        List<com.starrocks.sql.ast.TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(statement);
+        tableRelations.get(0).setTable(createIcebergTableWithRef("test_branch", SnapshotRef.branchBuilder(1L).build()));
+        tableRelations.get(1).setTable(new IcebergTable());
+
+        ConnectContext testContext = createQueryContext();
+        long before = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+        long branchBefore = getTimeTravelCounterValue("branch");
+        long timestampBefore = getTimeTravelCounterValue("timestamp");
+
+        new ConnectProcessor(testContext).auditAfterExec(sql, statement, null);
+
+        Assertions.assertEquals(before + 1, MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue());
+        Assertions.assertEquals(branchBefore + 1, getTimeTravelCounterValue("branch"));
+        Assertions.assertEquals(timestampBefore + 1, getTimeTravelCounterValue("timestamp"));
+    }
+
+    @Test
+    public void testRegularIcebergQueryDoesNotIncreaseTimeTravelMetric() throws Exception {
+        String sql = "SELECT * FROM db0.t0";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        AnalyzerUtils.collectTableRelations(statement).forEach(tableRelation -> tableRelation.setTable(new IcebergTable()));
+        ConnectContext testContext = createQueryContext();
+
+        long before = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+        new ConnectProcessor(testContext).auditAfterExec(sql, statement, null);
+        long after = MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.getValue();
+
+        Assertions.assertEquals(before, after);
     }
 
     @Test
@@ -255,5 +407,90 @@ public class QueryDetailTest {
 
         starRocksAssert.dropDatabase(dbName);
 
+    }
+
+    @Test
+    public void testAuditAfterExecWithCatalogMetricsAndBigQueryLog(@Mocked StmtExecutor mockExecutor) throws Exception {
+        String sql = "SELECT 1";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+        ConnectContext testContext = new ConnectContext();
+        testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
+        testContext.setQueryId(UUIDUtil.genUUID());
+        testContext.setStartTime();
+        testContext.getState().setIsQuery(true);
+        testContext.getSessionVariable().setEnableBigQueryLog(true);
+        testContext.getSessionVariable().setBigQueryLogCpuSecondThreshold(11L);
+        testContext.getSessionVariable().setBigQueryLogScanBytesThreshold(22L);
+        testContext.getSessionVariable().setBigQueryLogScanRowsThreshold(33L);
+
+        new mockit.Expectations() {
+            {
+                mockExecutor.getCatalogTypesInvolved();
+                result = Sets.newHashSet("hive");
+                minTimes = 0;
+            }
+        };
+
+        long oldSlowLogMs = Config.qe_slow_log_ms;
+        try {
+            Config.qe_slow_log_ms = 0;
+            ConnectProcessor processor = new ConnectProcessor(testContext);
+            Deencapsulation.setField(processor, "executor", mockExecutor);
+            processor.auditAfterExec(sql, statement, null);
+        } finally {
+            Config.qe_slow_log_ms = oldSlowLogMs;
+        }
+
+        AuditEvent event = testContext.getAuditEventBuilder().build();
+        Assertions.assertTrue(event.isQuery);
+        Assertions.assertEquals(11L, event.bigQueryLogCPUSecondThreshold);
+        Assertions.assertEquals(22L, event.bigQueryLogScanBytesThreshold);
+        Assertions.assertEquals(33L, event.bigQueryLogScanRowsThreshold);
+    }
+
+    @Test
+    public void testAuditAfterExecWithCatalogMetricsErrorType(@Mocked StmtExecutor mockExecutor) throws Exception {
+        String sql = "SELECT 1";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+        ConnectContext testContext = new ConnectContext();
+        testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
+        testContext.setQueryId(UUIDUtil.genUUID());
+        testContext.setStartTime();
+        testContext.getState().setIsQuery(true);
+        testContext.getState().setStateType(QueryState.MysqlStateType.ERR);
+
+        new mockit.Expectations() {
+            {
+                mockExecutor.getCatalogTypesInvolved();
+                result = Sets.newHashSet("hive");
+                minTimes = 0;
+            }
+        };
+
+        ConnectProcessor processor = new ConnectProcessor(testContext);
+        Deencapsulation.setField(processor, "executor", mockExecutor);
+
+        long timeoutBefore = MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT.getMetric("hive").getValue();
+        long internalBefore = MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR.getMetric("hive").getValue();
+
+        testContext.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
+        processor.auditAfterExec(sql, statement, null);
+        Assertions.assertEquals(timeoutBefore + 1,
+                MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT.getMetric("hive").getValue());
+
+        testContext.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+        processor.auditAfterExec(sql, statement, null);
+        Assertions.assertEquals(internalBefore + 1,
+                MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR.getMetric("hive").getValue());
     }
 }

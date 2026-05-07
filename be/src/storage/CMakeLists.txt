@@ -26,6 +26,7 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_config.cpp
+    flat_json_metrics.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -50,6 +51,7 @@ set(STORAGE_FILES
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
+    storage_metrics.cpp
     data_dir.cpp
     short_key_index.cpp
     snapshot_manager.cpp
@@ -78,6 +80,7 @@ set(STORAGE_FILES
     rowset/json_column_compactor.cpp
     rowset/json_column_iterator.cpp
     rowset/json_column_writer.cpp
+    rowset/object_column_writer.cpp
     rowset/cast_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
@@ -101,6 +104,7 @@ set(STORAGE_FILES
     rowset/data_sample.cpp
     rowset/dict_page.cpp
     rowset/segment.cpp
+    rowset/segment_file_info.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
@@ -178,6 +182,7 @@ set(STORAGE_FILES
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
     virtual_column_utils.cpp
+    extends_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
@@ -196,10 +201,14 @@ set(STORAGE_FILES
     lake/delta_writer.cpp
     lake/vacuum.cpp
     lake/vacuum_full.cpp
+    lake/vector_index_build_task.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
+    lake/tablet_reshard_helper.cpp
+    lake/tablet_splitter.cpp
+    lake/tablet_merger.cpp
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
@@ -307,3 +316,5 @@ endif()
 ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
+
+target_link_libraries(Storage PUBLIC ExecCore)

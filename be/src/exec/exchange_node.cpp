@@ -35,12 +35,13 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/offset_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -54,14 +55,13 @@ namespace starrocks {
 ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _texchange_node(tnode.exchange_node),
-          _num_senders(0),
+
           _stream_recvr(nullptr),
           _input_row_desc(descs, tnode.exchange_node.input_row_tuples),
           _is_merging(tnode.exchange_node.__isset.sort_info),
           _is_parallel_merge(tnode.exchange_node.__isset.enable_parallel_merge &&
                              tnode.exchange_node.enable_parallel_merge),
-          _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0),
-          _num_rows_skipped(0) {
+          _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0) {
     DCHECK_GE(_offset, 0);
 }
 
@@ -81,8 +81,9 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     // TODO: figure out appropriate buffer size
     DCHECK_GT(_num_senders, 0);
-    _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
-    _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
+    _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+    auto* query_execution_services = state->query_execution_services();
+    _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
             config::exchg_node_buffer_size_bytes, _is_merging, _sub_plan_query_statistics_recvr, false, 1, false);
     _stream_recvr->bind_profile(0, _runtime_profile);
@@ -243,7 +244,7 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
     *out << ")";
 }
 
-pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
@@ -287,14 +288,14 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, operators.back().get(), context, rc_rf_probe_collector);
 
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     if (operators.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(operators, context, id());
+        pipeline::may_add_chunk_accumulate_operator(operators, context, id());
     }
 
     operators = context->maybe_interpolate_debug_ops(runtime_state(), _id, operators);

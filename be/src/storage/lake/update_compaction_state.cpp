@@ -15,7 +15,7 @@
 #include "storage/lake/update_compaction_state.h"
 
 #include "base/debug/trace.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -58,6 +58,7 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
 
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
@@ -99,7 +100,6 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
         itr->close();
     }
     dest = std::move(col);
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest->memory_usage();
     _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();

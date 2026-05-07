@@ -24,7 +24,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
-#include "common/config.h"
+#include "common/config_object_storage_fwd.h"
 #include "common/s3_uri.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "fs/fs_factory.h"

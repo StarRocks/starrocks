@@ -54,7 +54,7 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
         casted_value_column = src_values_column->clone();
     }
     casted_value_column = NullableColumn::wrap_if_necessary(std::move(casted_value_column));
-    auto casted_map = MapColumn::create(std::move(casted_key_column), std::move(casted_value_column),
+    auto casted_map = MapColumn::create(casted_key_column, casted_value_column,
                                         ColumnHelper::as_column<UInt32Column>(std::move(*src_offsets_column).mutate()));
     RETURN_IF_ERROR(down_cast<MapColumn*>(casted_map->as_mutable_raw_ptr())->unfold_const_children(_type));
     if (!orig_column->is_nullable()) {
@@ -76,14 +76,16 @@ StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk
     const auto* struct_column = down_cast<const StructColumn*>(ColumnHelper::get_data_column(orig_column.get()));
     MutableColumns casted_fields;
     for (int i = 0; i < _field_casts.size(); ++i) {
+        // Use source_field_indices to get the correct source field when field order differs
+        int source_idx = (!_source_field_indices.empty()) ? _source_field_indices[i] : i;
         if (_field_casts[i] != nullptr) {
             Chunk field_chunk;
-            field_chunk.append_column(struct_column->fields()[i], 0);
+            field_chunk.append_column(struct_column->fields()[source_idx], 0);
             ASSIGN_OR_RETURN(auto casted_field, _field_casts[i]->evaluate_checked(context, &field_chunk));
             casted_field = NullableColumn::wrap_if_necessary(std::move(casted_field));
             casted_fields.emplace_back(std::move(*casted_field).mutate());
         } else {
-            auto& field_column = struct_column->get_column_by_idx(i);
+            auto& field_column = struct_column->get_column_by_idx(source_idx);
             casted_fields.emplace_back(NullableColumn::wrap_if_necessary(std::move(*field_column).mutate()));
         }
         DCHECK(casted_fields[i]->is_nullable());
@@ -121,7 +123,7 @@ StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked(ExprContext* context, Chunk*
     casted_element_column = NullableColumn::wrap_if_necessary(std::move(casted_element_column));
 
     auto casted_array = ArrayColumn::create(
-            std::move(casted_element_column),
+            casted_element_column,
             ColumnHelper::as_column<UInt32Column>(std::move(*(array_column->offsets_column())).mutate()));
     RETURN_IF_ERROR(down_cast<ArrayColumn*>(casted_array->as_mutable_raw_ptr())->unfold_const_children(_type));
     if (orig_column->is_constant()) {

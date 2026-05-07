@@ -18,6 +18,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 
 namespace starrocks::pipeline {

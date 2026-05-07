@@ -35,6 +35,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 
 typedef i64 TTimestamp
 typedef i32 TPlanNodeId
@@ -392,6 +393,7 @@ struct TFunction {
   34: optional bool isolated
   35: optional string input_type
   36: optional string content
+  37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 enum TLoadJobState {
@@ -435,7 +437,8 @@ enum TTableType {
     ICEBERG_MANIFESTS_TABLE,
     ICEBERG_FILES_TABLE,
     ICEBERG_PARTITIONS_TABLE,
-    BENCHMARK_TABLE
+    BENCHMARK_TABLE,
+    ICEBERG_PROPERTIES_TABLE
 }
 
 enum TKeysType {

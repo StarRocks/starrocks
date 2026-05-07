@@ -41,6 +41,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/format.h"
 #include "base/types/int128.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
@@ -248,7 +249,7 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
         // how to process literal
         ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
         auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _timezone));
-        std::string col = slot_desc->col_name();
+        std::string col{slot_desc->col_name()};
 
         // ES does not support non-bool literal pushdown for bool type
         if (column_ref->type().type == TYPE_BOOLEAN && expr->type().type != TYPE_BOOLEAN) {
@@ -309,7 +310,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 return Status::InternalError("build disjuncts failed: no SLOT_REF child");
             }
             bool is_not_null = fname == "is_not_null_pred" ? true : false;
-            std::string col = slot_desc->col_name();
+            std::string col{slot_desc->col_name()};
             if (_field_context.find(col) != _field_context.end()) {
                 col = _field_context[col];
             }
@@ -340,7 +341,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             if (type != TYPE_VARCHAR && type != TYPE_CHAR) {
                 return Status::InternalError("build disjuncts failed: like value is not a string");
             }
-            std::string col = slot_desc->col_name();
+            std::string col{slot_desc->col_name()};
             if (_field_context.find(col) != _field_context.end()) {
                 col = _field_context[col];
             }
@@ -438,7 +439,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             return Status::InternalError("unsupported type to push down to ES");
         }
 
-        std::string col = slot_desc->col_name();
+        std::string col{slot_desc->col_name()};
         if (_field_context.find(col) != _field_context.end()) {
             col = _field_context[col];
         }

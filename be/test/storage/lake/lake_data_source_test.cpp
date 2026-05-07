@@ -26,7 +26,8 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "connector/lake_connector.h"
@@ -40,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -342,6 +344,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
 
     // 5) Explicitly construct a LakeDataSource and call open().
     starrocks::connector::LakeDataSourceProvider provider(/*scan_node=*/nullptr, plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
 
     TInternalScanRange internal_scan_range;
     internal_scan_range.__set_tablet_id(_tablet_metadata->id());
@@ -373,6 +376,392 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     auto tablet_schema = ds.TEST_tablet_schema();
     ASSERT_TRUE(tablet_schema != nullptr);
     ASSERT_EQ(schema_id, tablet_schema->id());
+}
+
+// Exercise the vector-search branches of LakeDataSource::open() that were added by
+// the shared-data vector index read PR:
+//   * open() propagation of TVectorSearchOptions from thrift into _use_vector_index etc.
+//   * init_scanner_columns: the slot-id != _vector_slot_id (regular column lookup) branch.
+//   * init_reader_params: the `if (_use_vector_index)` block that copies query_vector,
+//     vector_range, ann_params, etc. onto the reader params.
+//
+// We do not need a real .vi file — the test is over once init_reader_params +
+// init_scanner_columns have filled _params, so open() is allowed to return any
+// status. We do assert that _params.use_vector_index landed as true via the
+// TEST_params() accessor.
+TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    // 1) Build TLakeScanNode with vector_search_options set. vector_slot_id is set to
+    //    a value that does not match any tuple slot (see below), so init_scanner_columns
+    //    exercises the regular-column-lookup branch for every slot.
+    int64_t schema_id = next_id();
+    if (schema_id == _tablet_metadata->schema().id()) {
+        schema_id = next_id();
+    }
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    TTableSchemaKey schema_key;
+    schema_key.__set_schema_id(schema_id);
+    schema_key.__set_db_id(200);
+    schema_key.__set_table_id(201);
+    lake_scan_node.__set_schema_key(schema_key);
+
+    TVectorSearchOptions vec_opts;
+    vec_opts.__set_enable_use_ann(true);
+    vec_opts.__set_use_ivfpq(false);
+    vec_opts.__set_vector_distance_column_name("vec_distance");
+    // Use a slot id that does NOT match any tuple slot, so init_scanner_columns
+    // exercises the else branch for every slot (regular column lookup) without
+    // synthesizing a virtual column index that the downstream schema conversion
+    // wouldn't know how to handle in this minimal test setup.
+    vec_opts.__set_vector_slot_id(999);
+    vec_opts.__set_vector_limit_k(10);
+    vec_opts.__set_query_vector(std::vector<std::string>{"0.1", "0.2", "0.3"});
+    vec_opts.__set_vector_range(0.5);
+    vec_opts.__set_result_order(0);
+    vec_opts.__set_pq_refine_factor(1.0);
+    vec_opts.__set_k_factor(1.0);
+    lake_scan_node.__set_vector_search_options(vec_opts);
+
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+
+    // 2) Runtime state with fragment_ctx (fe_addr required by schema RPC path).
+    auto runtime_state = create_runtime_state();
+    pipeline::FragmentContext fragment_ctx;
+    TNetworkAddress fe;
+    fe.hostname = "127.0.0.1";
+    fe.port = 9020;
+    fragment_ctx.set_fe_addr(fe);
+    runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
+
+    // 3) Desc table with two INT slots matching the schema we mock below.
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot0 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot0);
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                config::vector_chunk_size)
+                  .ok());
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_id(0);
+    tdesc.__set_tableType(TTableType::OLAP_TABLE);
+    tdesc.__set_tableName("test_table");
+    tdesc.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(tdesc));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    // 4) Schema RPC hook returns the same two-column schema as get_tablet_schema so the
+    //    non-vector slot still maps to a real tablet column (avoids -1 from field_index).
+    SyncPoint::GetInstance()->SetCallBack("TableSchemaService::_fetch_schema_via_rpc::test_hook", [&](void* arg) {
+        auto* arr = static_cast<std::array<void*, 4>*>(arg);
+        auto* response_batch = static_cast<TBatchGetTableSchemaResponse*>((*arr)[1]);
+        auto* status = static_cast<Status*>((*arr)[2]);
+        auto* mock_thrift_rpc = static_cast<bool*>((*arr)[3]);
+
+        *mock_thrift_rpc = true;
+        *status = Status::OK();
+        set_status(&response_batch->status, TStatusCode::OK);
+        response_batch->__set_responses(std::vector<TGetTableSchemaResponse>{});
+        auto& resp = response_batch->responses.emplace_back();
+        set_status(&resp.status, TStatusCode::OK);
+
+        TTabletSchema t_schema;
+        t_schema.__set_id(schema_id);
+        t_schema.__set_keys_type(TKeysType::DUP_KEYS);
+        t_schema.__set_short_key_column_count(1);
+
+        TColumn c0;
+        c0.__set_column_name("c0");
+        c0.column_type.__set_type(TPrimitiveType::INT);
+        c0.__set_is_key(true);
+        c0.__set_is_allow_null(false);
+        t_schema.columns.push_back(c0);
+
+        TColumn c1;
+        c1.__set_column_name("c1");
+        c1.column_type.__set_type(TPrimitiveType::INT);
+        c1.__set_is_key(false);
+        c1.__set_is_allow_null(false);
+        t_schema.columns.push_back(c1);
+
+        resp.__set_schema(t_schema);
+    });
+
+    starrocks::connector::LakeDataSourceProvider provider(/*scan_node=*/nullptr, plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id(), _tablet_metadata->version()));
+    auto lake_rowsets = tablet.get_rowsets();
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    base_rowsets.reserve(lake_rowsets.size());
+    for (auto& rs : lake_rowsets) {
+        base_rowsets.emplace_back(rs);
+    }
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    morsel.set_rowsets(base_rowsets);
+
+    starrocks::connector::LakeDataSource ds(&provider, scan_range);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+    ds.set_runtime_profile(&parent_profile);
+    ds.set_morsel(&morsel);
+    DeferOp close_guard([&] { ds.close(runtime_state.get()); });
+
+    // open() may or may not succeed end-to-end — we only care that the vector-search
+    // branches fired on the way through.
+    (void)ds.open(runtime_state.get());
+
+    const auto& params = ds.TEST_params();
+    EXPECT_TRUE(params.use_vector_index);
+    ASSERT_NE(params.vector_search_option, nullptr);
+    EXPECT_EQ(params.vector_search_option->k, 10);
+    EXPECT_EQ(params.vector_search_option->vector_distance_column_name, "vec_distance");
+    ASSERT_EQ(params.vector_search_option->query_vector.size(), 3);
+    EXPECT_FLOAT_EQ(params.vector_search_option->query_vector[0], 0.1f);
+}
+
+TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
+    // Build a PK tablet schema: c0 (key), c1 (key), c2 (value)
+    TabletSchemaPB pk_schema_pb;
+    pk_schema_pb.set_id(next_id());
+    pk_schema_pb.set_num_short_key_columns(2);
+    pk_schema_pb.set_keys_type(PRIMARY_KEYS);
+    pk_schema_pb.set_num_rows_per_row_block(65535);
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c0");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(false);
+    }
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c1");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(false);
+    }
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c2");
+        c->set_type("INT");
+        c->set_is_key(false);
+        c->set_is_nullable(false);
+    }
+    auto pk_tablet_schema = TabletSchema::create(pk_schema_pb);
+
+    auto runtime_state = create_runtime_state();
+    TSlotDescriptorBuilder slot_desc_builder;
+
+    // Case 1: Select all PK columns (c0, c1) → true
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_TRUE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 2: Select only one PK column (c0) → false (c1 missing)
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_FALSE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 3: Select only value column (c2) → false
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c2").column_pos(2).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_FALSE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 4: Select all columns (c0, c1, c2) → true (superset of PK)
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c2").column_pos(2).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_TRUE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 5: DUP_KEYS table → false
+    ASSERT_FALSE(connector::has_all_pk_columns_selected(_tablet_schema.get(), {}));
+
+    // Case 6: nullptr schema → false
+    ASSERT_FALSE(connector::has_all_pk_columns_selected(nullptr, {}));
+}
+
+TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
+    // Case 1: Non-PK table → skip warmup
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(_tablet_metadata.get(), _tablet_mgr)); }
+
+    // Case 2: nullptr metadata → skip warmup
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(nullptr, _tablet_mgr)); }
+
+    // Case 3: PK table with cloud-native persistent index but no SST files → skip
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 4: PK table with LOCAL persistent index → skip
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("dummy.sst");
+        sst->set_filesize(100);
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 5: PK table with cloud-native persistent index and SST file that exists
+    {
+        // Create a fake SST file on disk
+        std::string sst_filename = "test_warmup.sst";
+        std::string sst_path = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_filename);
+        {
+            ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(sst_path));
+            std::string sst_content(4096, 'x');
+            ASSERT_OK(wf->append(sst_content));
+            ASSERT_OK(wf->close());
+        }
+
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename(sst_filename);
+        sst->set_filesize(4096);
+
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 6: SST file exists but filesize not set in pb → fallback to get_size()
+    {
+        std::string sst_filename = "test_warmup_nosize.sst";
+        std::string sst_path = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_filename);
+        {
+            ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(sst_path));
+            std::string sst_content(2048, 'y');
+            ASSERT_OK(wf->append(sst_content));
+            ASSERT_OK(wf->close());
+        }
+
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename(sst_filename);
+        // filesize not set (defaults to 0), should fallback to get_size()
+
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 7: SST file does not exist → should return error
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("nonexistent.sst");
+        sst->set_filesize(100);
+
+        ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+    }
+
+    // Case 8: SST with invalid encryption_meta → should return error
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("dummy_enc.sst");
+        sst->set_filesize(1024);
+        sst->set_encryption_meta("invalid_encryption_meta");
+
+        ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+    }
 }
 
 } // namespace starrocks::lake

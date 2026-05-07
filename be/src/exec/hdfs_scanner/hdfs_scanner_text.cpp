@@ -16,12 +16,13 @@
 
 #include <unordered_map>
 
+#include "base/compression/compression_utils.h"
+#include "base/compression/stream_decompressor.h"
 #include "base/string/utf8_check.h"
 #include "column/column_helper.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/compression_utils.h"
-#include "util/compression/stream_decompressor.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -275,7 +276,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx.materialized_columns) {
             if (column.name() == "___count___") continue;
-            names.insert(column.name());
+            names.emplace(column.name());
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
     }

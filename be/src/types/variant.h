@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <sstream>
 #include <string_view>
 
 #include "base/decimal_types.h"

@@ -39,7 +39,7 @@ public:
 
     Status visit(const PercentileColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const Int8Column& column) override { return _impl->_impl->do_visit(column); }
+    Status visit(const Int8Column& column) override { return _impl->do_visit(column); }
 
     Status visit(const UInt8Column& column) override { return _impl->do_visit(column); }
 
@@ -83,6 +83,8 @@ public:
 
     Status visit(const NullableColumn& column) override { return _impl->do_visit(column); }
 
+    Status visit(const AdaptiveNullableColumn& column) override { return _impl->do_visit(column); }
+
     Status visit(const ConstColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const ArrayColumn& column) override { return _impl->do_visit(column); }
@@ -116,7 +118,7 @@ public:
 
     Status visit(PercentileColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(Int8Column* column) override { return _impl->_impl->do_visit(column); }
+    Status visit(Int8Column* column) override { return _impl->do_visit(column); }
 
     Status visit(UInt8Column* column) override { return _impl->do_visit(column); }
 
@@ -159,6 +161,8 @@ public:
     Status visit(FixedLengthColumn<decimal12_t>* column) override { return _impl->do_visit(column); }
 
     Status visit(NullableColumn* column) override { return _impl->do_visit(column); }
+
+    Status visit(AdaptiveNullableColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(ConstColumn* column) override { return _impl->do_visit(column); }
 

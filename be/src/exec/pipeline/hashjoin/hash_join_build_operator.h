@@ -20,7 +20,7 @@
 
 #include "base/concurrency/race_detect.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/expr.h"
@@ -59,7 +59,7 @@ public:
     }
 
     size_t output_amplification_factor() const override;
-    void update_exec_stats(RuntimeState* state) override {}
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
 protected:
     HashJoinerPtr _join_builder;

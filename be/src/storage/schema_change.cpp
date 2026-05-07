@@ -40,7 +40,9 @@
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -328,11 +330,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         return res.status();
     }
 
-    auto seg_iterators = res.value();
+    const auto& seg_iterators = res.value();
 
     // Fetch the new columns value into the new_chunk
     for (int idx = 0; idx < seg_iterators.size(); ++idx) {
-        auto seg_iterator = seg_iterators[idx];
+        const auto& seg_iterator = seg_iterators[idx];
         if (seg_iterator.get() == nullptr) {
             std::stringstream ss;
             ss << "Failed to get segment iterator, segment id: " << idx;
@@ -364,7 +366,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         }
 
         // Write cols file with current new_chunk
-        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(new_tablet->schema_hash_path()));
+        ASSIGN_OR_RETURN(const auto& fs, FileSystemFactory::CreateSharedFromString(new_tablet->schema_hash_path()));
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
@@ -596,7 +598,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             LOG(WARNING) << msg;
             return res.status();
         }
-        auto full = res.value();
+        const auto& full = res.value();
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), alter_msg_header() + "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
@@ -1131,6 +1133,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             // new added dcgs info for every segment in rowset.
             DeltaColumnGroupList dcgs;
             std::vector<int> last_dcg_counts;
+            last_dcg_counts.reserve(sc_params.rowsets_to_change[i]->num_segments());
             for (uint32_t j = 0; j < sc_params.rowsets_to_change[i]->num_segments(); j++) {
                 // check the lastest historical_dcgs version if it is equal to schema change version
                 // of the rowset. If it is, we should merge the dcg info.

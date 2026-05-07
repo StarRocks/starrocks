@@ -27,9 +27,9 @@
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "common/thread/blocking_priority_queue.hpp"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
-#include "util/blocking_priority_queue.hpp"
 
 namespace starrocks::workgroup {
 
@@ -137,6 +137,7 @@ public:
     virtual void close() = 0;
 
     virtual StatusOr<ScanTask> take() = 0;
+    virtual StatusOr<ScanTask> take(int worker_id) { return take(); }
     virtual bool try_offer(ScanTask task) = 0;
     virtual void force_put(ScanTask task) = 0;
 
@@ -155,6 +156,7 @@ public:
     void close() override { _queue.shutdown(); }
 
     StatusOr<ScanTask> take() override;
+    bool try_take(ScanTask* task);
     bool try_offer(ScanTask task) override;
     void force_put(ScanTask task) override;
 

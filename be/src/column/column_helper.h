@@ -21,7 +21,8 @@
 #include "column/column_filter_range.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
+#include "column/storage_column_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
@@ -84,13 +85,6 @@ public:
                       "precision and scale param");
         auto ptr = RunTimeColumnType<Type>::create();
         ptr->append_datum(Datum(value));
-        // @FIXME: BinaryColumn get_data() will call build_slice() to modify the column's memory data,
-        // but the operator is thread-unsafe, it's will cause crash in multi-thread(OLAP_SCANNER) when
-        // OLAP_SCANNER call expression.
-        // Call the raw_data() when create ConstColumn is a short-term solution
-        if constexpr (!lt_is_object_family<Type>) {
-            ptr->raw_data();
-        }
         return ConstColumn::create(std::move(ptr), chunk_size);
     }
 
@@ -546,12 +540,12 @@ public:
     }
 
     static Column* get_data_column(Column* column) {
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            auto* const_column = down_cast<ConstColumn*>(column);
+            return get_data_column(const_column->data_column_raw_ptr());
+        } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(column);
             return nullable_column->data_column_raw_ptr();
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column);
-            return const_column->data_column_raw_ptr();
         } else {
             return column;
         }
@@ -560,12 +554,12 @@ public:
     template <LogicalType LT>
     static const RunTimeColumnType<LT>* get_data_column_by_type(const Column* column) {
         using ColumnType = RunTimeColumnType<LT>;
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            return get_data_column_by_type<LT>(const_column->data_column().get());
+        } else if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
             return down_cast<const ColumnType*>(&nullable_column->data_column_ref());
-        } else if (column->is_constant()) {
-            const auto* const_column = down_cast<const ConstColumn*>(column);
-            return down_cast<const ColumnType*>(const_column->data_column().get());
         } else {
             return reinterpret_cast<const ColumnType*>(column);
         }
@@ -588,18 +582,33 @@ public:
         }
     }
 
+    static const uint8_t* get_null_data_ptr(const Column* column) {
+        if (column->only_null()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            const auto* nullable_column = down_cast<const NullableColumn*>(const_column->data_column().get());
+            return nullable_column->null_column_data().data();
+        } else if (column->is_nullable()) {
+            auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return nullable_column->null_column_data().data();
+        } else {
+            return nullptr;
+        }
+    }
+
     static const Column* get_data_column(const Column* column) {
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            auto* const_column = down_cast<const ConstColumn*>(column);
+            return get_data_column(const_column->data_column().get());
+        } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
             return nullable_column->data_column().get();
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<const ConstColumn*>(column);
-            return const_column->data_column().get();
         } else {
             return column;
         }
     }
     static const Column* get_data_column(const ColumnPtr& column) { return get_data_column(column.get()); }
+
+    static void mark_binary_columns(const ColumnPtr& column, const TypeDescriptor& type);
 
     static BinaryColumn* get_binary_column(Column* column) { return down_cast<BinaryColumn*>(get_data_column(column)); }
 
@@ -607,9 +616,36 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
+    // Build a slice buffer from a binary/large-binary column.
+    // Unwraps NullableColumn and ConstColumn before dispatch.
+    // Supports BinaryColumn (uint32_t offsets) and LargeBinaryColumn (uint64_t offsets).
+    static void build_slices(const Column* column, Buffer<Slice>& slices) {
+        const Column* data_col = get_data_column(column);
+        if (data_col->is_large_binary()) {
+            down_cast<const LargeBinaryColumn*>(data_col)->build_slices(slices);
+        } else {
+            down_cast<const BinaryColumn*>(data_col)->build_slices(slices);
+        }
+    }
+
     // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
     // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
     static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
+
+    template <LogicalType LT>
+    static void append_column_value(Column* column, const RunTimeCppType<LT>& value) {
+        using ColumnType = RunTimeColumnType<LT>;
+        if constexpr (lt_is_string_or_binary<LT>) {
+            using LargeColumnType = RunTimeLargeColumnType<LT>;
+            if (column->is_large_binary()) {
+                down_cast<LargeColumnType*>(column)->append(value);
+            } else {
+                down_cast<ColumnType*>(column)->append(value);
+            }
+        } else {
+            down_cast<ColumnType*>(column)->append(value);
+        }
+    }
 
     static bool is_all_const(const Columns& columns);
 
@@ -684,13 +720,55 @@ template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
     static const auto get_data(const Column* column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
+        const auto* data_column = ColumnHelper::get_data_column(column);
+        if constexpr (lt_is_string_or_binary<ltype>) {
+            using LargeColumnType = RunTimeLargeColumnType<ltype>;
+            if (data_column->is_large_binary()) {
+                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
+            }
+            return down_cast<const ColumnType*>(data_column)->immutable_data();
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
+        }
     }
-    static const auto get_data(const ColumnPtr& column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
+    static const auto get_data(const ColumnPtr& column) { return get_data(column.get()); }
+    static const auto get_data(const MutableColumnPtr& column) { return get_data(column.get()); }
+
+    static const auto get_data(const Column* column, size_t row) {
+        const Column* data_column = ColumnHelper::get_data_column(column);
+        size_t index = column->is_constant() ? 0 : row;
+        return get_data(data_column)[index];
     }
-    static const auto get_data(const MutableColumnPtr& column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
+};
+
+// Like GetContainer but uses StorageColumnType (on-disk storage column types).
+// Differences from GetContainer:
+//   - TYPE_BOOLEAN       -> UInt8Column  (same as GetContainer, BooleanColumn = UInt8Column)
+//   - TYPE_DATE_V1       -> FixedLengthColumn<uint24_t>  (no RunTime equivalent)
+//   - TYPE_DATETIME_V1   -> Int64Column  (no RunTime equivalent)
+//   - string/binary types use StorageLargeColumnType for large binary columns.
+template <LogicalType ltype>
+struct GetStorageContainer {
+    using ColumnType = StorageColumnType<ltype>;
+    static const auto get_data(const Column* column) {
+        const auto* data_column = ColumnHelper::get_data_column(column);
+        if constexpr (lt_is_string_or_binary<ltype>) {
+            using LargeColumnType = StorageLargeColumnType<ltype>;
+            if (data_column->is_large_binary()) {
+                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
+            }
+            return down_cast<const ColumnType*>(data_column)->immutable_data();
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
+        }
+    }
+    static const auto get_data(const ColumnPtr& column) { return get_data(column.get()); }
+    static const auto get_data(const MutableColumnPtr& column) { return get_data(column.get()); }
+
+    static const auto get_data(const Column* column, size_t row) {
+        const Column* data_column = ColumnHelper::get_data_column(column);
+        size_t index = column->is_constant() ? 0 : row;
+        return get_data(data_column)[index];
     }
 };
 

@@ -17,7 +17,8 @@
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_merge_commit_fwd.h"
+#include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 

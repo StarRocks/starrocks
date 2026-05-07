@@ -35,7 +35,8 @@
 #include "http_service.h"
 
 #include "cache/datacache.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_path_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
@@ -47,6 +48,7 @@
 #ifdef STARROCKS_JIT_ENABLE
 #include "http/action/jit_cache_action.h"
 #endif
+#include "common/metrics/process_metrics_registry.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -69,15 +71,17 @@
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 
-HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, int port, int num_threads)
+HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, ProcessMetricsRegistry* process_metrics_registry,
+                             int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
+          _process_metrics_registry(process_metrics_registry),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
@@ -195,7 +199,7 @@ Status HttpServiceBE::start() {
 
     // register metrics
     {
-        auto action = new MetricsAction(GlobalMetricsRegistry::instance()->metrics());
+        auto action = new MetricsAction(_process_metrics_registry);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 

@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "exprs/expr_executor.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

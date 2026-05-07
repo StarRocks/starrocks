@@ -23,27 +23,30 @@
 #include <utility>
 #include <vector>
 
+#include "base/brpc/disposable_closure.h"
+#include "base/compression/block_compression.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
 #include "column/chunk.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
+#include "common/util/table_metrics.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
 #include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
@@ -53,10 +56,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/brpc_stub_cache.h"
-#include "util/compression/block_compression.h"
-#include "util/disposable_closure.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -66,17 +65,24 @@ DEFINE_FAIL_POINT(tablets_channel_abort_replica_failure);
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
 LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                         MemTracker* mem_tracker, RuntimeProfile* parent_profile)
+                                         MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                         BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                         TableMetricsManager* table_metrics_mgr)
         : TabletsChannel(),
           _load_channel(load_channel),
+          _brpc_stub_cache(brpc_stub_cache),
+          _table_metrics_mgr(table_metrics_mgr),
           _key(key),
           _mem_tracker(mem_tracker),
           _max_sliding_window_size(config::max_load_dop * 3),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
-    std::call_once(once_flag, [] {
-        REGISTER_GAUGE_STARROCKS_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });
-    });
+    if (metrics != nullptr) {
+        std::call_once(once_flag, [metrics] {
+            REGISTER_GAUGE_RUNTIME_METRIC(metrics, tablet_writer_count,
+                                          [&]() { return _s_tablet_writer_count.load(); });
+        });
+    }
 
     _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
     _profile_update_counter = ADD_COUNTER(_profile, "ProfileUpdateCount", TUnit::UNIT);
@@ -156,7 +162,9 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 #ifndef BE_TEST
-    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics = _table_metrics_mgr->get_table_metrics(_schema->table_id());
+    }
 #endif
 
     _senders = std::vector<Sender>(params.num_senders());
@@ -424,7 +432,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             int64_t elapsed_ms = static_cast<int64_t>(watch.elapsed_time() / NANOSECS_PER_MILLIS);
             int64_t left_timeout_ms = std::max<int64_t>(0, request.timeout_ms() - elapsed_ms);
             SecondaryReplicasWaiter waiter(request.id(), _txn_id, request.sink_id(), left_timeout_ms, start_wait_time,
-                                           delta_writers);
+                                           delta_writers, _brpc_stub_cache);
             Status status = waiter.wait();
             if (status.is_time_out()) {
                 break;
@@ -511,10 +519,10 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
     auto wait_replica_ns = finish_wait_replica_ts - finish_wait_writer_ts;
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
             wait_memtable_flush_time_us);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
     size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
@@ -623,7 +631,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
             continue;
         });
 
-        auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(endpoint.host(), endpoint.port());
+        auto stub = _brpc_stub_cache->get_stub(endpoint.host(), endpoint.port());
         if (stub == nullptr) {
             auto msg =
                     fmt::format("Failed to Connect node {} {}:{} failed.", node_id, endpoint.host(), endpoint.port());
@@ -765,7 +773,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             GlobalDictsWithVersion<GlobalDictMap> dict;
             dict.dict = std::move(global_dict);
             dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
-            _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
+            _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
         }
     }
 
@@ -1172,7 +1180,6 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
@@ -1190,9 +1197,16 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_SET_COUNTER(profile, "MemtableAggCount", TUnit::UNIT, memtable_stat.agg_count.load());
     ADD_AND_SET_TIMER(profile, "MemtableAggTime", memtable_stat.agg_time_ns.load());
     ADD_AND_SET_TIMER(profile, "MemtableFlushTime", memtable_stat.flush_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "MemtableIOTime", memtable_stat.io_time_ns.load());
     ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES, memtable_stat.flush_memory_size.load());
-    ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES, memtable_stat.flush_disk_size.load());
+    auto* memtable_disk_size_counter = ADD_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES);
+    COUNTER_SET(memtable_disk_size_counter, memtable_stat.flush_disk_size.load());
+    auto* memtable_io_time_counter = ADD_TIMER(profile, "MemtableIOTime");
+    COUNTER_SET(memtable_io_time_counter, memtable_stat.io_time_ns.load());
+    ADD_DERIVED_COUNTER(profile, "MemtableIOSpeed", TUnit::BYTES_PER_SECOND, "",
+                        [memtable_disk_size_counter, memtable_io_time_counter] {
+                            return RuntimeProfile::units_per_second(memtable_disk_size_counter,
+                                                                    memtable_io_time_counter);
+                        });
 }
 
 void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
@@ -1220,7 +1234,6 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_SET_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     auto* segment_flush_token = writer->segment_flush_token();
@@ -1236,20 +1249,24 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
 }
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                               MemTracker* mem_tracker,
-                                                               RuntimeProfile* parent_profile) {
-    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile);
+                                                               MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                                               BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                                               TableMetricsManager* table_metrics_mgr) {
+    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache,
+                                                 metrics, table_metrics_mgr);
 }
 
 SecondaryReplicasWaiter::SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms,
-                                                 int64_t eos_time_ms, std::vector<AsyncDeltaWriter*> delta_writers)
+                                                 int64_t eos_time_ms, std::vector<AsyncDeltaWriter*> delta_writers,
+                                                 BrpcStubCache* brpc_stub_cache)
         : _load_id(std::move(load_id)),
           _txn_id(txn_id),
           _sink_id(sink_id),
           _timeout_ns(std::max((int64_t)0, timeout_ms) * NANOSECS_PER_MILLIS),
           _delta_writers(std::move(delta_writers)),
           _eos_time_ms(eos_time_ms),
-          _last_get_replica_status_time_ms(eos_time_ms) {}
+          _last_get_replica_status_time_ms(eos_time_ms),
+          _brpc_stub_cache(brpc_stub_cache) {}
 
 SecondaryReplicasWaiter::~SecondaryReplicasWaiter() {
     _release_replica_status_closure();
@@ -1317,7 +1334,7 @@ void SecondaryReplicasWaiter::_try_check_replica_status_on_primary(int unfinishe
 void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet_start_index) {
     auto delta_writer = _delta_writers[unfinished_tablet_start_index];
     auto& primary_replica = delta_writer->writer()->replicas()[0];
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+    auto stub = _brpc_stub_cache->get_stub(primary_replica.host(), primary_replica.port());
     if (stub == nullptr) {
         _replica_status_fail_num += 1;
         _last_get_replica_status_time_ms = MonotonicMillis();
@@ -1429,7 +1446,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     _diagnose_triggered = true;
     auto delta_writer = _delta_writers[unfinished_tablet_start_index];
     auto& primary_replica = delta_writer->replicas()[0];
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+    auto stub = _brpc_stub_cache->get_stub(primary_replica.host(), primary_replica.port());
     if (stub == nullptr) {
         LOG(WARNING) << "failed to get stub to diagnose primary replica, txn_id: " << _txn_id
                      << ", load_id: " << print_id(_load_id) << ", primary_replica: [" << primary_replica.host() << ":"

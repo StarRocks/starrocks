@@ -28,7 +28,7 @@ static inline std::pair<int64_t, int64_t> split_micros_to_seconds(int64_t micros
     return {seconds, microseconds};
 }
 
-Status VariantConverter::cast_to_bool(const VariantRowRef& variant, ColumnBuilder<TYPE_BOOLEAN>& result) {
+Status VariantRowConverter::cast_to_bool(const VariantRowRef& variant, ColumnBuilder<TYPE_BOOLEAN>& result) {
     const VariantValue& value = variant.get_value();
     const VariantType type = value.type();
     if (type == VariantType::NULL_TYPE) {
@@ -97,8 +97,8 @@ Status VariantConverter::cast_to_bool(const VariantRowRef& variant, ColumnBuilde
     return VARIANT_CAST_NOT_SUPPORT(type, TYPE_BOOLEAN);
 }
 
-Status VariantConverter::cast_to_string(const VariantRowRef& variant, const cctz::time_zone& zone,
-                                        ColumnBuilder<TYPE_VARCHAR>& result) {
+Status VariantRowConverter::cast_to_string(const VariantRowRef& variant, const cctz::time_zone& zone,
+                                           ColumnBuilder<TYPE_VARCHAR>& result) {
     const VariantValue& value = variant.get_value();
     switch (value.type()) {
     case VariantType::NULL_TYPE: {
@@ -121,8 +121,8 @@ Status VariantConverter::cast_to_string(const VariantRowRef& variant, const cctz
     }
 }
 
-Status VariantConverter::cast_to_date(const VariantRowRef& row, const cctz::time_zone& zone,
-                                      ColumnBuilder<TYPE_DATE>& result) {
+Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::time_zone& zone,
+                                         ColumnBuilder<TYPE_DATE>& result) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -148,8 +148,8 @@ Status VariantConverter::cast_to_date(const VariantRowRef& row, const cctz::time
     }
 }
 
-Status VariantConverter::cast_to_time(const VariantRowRef& row, const cctz::time_zone& zone,
-                                      ColumnBuilder<TYPE_TIME>& result) {
+Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::time_zone& zone,
+                                         ColumnBuilder<TYPE_TIME>& result) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -176,8 +176,8 @@ Status VariantConverter::cast_to_time(const VariantRowRef& row, const cctz::time
     }
 }
 
-Status VariantConverter::cast_to_datetime(const VariantRowRef& row, const cctz::time_zone& zone,
-                                          ColumnBuilder<TYPE_DATETIME>& result) {
+Status VariantRowConverter::cast_to_datetime(const VariantRowRef& row, const cctz::time_zone& zone,
+                                             ColumnBuilder<TYPE_DATETIME>& result) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:

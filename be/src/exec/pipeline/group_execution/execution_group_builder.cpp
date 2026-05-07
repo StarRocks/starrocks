@@ -16,6 +16,7 @@
 
 #include "common/logging.h"
 #include "exec/pipeline/group_execution/execution_group.h"
+#include "gen_cpp/Planner_types.h"
 
 namespace starrocks::pipeline {
 ExecutionGroupPtr ExecutionGroupBuilder::create_normal_exec_group() {

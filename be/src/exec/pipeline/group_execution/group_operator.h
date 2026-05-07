@@ -19,10 +19,10 @@
 #include "common/statusor.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 // P1: SourceOp->ProjectOp->JoinProbeOp->ProjectOp->ExchangeSink

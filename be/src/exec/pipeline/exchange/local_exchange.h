@@ -23,10 +23,10 @@
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 class ExprContext;
-class RuntimeState;
 
 namespace pipeline {
 
@@ -52,15 +52,6 @@ public:
 
     size_t partition_end_offset(size_t partition_id) { return _partition_row_indexes_start_points[partition_id + 1]; }
 
-    size_t partition_memory_usage(size_t partition_id) {
-        if (partition_id >= _partition_memory_usage.size() || partition_id < 0) {
-            throw std::runtime_error(fmt::format("invalid index {} to get partition memory usage, whose size = {}.",
-                                                 partition_id, _partition_memory_usage.size()));
-        } else {
-            return _partition_memory_usage[partition_id];
-        }
-    }
-
 protected:
     LocalExchangeSourceOperatorFactory* _source;
 
@@ -69,7 +60,6 @@ protected:
     // It will easy to get number of rows belong to one channel by doing
     // _partition_row_indexes_start_points[i + 1] - _partition_row_indexes_start_points[i]
     std::vector<size_t> _partition_row_indexes_start_points;
-    std::vector<size_t> _partition_memory_usage;
     std::vector<uint32_t> _shuffle_channel_id;
 };
 
@@ -147,16 +137,6 @@ public:
 
     void finish_source() { _finished_source_number++; }
 
-    void epoch_finish(RuntimeState* state) {
-        if (incr_epoch_finished_sinker() == _sink_number) {
-            for (auto* source : _source->get_sources()) {
-                static_cast<void>(source->set_epoch_finishing(state));
-            }
-            // reset the number to be reused in the next epoch.
-            _epoch_finished_sinker = 0;
-        }
-    }
-
     const std::string& name() const { return _name; }
 
     bool need_input() const;
@@ -165,8 +145,6 @@ public:
     int32_t decr_sinker() { return _sink_number--; }
 
     int32_t source_dop() const { return _source->get_sources().size(); }
-
-    int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
 
     size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
     size_t get_peak_memory_usage() const { return _memory_manager->get_peak_memory_usage(); }
@@ -190,9 +168,6 @@ protected:
     std::atomic<int32_t> _sink_number = 0;
     std::atomic<int32_t> _finished_source_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
-
-    // Stream MV
-    std::atomic<int32_t> _epoch_finished_sinker = 0;
 
 private:
     Observable _sink_observable;

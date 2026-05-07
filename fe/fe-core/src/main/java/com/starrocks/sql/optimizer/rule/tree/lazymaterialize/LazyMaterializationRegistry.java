@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.tree.lazymaterialize;
 
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 
 import java.util.Map;
@@ -25,6 +26,7 @@ public class LazyMaterializationRegistry {
 
     static {
         HANDLERS.put(PhysicalIcebergScanOperator.class, new IcebergV3LazyMaterializationSupport());
+        HANDLERS.put(PhysicalOlapScanOperator.class, new OlapScanLazyMaterializationSupport());
     }
 
     static LazyMaterializationSupport getHandler(PhysicalScanOperator scanOperator) {

@@ -16,8 +16,8 @@
 
 #include <sys/stat.h>
 
-#include "common/config.h"
-
+#include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #ifdef BE_TEST
 #include "agent/agent_server.h"
 #endif
@@ -36,7 +36,7 @@
 #include "http/http_client.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

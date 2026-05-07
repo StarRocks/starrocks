@@ -111,6 +111,28 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = dictCollectedVersions;
     }
 
+    public PartitionCommitInfo(PartitionCommitInfo partitionCommitInfo) {
+        this.physicalPartitionId = partitionCommitInfo.physicalPartitionId;
+        this.version = partitionCommitInfo.version;
+        this.versionTime = partitionCommitInfo.versionTime;
+        this.dataVersion = partitionCommitInfo.dataVersion;
+        this.versionEpoch = partitionCommitInfo.versionEpoch;
+        this.invalidDictCacheColumns = partitionCommitInfo.invalidDictCacheColumns == null
+                ? Lists.newArrayList()
+                : Lists.newArrayList(partitionCommitInfo.invalidDictCacheColumns);
+        this.validDictCacheColumns = partitionCommitInfo.validDictCacheColumns == null
+                ? Lists.newArrayList()
+                : Lists.newArrayList(partitionCommitInfo.validDictCacheColumns);
+        this.dictCollectedVersions = partitionCommitInfo.dictCollectedVersions == null
+                ? Lists.newArrayList()
+                : Lists.newArrayList(partitionCommitInfo.dictCollectedVersions);
+        this.compactionScore = partitionCommitInfo.compactionScore == null
+                ? null
+                : new Quantiles(partitionCommitInfo.compactionScore);
+        this.tabletIdToRowCountForPartitionFirstLoad.putAll(partitionCommitInfo.tabletIdToRowCountForPartitionFirstLoad);
+        this.isDoubleWrite = partitionCommitInfo.isDoubleWrite;
+    }
+
     public void setVersionTime(long time) {
         this.versionTime = time;
     }

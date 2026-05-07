@@ -20,6 +20,7 @@
 #include "base/testutil/assert.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

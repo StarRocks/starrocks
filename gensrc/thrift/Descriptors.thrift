@@ -40,6 +40,8 @@ include "Exprs.thrift"
 
 enum TRowPositionType {
     ICEBERG_V3_ROW_POSITION,
+    OLAP_ROW_POSITION,
+    LAKE_ROW_POSITION,
 }
 
 // used to describe row position for different tables
@@ -49,6 +51,7 @@ struct TRowPositionDescriptor {
     2: optional Types.TSlotId row_source_slot;
     3: optional list<Types.TSlotId> fetch_ref_slots;
     4: optional list<Types.TSlotId> lookup_ref_slots;
+    5: optional i32 scan_node_id;
 }
 
 struct TSlotDescriptor {
@@ -541,6 +544,14 @@ struct TTableFunctionTable {
     11: optional Types.TParquetOptions parquet_options
 
     12: optional bool csv_include_header
+
+    // enclose character for CSV unload. When set, all non-NULL field values are
+    // wrapped with this character; occurrences of the enclose character (and the
+    // escape character itself) within field content are escaped using csv_escape.
+    13: optional i8 csv_enclose
+
+    // escape character for CSV unload. Used together with csv_enclose.
+    14: optional i8 csv_escape
 }
 
 struct TIcebergSchemaField {

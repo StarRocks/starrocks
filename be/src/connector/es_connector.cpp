@@ -14,7 +14,7 @@
 
 #include "connector/es_connector.h"
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/system/backend_options.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
@@ -23,6 +23,8 @@
 #include "exec/es/es_scroll_query.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -89,7 +91,7 @@ Status ESDataSource::open(RuntimeState* state) {
         if (!slot->is_materialized()) {
             continue;
         }
-        _column_names.push_back(slot->col_name());
+        _column_names.emplace_back(slot->col_name());
     }
 
     RETURN_IF_ERROR(_build_conjuncts());
@@ -214,7 +216,9 @@ Status ESDataSource::_create_scanner() {
             ESScrollQueryBuilder::build(_properties, _column_names, _predicates, _docvalue_context, &doc_value_mode);
 
     const std::string& host = _properties.at(ESScanReader::KEY_HOST_PORT);
-    _es_reader = _pool->add(new ESScanReader(host, _properties, doc_value_mode));
+    auto* query_execution_services = _runtime_state->query_execution_services();
+    _es_reader = _pool->add(new ESScanReader(host, _properties, doc_value_mode,
+                                             query_execution_services->execution->pipeline_sink_io_pool));
     RETURN_IF_ERROR(_es_reader->open());
     return Status::OK();
 }

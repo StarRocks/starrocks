@@ -25,7 +25,7 @@
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
@@ -34,6 +34,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
@@ -53,6 +54,9 @@ protected:
         fragment_id.lo = 0;
         _runtime_state =
                 std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
         // Initialize mem trackers for the runtime state
         _runtime_state->init_instance_mem_tracker();
 

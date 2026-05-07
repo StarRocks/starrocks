@@ -21,7 +21,6 @@
 #include "common/sort_desc.h"
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
-#include "runtime/chunk_cursor.h"
 #include "types/datum.h"
 
 namespace starrocks {

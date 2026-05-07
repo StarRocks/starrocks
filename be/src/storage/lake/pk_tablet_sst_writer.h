@@ -17,6 +17,7 @@
 #include <future>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "gutil/macros.h"
@@ -43,8 +44,8 @@ public:
 
 class PkTabletSSTWriter : public DefaultSSTWriter {
 public:
-    PkTabletSSTWriter(const TabletSchemaCSPtr& tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : _tablet_schema_ptr(tablet_schema_ptr), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
+    PkTabletSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
+            : _tablet_schema_ptr(std::move(tablet_schema_ptr)), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
     ~PkTabletSSTWriter() override = default;
     Status append_sst_record(const Chunk& data) override;
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,

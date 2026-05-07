@@ -14,13 +14,13 @@
 
 #pragma once
 
-#include <iostream>
+#include <fmt/format.h>
+
+#include <ostream>
 
 #include "base/utility/guard.h"
-#include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -134,7 +134,7 @@ constexpr bool is_string_type(LogicalType type) {
 
 constexpr bool is_object_type(LogicalType type) {
     return type == LogicalType::TYPE_HLL || type == LogicalType::TYPE_OBJECT || type == LogicalType::TYPE_JSON ||
-           type == LogicalType::TYPE_PERCENTILE;
+           type == LogicalType::TYPE_PERCENTILE || type == TYPE_VARIANT;
 }
 
 inline bool is_decimalv3_field_type(LogicalType type) {
@@ -389,3 +389,8 @@ inline std::ostream& operator<<(std::ostream& os, starrocks::LogicalType type) {
     os << starrocks::logical_type_to_string(type);
     return os;
 }
+
+template <>
+struct fmt::formatter<starrocks::LogicalType> : formatter<std::string_view> {
+    auto format(starrocks::LogicalType value, format_context& ctx) const -> format_context::iterator;
+};

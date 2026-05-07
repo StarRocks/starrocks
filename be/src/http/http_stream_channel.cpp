@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-HttpStreamChannel::HttpStreamChannel(HttpRequest* req) : _req(req), _buffer(nullptr) {}
+HttpStreamChannel::HttpStreamChannel(HttpRequest* req) : _req(req) {}
 
 HttpStreamChannel::~HttpStreamChannel() {
     end();

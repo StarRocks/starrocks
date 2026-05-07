@@ -18,7 +18,7 @@
 
 #include "base/simd/simd.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
 namespace starrocks::pipeline {
@@ -142,7 +142,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming(const Chun
     SCOPED_TIMER(_aggregator->streaming_timer());
     ChunkPtr res = std::make_shared<Chunk>();
     RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
-    _aggregator->offer_chunk_to_buffer(std::move(res));
+    _aggregator->offer_chunk_to_buffer(res);
     return Status::OK();
 }
 

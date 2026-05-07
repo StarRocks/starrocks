@@ -26,7 +26,7 @@
 
 namespace starrocks {
 struct JavaUDAFState {
-    JavaUDAFState(int handle_) : handle(std::move(handle_)) {}
+    JavaUDAFState(int handle_) : handle(handle_) {}
     ~JavaUDAFState() = default;
     // UDAF State
     int handle;
@@ -38,9 +38,22 @@ public:
     static jobject convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
                                                  const uint8_t* filter, int num_rows);
 
+    // `arg_type_descs` is an optional per-argument com.starrocks.udf.UdfTypeDesc
+    // jobject (mirroring the SQL TypeDescriptor of each argument and capturing the
+    // formal Java record class at every STRUCT slot). Populated by the UDF caller
+    // for any signature that contains a STRUCT in any position. When the caller has
+    // no STRUCT in any arg subtree, the slot may be null jobject and the boxer
+    // falls back to JavaArrayConverter.
     static Status convert_to_boxed_array(FunctionContext* ctx, const Column** columns, int num_cols, int num_rows,
-                                         std::vector<jobject>* res);
+                                         std::vector<jobject>* res,
+                                         const std::vector<jobject>* arg_type_descs = nullptr);
 };
+
+// Build a com.starrocks.udf.UdfTypeDesc jobject mirroring the SQL TypeDescriptor,
+// walking the formal Java reflective Type in lockstep so the formal record class
+// is captured at every STRUCT slot. Returned reference is a local ref; caller
+// promotes to a JavaGlobalRef for storage on the UDF context.
+StatusOr<jobject> build_udf_type_desc(JNIEnv* env, const TypeDescriptor& td, jobject formal_type);
 
 #define SET_FUNCTION_CONTEXT_ERR(status, context)       \
     if (UNLIKELY(!status.ok())) {                       \
@@ -50,6 +63,11 @@ public:
 StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, const Column* col, int row_num);
 
 void release_jvalue(bool is_boxed, jvalue val);
-Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val);
+
+// Append a Java-side jvalue to `col`, converting DECIMAL via the column's declared
+// precision/scale. When the value overflows, `error_if_overflow == true` (default)
+// returns an error Status (REPORT_ERROR), `false` appends NULL (OUTPUT_NULL).
+Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val,
+                     bool error_if_overflow = true);
 Status check_type_matched(const TypeDescriptor& type_desc, jobject val);
 } // namespace starrocks

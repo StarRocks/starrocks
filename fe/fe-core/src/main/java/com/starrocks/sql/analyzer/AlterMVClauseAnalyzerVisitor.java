@@ -91,6 +91,9 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
             throw new SemanticException("Materialized view definition is invalid");
         }
         QueryStatement queryStatement = (QueryStatement) astParseNode;
+        if (queryStatement.getQueryRelation() == null || !(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+            throw new SemanticException("Materialized view definition is invalid: only support SELECT statement");
+        }
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         if (!(selectRelation.getRelation() instanceof TableRelation)) {
             throw new SemanticException("Materialized view based on multiple tables is not supported");

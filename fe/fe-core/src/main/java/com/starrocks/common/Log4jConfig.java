@@ -175,6 +175,20 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+
+            "    <RollingFile name=\"PlanFile\" fileName=\"${plan_log_dir}/fe.plan.log\" filePattern=\"${plan_log_dir}/fe.plan.log.${plan_file_pattern}-%i\">\n" +
+            "      ${syslog_dump_layout}\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${plan_roll_maxsize}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${plan_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${plan_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.plan.log.*\" />\n" +
+            "          <IfLastModified age=\"${plan_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
             "  </Appenders>\n";
 
     // Predefined loggers to write log to file
@@ -197,6 +211,9 @@ public class Log4jConfig extends XmlConfiguration {
             "    </Logger>\n" +
             "    <Logger name=\"features\" level=\"INFO\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"FeaturesFile\"/>\n" +
+            "    </Logger>\n" +
+            "    <Logger name=\"plan\" level=\"INFO\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"PlanFile\"/>\n" +
             "    </Logger>\n" +
             "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
@@ -251,8 +268,8 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("audit_file_pattern",
                 getIntervalPattern("audit_log_roll_interval", Config.audit_log_roll_interval));
 
-        // dump log config
-        properties.put("dump_log_dir", Config.dump_log_dir);
+        // dump log config — always co-located with fe.log (sys_log_dir)
+        properties.put("dump_log_dir", Config.sys_log_dir);
         properties.put("dump_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
         properties.put("dump_roll_num", String.valueOf(Config.dump_log_roll_num));
         properties.put("dump_log_delete_age", String.valueOf(Config.dump_log_delete_age));
@@ -290,6 +307,14 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("internal_log_delete_age", String.valueOf(Config.internal_log_delete_age));
         properties.put("internal_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.internal_log_roll_interval));
+
+        // plan log config — always co-located with fe.log (sys_log_dir)
+        properties.put("plan_log_dir", Config.sys_log_dir);
+        properties.put("plan_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("plan_roll_num", String.valueOf(Config.plan_log_roll_num));
+        properties.put("plan_log_delete_age", String.valueOf(Config.plan_log_delete_age));
+        properties.put("plan_file_pattern",
+                getIntervalPattern("plan_log_roll_interval", Config.plan_log_roll_interval));
 
         // appender layout
         final String jsonLoggingConfValue = "json";

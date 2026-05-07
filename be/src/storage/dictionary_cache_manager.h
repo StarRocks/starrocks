@@ -22,6 +22,7 @@
 #include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/dictionary_cache_writer.h"
@@ -30,7 +31,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "types/datum.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -89,14 +90,14 @@ public:
     static constexpr uint8_t PREFETCHN = 8;
 
     DictionaryCacheImpl(DictionaryCacheEncoderType type) : DictionaryCache(type), _estimated_memory_useage(0) {}
-    virtual ~DictionaryCacheImpl() override = default;
+    ~DictionaryCacheImpl() override = default;
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
     using ValueCppType = typename DictionaryCacheTypeTraits<ValueLogicalType>::CppType;
 
     using ValueColumnType = typename DictionaryCacheTypeTraits<ValueLogicalType>::ColumnType;
 
-    virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
+    inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             KeyCppType key;
@@ -157,13 +158,13 @@ public:
         return Status::OK();
     }
 
-    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
-                                 Column* null_column) override {
+    inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
+                         Column* null_column) override {
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             size_t size = src->size();
             RETURN_IF(size == 0, Status::OK());
-            const auto* raw_data = reinterpret_cast<const KeyCppType*>(src->raw_data());
+            const auto& raw_data = GetContainer<KeyLogicalType>::get_data(src);
             DCHECK(value_encode_flags.size() == size);
             // avoid memory reallocation when looking up hash table
             if constexpr (!std::is_same_v<ValueCppType, Slice>) {
@@ -191,7 +192,6 @@ public:
 
                     if constexpr (std::is_same_v<KeyCppType, Slice>) {
                         for (size_t j = 0; j < PREFETCHN; j++) {
-                            PREFETCH_ADDR(&raw_data[beg_index + j]);
                             PREFETCH_ADDR(raw_data[beg_index + j].data);
                         }
                     } else {
@@ -307,9 +307,9 @@ public:
         return Status::OK();
     }
 
-    virtual inline size_t memory_usage() override { return _estimated_memory_useage.load(); }
+    inline size_t memory_usage() override { return _estimated_memory_useage.load(); }
 
-    virtual std::mutex& lock() override { return _lock; }
+    std::mutex& lock() override { return _lock; }
 
 private:
     // Avoid creating Datum
@@ -425,7 +425,7 @@ public:
             }
 
             const auto& src = chunk->get_column_by_index(idx);
-            const auto* raw_data = reinterpret_cast<const Slice*>(src->raw_data());
+            const auto& raw_data = GetContainer<TYPE_VARCHAR>::get_data(src);
             for (int i = 0; i < size; i++) {
                 bool contains_zero = false;
                 for (int j = 0; j < raw_data[i].size; j++) {
@@ -447,6 +447,7 @@ public:
         case PK_ENCODE: {
             // Dictionary cache currently only works with share-nothing PK tables which always use V1.
             std::vector<uint32_t> idxes;
+            idxes.reserve(schema.fields().size());
             for (uint32_t i = 0; i < schema.fields().size(); i++) {
                 idxes.push_back((uint32_t)i);
             }
@@ -604,7 +605,7 @@ public:
                                                            const DictionaryCacheTxnId& txn_id);
 
     inline static Status probe_given_dictionary_cache(const Schema& key_schema, const Schema& value_schema,
-                                                      DictionaryCachePtr dictionary, const ChunkPtr& key_chunk,
+                                                      const DictionaryCachePtr& dictionary, const ChunkPtr& key_chunk,
                                                       ChunkPtr& value_chunk, Column* null_column) {
         DCHECK(value_chunk->num_rows() == 0);
         size_t size = key_chunk->num_rows();

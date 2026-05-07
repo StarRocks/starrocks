@@ -87,6 +87,8 @@ public:
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
+    uint32_t dynamic_rss_id_base = 0;
+
     bool asc_hint = true;
 
     bool prune_column_after_index_filter = false;

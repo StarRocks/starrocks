@@ -21,13 +21,14 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
+#include "exec/data_sinks/memory_scratch_sink.h"
 #include "exec/scan_node.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
-#include "runtime/memory_scratch_sink.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -127,6 +128,7 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
     DCHECK(_tablets.size() > 0);
     _tablet_schema = _tablets[0]->tablet_schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_tablet_schema->num_key_columns());
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

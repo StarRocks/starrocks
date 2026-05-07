@@ -39,6 +39,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/concurrency/once.h"
 #include "base/string/c_string.h"
 #include "column/column_access_path.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -50,7 +51,6 @@
 #include "storage/primary_key_encoding_types.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
-#include "util/once.h"
 
 namespace starrocks {
 
@@ -58,6 +58,7 @@ class TabletSchemaMap;
 class MemTracker;
 class SegmentReaderWriterTest;
 class POlapTableIndexSchema;
+class Schema;
 class TColumn;
 
 struct ExtendedColumnInfo {
@@ -292,6 +293,7 @@ public:
     static StatusOr<TabletSchemaSPtr> create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
                                              const POlapTableColumnParam& column_param);
     static TabletSchemaSPtr copy(const TabletSchema& tablet_schema);
+    static TabletSchemaSPtr copy(const TabletSchema& tablet_schema, const std::vector<TabletColumn>& columns);
     static TabletSchemaCSPtr copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in

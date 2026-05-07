@@ -103,7 +103,7 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
                     offset++;
                     std::string str =
                             boost::locale::conv::utf_to_utf<char>(std::wstring(token.termBuffer(), token.termLength()));
-                    array_binary_column->append(Slice(std::move(str)));
+                    array_binary_column->append(Slice(str));
                 }
             }
         }

@@ -208,11 +208,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     generateSplitProducerAndConsumer(leftChild, leftInputJoinKeyExpr, nonNullSkewValues,
                             includeNullSkew, skewOnLeft);
 
-            SplitProducerAndConsumer rightSplit;
-            if (nullOnlyLeftOuterJoinFastPath) {
-                // NULL-only skew: right side does not participate in the skew branch at all.
-                rightSplit = buildSplit(rightChild, ConstantOperator.FALSE, ConstantOperator.TRUE, false);
-            } else {
+            SplitProducerAndConsumer rightSplit = null;
+            // NULL-only skew on the preserved side does not need a skew branch on the non-preserved side.
+            // Reusing the original right input for the shuffle join avoids creating a dangling split branch
+            // that later materializes as a one-way SplitCastDataSink.
+            if (!nullOnlyLeftOuterJoinFastPath) {
                 rightSplit = generateSplitProducerAndConsumer(rightChild, rightInputJoinKeyExpr, nonNullSkewValues,
                         includeNullSkew, !skewOnLeft);
             }
@@ -255,9 +255,10 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalConcatenateOperator concatenateOperator = buildConcatenateOperator(outputColumns,
                     localExchangerType, originalShuffleJoinOperator.getLimit());
 
+            OptExpression rightInputOfShuffleJoin =
+                    nullOnlyLeftOuterJoinFastPath ? rightChild : rightSplit.splitConsumerOptForShuffleJoin;
             OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
-                            newArrayList(leftSplit.splitConsumerOptForShuffleJoin,
-                                    rightSplit.splitConsumerOptForShuffleJoin))
+                            newArrayList(leftSplit.splitConsumerOptForShuffleJoin, rightInputOfShuffleJoin))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(opt.getRequiredProperties()).setCost(opt.getCost()).build();
 
@@ -301,11 +302,14 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setCost(opt.getCost()).build();
 
-            OptExpression cteAnchorOptExp1 =
-                    OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(newArrayList(rightSplit.splitProducer, concatenateOptExp))
-                            .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
-                            .setCost(opt.getCost()).build();
+            OptExpression cteAnchorOptExp1 = concatenateOptExp;
+            if (!nullOnlyLeftOuterJoinFastPath) {
+                cteAnchorOptExp1 =
+                        OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
+                                .setInputs(newArrayList(rightSplit.splitProducer, concatenateOptExp))
+                                .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                                .setCost(opt.getCost()).build();
+            }
 
             // if hit once, we give up rewriting the following subtree
             return OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))

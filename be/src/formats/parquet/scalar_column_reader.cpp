@@ -572,7 +572,24 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
             src->as_mutable_raw_ptr()->reset_column();
         } else {
             static_assert(!LAZY_CONVERT, "LAZY_DICT_DECODE && LAZY_CONVERT == true is not supported by now");
-            RETURN_IF_ERROR(_dict_decode(dst, src));
+            if (_converter->need_convert) {
+                // Decode dict codes to physical values in an intermediate column (e.g. raw 16-byte
+                // UUID bytes), then apply the converter to produce the logical values in dst
+                // (e.g. canonical 36-char UUID strings).  Direct _dict_decode into dst would write
+                // unconverted physical bytes, producing wrong output for columns like UUID.
+                if (_tmp_intermediate_column == nullptr) {
+                    _tmp_intermediate_column = _converter->create_src_column();
+                }
+                _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
+                RETURN_IF_ERROR(_dict_decode(_tmp_intermediate_column, src));
+                {
+                    SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+                    RETURN_IF_ERROR(_converter->convert(_tmp_intermediate_column.get(), dst->as_mutable_raw_ptr()));
+                }
+                _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
+            } else {
+                RETURN_IF_ERROR(_dict_decode(dst, src));
+            }
         }
         src = _ori_column;
     } else {

@@ -44,13 +44,27 @@
 #include "base/utility/defer_op.h"
 #include "common/util/thrift_util.h"
 #include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
-void GetResultBatchCtx::on_failure(const Status& status) {
+DeferOp<std::function<void()>> BufferControlBlock::defer_notify() {
+    return DeferOp<std::function<void()>>([query_ctx = _query_ctx, this]() {
+        if (auto ctx = query_ctx.lock()) {
+            this->_observable.notify_source_observers();
+            CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+        }
+    });
+}
+
+void GetResultBatchCtx::on_failure(const Status& status, QueryStatistics* statistics) {
     DCHECK(!status.ok()) << "status is ok, errmsg=" << status.message();
     status.to_protobuf(result->mutable_status());
+    if (statistics != nullptr) {
+        statistics->to_pb(result->mutable_query_statistics());
+    }
     done->Run();
     delete this;
 }
@@ -101,8 +115,7 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
           _buffer_bytes(0),
           _buffer_limit(buffer_size),
           _packet_num(0),
-          _arrow_rows_limit(buffer_size * 4096),
-          _arrow_rows(0) {}
+          _arrow_rows_limit(buffer_size * 4096) {}
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();
@@ -301,11 +314,11 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     auto notify = defer_notify();
     std::unique_lock<std::mutex> l(_lock);
     if (!_status.ok()) {
-        ctx->on_failure(_status);
+        ctx->on_failure(_status, _query_statistics.get());
         return;
     }
     if (_is_cancelled) {
-        ctx->on_failure(Status::Cancelled("Cancelled BufferControlBlock::get_batch"));
+        ctx->on_failure(Status::Cancelled("Cancelled BufferControlBlock::get_batch"), _query_statistics.get());
         return;
     }
     if (!_batch_queue.empty()) {
@@ -375,13 +388,14 @@ Status BufferControlBlock::close(Status exec_status) {
     // notify blocked get thread
     _data_arriaval.notify_all();
     if (!_waiting_rpc.empty()) {
+        QueryStatistics* stats = _query_statistics.get();
         if (_status.ok()) {
             for (auto& ctx : _waiting_rpc) {
-                ctx->on_close(_packet_num, _query_statistics.get());
+                ctx->on_close(_packet_num, stats);
             }
         } else {
             for (auto& ctx : _waiting_rpc) {
-                ctx->on_failure(_status);
+                ctx->on_failure(_status, stats);
             }
         }
         _waiting_rpc.clear();
@@ -394,8 +408,9 @@ void BufferControlBlock::cancel() {
     _is_cancelled = true;
     _data_removal.notify_all();
     _data_arriaval.notify_all();
+    QueryStatistics* stats = _query_statistics.get();
     for (auto& ctx : _waiting_rpc) {
-        ctx->on_failure(Status::Cancelled("Cancelled BufferControlBlock::cancel"));
+        ctx->on_failure(Status::Cancelled("Cancelled BufferControlBlock::cancel"), stats);
     }
     _waiting_rpc.clear();
 }

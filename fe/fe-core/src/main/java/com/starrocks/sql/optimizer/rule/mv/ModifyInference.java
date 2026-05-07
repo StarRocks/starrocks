@@ -21,9 +21,6 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.EnumSet;
@@ -74,45 +71,6 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
     public ModifyOp visitPhysicalOlapScan(OptExpression optExpression, Void ctx) {
         PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
         return visitOlapTable(scan.getTable());
-    }
-
-    @Override
-    public ModifyOp visitPhysicalStreamScan(OptExpression optExpression, Void ctx) {
-        PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
-        ModifyOp op = visitOlapTable(scan.getTable());
-        scan.setModifyOp(op);
-        return op;
-    }
-
-    @Override
-    public ModifyOp visitPhysicalStreamJoin(OptExpression optExpression, Void ctx) {
-        ModifyOp lhsOp = infer(optExpression.inputAt(0));
-        ModifyOp rhsOp = infer(optExpression.inputAt(1));
-        PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
-
-        // TODO(murphy) support outer join
-        if (!join.getJoinType().isInnerJoin()) {
-            throw new NotImplementedException("Only INNER JOIN is supported");
-        }
-        ModifyOp joinModify = ModifyOp.union(lhsOp, rhsOp);
-        join.setModifyOp(joinModify);
-        return joinModify;
-    }
-
-    @Override
-    public ModifyOp visitPhysicalStreamAgg(OptExpression optExpression, Void ctx) {
-        ModifyOp inputModify = infer(optExpression.inputAt(0));
-        PhysicalStreamAggOperator agg = (PhysicalStreamAggOperator) optExpression.getOp();
-
-        // TODO(murphy) optimize for non-retractable scenario
-        ModifyOp res;
-        if (inputModify.isInsertOnly()) {
-            res = ModifyOp.UPSERT;
-        } else {
-            res = ModifyOp.ALL;
-        }
-        agg.setModifyOp(res);
-        return res;
     }
 
     public static class ModifyOp {

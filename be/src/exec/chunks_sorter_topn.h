@@ -174,7 +174,7 @@ private:
     const size_t _max_buffered_chunks;
     size_t _init_buffered_chunks;
     RawChunks _raw_chunks;
-    bool _init_merged_segment;
+    bool _init_merged_segment{false};
     MergedRuns _merged_runs;
 
     const size_t _limit;

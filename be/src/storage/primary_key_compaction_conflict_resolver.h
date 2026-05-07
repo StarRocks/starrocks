@@ -34,8 +34,8 @@ struct CompactConflictResolveParams {
     uint32_t rowset_id = 0;
     int64_t base_version = 0;
     int64_t new_version = 0;
-    DelvecLoader* delvec_loader = 0;
-    PrimaryIndex* index = 0;
+    DelvecLoader* delvec_loader = nullptr;
+    PrimaryIndex* index = nullptr;
 };
 
 class PrimaryKeyCompactionConflictResolver {

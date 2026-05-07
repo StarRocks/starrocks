@@ -19,6 +19,7 @@
 #include "column/chunk_slice.h"
 #include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
+#include "exec/sorting/sort_cursor.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
@@ -114,7 +115,7 @@ protected:
 class CascadeChunkMerger : public ChunkMerger {
 public:
     CascadeChunkMerger(RuntimeState* state);
-    ~CascadeChunkMerger() = default;
+    ~CascadeChunkMerger() override = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const SortDescs& _sort_desc) override;
@@ -125,7 +126,7 @@ public:
     Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) override;
 
 private:
-    const std::vector<ExprContext*>* _sort_exprs;
+    const std::vector<ExprContext*>* _sort_exprs{nullptr};
     SortDescs _sort_desc;
 
     std::unique_ptr<MergeCursorsCascade> _merger;
@@ -135,7 +136,7 @@ private:
 class ConstChunkMerger : public ChunkMerger {
 public:
     ConstChunkMerger(RuntimeState* state);
-    ~ConstChunkMerger() = default;
+    ~ConstChunkMerger() override = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const SortDescs& _sort_desc) override;

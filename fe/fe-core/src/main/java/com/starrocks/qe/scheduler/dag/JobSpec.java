@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.util.CompressionUtils;
@@ -62,6 +63,7 @@ public class JobSpec {
 
     private ExecPlan execPlan = null;
     private List<PlanFragment> fragments;
+    private List<PlanFragment> preExecutedFragments = Lists.newArrayList();
     private List<ScanNode> scanNodes;
     /**
      * copied from TQueryExecRequest; constant across all fragments
@@ -70,7 +72,6 @@ public class JobSpec {
 
     private ConnectContext connectContext;
     private boolean enablePipeline;
-    private boolean enableStreamPipeline;
     private boolean isBlockQuery;
 
     private boolean needReport;
@@ -128,7 +129,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(execPlan)
                     .descTable(descTable)
-                    .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(context.getSessionVariable().isEnableProfile() ||
                             context.getSessionVariable().isEnableBigQueryProfile() || queryType == TQueryType.LOAD)
@@ -137,35 +137,6 @@ public class JobSpec {
                     .commonProperties(context)
                     .computeResource(context.getCurrentComputeResource())
                     .setPlanProtocol(context.getSessionVariable().getThriftPlanProtocol())
-                    .build();
-        }
-
-        public static JobSpec fromMVMaintenanceJobSpec(ConnectContext context,
-                                                       List<PlanFragment> fragments,
-                                                       List<ScanNode> scanNodes,
-                                                       TDescriptorTable descTable,
-                                                       ExecPlan execPlan) {
-            TQueryOptions queryOptions = context.getSessionVariable().toThrift();
-
-            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
-                    context.getSessionVariable().getTimeZone());
-            if (context.getLastQueryId() != null) {
-                queryGlobals.setLast_query_id(context.getLastQueryId().toString());
-            }
-            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
-
-            return new Builder()
-                    .queryId(context.getExecutionId())
-                    .fragments(fragments)
-                    .scanNodes(scanNodes)
-                    .execPlan(execPlan)
-                    .descTable(descTable)
-                    .enableStreamPipeline(true)
-                    .isBlockQuery(false)
-                    .needReport(true)
-                    .queryGlobals(queryGlobals)
-                    .queryOptions(queryOptions)
-                    .commonProperties(context)
                     .build();
         }
 
@@ -187,7 +158,6 @@ public class JobSpec {
                     .scanNodes(loadPlanner.getScanNodes())
                     .execPlan(loadPlanner.getExecPlan())
                     .descTable(loadPlanner.getDescTable().toThrift())
-                    .enableStreamPipeline(false)
                     .isBlockQuery(true)
                     .needReport(true)
                     .queryGlobals(queryGlobals)
@@ -224,7 +194,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(null)
                     .descTable(descTable.toThrift())
-                    .enableStreamPipeline(false)
                     .isBlockQuery(true)
                     .needReport(true)
                     .queryGlobals(queryGlobals)
@@ -250,7 +219,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(execPlan)
                     .descTable(descTable.toThrift())
-                    .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(false)
                     .queryGlobals(queryGlobals)
@@ -267,6 +235,18 @@ public class JobSpec {
             TQueryOptions queryOptions = new TQueryOptions();
             queryOptions.setQuery_type(TQueryType.LOAD);
             queryOptions.setLoad_job_type(TLoadJobType.STREAM_LOAD);
+            // Propagate enable_profile decided by StreamLoadPlanner (e.g. from the
+            // table's enable_load_profile property) so that FE respects it when the
+            // ConnectContext session variable is not set, as is the case for stream
+            // loads sent directly to CN.
+            TQueryOptions plannerOptions = params.getQuery_options();
+            if (plannerOptions != null && plannerOptions.isSetEnable_profile()
+                    && plannerOptions.isEnable_profile()) {
+                queryOptions.setEnable_profile(true);
+                if (plannerOptions.isSetLoad_profile_collect_second()) {
+                    queryOptions.setLoad_profile_collect_second(plannerOptions.getLoad_profile_collect_second());
+                }
+            }
 
             return new Builder()
                     .queryId(queryId)
@@ -274,7 +254,6 @@ public class JobSpec {
                     .scanNodes(null)
                     .execPlan(null)
                     .descTable(null)
-                    .enableStreamPipeline(false)
                     .isBlockQuery(true)
                     .needReport(true)
                     .queryGlobals(null)
@@ -303,7 +282,6 @@ public class JobSpec {
                     .scanNodes(scanNodes)
                     .execPlan(null)
                     .descTable(null)
-                    .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(false)
                     .queryGlobals(queryGlobals)
@@ -363,7 +341,6 @@ public class JobSpec {
                 "loadJobId=" + loadJobId +
                 ", queryId=" + DebugUtil.printId(queryId) +
                 ", enablePipeline=" + enablePipeline +
-                ", enableStreamPipeline=" + enableStreamPipeline +
                 ", isBlockQuery=" + isBlockQuery +
                 ", resourceGroup=" + resourceGroup +
                 ", cnGroup=" + computeResource +
@@ -402,6 +379,10 @@ public class JobSpec {
         return fragments;
     }
 
+    public List<PlanFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
+    }
+
     public List<ScanNode> getScanNodes() {
         return scanNodes;
     }
@@ -416,10 +397,6 @@ public class JobSpec {
 
     public boolean isEnablePipeline() {
         return enablePipeline;
-    }
-
-    public boolean isEnableStreamPipeline() {
-        return enableStreamPipeline;
     }
 
     public TQueryGlobals getQueryGlobals() {
@@ -565,6 +542,13 @@ public class JobSpec {
             return this;
         }
 
+        public Builder preExecutedFragments(List<PlanFragment> preExecutedFragments) {
+            if (preExecutedFragments != null) {
+                instance.preExecutedFragments = preExecutedFragments;
+            }
+            return this;
+        }
+
         public Builder scanNodes(List<ScanNode> scanNodes) {
             instance.scanNodes = scanNodes;
             return this;
@@ -575,11 +559,6 @@ public class JobSpec {
                 descTable.setIs_cached(false);
             }
             instance.descTable = descTable;
-            return this;
-        }
-
-        public Builder enableStreamPipeline(boolean enableStreamPipeline) {
-            instance.enableStreamPipeline = enableStreamPipeline;
             return this;
         }
 
@@ -630,6 +609,9 @@ public class JobSpec {
 
         private Builder execPlan(ExecPlan execPlan) {
             instance.execPlan = execPlan;
+            if (instance.execPlan != null) {
+                preExecutedFragments(execPlan.getPreExecutedFragments());
+            }
             return this;
         }
 

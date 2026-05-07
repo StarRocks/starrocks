@@ -34,10 +34,11 @@
 
 #include "exec/scan_node.h"
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

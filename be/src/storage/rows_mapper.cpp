@@ -19,7 +19,7 @@
 #include "base/coding.h"
 #include "base/container/raw_container.h"
 #include "base/hash/crc32c.h"
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "lake/filenames.h"

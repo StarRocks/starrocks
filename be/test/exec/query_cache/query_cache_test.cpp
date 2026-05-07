@@ -26,6 +26,7 @@
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/cache_param.h"
@@ -35,6 +36,7 @@
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

@@ -274,6 +274,16 @@ void LRUCache::release(Cache::Handle* handle) {
     }
 }
 
+void LRUCache::touch(const CacheKey& key, uint32_t hash) {
+    std::lock_guard l(_mutex);
+    LRUHandle* e = _table.lookup(key, hash);
+    if (e != nullptr && e->refs == 1) {
+        DCHECK(e->in_cache);
+        _lru_remove(e);
+        _lru_append(&_lru, e);
+    }
+}
+
 void LRUCache::_evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted) {
     LRUHandle* cur = &_lru;
     // 1. evict normal cache entries
@@ -419,7 +429,7 @@ uint32_t ShardedLRUCache::_shard(uint32_t hash) {
     return hash >> (32 - kNumShardBits);
 }
 
-ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capacity) {
+ShardedLRUCache::ShardedLRUCache(size_t capacity) : _capacity(capacity) {
     const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
@@ -464,6 +474,11 @@ Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
 void ShardedLRUCache::release(Handle* handle) {
     auto* h = reinterpret_cast<LRUHandle*>(handle);
     _shards[_shard(h->hash)].release(handle);
+}
+
+void ShardedLRUCache::touch(const CacheKey& key) {
+    const uint32_t hash = _hash_slice(key);
+    _shards[_shard(hash)].touch(key, hash);
 }
 
 void ShardedLRUCache::erase(const CacheKey& key) {

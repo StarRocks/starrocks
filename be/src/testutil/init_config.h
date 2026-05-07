@@ -18,7 +18,8 @@
 #include <filesystem>
 #include <fstream>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
 
 namespace starrocks {

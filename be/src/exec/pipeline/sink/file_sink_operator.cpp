@@ -16,7 +16,9 @@
 
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -24,6 +26,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
@@ -66,8 +69,9 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
     }
 
     auto dop = state->query_options().pipeline_dop;
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
-                                                                   std::min(dop << 1, 1024), &_sender));
+    auto* query_execution_services = state->query_execution_services();
+    RETURN_IF_ERROR(query_execution_services->runtime->result_mgr->create_sender(state->fragment_instance_id(),
+                                                                                 std::min(dop << 1, 1024), &_sender));
     _writer = std::make_shared<FileResultWriter>(_file_opts.get(), _output_expr_ctxs, parent_profile);
     RETURN_IF_ERROR(_writer->init(state));
 
@@ -100,7 +104,8 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         _sender.reset();
 
-        (void)_state->exec_env()->result_mgr()->cancel_at_time(
+        auto* query_execution_services = _state->query_execution_services();
+        (void)query_execution_services->runtime->result_mgr->cancel_at_time(
                 time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
     }
     SinkIOBuffer::close(state);

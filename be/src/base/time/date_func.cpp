@@ -18,6 +18,7 @@
 #include "base/time/date_func.h"
 
 #include <iomanip>
+#include <sstream>
 
 namespace starrocks {
 

@@ -57,7 +57,7 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句直接从 MinIO 查询数据。
+- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句直接从 MinIO 查询数据。
 - 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
 - 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入数据。
 

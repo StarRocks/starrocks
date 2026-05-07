@@ -21,7 +21,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate_state_allocator.h"
@@ -32,8 +32,10 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/function_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
@@ -54,7 +56,15 @@
 
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context);
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration, bool use_cache,
+                               bool* cache_hit_out = nullptr);
+
+Analytor::~Analytor() {
+    if (_state != nullptr) {
+        close(_state);
+    }
+}
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
@@ -217,6 +227,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
@@ -327,6 +338,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
     _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
+    _udaf_load_timer = ADD_TIMER(_runtime_profile, "UdafLoadTime");
+    _udaf_cache_hit_count = ADD_COUNTER(_runtime_profile, "UdafCacheHitCount", TUnit::UNIT);
+    _udaf_cache_populate_count = ADD_COUNTER(_runtime_profile, "UdafCachePopulateCount", TUnit::UNIT);
 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
@@ -369,8 +383,10 @@ Status Analytor::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 
     auto create_fn_states = [this]() {
+#ifndef __APPLE__
         std::vector<int> attached_udaf_idx;
         bool init_success = false;
+#endif
         DeferOp cleanup_on_fail([&]() {
 #ifndef __APPLE__
             if (init_success) {
@@ -386,8 +402,24 @@ Status Analytor::open(RuntimeState* state) {
 #ifndef __APPLE__
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
-                auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                  _agg_fn_ctxs[i]);
+                auto& opts = _state->query_options();
+                bool use_cache =
+                        opts.__isset.enable_cache_udaf && opts.enable_cache_udaf && fn.__isset.isolated && !fn.isolated;
+                bool cache_hit = false;
+                Status st;
+                {
+                    SCOPED_TIMER(_udaf_load_timer);
+                    st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                 _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                                 use_cache ? &cache_hit : nullptr);
+                }
+                if (use_cache) {
+                    if (cache_hit) {
+                        COUNTER_UPDATE(_udaf_cache_hit_count, 1);
+                    } else {
+                        COUNTER_UPDATE(_udaf_cache_populate_count, 1);
+                    }
+                }
                 RETURN_IF_ERROR(st);
                 attached_udaf_idx.emplace_back(i);
             }
@@ -398,7 +430,9 @@ Status Analytor::open(RuntimeState* state) {
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         _managed_fn_states.emplace_back(
                 std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
+#ifndef __APPLE__
         init_success = true;
+#endif
         return Status::OK();
     };
 
@@ -669,12 +703,19 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+                // https://github.com/StarRocks/starrocks/pull/43065 confirms that _agg_expr_ctxs[i][j]->evaluate
+                // will not generate a single column larger than 4GB.
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
-                // When chunk's column is const, maybe need to unpack it.
                 TRY_CATCH_BAD_ALLOC(
                         _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
 
+                // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
+                Column* agg_column = _agg_intput_columns[i][j]->as_mutable_raw_ptr();
+                ASSIGN_OR_RETURN(auto upgrade_col, agg_column->upgrade_if_overflow());
+                if (upgrade_col != nullptr) {
+                    _agg_intput_columns[i][j] = std::move(upgrade_col);
+                }
                 RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
         }
@@ -682,12 +723,24 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+
+            // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
+            ASSIGN_OR_RETURN(auto upgrade_col, _partition_columns[i]->upgrade_if_overflow());
+            if (upgrade_col != nullptr) {
+                _partition_columns[i] = std::move(upgrade_col);
+            }
             RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+
+            // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
+            ASSIGN_OR_RETURN(auto order_upgrade_col, _order_columns[i]->upgrade_if_overflow());
+            if (order_upgrade_col != nullptr) {
+                _order_columns[i] = std::move(order_upgrade_col);
+            }
             RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
     }

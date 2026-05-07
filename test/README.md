@@ -500,3 +500,40 @@ CLEANUP {
 * Notes:
 * The framework's built-in cleanup (dropping parsed DATABASE/RESOURCE) still runs; CLEANUP is an addition for fine-grained or external cleanup.
 * Results in CLEANUP are not validated; failures will be logged but do not block other cleanup steps.
+
+### 11. SET_VAR
+
+Run a block of SQL statements repeatedly under different session variable combinations. This is useful for verifying that queries produce consistent results regardless of optimizer/runtime settings such as late materialization, runtime filter, etc.
+
+* Usage:
+
+```sql
+-- name: test_with_session_vars
+create database test_db_${uuid0};
+use test_db_${uuid0};
+create table t1 (c1 int, c2 string) DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) PROPERTIES('replication_num' = '1');
+insert into t1 values (1, 'a'), (2, 'b'), (3, 'c');
+
+SET_VAR {
+  PROPERTY: [{"enable_late_materialization": "true"}, {"enable_late_materialization": "false"}]
+  select * from t1 order by c1;
+  select count(*) from t1;
+} END SET_VAR
+
+drop database test_db_${uuid0};
+```
+
+* `PROPERTY` must be a JSON array of objects. Each object is a set of `{variable_name: value}` pairs representing one session variable combination.
+* You can specify multiple variables per combination:
+
+```sql
+SET_VAR {
+  PROPERTY: [{"enable_late_materialization": "true", "new_planner_optimize_timeout": "10000"}, {"enable_late_materialization": "false", "new_planner_optimize_timeout": "10000"}]
+  select c1, c3 from t2 where c2 > 10 order by c1;
+} END SET_VAR
+```
+
+* In **record mode** (`-r`), the framework executes the block with the first variable combination and records the results. Subsequent combinations are also executed to verify they succeed.
+* In **validate mode** (`-v`), the framework executes the block once per combination and checks every run against the same expected results from the R file.
+* The `[UC]` (uncheck), `[ORDER]`, and `[REGEX]` flags are supported on individual statements inside the block.
+* `SET_VAR` blocks must NOT be nested inside `LOOP` blocks.

@@ -21,7 +21,7 @@
 #include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -53,6 +53,7 @@ void HashJoinProbeMetrics::prepare(RuntimeProfile* runtime_profile) {
 }
 
 void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
+    this->runtime_profile = runtime_profile;
     copy_right_table_chunk_timer = ADD_TIMER(runtime_profile, "CopyRightTableChunkTime");
     build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
@@ -64,8 +65,6 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     partial_runtime_bloom_filter_bytes =
             ADD_COUNTER(runtime_profile, "PartialRuntimeMembershipFilterBytes", TUnit::BYTES);
     partition_nums = ADD_COUNTER(runtime_profile, "PartitionNums", TUnit::UNIT);
-    runtime_profile->add_info_string("HashMapType", "NONE");
-    hash_map_type_info = runtime_profile->get_info_string("HashMapType");
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -110,6 +109,14 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     _hash_join_prober = _pool->add(new HashJoinProber(*this));
     _build_metrics = _pool->add(new HashJoinBuildMetrics());
     _probe_metrics = _pool->add(new HashJoinProbeMetrics());
+}
+
+size_t HashJoiner::runtime_bloom_filter_row_limit() const {
+    uint64_t runtime_join_filter_pushdown_limit = 1024000;
+    if (_runtime_state->query_options().__isset.runtime_join_filter_pushdown_limit) {
+        runtime_join_filter_pushdown_limit = _runtime_state->query_options().runtime_join_filter_pushdown_limit;
+    }
+    return runtime_join_filter_pushdown_limit;
 }
 
 Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile) {
@@ -255,7 +262,7 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket, &hash_map_type);
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
         COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket));
-        *(build_metrics().hash_map_type_info) = std::move(hash_map_type);
+        build_metrics().runtime_profile->add_info_string_if_not_exists("HashMapType", hash_map_type);
     }
 
     return Status::OK();

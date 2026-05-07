@@ -56,10 +56,16 @@ public class TableCommitInfo implements Writable {
         idToPartitionCommitInfo = Maps.newHashMap();
     }
 
-
-
-
-
+    public TableCommitInfo(TableCommitInfo tableCommitInfo) {
+        this.tableId = tableCommitInfo.tableId;
+        this.idToPartitionCommitInfo = Maps.newHashMap();
+        if (tableCommitInfo.idToPartitionCommitInfo != null) {
+            for (Map.Entry<Long, PartitionCommitInfo> entry : tableCommitInfo.idToPartitionCommitInfo.entrySet()) {
+                this.idToPartitionCommitInfo.put(entry.getKey(),
+                        entry.getValue() == null ? null : new PartitionCommitInfo(entry.getValue()));
+            }
+        }
+    }
 
     public long getTableId() {
         return tableId;

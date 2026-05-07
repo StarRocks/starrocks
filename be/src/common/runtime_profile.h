@@ -42,11 +42,11 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
-#include <thread>
 #include <unordered_set>
 #include <utility>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/phmap/phmap.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
@@ -217,7 +217,14 @@ public:
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
-            Update(new_val);
+            // HighWaterMarkCounter: negative delta cannot produce a new peak.
+            // LowWaterMarkCounter:  positive delta cannot produce a new floor.
+            // Skip Update() entirely — avoids loading the peak cache line on every release().
+            if constexpr (is_high) {
+                if (delta > 0) Update(new_val);
+            } else {
+                if (delta < 0) Update(new_val);
+            }
         }
 
         /// Tries to increase the current value by delta. If current_value() + delta
@@ -257,15 +264,23 @@ public:
         /// Set '_value' to 'v' if 'v' is larger/lower than '_value'. The entire operation is
         /// atomic.
         void Update(int64_t v) {
+            int64_t old_value = _value.load(std::memory_order_relaxed);
+            // Fast path: skip CAS loop entirely when v is not a new extreme.
+            // This eliminates the CAS on all release() paths (where v < peak)
+            // and on most consume() paths once the peak stabilizes.
+            if constexpr (is_high) {
+                if (v <= old_value) return;
+            } else {
+                if (v >= old_value) return;
+            }
             while (true) {
-                int64_t old_value = _value.load(std::memory_order_relaxed);
                 int64_t new_value;
                 if constexpr (is_high) {
                     new_value = std::max(old_value, v);
                 } else {
                     new_value = std::min(old_value, v);
                 }
-                if (new_value == old_value) break; // Avoid atomic update.
+                if (new_value == old_value) break;
                 if (LIKELY(_value.compare_exchange_strong(old_value, new_value, std::memory_order_relaxed))) break;
             }
         }
@@ -332,7 +347,7 @@ public:
         // Stores an event in sequence with the given label and the
         // current time (relative to the first time start() was called) as
         // the timestamp.
-        void mark_event(const std::string& label) { _events.push_back(make_pair(label, _sw.elapsed_time())); }
+        void mark_event(const std::string& label) { _events.emplace_back(label, _sw.elapsed_time()); }
 
         int64_t elapsed_time() { return _sw.elapsed_time(); }
 
@@ -451,12 +466,10 @@ public:
     // Clean all the counters except saved_names
     void remove_counters(const std::set<std::string>& saved_names);
 
-    // Helper to append to the "ExecOption" info string.
-    void append_exec_option(const std::string& option) { add_info_string("ExecOption", option); }
-
     // Adds a string to the runtime profile.  If a value already exists for 'key',
     // the value will be updated.
-    void add_info_string(const std::string& key, const std::string& value = "");
+    void add_info_string(std::string_view key, std::string_view value = {});
+    void add_info_string_if_not_exists(std::string_view key, std::string_view value);
 
     // Creates and returns a new EventSequence (owned by the runtime
     // profile) - unless a timer with the same 'key' already exists, in
@@ -464,9 +477,9 @@ public:
     // TODO: EventSequences are not merged by Merge()
     EventSequence* add_event_sequence(const std::string& key);
 
-    // Returns a pointer to the info string value for 'key'.  Returns NULL if
+    // Returns a pointer to the info string value for 'key'.  Returns std::nullopt if
     // the key does not exist.
-    std::string* get_info_string(const std::string& key);
+    std::optional<std::string> get_info_string(std::string_view key);
 
     // Copy all the string infos from src profile
     void copy_all_info_strings_from(RuntimeProfile* src_profile);
@@ -564,7 +577,7 @@ private:
 
     RuntimeProfile* get_child_unlock(const std::string& name);
 
-    RuntimeProfile* _parent;
+    RuntimeProfile* _parent{nullptr};
 
     // Pool for allocated counters. Usually owned by the creator of this
     // object, but occasionally allocated in the constructor.
@@ -574,7 +587,7 @@ private:
     std::string _name;
 
     // user-supplied, uninterpreted metadata.
-    int64_t _metadata;
+    int64_t _metadata{-1};
 
     /// True if this profile is an average derived from other profiles.
     /// All counters in this profile must be of unit AveragedCounter.
@@ -605,7 +618,7 @@ private:
     ChildVector _children;
     mutable std::mutex _children_lock; // protects _child_map and _children
 
-    typedef std::map<std::string, std::string> InfoStrings;
+    using InfoStrings = phmap::flat_hash_map<std::string, std::string>;
     InfoStrings _info_strings;
 
     // Keeps track of the order in which InfoStrings are displayed when printed
@@ -622,7 +635,7 @@ private:
     Counter _counter_total_time;
     // Time spent in just in this profile (i.e. not the children) as a fraction
     // of the total time in the entire profile tree.
-    double _local_time_percent;
+    double _local_time_percent{0};
 
     // Protects _version
     mutable std::mutex _version_lock;
@@ -790,6 +803,8 @@ private:
             RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold), parent)
 #define ADD_CHILD_TIMER(profile, name, parent) \
     (profile)->add_child_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS), parent)
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) \
+    (profile)->add_derived_counter(name, type, __VA_ARGS__, parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
     ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
@@ -821,6 +836,7 @@ private:
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) (RuntimeProfile::Counter*)NULL
 #define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent) (RuntimeProfile::Counter*)NULL
 #define ADD_CHILD_TIMER(profile, name, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) (RuntimeProfile::DerivedCounter*)NULL
 #define ADD_THREAD_COUNTERS(profile, prefix) (RuntimeProfile::ThreadCounters*)NULL
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) (RuntimeProfile::Counter*)NULL
 #define SCOPED_THREAD_COUNTER_MEASUREMENT(c)

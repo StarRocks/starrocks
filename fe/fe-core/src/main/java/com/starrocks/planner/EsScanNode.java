@@ -154,6 +154,8 @@ public class EsScanNode extends ScanNode {
             esScanNode.setFields_context(table.fieldsContext());
         }
         msg.es_scan_node = esScanNode;
+
+        setConnectorCatalogType(msg);
     }
 
     public void assignNodes() throws StarRocksException {

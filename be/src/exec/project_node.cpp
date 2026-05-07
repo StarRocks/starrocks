@@ -27,6 +27,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/status.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
@@ -288,9 +289,9 @@ void ProjectNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilt
     }
 }
 
-pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ProjectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto operators, _children[0]->decompose_to_pipeline(context));
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
 
@@ -298,7 +299,7 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
             context->next_operator_id(), id(), std::move(_slot_ids), std::move(_expr_ctxs),
             std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs)));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

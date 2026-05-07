@@ -23,7 +23,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "exec/lake_meta_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -94,8 +94,9 @@ public:
         TUniqueId fragment_id;
         TQueryOptions query_options;
         TQueryGlobals query_globals;
-        _state = _pool.add(
-                new RuntimeState(query_id, fragment_id, query_options, query_globals, ExecEnv::GetInstance()));
+        auto* exec_env = ExecEnv::GetInstance();
+        _state = _pool.add(new RuntimeState(query_id, fragment_id, query_options, query_globals,
+                                            &exec_env->query_execution_services(), exec_env));
         _state->init_mem_trackers(query_id);
 
         // Setup FragmentContext with fe_addr for schema RPC

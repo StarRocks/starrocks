@@ -20,7 +20,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/parquet/encoding_bss.h"
 #include "formats/parquet/encoding_delta.h"
 #include "formats/parquet/encoding_dict.h"

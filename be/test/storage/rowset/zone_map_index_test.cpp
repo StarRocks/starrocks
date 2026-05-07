@@ -43,7 +43,7 @@
 #include "base/testutil/assert.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/binary_column.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/tablet_schema_helper.h"

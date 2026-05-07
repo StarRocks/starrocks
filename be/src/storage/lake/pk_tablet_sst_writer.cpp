@@ -17,7 +17,7 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -40,6 +40,7 @@ Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
     ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet_schema_ptr->primary_key_encoding_type_or_error());
     if (_pk_column == nullptr) {
         vector<uint32_t> pk_columns;
+        pk_columns.reserve(_tablet_schema_ptr->num_key_columns());
         for (size_t i = 0; i < _tablet_schema_ptr->num_key_columns(); i++) {
             pk_columns.push_back((uint32_t)i);
         }
@@ -50,9 +51,9 @@ Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
     auto clone_pk_column = _pk_column->clone_empty();
     TRY_CATCH_BAD_ALLOC(
             PrimaryKeyEncoder::encode(_pkey_schema, data, 0, data.num_rows(), clone_pk_column.get(), pk_encoding_type));
-    std::vector<Slice> keys;
-    const Slice* vkeys =
-            PrimaryIndex::build_persistent_keys(*clone_pk_column, _key_size, 0, clone_pk_column->size(), &keys);
+    Buffer<Slice> keys;
+    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(*clone_pk_column, _key_size, 0,
+                                                                             clone_pk_column->size(), &keys));
     for (size_t i = 0; i < clone_pk_column->size(); i++) {
         RETURN_IF_ERROR(_pk_sst_builder->add(vkeys[i]));
     }

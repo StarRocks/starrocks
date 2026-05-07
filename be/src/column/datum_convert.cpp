@@ -18,7 +18,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -26,7 +26,7 @@ using strings::Substitute;
 
 template <LogicalType TYPE>
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str) {
-    typename CppTypeTraits<TYPE>::CppType value;
+    StorageCppType<TYPE> value;
     RETURN_IF_ERROR(type_info->from_string(&value, str));
     dst->set(value);
     return Status::OK();
@@ -108,8 +108,8 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
 
 template <LogicalType TYPE>
 std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
-    using CppType = typename CppTypeTraits<TYPE>::CppType;
-    auto value = datum.template get<CppType>();
+    using CppType = StorageCppType<TYPE>;
+    auto value = datum.get<CppType>();
     return type_info->to_string(&value);
 }
 

@@ -28,6 +28,8 @@
 #include "exec/pipeline/bucket_process_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -37,104 +39,10 @@
 
 namespace starrocks {
 
-Status DistinctBlockingNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
-    _aggregator->set_aggr_phase(AggrPhase2);
-    return Status::OK();
-}
-
-Status DistinctBlockingNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(_aggregator->open(state));
-    RETURN_IF_ERROR(_children[0]->open(state));
-
-    ChunkPtr chunk;
-    bool limit_with_no_agg = limit() != -1;
-    VLOG_ROW << "group_by_expr_ctxs size " << _aggregator->group_by_expr_ctxs().size() << " _needs_finalize "
-             << _aggregator->needs_finalize();
-
-    while (true) {
-        RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
-
-        bool eos = false;
-        RETURN_IF_CANCELLED(state);
-        RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
-
-        if (eos) {
-            break;
-        }
-        if (chunk->is_empty()) {
-            continue;
-        }
-        DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
-
-        RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
-
-        {
-            SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
-            TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
-
-            _aggregator->update_num_input_rows(chunk->num_rows());
-            if (limit_with_no_agg) {
-                auto size = _aggregator->hash_set_variant().size();
-                if (size >= limit()) {
-                    break;
-                }
-            }
-        }
-    }
-
-    COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-
-    // If hash set is empty, we don't need to return value
-    if (_aggregator->hash_set_variant().size() == 0) {
-        _aggregator->set_ht_eos();
-    }
-    _aggregator->hash_set_variant().visit(
-            [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
-
-    COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-
-    _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-
-    return Status::OK();
-}
-
-Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    RETURN_IF_CANCELLED(state);
-    *eos = false;
-
-    if (_aggregator->is_ht_eos()) {
-        COUNTER_SET(_aggregator->rows_returned_counter(), _aggregator->num_rows_returned());
-        *eos = true;
-        return Status::OK();
-    }
-    const auto chunk_size = runtime_state()->chunk_size();
-
-    _aggregator->convert_hash_set_to_chunk(chunk_size, chunk);
-
-    const int64_t old_size = (*chunk)->num_rows();
-    eval_join_runtime_filters(chunk->get());
-
-    // For having
-    RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>((*chunk)->num_rows())));
-
-    _aggregator->process_limit(chunk);
-
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
-}
-
 template <class AggFactory, class SourceFactory, class SinkFactory>
-pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
-                                                                   pipeline::PipelineBuilderContext* context,
-                                                                   bool per_bucket_optimize) {
+StatusOr<pipeline::OpFactories> DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                                             pipeline::PipelineBuilderContext* context,
+                                                                             bool per_bucket_optimize) {
     using namespace pipeline;
 
     auto workgroup = context->fragment_context()->workgroup();
@@ -185,7 +93,7 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_sink_op.get(), context, rc_rf_probe_collector);
 
     if (per_bucket_optimize) {
         auto bucket_source_operator = std::make_shared<BucketProcessSourceOperatorFactory>(
@@ -196,7 +104,7 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_source_op.get(), context, rc_rf_probe_collector);
     ops_with_sink.push_back(std::move(agg_sink_op));
 
     // The upstream pipeline may be changed by *maybe_interpolate_local_shuffle_exchange*.
@@ -213,10 +121,10 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
     return ops_with_source;
 }
 
-pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> DistinctBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
     bool use_per_bucket_optimize =
             _tnode.agg_node.__isset.use_per_bucket_optimize && _tnode.agg_node.use_per_bucket_optimize;
@@ -241,26 +149,30 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     OpFactories ops_with_source;
 
     if (sorted_streaming_aggregate) {
-        ops_with_source =
-                _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
-                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false);
+        ASSIGN_OR_RETURN(
+                ops_with_source,
+                (_decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
+                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false)));
     } else {
         if (runtime_state()->enable_spill() && runtime_state()->enable_agg_distint_spill()) {
             if (runtime_state()->enable_spill_partitionwise_agg()) {
-                ops_with_source =
-                        _decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseDistinctSourceOperatorFactory,
-                                               SpillablePartitionWiseDistinctSinkOperatorFactory>(ops_with_sink,
-                                                                                                  context, false);
+                ASSIGN_OR_RETURN(
+                        ops_with_source,
+                        (_decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseDistinctSourceOperatorFactory,
+                                                SpillablePartitionWiseDistinctSinkOperatorFactory>(ops_with_sink,
+                                                                                                   context, false)));
             } else {
-                ops_with_source = _decompose_to_pipeline<AggregatorFactory,
+                ASSIGN_OR_RETURN(ops_with_source,
+                                 (_decompose_to_pipeline<AggregatorFactory,
                                                          SpillableAggregateDistinctBlockingSourceOperatorFactory,
                                                          SpillableAggregateDistinctBlockingSinkOperatorFactory>(
-                        ops_with_sink, context, false);
+                                         ops_with_sink, context, false)));
             }
         } else {
-            ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateDistinctBlockingSourceOperatorFactory,
+            ASSIGN_OR_RETURN(ops_with_source,
+                             (_decompose_to_pipeline<AggregatorFactory, AggregateDistinctBlockingSourceOperatorFactory,
                                                      AggregateDistinctBlockingSinkOperatorFactory>(
-                    ops_with_sink, context, use_per_bucket_optimize);
+                                     ops_with_sink, context, use_per_bucket_optimize)));
         }
     }
 
@@ -274,7 +186,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(ops_with_source, context, id());
+        pipeline::may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
     ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
 

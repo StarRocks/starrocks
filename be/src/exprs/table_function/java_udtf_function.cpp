@@ -27,6 +27,7 @@
 #include "exprs/table_function/table_function.h"
 #include "gutil/casts.h"
 #include "jni.h"
+#include "runtime/runtime_state.h"
 #include "runtime/user_function_cache.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
@@ -34,7 +35,6 @@
 #include "udf/java/utils.h"
 
 namespace starrocks {
-
 const TableFunction* getJavaUDTFFunction() {
     static JavaUDTFFunction java_table_function;
     return &java_table_function;
@@ -47,6 +47,7 @@ public:
               _symbol(std::move(symbol)),
               _arg_type_descs(std::move(type_desc)),
               _ret_type(TypeDescriptor::from_thrift(desc)) {}
+
     ~JavaUDTFState() override = default;
 
     Status open();
@@ -101,9 +102,11 @@ Status JavaUDTFState::open() {
 Status JavaUDTFFunction::init(const TFunction& fn, TableFunctionState** state) const {
     std::string libpath;
     auto instance = UserFunctionCache::instance();
-    RETURN_IF_ERROR(instance->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, TFunctionBinaryType::SRJAR, &libpath));
+    RETURN_IF_ERROR(instance->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, TFunctionBinaryType::SRJAR, &libpath,
+                                          fn.cloud_configuration));
     // Now we only support one return types
     std::vector<TypeDescriptor> arg_typedescs;
+    arg_typedescs.reserve(fn.arg_types.size());
     for (auto& type : fn.arg_types) {
         arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
     }
@@ -163,6 +166,15 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
     });
     env->PushLocalFrame(num_cols * num_rows + 16);
 
+    // Boundary check: method_desc must have at least num_cols + 1 elements
+    // (index 0 is return type, indices 1..num_cols are parameter types)
+    if (stateUDTF->method_process()->method_desc.size() < num_cols + 1) {
+        state->set_status(
+                Status::InternalError(fmt::format("method_desc size mismatch: need at least {}, got {}", num_cols + 1,
+                                                  stateUDTF->method_process()->method_desc.size())));
+        return {};
+    }
+
     for (int i = 0; i < num_rows; ++i) {
         DeferOp defer = DeferOp([&]() {
             for (int j = 0; j < num_cols; ++j) {
@@ -212,7 +224,8 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
                 state->set_status(st);
                 return {};
             }
-            auto res = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi});
+            auto res = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi},
+                                     runtime_state != nullptr && runtime_state->error_if_overflow());
             if (UNLIKELY(!res.ok())) {
                 state->set_status(Status::InternalError(res.to_string()));
                 return {};
@@ -231,5 +244,4 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
     return std::make_pair(std::move(res), std::move(offsets_col));
 }
-
 } // namespace starrocks

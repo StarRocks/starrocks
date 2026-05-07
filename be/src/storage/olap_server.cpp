@@ -44,10 +44,15 @@
 
 #include "base/time/time.h"
 #include "cache/datacache.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "common/thread/thread.h"
 #include "fs/fs_util.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
@@ -116,6 +121,7 @@ Status StorageEngine::start_bg_threads() {
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
+    data_dirs.reserve(_store_map.size());
     for (auto& tmp_store : _store_map) {
         data_dirs.push_back(tmp_store.second.get());
     }
@@ -251,6 +257,7 @@ void* StorageEngine::_fd_cache_clean_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::file_descriptor_cache_clean_interval;
         if (interval <= 0) {
@@ -304,6 +311,7 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(1);
         // schedule persistent index compaction
@@ -327,6 +335,7 @@ void* StorageEngine::_pk_dump_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(60);
         // disable pk dump generation when pk_dump_interval_seconds less than 0
@@ -371,6 +380,7 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         // must be here, because this thread is start on start and
@@ -385,6 +395,20 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
             continue;
         }
 
+        if (!status.ok()) {
+            if (!status.is_not_found()) {
+                LOG_EVERY_N(INFO, 10) << "Update compaction suspended because of status: " << status
+                                      << ", data_dir: " << data_dir->path();
+            }
+        } else {
+            LOG_EVERY_N(INFO, 10) << "Update compaction suspended because memory limit exceeded. "
+                                  << "Compaction mem tracker limit exceeded: "
+                                  << _options.compaction_mem_tracker->any_limit_exceeded()
+                                  << ", Update mem tracker limit exceeded: "
+                                  << _options.update_mem_tracker->any_limit_exceeded()
+                                  << ", data_dir: " << data_dir->path();
+        }
+
         int32_t interval = config::update_compaction_check_interval_seconds;
         if (interval <= 0) {
             LOG(WARNING) << "update compaction check interval config is illegal: " << interval << ", force set to 1";
@@ -396,6 +420,12 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
                 !_options.update_mem_tracker->any_limit_exceeded()) {
                 break;
             }
+            LOG_EVERY_N(INFO, 10) << "Update compaction still suspended due to memory limit"
+                                  << ", Compaction mem tracker limit exceeded: "
+                                  << _options.compaction_mem_tracker->any_limit_exceeded()
+                                  << ", Update mem tracker limit exceeded: "
+                                  << _options.update_mem_tracker->any_limit_exceeded()
+                                  << ", data_dir: " << data_dir->path();
         } while (true);
     }
 
@@ -406,6 +436,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         std::pair<int64_t, vector<uint32_t>> task(-1, vector<uint32>());
@@ -486,6 +517,7 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     GarbageSweepIntervalCalculator interval_calculator;
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         interval_calculator.maybe_interval_updated();
@@ -574,6 +606,7 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         _start_disk_stat_monitor();
 
@@ -589,6 +622,7 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
 }
 
 void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::finish_publish_version_internal;
         {
@@ -649,6 +683,7 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t expire_sec = config::update_cache_expire_sec;
         if (expire_sec <= 0) {
@@ -701,6 +736,7 @@ void* StorageEngine::_unused_rowset_monitor_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         double deleted_pct = delete_unused_rowset();
         // delete 20% means we nead speedup 5x which make interval 1/5 before
@@ -718,7 +754,7 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path gc by tablet!";
         ((DataDir*)arg)->perform_path_gc_by_tablet();
@@ -749,7 +785,7 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(600);
         break;
@@ -776,7 +812,7 @@ void* StorageEngine::_clear_expired_replication_snapshots_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to clear expired replication snapshots!";
         replication_txn_manager()->clear_expired_snapshots();
@@ -797,6 +833,7 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "begin to do tablet meta checkpoint:" << ((DataDir*)arg)->path();
         int64_t start_time = UnixMillis();
@@ -817,6 +854,7 @@ void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         {
             auto wait_timeout = std::chrono::seconds(1);

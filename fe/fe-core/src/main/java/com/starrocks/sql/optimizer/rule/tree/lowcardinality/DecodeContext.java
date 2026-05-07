@@ -22,6 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
@@ -88,7 +89,9 @@ class DecodeContext {
     Map<Integer, List<ScalarOperator>> stringExprsMap = Maps.newHashMap();
 
     // all string aggregate expressions
-    List<CallOperator> stringAggregateExprs = Lists.newArrayList();
+    Map<Integer, List<CallOperator>> stringAggregateExprs = Maps.newHashMap();
+
+    Map<Integer, ColumnRefSet> aggIdToSupportColumns = Maps.newHashMap();
 
     // The string columns used by the operator
     // IdentityHashMap: use object == object, operator equals is not enough
@@ -239,10 +242,15 @@ class DecodeContext {
     private void rewriteStringAggregations() {
         // rewrite string aggregate expression
         AggregateRewriter rewriter = new AggregateRewriter();
-        for (CallOperator aggFn : stringAggregateExprs) {
-            CallOperator new1stAggFn = (CallOperator) (aggFn.accept(rewriter, null));
-            stringExprToDictExprMap.put(aggFn, new1stAggFn);
-        }
+        stringAggregateExprs.forEach((aggId, aggFns) -> {
+            ColumnRefSet supportColumns = aggIdToSupportColumns.get(aggId);
+            Preconditions.checkNotNull(supportColumns);
+            rewriter.setSupportColumns(supportColumns);
+            for (CallOperator aggFn : aggFns) {
+                CallOperator new1stAggFn = (CallOperator) (aggFn.accept(rewriter, null));
+                stringExprToDictExprMap.put(aggFn, new1stAggFn);
+            }
+        });
     }
 
     // create a new dictionary column and assign the same property except for the type and column id
@@ -488,9 +496,12 @@ class DecodeContext {
     }
 
     private class AggregateRewriter extends BaseScalarOperatorShuttle {
+        private ColumnRefSet supportColumns;
+
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void ignore) {
-            return stringRefToDictRefMap.getOrDefault(variable, variable);
+            return supportColumns.contains(variable) ?
+                    stringRefToDictRefMap.getOrDefault(variable, variable) : variable;
         }
 
         AggregateFunction buildAggregateFunction(AggregateFunction fn, List<ScalarOperator> newChildren,
@@ -570,19 +581,30 @@ class DecodeContext {
             return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
                     call.isDistinct(), call.isRemovedDistinct());
         }
+
+        void setSupportColumns(ColumnRefSet supportColumns) {
+            this.supportColumns = supportColumns;
+        }
     }
 
     private class GlobalDictRewriter extends BaseScalarOperatorShuttle {
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void ignore) {
             // string dict expression use origin string column
-            ScalarOperator res = stringRefToDefineExprMap.get(variable.getId());
-            if (res.isColumnRef() && variable.getId() == ((ColumnRefOperator) res).getId()) {
+            ScalarOperator define = stringRefToDefineExprMap.get(variable.getId());
+            if (define.isColumnRef() && variable.getId() == ((ColumnRefOperator) define).getId()) {
                 // mock to string column
                 return new ColumnRefOperator(variable.getId(), variable.getType(), variable.getName(),
                         variable.isNullable());
             }
-            return res.accept(this, null);
+            ScalarOperator result = define.accept(this, null);
+            if (result.isColumnRef() && result.getType().isArrayType() && variable.getType().isStringType()) {
+                // This is result of an unnest operator on an ARRAY<VARCHAR>, we replace the type with INT so that
+                // backend doesn't get confused when creating dictionaries.
+                ColumnRefOperator ref = result.cast();
+                return new ColumnRefOperator(ref.getId(), IntegerType.INT, ref.getName(), ref.isNullable());
+            }
+            return result;
         }
 
         @Override

@@ -27,7 +27,7 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "block_manager.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
@@ -35,10 +35,6 @@
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "io/core/input_stream.h"
-#include "io/io_profiler.h"
-#include "runtime/exec_env.h"
-#include "storage/options.h"
-#include "util/stack_util.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {
@@ -154,7 +150,6 @@ Status LogBlockContainer::append_data(const std::vector<Slice>& data, size_t tot
     auto* dir = _dir.get();
     RETURN_IF(!try_acquire_sizes(total_size), DISK_ACQUIRE_ERROR(total_size, dir));
     RETURN_IF_ERROR(_writable_file->pre_allocate(total_size));
-    auto scope = IOProfiler::scope(IOProfiler::TAG::TAG_SPILL, 0);
     RETURN_IF_ERROR(_writable_file->appendv(data.data(), data.size()));
     _data_size += total_size;
     return Status::OK();
@@ -189,11 +184,6 @@ public:
     LogBlockReader(const Block* block, const BlockReaderOptions& options = {}) : BlockReader(block, options) {}
 
     ~LogBlockReader() override = default;
-
-    Status read_fully(void* data, int64_t count) override {
-        auto scope = IOProfiler::scope(IOProfiler::TAG_SPILL, 0);
-        return BlockReader::read_fully(data, count);
-    }
 
     std::string debug_string() override { return _block->debug_string(); }
 
@@ -245,7 +235,7 @@ private:
 };
 
 LogBlockManager::LogBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
-        : _query_id(std::move(query_id)), _dir_mgr(dir_mgr) {
+        : _query_id(query_id), _dir_mgr(dir_mgr) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
 }

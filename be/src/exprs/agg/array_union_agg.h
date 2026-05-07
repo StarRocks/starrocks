@@ -18,13 +18,12 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

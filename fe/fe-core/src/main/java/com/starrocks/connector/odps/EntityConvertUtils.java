@@ -29,6 +29,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -90,10 +91,13 @@ public class EntityConvertUtils {
                 return new ArrayType(convertType(arrayTypeInfo.getElementTypeInfo()));
             case STRUCT:
                 StructTypeInfo structTypeInfo = (StructTypeInfo) typeInfo;
-                List<Type> fieldTypeList =
-                        structTypeInfo.getFieldTypeInfos().stream().map(EntityConvertUtils::convertType)
-                                .collect(Collectors.toList());
-                return new StructType(fieldTypeList);
+                List<StructField> structFields = new ArrayList<>();
+                for (int i = 0; i < structTypeInfo.getFieldCount(); i++) {
+                    String name = structTypeInfo.getFieldNames().get(i);
+                    Type t = convertType(structTypeInfo.getFieldTypeInfos().get(i));
+                    structFields.add(new StructField(name, t));
+                }
+                return new StructType(structFields, true);
             default:
                 return VarcharType.VARCHAR;
         }

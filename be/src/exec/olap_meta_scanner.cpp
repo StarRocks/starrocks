@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "exec/olap_meta_scan_node.h"
+#include "runtime/runtime_state.h"
 #include "storage/metadata_util.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"

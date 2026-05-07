@@ -57,7 +57,7 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     std::vector<SlotId> key_slot_ids;
     std::vector<SlotId> value_slot_ids;
     for (int i = 0; i < schema->tuple_desc()->slots().size(); ++i) {
-        const string& name = schema->tuple_desc()->slots()[i]->col_name();
+        const auto name = schema->tuple_desc()->slots()[i]->col_name();
         col_names.emplace_back(name.data(), name.size());
 
         if (i < request->key_size()) {

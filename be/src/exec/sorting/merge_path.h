@@ -25,6 +25,7 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::merge_path {

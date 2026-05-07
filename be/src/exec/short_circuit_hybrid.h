@@ -26,7 +26,6 @@
 #include "exec/scan_node.h"
 #include "gen_cpp/ShortCircuit_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/table_reader.h"
 
 namespace starrocks {

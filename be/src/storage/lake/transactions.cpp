@@ -15,12 +15,14 @@
 #include "storage/lake/transactions.h"
 
 #include "base/container/lru_cache.h"
-#include "common/config.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
@@ -43,18 +45,18 @@ ParallelSet<int64_t> tablet_txns;
 // the situation happens in create rollup.
 const int64_t EMPTY_TXNLOG_TXNID = -1;
 
-bool add_tablet(int64_t tablet_id) {
+} // namespace
+
+namespace starrocks::lake {
+
+bool acquire_publish_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
     return ok;
 }
 
-void remove_tablet(int64_t tablet_id) {
+void release_publish_tablet(int64_t tablet_id) {
     tablet_txns.erase(tablet_id);
 }
-
-} // namespace
-
-namespace starrocks::lake {
 
 static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                         std::vector<std::string>* files_to_delete) {
@@ -92,8 +94,8 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true,
-                                                   txns[index_version - base_version - 1].gtid());
+        auto gtid = txns.size() == 1 ? txns[0].gtid() : txns[index_version - base_version - 1].gtid();
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true, gtid);
         if (res.ok()) {
             version = index_version;
         } else {
@@ -174,7 +176,7 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata) {
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -187,6 +189,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
         new_metadata->set_gtid(txns[0].gtid());
+        // Apply max(prev_bv, fe_bv) for async vector index build
+        if (fe_built_version > 0 || new_metadata->has_vector_index_built_version()) {
+            int64_t prev_bv =
+                    new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
+            new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
+        }
         if (!skip_write_tablet_metadata) {
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
@@ -197,13 +205,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         return new_metadata;
     }
 
-    if (!add_tablet(tablet_info.get_tablet_id_in_metadata())) {
+    if (!acquire_publish_tablet(tablet_info.get_tablet_id_in_metadata())) {
         return Status::ResourceBusy(
                 fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
                             "error and the task will retry later.",
                             tablet_info.get_tablet_id_in_metadata()));
     }
-    DeferOp remove_tablet_txn([&] { remove_tablet(tablet_info.get_tablet_id_in_metadata()); });
+    DeferOp remove_tablet_txn([&] { release_publish_tablet(tablet_info.get_tablet_id_in_metadata()); });
 
     if (txns.size() > 1) {
         CHECK_EQ(new_version, base_version + txns.size());
@@ -495,6 +503,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         }
     }
 
+    // Apply max(prev_bv, fe_bv) for async vector index build
+    if (fe_built_version > 0 || new_metadata->has_vector_index_built_version()) {
+        int64_t prev_bv =
+                new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
+        new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
+    }
+
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
 
@@ -542,6 +557,17 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
 
 void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std::vector<std::string>* files_to_delete) {
     auto tablet_id = txn_log.tablet_id();
+
+    // Helper to collect .vi files tracked in a rowset's segment_metas
+    auto collect_vi_files = [&](const RowsetMetadataPB& rowset) {
+        for (int i = 0; i < rowset.segments_size() && i < rowset.segment_metas_size(); i++) {
+            for (int64_t vi_id : rowset.segment_metas(i).vector_index_ids()) {
+                auto vi_name = gen_vector_index_filename(rowset.segments(i), vi_id);
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
+            }
+        }
+    };
+
     if (txn_log.has_op_write()) {
         for (const auto& segment : txn_log.op_write().rowset().segments()) {
             files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
@@ -549,14 +575,23 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_file : txn_log.op_write().dels()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
         }
+        collect_vi_files(txn_log.op_write().rowset());
     }
     if (txn_log.has_op_compaction()) {
         // only delete actual new segments
         size_t new_segment_offset = txn_log.op_compaction().new_segment_offset();
         size_t new_segment_count = txn_log.op_compaction().new_segment_count();
-        const auto& segments = txn_log.op_compaction().output_rowset().segments();
+        const auto& output_rowset = txn_log.op_compaction().output_rowset();
+        const auto& segments = output_rowset.segments();
         for (size_t idx = new_segment_offset, cnt = 0; idx < segments.size() && cnt < new_segment_count; ++idx, ++cnt) {
             files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segments[idx]));
+            // Delete .vi files for this new segment
+            if (idx < output_rowset.segment_metas_size()) {
+                for (int64_t vi_id : output_rowset.segment_metas(idx).vector_index_ids()) {
+                    auto vi_name = gen_vector_index_filename(segments[idx], vi_id);
+                    files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
+                }
+            }
         }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
@@ -564,6 +599,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             for (const auto& segment : rowset.segments()) {
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
             }
+            collect_vi_files(rowset);
         }
     }
     if (txn_log.has_op_replication()) {
@@ -574,6 +610,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             for (const auto& del_file : op_write.dels()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
             }
+            collect_vi_files(op_write.rowset());
         }
     }
 

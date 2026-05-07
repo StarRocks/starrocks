@@ -54,8 +54,7 @@ public:
     // Create a new transaction in TxnManager and return a AsyncDeltaWriter for write.
     static StatusOr<std::unique_ptr<AsyncDeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
 
-    AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer)
-            : _writer(std::move(writer)), _queue_id{kInvalidQueueId}, _closed(false) {}
+    AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer) : _writer(std::move(writer)), _closed(false) {}
 
     ~AsyncDeltaWriter();
 
@@ -132,7 +131,7 @@ private:
     void _close();
 
     std::shared_ptr<DeltaWriter> _writer;
-    bthread::ExecutionQueueId<Task> _queue_id;
+    bthread::ExecutionQueueId<Task> _queue_id{kInvalidQueueId};
     std::atomic<bool> _closed;
 };
 

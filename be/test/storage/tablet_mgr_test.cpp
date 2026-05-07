@@ -36,7 +36,7 @@
 #include <memory>
 #include <string>
 
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_tracker.h"

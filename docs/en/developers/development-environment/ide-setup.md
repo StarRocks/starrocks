@@ -122,9 +122,9 @@ Debug java parameter: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,add
 
 ### BE
 
-It is recommended to run `mvn install -DskipTests` first in `fe` folder to ensure that thrift and protobuf in the gensrc directory are compiled correctly.
+It is recommended to run `mvn install -DskipTests` first in `fe` to generate the FE-side Java thrift/proto sources.
 
-Then you need to enter  `gensrc` folder, run `make clean` and `make` commands respectively, otherwise Clion can't detect thrift's output files.
+For BE, run the CMake configure/build flow once. The BE thrift/protobuf headers are materialized by CMake during configure/build into the active build directory (for example `be/build_Release/gensrc/gen_cpp`), so you no longer need `cd gensrc && make` for those files. If you need the shared script outputs first, run `make -C gensrc script`.
 
 Use Clion to open `be` folder.
 

@@ -38,6 +38,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <memory_resource>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -50,12 +51,10 @@
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/logging.h"
-#include "common/object_pool.h"
-#include "common/runtime_profile.h"
-#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/mem_pool.h"
+#include "runtime/arena_allocator.h"
+#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -63,15 +62,17 @@ namespace starrocks {
 class DescriptorTbl;
 class ObjectPool;
 class Status;
-class ExecEnv;
 class Expr;
 class DateTimeValue;
+class MemPool;
 class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
 class RowDescriptor;
+class RuntimeProfile;
 class RuntimeFilterPort;
+class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
@@ -93,9 +94,18 @@ class RuntimeState {
 public:
     // for ut only
     RuntimeState();
+    RuntimeState(const RuntimeState&) = delete;
+    // for ut only
+    RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
+
+    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
 
     RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -103,6 +113,7 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    RuntimeState(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env);
     explicit RuntimeState(ExecEnv* exec_env);
 
     // Empty d'tor to avoid issues with std::unique_ptr.
@@ -140,9 +151,24 @@ public:
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
     ExecEnv* exec_env() { return _exec_env; }
+    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
+
+    // Fragment-level shared MemPool for placement-new allocations.
+    // Owned by RuntimeState so it outlives all PipelineDrivers.
+    MemPool* fragment_mem_pool() { return _fragment_mem_pool.get(); }
+
+    // PMR memory resource backed by the fragment MemPool.
+    std::pmr::memory_resource* mem_resource() { return _mem_resource.get(); }
+
+    // Create the fragment-level MemPool. Called once during fragment preparation.
+    void init_fragment_mem_pool();
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
     void set_query_mem_tracker(const std::shared_ptr<MemTracker>& query_mem_tracker) {
         _query_mem_tracker = query_mem_tracker;
@@ -152,6 +178,10 @@ public:
     RuntimeFilterPort* runtime_filter_port() {
         DCHECK(_runtime_filter_port != nullptr);
         return _runtime_filter_port;
+    }
+    RuntimeFilterRegistry* runtime_filter_registry() {
+        DCHECK(_runtime_filter_registry != nullptr);
+        return _runtime_filter_registry;
     }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
@@ -338,6 +368,33 @@ public:
                _query_options.enable_full_sort_use_german_string;
     }
 
+    bool http_request_ssl_verification_required() const {
+        return _query_options.__isset.http_request_ssl_verification_required &&
+               _query_options.http_request_ssl_verification_required;
+    }
+
+    int32_t http_request_security_level() const {
+        return _query_options.__isset.http_request_security_level ? _query_options.http_request_security_level
+                                                                  : 3; // default: RESTRICTED
+    }
+
+    const std::string& http_request_ip_allowlist() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_ip_allowlist ? _query_options.http_request_ip_allowlist : empty;
+    }
+
+    const std::string& http_request_host_allowlist_regexp() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_host_allowlist_regexp
+                       ? _query_options.http_request_host_allowlist_regexp
+                       : empty;
+    }
+
+    bool http_request_allow_private_in_allowlist() const {
+        return _query_options.__isset.http_request_allow_private_in_allowlist &&
+               _query_options.http_request_allow_private_in_allowlist;
+    }
+
     int32_t spill_mem_table_size() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }
@@ -390,6 +447,10 @@ public:
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
     }
 
+    bool error_for_division_by_zero() const {
+        return _query_options.__isset.error_for_division_by_zero && _query_options.error_for_division_by_zero;
+    }
+
     bool enable_hyperscan_vec() const {
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
@@ -439,7 +500,7 @@ public:
 
     void append_tablet_fail_infos(const TTabletFailInfo& fail_info) {
         std::lock_guard<std::mutex> l(_tablet_infos_lock);
-        _tablet_fail_infos.emplace_back(std::move(fail_info));
+        _tablet_fail_infos.emplace_back(fail_info);
     }
 
     std::vector<TSinkCommitInfo>& sink_commit_infos() {
@@ -449,7 +510,7 @@ public:
 
     void add_sink_commit_info(const TSinkCommitInfo& sink_commit_info) {
         std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
-        _sink_commit_infos.emplace_back(std::move(sink_commit_info));
+        _sink_commit_infos.emplace_back(sink_commit_info);
     }
 
     // get mem limit for load channel
@@ -467,8 +528,6 @@ public:
 
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
-
-    Status reset_epoch();
 
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
@@ -548,7 +607,7 @@ private:
 
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-               const TQueryGlobals& query_globals, ExecEnv* exec_env);
+               const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -579,6 +638,7 @@ private:
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
@@ -587,6 +647,17 @@ private:
 
     // Memory usage of this fragment instance
     std::shared_ptr<MemTracker> _instance_mem_tracker;
+
+    // Fragment-level memory pool for placement-new allocation of query objects
+    // (ExecNodes, Descriptors, etc.).  Declared BEFORE _obj_pool so that it is
+    // destroyed AFTER _obj_pool (C++ reverse member destruction order).  This
+    // guarantees ObjectPool calls destructors before MemPool memory is freed.
+    //
+    // Owned here (not in FragmentContext) because RuntimeState is ref-counted
+    // via shared_ptr and PipelineDrivers can outlive FragmentContext.
+    std::unique_ptr<MemPool> _fragment_mem_pool;
+    // PMR adapter — nullptr when _fragment_mem_pool is null.
+    std::unique_ptr<MemPoolResource> _mem_resource;
 
     std::shared_ptr<ObjectPool> _obj_pool;
 
@@ -659,10 +730,8 @@ private:
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
 
-    // prohibit copies
-    RuntimeState(const RuntimeState&) = delete;
-
     RuntimeFilterPort* _runtime_filter_port = nullptr;
+    RuntimeFilterRegistry* _runtime_filter_registry = nullptr;
 
     FragmentDictState* _fragment_dict_state = nullptr;
 

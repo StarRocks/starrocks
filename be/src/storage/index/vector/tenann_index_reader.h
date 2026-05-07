@@ -31,9 +31,11 @@ namespace starrocks {
 class TenANNReader final : public VectorIndexReader {
 public:
     TenANNReader() = default;
-    ~TenANNReader() override{};
+    ~TenANNReader() override = default;
 
     Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) override;
+
+    Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs) override;
 
     Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                   tenann::IdFilter* id_filter = nullptr) override;

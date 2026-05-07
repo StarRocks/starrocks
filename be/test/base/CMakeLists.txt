@@ -18,6 +18,7 @@ set(BASE_TEST_FILES
     bit/bit_packing_simd_test.cpp
     bit/bit_packing_test.cpp
     bit/bitmap_test.cpp
+    bit/frame_of_reference_coding_test.cpp
     bit/rle_encoding_test.cpp
     bit/bit_stream_utils_test.cpp
     bit/bit_util_test.cpp
@@ -28,14 +29,17 @@ set(BASE_TEST_FILES
     bthreads/single_flight_test.cpp
     brpc/ref_count_closure_test.cpp
     brpc/recoverable_closure_test.cpp
+    brpc/disposable_closure_test.cpp
     brpc/reusable_closure_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp
     concurrency/limit_setter_test.cpp
     concurrency/countdown_latch_test.cpp
+    concurrency/once_test.cpp
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp
+    compression/block_compression_test.cpp
     container/heap_test.cpp
     lru_cache_test.cpp
     container/priority_queue_test.cpp
@@ -106,7 +110,7 @@ set(BASE_TEST_LINK_LIBS
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest

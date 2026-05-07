@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/sort_exec_exprs.h"
 #include "runtime/data_stream_recvr.h"
@@ -71,8 +72,7 @@ public:
     // recorded in TPlanNode, and before calling prepare()
     void set_num_senders(int num_senders) { _num_senders = num_senders; }
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 protected:
     void debug_string(int indentation_level, std::stringstream* out) const override;
@@ -84,7 +84,7 @@ private:
 
     const TExchangeNode& _texchange_node;
 
-    int _num_senders; // needed for _stream_recvr construction
+    int _num_senders{0}; // needed for _stream_recvr construction
 
     // created in prepare() and owned by the RuntimeState
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
@@ -109,7 +109,7 @@ private:
     int64_t _offset;
 
     // Number of rows skipped so far.
-    int64_t _num_rows_skipped;
+    int64_t _num_rows_skipped{0};
 
     // Sub plan query statistics receiver. It is shared with DataStreamRecvr and will be
     // called in two different threads. When ExchangeNode is destructed, this may be accessed

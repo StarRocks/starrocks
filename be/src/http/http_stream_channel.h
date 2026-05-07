@@ -41,7 +41,7 @@ public:
 
 private:
     HttpRequest* _req;
-    evbuffer* _buffer;
+    evbuffer* _buffer{nullptr};
 };
 
 } // namespace starrocks

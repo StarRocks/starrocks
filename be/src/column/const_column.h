@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <sstream>
+
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
@@ -58,10 +60,6 @@ public:
     bool has_null() const override { return _data->has_null(); }
 
     bool is_constant() const override { return true; }
-
-    const uint8_t* raw_data() const override { return _data->raw_data(); }
-
-    uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data->mutable_raw_data()); }
 
     size_t size() const override { return _size; }
 

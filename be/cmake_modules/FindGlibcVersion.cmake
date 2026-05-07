@@ -14,6 +14,11 @@
 
 # check glibc version, assign to GLIBC_VERSION
 
+if (APPLE)
+  set(GLIBC_VERSION "0.0")
+  message(STATUS "GLIBC version check skipped on macOS")
+else()
+
 set(CHECK_C_SOURCE_CODE
     "
 #include <stdio.h>
@@ -36,4 +41,5 @@ if(compile_result EQUAL 0)
   message(STATUS "GLIBC version: ${GLIBC_VERSION}")
 else()
   message(FATAL_ERROR "Failed to get the glibc version")
+endif()
 endif()

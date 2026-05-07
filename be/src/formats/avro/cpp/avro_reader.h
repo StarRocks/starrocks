@@ -35,9 +35,9 @@ public:
             : _file(std::move(file)),
               _buffer_size(buffer_size),
               _buffer(new uint8_t[buffer_size]),
-              _byte_count(0),
+
               _next(_buffer),
-              _available(0),
+
               _counter(counter) {}
 
     ~AvroBufferInputStream() override { delete[] _buffer; }
@@ -54,9 +54,9 @@ private:
     std::shared_ptr<RandomAccessFile> _file;
     const size_t _buffer_size;
     uint8_t* const _buffer;
-    size_t _byte_count;
+    size_t _byte_count{0};
     uint8_t* _next;
-    size_t _available;
+    size_t _available{0};
     ScannerCounter* _counter = nullptr;
 };
 

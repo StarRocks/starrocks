@@ -14,9 +14,9 @@
 
 #include "fs/fs_options_helper.h"
 
+#include "exec/data_sinks/file_result_writer.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/DataSinks_types.h"
-#include "runtime/file_result_writer.h"
 
 namespace starrocks {
 

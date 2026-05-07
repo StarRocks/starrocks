@@ -14,14 +14,19 @@
 
 #include "storage/lake/rowset.h"
 
+#include <algorithm>
 #include <future>
 #include <unordered_set>
 
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -213,10 +218,12 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
         }
         if (metadata().segment_metas_size() > 0) {
             auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
-            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            file.write_sort_key_fields_to(segment_meta);
             segment_meta->set_num_rows(file.num_rows);
             segment_meta->set_segment_idx(next_segment_id++);
+            for (int64_t vi_id : file.vector_index_ids) {
+                segment_meta->add_vector_index_ids(vi_id);
+            }
         }
     }
     op_compaction->set_new_segment_count(writer->segments().size());
@@ -287,16 +294,20 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.lake_io_opts = options.lake_io_opts;
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
+    seg_options.use_vector_index = options.use_vector_index;
+    seg_options.vector_search_option = options.vector_search_option;
+    seg_options.belonged_to_cloud_native = true;
     seg_options.has_preaggregation = options.has_preaggregation;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    seg_options.tablet_id = tablet_id();
+    seg_options.rowset_id = metadata().id();
+    seg_options.dynamic_rss_id_base = options.dynamic_rss_id_base;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
                 _tablet_mgr, nullptr, seg_options.lake_io_opts.fill_data_cache, seg_options.lake_io_opts);
         seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
         seg_options.version = options.version;
-        seg_options.tablet_id = tablet_id();
-        seg_options.rowset_id = metadata().id();
     }
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
@@ -470,10 +481,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     return seg_iterators;
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const Schema& schema,
-                                                                                      int64_t version,
-                                                                                      const MetaFileBuilder* builder,
-                                                                                      OlapReaderStatistics* stats) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
+        const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
+        const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
@@ -501,6 +511,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
+        }
+        // Apply per-segment rowid range if provided
+        if (rowid_range_per_segment != nullptr && i < rowid_range_per_segment->size()) {
+            seg_options.rowid_range_option = (*rowid_range_per_segment)[i];
+        } else {
+            seg_options.rowid_range_option = nullptr;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
@@ -602,6 +618,16 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         std::future<std::pair<StatusOr<SegmentPtr>, std::string>> future;
     };
     std::vector<SegmentLoadFuture> segment_futures;
+    // The parallel tasks capture |this| pointer. Must wait for all tasks
+    // to complete before returning, to prevent use-after-free if the
+    // Rowset is destroyed while tasks are still running.
+    DeferOp wait_futures([&segment_futures]() {
+        for (auto& f : segment_futures) {
+            if (f.future.valid()) {
+                f.future.wait();
+            }
+        }
+    });
 
     // Pre-allocate segments vector to maintain correct index mapping.
     // This is necessary because when parallel loading is enabled with skip_segment_idxs,
@@ -674,6 +700,13 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         if (_parallel_load) {
             int captured_idx = current_idx;
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
+                if (!injected_st.ok()) {
+                    return std::make_pair(StatusOr<SegmentPtr>(injected_st), seg_name);
+                }
+#endif
                 auto result = _tablet_mgr->load_segment(segment_info, segment_id, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
                 return std::make_pair(std::move(result), seg_name);
@@ -744,8 +777,11 @@ int64_t Rowset::data_size_after_deletion() const {
     if (num_rows() == 0 || data_size() == 0) {
         return 0;
     }
-    // data size * (num_rows - num_deleted_rows) / num_rows
-    return (int64_t)(data_size() * ((double)(num_rows() - num_dels()) / num_rows()));
+    // data size * (num_rows - num_deleted_rows) / num_rows. Clamp live rows to 0 to
+    // guard against callers that observe an inflated num_dels (e.g. pre-fix reshard
+    // children that inherited the parent's full delvec cardinality).
+    int64_t live_rows = std::max<int64_t>(0, num_rows() - num_dels());
+    return (int64_t)(data_size() * ((double)live_rows / num_rows()));
 }
 
 } // namespace starrocks::lake

@@ -14,6 +14,10 @@
 
 #include "storage/lake/spark_load.h"
 
+#include "base/utility/defer_op.h"
+#include "exec/file_scanner/file_scanner.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -118,8 +122,7 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
         op_write->mutable_rowset()->add_segment_size(f.size.value());
         op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
         auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
         segment_meta->set_segment_idx(segment_idx);
     }

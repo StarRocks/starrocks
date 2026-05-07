@@ -41,6 +41,7 @@ using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 struct OlapScanRange;
 struct VectorSearchOption;
 using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
+using RowsetIdToDRSSId = phmap::parallel_flat_hash_map<RowsetId, uint32_t, HashOfRowsetId>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 // Params for TabletReader
@@ -83,6 +84,7 @@ struct TabletReaderParams {
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
+    RowsetIdToDRSSId* rowset_id_to_drssid = nullptr;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;

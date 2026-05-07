@@ -23,17 +23,16 @@
 #include "column/column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
-#include "column/vectorized_fwd.h"
-#include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {
-    // compaction will reuse column, must copy in there.
+    // compaction will reuse the column, must copy in there.
     _json_datas.emplace_back(column.clone());
 
     _estimate_size += column.byte_size();
@@ -125,6 +124,7 @@ Status FlatJsonColumnCompactor::_merge_columns(MutableColumns& json_datas) {
 }
 
 Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
+    FlatJsonMetrics::instance()->flat_json_compaction_total.increment(1);
     VLOG(2) << "FlatJsonColumnCompactor flatten_columns, json_datas: " << json_datas.size();
     _is_flat = true;
 
@@ -149,6 +149,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
             _flat_columns = flattener.mutable_result();
         } else {
             if (!check_is_same_schema(pre_col, json_col)) {
+                FlatJsonMetrics::instance()->flat_json_compaction_schema_change_total.increment(1);
                 transformer.init_compaction_task(json_col->flat_column_paths(), json_col->flat_column_types(),
                                                  json_col->has_remain());
                 pre_col = json_col;

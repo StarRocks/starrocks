@@ -67,6 +67,8 @@ SET GLOBAL query_mem_limit = 137438953472;
 * cngroup_resource_usage_fresh_ratio
 * cngroup_schedule_mode
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -195,6 +197,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于兼容 MySQL 客户端。无实际作用。
 * 默认值：1
 * 类型：Int
+
+### binary_encoding_format
+
+* **作用域**: Session
+* **描述**: 控制 StarRocks 在 MySQL 文本结果中如何编码 `BINARY` / `VARBINARY` 值。可选值为 `raw`、`hex` 和 `base64`，默认值为 `hex`。该变量需要结合 `binary_encoding_level` 一起理解。对于顶层二进制列，MySQL 客户端通常可以直接处理；但当二进制值出现在 `ARRAY`、`MAP`、`STRUCT` 等嵌套类型中时，结果会以类 JSON 字符串的形式返回，此时为了保证内容可打印且格式稳定，往往需要额外编码。若希望结果更紧凑可读，可以使用 `base64`；若希望完全保留原始字节，可以设置为 `raw`。
+* **默认值**: `hex`
+* **数据类型**: String
+* **引入版本**: v4.1
+
+### binary_encoding_level
+
+* **作用域**: Session
+* **描述**: 控制 MySQL 文本结果中哪些二进制值需要编码。可选值为 `nested` 和 `all`，默认值为 `nested`。`nested` 用于兼容历史行为，即仅对 `ARRAY`、`MAP`、`STRUCT` 等嵌套类型中的二进制值进行编码，而顶层二进制列保持原有行为。若团队希望所有二进制输出都遵循统一的编码规范，可以设置为 `all`，此时顶层二进制值也会一起编码。若 `binary_encoding_format = raw`，则不会额外执行二进制编码，即使这里设置为 `nested` 或 `all`，嵌套输出的可读性也可能下降。
+* **默认值**: `nested`
+* **数据类型**: String
+* **引入版本**: v4.1
 
 ### big_query_profile_threshold
 
@@ -450,6 +468,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_cache_udaf
+
+* **描述**: 设置为 `true` 时，启用 Java UDAF 类级初始化的内存缓存（包括类加载、方法内省和批量更新 stub 类生成）。缓存在首次使用时填充，并在同一 BE 进程内的所有 aggregator/analytor 实例之间复用，从而消除原本与 pipeline DOP 成线性比例的重复每实例初始化开销。缓存仅适用于创建时指定 `"isolation" = "shared"` 的 UDAF 和窗口函数；使用 `"isolation" = "private"` 创建的函数无论此设置如何，始终走非缓存路径。默认为 `false`；在确认 shared 隔离模式的 UDAF 可安全跨并发查询共享类级状态后再启用。运行时 Profile 中提供 `UdafCacheHitCount`、`UdafCachePopulateCount` 和 `UdafLoadTime` 计数器用于观测缓存行为。
+* **范围**: Session
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.4.0
+
 ### enable_color_explain_output
 
 * **范围**: Session
@@ -563,7 +589,21 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：当字符串列的最大长度未知时用于元数据的回退长度。如果客户端依赖该元数据且报告的长度小于真实值，部分 BI 工具可能返回空值或截断。小于等于 0 时回退为 `64`；有效范围为 `1` ~ `1048576`。
 * 默认值：64
 * 数据类型：Int
-* 引入版本：v3.5.12
+* 引入版本：v3.5.16、v4.0.9
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 时，是否保留目标 `VARCHAR(N)` 的长度信息。开启后，可使 `CAST(col AS VARCHAR(N))` 这类语句在 prepare 和 execute 阶段返回一致的结果集元数据。
+* 默认值：false
+* 数据类型：Boolean
+* 引入版本：v3.5.16、v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 后，是否将复用的 planner `Expr` 的 `type` 和 `originType` 同步为改写后的 `VARCHAR(N)` 类型。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v3.5.16、v4.0.9
 
 ### enable_lake_tablet_internal_parallel
 
@@ -1234,12 +1274,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：auto
 * 引入版本：v3.3.2
 
-### prefer_compute_node
-
-* 描述：将部分执行计划调度到 CN 节点执行。
-* 默认值：false
-* 引入版本：v2.4
-
 ### query_cache_agg_cardinality_limit
 
 * 描述：GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行数, 则不启用 cache。
@@ -1414,6 +1448,8 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * `SORT_NULLS_LAST`：排序后，将 NULL 值放到最后。
 * `ERROR_IF_OVERFLOW`：运算溢出时，报错而不是返回 NULL，目前仅 DECIMAL 支持这一行为。
 * `GROUP_CONCAT_LEGACY`：使用 2.5 及以前的 `group_concat` 的语法。该选项从 3.0.9，3.1.6 开始支持。
+* `FORBID_INVALID_IMPLICIT_CAST`：在计划阶段启用类似 Trino 的严格类型检查。仅允许同一类型族内的扩宽（widening）隐式转换，例如 `TINYINT`→`INT`→`BIGINT`→`DECIMAL`→`DOUBLE`、`DATE`→`DATETIME`。`VARCHAR`/`CHAR` 之间的隐式转换不校验声明长度，仍然允许。跨类型族的转换（例如 `string`↔`numeric`、`string`↔`date`、`numeric`↔`date`、`boolean` 与其他类型之间）以及数值窄化转换（例如 `BIGINT`→`INT`、`DOUBLE`→`FLOAT`）会被拒绝并返回语义错误。如需进行此类转换，请使用显式 `CAST`。
+* `STRUCT_CAST_BY_NAME`：在 STRUCT 类型之间进行类型转换时，启用基于名称的字段匹配，而非默认的基于位置的匹配。启用此模式后，源 Struct 中的字段将根据字段名称（不区分大小写）与目标 Struct 中的字段进行匹配，无论它们的声明顺序如何。源 Struct 中存在而目标 Struct 中缺失的字段将被忽略；目标 Struct 中存在而源 Struct 中缺失的字段将被填充为 NULL。此模式同时影响 FE 类型解析（UNION ALL 的通用超类型计算和可转换性检查）以及 BE 转换评估（CastStructExpr 中的运行时字段重新排序）。当对 STRUCT 列执行 UNION ALL 操作时，若各分支中字段的定义顺序不同，此模式尤为有用。
 
 不同模式之间可以独立设置，您可以单独开启某一个模式，例如：
 
@@ -1483,13 +1519,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 * **默认值**: `10`
 * **类型**: long
 * **引入版本**: v3.2.0
-
-### use_compute_nodes
-
-* 描述：用于设置使用 CN 节点的数量上限。该设置只会在 `prefer_compute_node=true` 时才会生效。`-1`，表示使用所有 CN 节点。`0` 表示不使用 CN 节点。
-* 默认值：-1
-* 类型：Int
-* 引入版本：v2.4
 
 ### version (global)
 

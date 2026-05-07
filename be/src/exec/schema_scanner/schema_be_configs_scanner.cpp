@@ -14,11 +14,10 @@
 
 #include "exec/schema_scanner/schema_be_configs_scanner.h"
 
-#include "agent/master_info.h"
 #include "base/metrics.h"
-#include "exec/schema_scanner/schema_helper.h"
+#include "common/system/master_info.h"
+#include "exec/schema_scanner/schema_column_filler.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/starrocks_metrics.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

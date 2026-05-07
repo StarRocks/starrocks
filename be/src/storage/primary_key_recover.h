@@ -39,6 +39,8 @@ class OlapReaderStatistics;
 */
 class PrimaryKeyRecover {
 public:
+    virtual ~PrimaryKeyRecover() = default;
+
     // Follow the steps below:
     // 1. reset_state
     // 2. recover

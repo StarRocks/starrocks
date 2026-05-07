@@ -85,11 +85,11 @@ class CancellableRunnable : public Runnable {
 public:
     CancellableRunnable(std::function<void()> runner, std::function<void()> canceller)
             : _runnable(std::move(runner)), _canceller(std::move(canceller)) {}
-    virtual ~CancellableRunnable() = default;
+    ~CancellableRunnable() override = default;
 
-    virtual void run() override { _runnable(); }
+    void run() override { _runnable(); }
 
-    virtual void cancel() override { _canceller(); }
+    void cancel() override { _canceller(); }
 
 protected:
     std::function<void()> _runnable;
@@ -144,6 +144,8 @@ protected:
 class ThreadPoolBuilder {
 public:
     explicit ThreadPoolBuilder(std::string name);
+    ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
+    const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
 
     // Note: We violate the style guide by returning mutable references here
     // in order to provide traditional Builder pattern conveniences.
@@ -160,15 +162,12 @@ public:
 private:
     friend class ThreadPool;
     const std::string _name;
-    int _min_threads;
+    int _min_threads{0};
     int _max_threads;
     int _max_queue_size;
     MonoDelta _idle_timeout;
     CpuUtil::CpuIds _cpuids;
     std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
-
-    ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
-    const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
 };
 
 // Thread pool with a variable number of threads.
@@ -208,6 +207,9 @@ private:
 //    thread_pool->SubmitFunc(std::bind(&Func, 10));
 class ThreadPool {
 public:
+    ThreadPool(const ThreadPool&) = delete;
+    const ThreadPool& operator=(const ThreadPool&) = delete;
+
     enum Priority {
         LOW_PRIORITY = 0,
         HIGH_PRIORITY,
@@ -362,25 +364,25 @@ private:
     // Number of threads currently running.
     //
     // Protected by _lock.
-    int _num_threads;
+    int _num_threads{0};
 
     // Number of threads which are in the process of starting.
     // When these threads start, they will decrement this counter and
     // accordingly increment '_num_threads'.
     //
     // Protected by _lock.
-    int _num_threads_pending_start;
+    int _num_threads_pending_start{0};
 
     // Number of threads currently running and executing client tasks.
     //
     // Protected by _lock.
-    int _active_threads;
+    int _active_threads{0};
 
     // Total number of client tasks queued, either directly (_queue) or
     // indirectly (_tokens).
     //
     // Protected by _lock.
-    int _total_queued_tasks;
+    int _total_queued_tasks{0};
 
     // Last task executed timestamp
     MonoTime _last_active_timestamp;
@@ -435,9 +437,6 @@ private:
 
     // Total time in nanoseconds to execute tasks.
     CoreLocalCounter<int64_t> _total_execute_time_ns{MetricUnit::NOUNIT};
-
-    ThreadPool(const ThreadPool&) = delete;
-    const ThreadPool& operator=(const ThreadPool&) = delete;
 };
 
 // Entry point for token-based task submission and blocking for a particular
@@ -447,6 +446,9 @@ private:
 // ThreadPool's lock.
 class ThreadPoolToken {
 public:
+    ThreadPoolToken(const ThreadPoolToken&) = delete;
+    const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
+
     // Destroys the token.
     //
     // May be called on a token with outstanding tasks, as Shutdown() will be
@@ -533,7 +535,7 @@ private:
     ThreadPool* _pool;
 
     // Token state machine.
-    State _state;
+    State _state{State::IDLE};
 
     // Queued client tasks.
     PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> _entries;
@@ -544,12 +546,8 @@ private:
 
     // Number of worker threads currently executing tasks belonging to this
     // token.
-    int _active_threads;
-
-    ThreadPoolToken(const ThreadPoolToken&) = delete;
-    const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
+    int _active_threads{0};
 };
-
 // A class use to limit the number of tasks submitted to the thread pool.
 class ConcurrencyLimitedThreadPoolToken {
 public:

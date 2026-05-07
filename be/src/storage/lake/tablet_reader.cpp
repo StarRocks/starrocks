@@ -17,11 +17,17 @@
 #include <future>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -142,6 +148,12 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             rss.emplace_back(rowset);
         }
 
+        // Do not split if tablet has no rowsets (empty tablet)
+        if (_rowsets.empty()) {
+            _need_split = false;
+            return init_collector(read_params);
+        }
+
         // not split for data skew between tablet
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
             // set _need_split false to make iterator can get data this round if split do not happen,
@@ -166,8 +178,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         }
 
         // do prepare
-        split_morsel_queue->set_tablets(std::move(tablets));
-        split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
+        split_morsel_queue->set_tablets(tablets);
+        split_morsel_queue->set_tablet_rowsets(tablet_rowsets);
         split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
                                            read_params.end_key);
         split_morsel_queue->set_tablet_schema(_tablet_schema);
@@ -363,6 +375,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
 
     rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.use_vector_index = params.use_vector_index;
+    rs_opts.vector_search_option = params.vector_search_option;
     rs_opts.has_preaggregation = true;
     if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
         rs_opts.has_preaggregation = true;
@@ -374,14 +388,32 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
     std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
+    // The parallel tasks capture local variables and |this| by reference.
+    // Must wait for all tasks to complete before returning, otherwise
+    // dangling references to |rs_opts| and |this| cause use-after-free.
+    DeferOp wait_futures([&futures]() {
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    });
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset]() { return enhance_error_prompt(rowset->read(schema(), rs_opts)); });
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                if (!injected_st.ok()) {
+                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                }
+#endif
+                return enhance_error_prompt(rowset->read(schema(), rs_opts));
+            });
 
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));

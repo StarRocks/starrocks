@@ -19,7 +19,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/orlp/pdqsort.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/runtime_profile.h"
 #include "exec/sorting/sort_permute.h"
 #include "exprs/expr.h"

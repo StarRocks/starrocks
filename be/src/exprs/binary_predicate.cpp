@@ -17,7 +17,7 @@
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
@@ -542,7 +542,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
         } else {
             return new ArrayPredicate(node);
         }
-    } else if (type == TYPE_MAP || type == TYPE_STRUCT) {
+    } else if (type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_VARIANT) {
         if (node.opcode == TExprOpcode::EQ) {
             return new CommonEqualsPredicate<true>(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {

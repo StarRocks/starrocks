@@ -20,8 +20,8 @@
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/aggregate_traits.h"
@@ -70,7 +70,7 @@ struct ApproxTopKState {
         this->table.clear();
     }
 
-    void merge(MemPool* mem_pool, const std::vector<Counter> other_counters) {
+    void merge(MemPool* mem_pool, const std::vector<Counter>& other_counters) {
         for (auto& other_counter : other_counters) {
             process<false>(mem_pool, other_counter.value, other_counter.count, true);
         }
@@ -276,7 +276,7 @@ public:
         this->data(state).reset(kv.first, kv.second);
     }
 
-    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {
+    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
         init_state_if_necessary(ctx, state);
         this->data(state).process_null(1);
     }
@@ -328,7 +328,7 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         init_state_if_necessary(ctx, state);
-        const auto* column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[0]));
+        const auto* column = ColumnHelper::get_data_column(columns[0]);
         const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
         this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
     }
@@ -441,7 +441,7 @@ public:
     }
 
     void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
-                                  int64_t peer_group_end) const {
+                                  int64_t peer_group_end) const override {
         this->data(state).process_null(1);
     }
 
@@ -451,7 +451,7 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const auto* column = down_cast<const InputColumnType*>(columns[0]);
+        const auto* column = ColumnHelper::get_data_column(columns[0]);
         for (size_t i = frame_start; i < frame_end; i++) {
             const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
             this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);

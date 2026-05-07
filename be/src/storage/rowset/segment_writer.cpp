@@ -44,9 +44,12 @@
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
@@ -54,6 +57,7 @@
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/json_column_writer.h"
 #include "storage/rowset/page_io.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
 #include "types/json_value.h"
@@ -112,6 +116,7 @@ Status SegmentWriter::init() {
 
 Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
+    all_column_indexes.reserve(_tablet_schema->num_columns());
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
@@ -182,6 +187,17 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_bitmap_index = column.has_bitmap_index();
         opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
         opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
+        // Bundle-file segments (shared-data) suppress per-column .vi generation: the
+        // segment filename in metadata is the bundle filename, not the per-segment
+        // name used to derive .vi paths, so producing per-segment .vi here would
+        // generate paths that don't match what readers look up. Disable need_vector_index
+        // before the column writers are constructed so ArrayColumnWriter does not try
+        // to spin up a VectorIndexWriter and look up a non-existent entry in
+        // standalone_index_file_paths. Async mode also skips per-column writer creation;
+        // .vi files are produced later by the deferred build task.
+        if (opts.need_vector_index && (_opts.skip_vector_index || _opts.defer_vector_index_build)) {
+            opts.need_vector_index = false;
+        }
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
         if (opts.need_inverted_index) {
@@ -190,11 +206,19 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                                                                    _opts.segment_file_mark.rowset_id, _segment_id,
                                                                    opts.tablet_index.at(GIN).index_id()));
         } else if (opts.need_vector_index) {
-            opts.standalone_index_file_paths.emplace(
-                    IndexType::VECTOR,
-                    IndexDescriptor::vector_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
-                                                            _opts.segment_file_mark.rowset_id, _segment_id,
-                                                            opts.tablet_index.at(IndexType::VECTOR).index_id()));
+            int64_t index_id = opts.tablet_index.at(IndexType::VECTOR).index_id();
+            // Shared-data mode: tablet writer pre-populates vector_index_file_paths with
+            // location-provider-resolved paths. Shared-nothing mode: the map is empty and
+            // we fall back to the IndexDescriptor-based path.
+            auto it = _opts.vector_index_file_paths.find(index_id);
+            if (it != _opts.vector_index_file_paths.end()) {
+                opts.standalone_index_file_paths.emplace(IndexType::VECTOR, it->second);
+            } else {
+                opts.standalone_index_file_paths.emplace(
+                        IndexType::VECTOR, IndexDescriptor::vector_index_file_path(
+                                                   _opts.segment_file_mark.rowset_path_prefix,
+                                                   _opts.segment_file_mark.rowset_id, _segment_id, index_id));
+            }
         }
 
         if (column.type() == LogicalType::TYPE_ARRAY) {
@@ -265,6 +289,27 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     if (_has_key) {
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
     }
+
+    // Sort-key sampler one-shot init: arm only on the first key-columns pass.
+    // The vertical writer (general_tablet_writer.cpp) re-enters this init() for
+    // each non-key column group on the same SegmentWriter; we must preserve the
+    // previously armed state and the already-collected samples. Use the
+    // `has_key` parameter rather than the `_has_key` member so the check is
+    // independent of assignment ordering above.
+    //
+    // The vertical writer's invariant (general_tablet_writer.cpp:247) requires
+    // the first write_columns() call to have is_key=true, so _num_rows_written
+    // must be 0 here when has_key first becomes true. The DCHECK makes this
+    // contract crash-loud in debug/test builds; in release we fall back to
+    // leaving the sampler disabled instead of sampling mid-stream.
+    if (has_key && !_sort_column_indexes.empty() && _sort_key_sample_row_interval == 0) {
+        DCHECK_EQ(_num_rows_written, 0) << "sampler arm requires fresh writer";
+        const int64_t row_interval = config::segment_sort_key_sample_row_interval;
+        if (_num_rows_written == 0 && row_interval > 0) {
+            _sort_key_sample_row_interval = row_interval;
+            _next_sort_key_sample_row_index = row_interval;
+        }
+    }
     const auto& column = _tablet_schema->columns().back();
     if (column.name() == Schema::FULL_ROW_COLUMN) {
         std::vector<ColumnId> cids(_tablet_schema->num_columns() - 1);
@@ -277,6 +322,24 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     _verify_footer();
 
     return Status::OK();
+}
+
+void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
+    file_info.sort_key_min = _sort_key_min;
+    file_info.sort_key_max = _sort_key_max;
+    file_info.sort_key_samples = std::move(_sort_key_samples);
+    file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
+}
+
+void SegmentWriter::write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const {
+    _sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+    _sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+    for (const auto& sample : _sort_key_samples) {
+        sample.to_proto(segment_meta->add_sort_key_samples());
+    }
+    if (!_sort_key_samples.empty() && _sort_key_sample_row_interval > 0) {
+        segment_meta->set_sort_key_sample_row_interval(_sort_key_sample_row_interval);
+    }
 }
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,
@@ -336,6 +399,25 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         uint64_t standalone_index_size = 0;
         RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
         *index_size += _wfile->size() - index_offset + standalone_index_size;
+
+        // The footer's vector_index_storage_type is a segment-level flag: any column that
+        // produced a standalone .vi file makes the whole segment STANDALONE. Only upgrade
+        // to STANDALONE here; never reset back to NONE for subsequent non-vector columns.
+        if (standalone_index_size > 0) {
+            _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
+            _has_vector_index_written = true;
+        } else if (!_has_vector_index_written &&
+                   _tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR)) {
+            // No .vi was produced inline. In async mode, the deferred build task will
+            // produce one later iff this segment has enough rows and isn't a bundle
+            // (bundle segments don't carry .vi). Mark STANDALONE in that case so the
+            // read path looks for the .vi when it lands; otherwise mark NONE so
+            // readers fall back to brute-force scan instead of waiting forever.
+            const bool will_build_async = _opts.defer_vector_index_build && !_opts.skip_vector_index &&
+                                          _num_rows >= _opts.vector_index_build_threshold;
+            _footer.set_vector_index_storage_type(will_build_async ? VECTOR_INDEX_STORAGE_STANDALONE
+                                                                   : VECTOR_INDEX_STORAGE_NONE);
+        }
 
         // check global dict valid
         _check_column_global_dict_valid(column_writer.get(), column_index);
@@ -448,6 +530,15 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
                 std::string encoded_key;
                 encoded_key = tuple.short_key_encode(keys, _sort_column_indexes, 0);
                 RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
+            }
+            // Sort-key sample: take one tuple every _sort_key_sample_row_interval
+            // rows. Samples are at 0-indexed rows interval, 2*interval, 3*interval,
+            // ... so samples[k] is the key at row (k+1) * interval. The producer
+            // invariant samples.size() * interval < num_rows holds strictly
+            // because the last sample lands at row N*interval (< num_rows).
+            if (_sort_key_sample_row_interval > 0 && _num_rows_written == _next_sort_key_sample_row_index) {
+                _sort_key_samples.emplace_back(build_variant_tuple_from_chunk_row(chunk, i, _sort_column_indexes));
+                _next_sort_key_sample_row_index += _sort_key_sample_row_interval;
             }
             ++_num_rows_written;
         }

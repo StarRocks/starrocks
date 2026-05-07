@@ -20,7 +20,7 @@
 namespace starrocks {
 
 AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _tnode(tnode) {}
+        : PipelineNode(pool, tnode, descs), _tnode(tnode) {}
 
 AggregateBaseNode::~AggregateBaseNode() {
     if (runtime_state() != nullptr) {
@@ -45,17 +45,6 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
             _build_runtime_filters.emplace_back(rf_desc);
         }
     }
-    return Status::OK();
-}
-
-Status AggregateBaseNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    auto params = convert_to_aggregator_params(_tnode);
-
-    // Avoid partial-prepared Aggregator, which is dangerous to close
-    auto aggregator = std::make_shared<Aggregator>(std::move(params));
-    RETURN_IF_ERROR(aggregator->prepare(state, runtime_profile()));
-    _aggregator = std::move(aggregator);
     return Status::OK();
 }
 

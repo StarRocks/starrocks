@@ -21,7 +21,7 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -59,7 +59,8 @@ protected:
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
         state->_query_options.query_type = TQueryType::LOAD;

@@ -18,20 +18,24 @@
 #include "base/testutil/sync_point.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_merge_commit_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_metrics.h"
+#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
 BatchWriteMgr::BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor) : _executor(std::move(executor)) {}
 
-Status BatchWriteMgr::init() {
-    REGISTER_THREAD_POOL_METRICS(merge_commit, _executor->get_thread_pool());
+Status BatchWriteMgr::init(MetricRegistry* metrics) {
+    if (metrics != nullptr) {
+        REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, merge_commit, _executor->get_thread_pool());
+    }
     std::unique_ptr<ThreadPoolToken> token =
             _executor->get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     _txn_state_cache = std::make_unique<TxnStateCache>(config::merge_commit_txn_state_cache_capacity, std::move(token));

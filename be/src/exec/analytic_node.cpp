@@ -22,6 +22,7 @@
 #include "common/runtime_profile.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/hash_partition_sink_operator.h"
 #include "exec/pipeline/hash_partition_source_operator.h"
@@ -37,7 +38,7 @@
 namespace starrocks {
 
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs),
+        : PipelineNode(pool, tnode, descs),
           _tnode(tnode),
           _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {}
 
@@ -56,30 +57,6 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status AnalyticNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
-
-    _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc, false);
-    RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
-
-    return Status::OK();
-}
-
-Status AnalyticNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(child(0)->open(state));
-
-    return _analytor->open(state);
-}
-
-Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::InternalError("should not call get_next() in AnalyticNode");
-}
-
 void AnalyticNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
@@ -93,10 +70,10 @@ void AnalyticNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     bool is_skewed = _tnode.analytic_node.__isset.is_skewed && _tnode.analytic_node.is_skewed;
 
@@ -140,14 +117,14 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     ops_with_sink.emplace_back(
             std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor_factory));
-    this->init_runtime_filter_for_operator(ops_with_sink.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, ops_with_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(ops_with_sink);
 
     OpFactories ops_with_source;
     auto source_op =
             std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
     source_op->set_skewed(is_skewed);
-    this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, source_op.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(source_op.get(), upstream_source_op);
     ops_with_source.push_back(std::move(source_op));
 

@@ -210,7 +210,7 @@ public class ConnectContext {
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
-    protected boolean isSingleStmt = false;
+    protected boolean isMultiStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -893,6 +893,16 @@ public class ConnectContext {
             return;
         }
         closed = true;
+        // Clean up explicit transaction state to prevent memory leak in explicitTxnStateMap
+        if (txnId != 0) {
+            try {
+                globalStateMgr.getGlobalTransactionMgr()
+                        .clearExplicitTxnState(txnId);
+            } catch (Exception e) {
+                // Ignore exceptions during cleanup to avoid masking the original close reason
+            }
+            txnId = 0;
+        }
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
@@ -1136,7 +1146,13 @@ public class ConnectContext {
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
-            if (!warehouseManager.isResourceAvailable(computeResource)) {
+            // Re-acquire if the cached compute resource belongs to a different warehouse than the
+            // current session warehouse. This can happen when a query-scope warehouse hint modifies
+            // the session variable but the compute resource is not properly restored afterwards.
+            if (computeResource.getWarehouseId() != this.getCurrentWarehouseId()) {
+                this.resetComputeResource();
+                acquireComputeResource();
+            } else if (!warehouseManager.isResourceAvailable(computeResource)) {
                 if (state != null && !state.isRunning()) {
                     // if the query is not running, we can acquire a new compute resource.
                     acquireComputeResource();
@@ -1897,11 +1913,11 @@ public class ConnectContext {
         listeners.clear();
     }
 
-    public boolean isSingleStmt() {
-        return isSingleStmt;
+    public boolean isMultiStmt() {
+        return isMultiStmt;
     }
 
-    public void setSingleStmt(boolean singleStmt) {
-        isSingleStmt = singleStmt;
+    public void setMultiStmt(boolean multiStmt) {
+        isMultiStmt = multiStmt;
     }
 }

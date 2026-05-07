@@ -17,7 +17,7 @@
 #include <future>
 
 #include "base/url_coding.h"
-#include "common/config.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
@@ -25,6 +25,8 @@
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "types/datum.h"
 #include "utils.h"
 
@@ -39,7 +41,7 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, s
           _transform_exprs(std::move(transform_exprs)) {}
 
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
-    push_rollback_action(std::move(result.rollback_action));
+    push_rollback_action(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
 
@@ -93,7 +95,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
             ColumnEvaluator::clone(ctx->column_evaluators));
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
-            boost::to_lower_copy(ctx->format));
+            boost::to_lower_copy(ctx->format), ctx->writer_tag);
 
     std::vector<std::string>& partition_columns = ctx->partition_column_names;
     std::vector<std::string>& transform_exprs = ctx->transform_exprs;
@@ -109,12 +111,16 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
 
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
     if (config::enable_connector_sink_spill) {
+        auto* query_execution_services = runtime_state->query_execution_services();
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
                         fs,
                         ctx->fragment_context,
-                        runtime_state->desc_tbl().get_tuple_descriptor(ctx->tuple_desc_id),
+                        query_execution_services->runtime->connector_sink_spill_executor,
+                        ctx->override_tuple_desc != nullptr
+                                ? ctx->override_tuple_desc
+                                : runtime_state->desc_tbl().get_tuple_descriptor(ctx->tuple_desc_id),
                         column_evaluators,
                         ctx->sort_ordering});
         partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);

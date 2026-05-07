@@ -19,7 +19,7 @@
 #include <sstream>
 #include <string>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "http/action/profile_utils.h"
 #include "http/default_path_handlers.h"
 

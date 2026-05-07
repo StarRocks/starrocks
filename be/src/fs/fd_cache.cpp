@@ -17,7 +17,7 @@
 #include <unistd.h>
 
 #include "base/container/lru_cache.h"
-#include "common/config.h"
+#include "common/config_local_io_fwd.h"
 
 namespace starrocks {
 

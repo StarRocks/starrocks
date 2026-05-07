@@ -78,6 +78,47 @@ public class TransactionStateTest {
     }
 
     @Test
+    public void testCopyConstructor() {
+        TxnCoordinator coordinator = new TxnCoordinator(TxnSourceType.BE, "127.0.0.1");
+        TransactionState original = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label123", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, coordinator, 50000L, 60 * 1000L);
+
+        Set<Long> errorReplicas = Sets.newHashSet(10001L);
+        original.setErrorReplicas(errorReplicas);
+
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(20000L);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(30000L, 10L, 100L);
+        partitionCommitInfo.setDataVersion(11L);
+        partitionCommitInfo.setVersionEpoch(12L);
+        partitionCommitInfo.setIsDoubleWrite(true);
+        partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().put(40000L, 123L);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        original.putIdToTableCommitInfo(20000L, tableCommitInfo);
+
+        TransactionState copied = new TransactionState(original);
+        Assertions.assertSame(original.getTableIdList(), copied.getTableIdList());
+        Assertions.assertSame(original.getCoordinator(), copied.getCoordinator());
+        Assertions.assertSame(original.getErrorReplicas(), copied.getErrorReplicas());
+
+        Assertions.assertNotSame(original.getIdToTableCommitInfos(), copied.getIdToTableCommitInfos());
+        TableCommitInfo copiedTableCommitInfo = copied.getTableCommitInfo(20000L);
+        Assertions.assertNotSame(tableCommitInfo, copiedTableCommitInfo);
+        Assertions.assertNotNull(copiedTableCommitInfo);
+
+        PartitionCommitInfo copiedPartitionCommitInfo = copiedTableCommitInfo.getPartitionCommitInfo(30000L);
+        Assertions.assertNotSame(partitionCommitInfo, copiedPartitionCommitInfo);
+        Assertions.assertNotNull(copiedPartitionCommitInfo);
+
+        tableCommitInfo.removePartition(30000L);
+        Assertions.assertNotNull(copiedTableCommitInfo.getPartitionCommitInfo(30000L));
+
+        partitionCommitInfo.setVersion(20L);
+        assertEquals(10L, copiedPartitionCommitInfo.getVersion());
+        assertEquals(Long.valueOf(123L), copiedPartitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().get(40000L));
+    }
+
+    @Test
     public void testSerDeTxnFinishStatePB() throws IOException {
         Codec<TxnFinishStatePB> finishStatePBCodec = ProtobufProxy.create(TxnFinishStatePB.class);
         for (int i = 1; i <= 100000; i *= 10) {

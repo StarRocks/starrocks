@@ -95,6 +95,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TLakeScanNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNormalOlapScanNode;
@@ -130,6 +131,8 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import javax.annotation.Nullable;
 
 public class OlapScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
@@ -200,6 +203,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
+    private boolean enableGlobalLateMaterialization = false;
+    private List<Expr> partitionConjuncts = Lists.newArrayList();
 
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
@@ -233,12 +238,20 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         this.reasonOfPreAggregation = reason;
     }
 
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
+    }
+
     public List<Long> getScanTabletIds() {
         return scanTabletIds;
     }
 
     public boolean isPreAggregation() {
         return isPreAggregation;
+    }
+
+    public List<Expr> getPartitionConjuncts() {
+        return partitionConjuncts;
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
@@ -316,13 +329,66 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     @Override
     public int getBucketNums() {
-        int bucketNum = olapTable.getDefaultDistributionInfo().getBucketNum();
+        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
+        if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            return getRangeDistributionBucketNums(distInfo);
+        }
+        // HASH path.
+        int bucketNum = distInfo.getBucketNum();
         if (getSelectedPartitionIds().size() <= 1) {
             for (Long pid : getSelectedPartitionIds()) {
                 bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
             }
         }
         return bucketNum;
+    }
+
+    private int getRangeDistributionBucketNums(DistributionInfo distInfo) {
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
+        if (dispatch != null) {
+            // getBucketNums() is invoked from ExecutionFragment.getOrCreateColocatedAssignment
+            // only when BackendSelectorFactory has chosen a colocate-dispatch path. Verify
+            // alignment HERE, after the dispatch decision: a misaligned ColocateRangeMgr
+            // would silently produce wrong join results under colocate dispatch.
+            // Non-colocate scans go through NormalBackendSelector and never reach this point.
+            dispatch.requireAligned(getSelectedPhysicalPartitions(), index.indexMetaId);
+            return dispatch.bucketCount();
+        }
+        // Range distribution without a colocate group: RangeDistributionInfo always
+        // reports 1 (one tablet per partition by design).
+        return distInfo.getBucketNum();
+    }
+
+    /**
+     * Returns the physical partitions that actually contribute scan tablets.
+     * Optimizer path: derived from {@link #partitionToScanTabletMap} (skip
+     * empty entries — those were pruned out). Legacy path: every sub-partition
+     * of every selected logical partition.
+     */
+    private List<PhysicalPartition> getSelectedPhysicalPartitions() {
+        List<PhysicalPartition> result = new ArrayList<>();
+        if (partitionToScanTabletMap != null) {
+            for (Map.Entry<Long, List<Long>> entry : partitionToScanTabletMap.entrySet()) {
+                if (entry.getValue() == null || entry.getValue().isEmpty()) {
+                    continue;
+                }
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(entry.getKey());
+                if (physicalPartition != null) {
+                    result.add(physicalPartition);
+                }
+            }
+            return result;
+        }
+        for (Long partitionId : selectedPartitionIds) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                continue;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                result.add(physicalPartition);
+            }
+        }
+        return result;
     }
 
     @Override
@@ -549,6 +615,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
+                                      List<TKeyRange> partitionRanges,
                                       long localBeId) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
@@ -590,6 +657,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(physicalPartition.getId());
+            internalRange.setPartition_column_ranges(partitionRanges);
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
@@ -763,6 +831,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
          */
         Preconditions.checkState(scanBackendIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
+        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
+        RangeColocateScanDispatch dispatch = null;
+        if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            dispatch = RangeColocateScanDispatch.forTable(olapTable);
+        }
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
 
@@ -783,13 +856,34 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     scanTabletIds.addAll(allTabletIds);
                 }
 
-                for (int i = 0; i < allTabletIds.size(); i++) {
-                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                }
+                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds);
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
-                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
+                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId);
             }
+        }
+    }
+
+    /**
+     * Populates {@link #tabletId2BucketSeq} for one {@link MaterializedIndex}.
+     * Range-colocate scans use the bucket sequence supplied by the dispatch
+     * facade when alignment holds; everything else (HASH, range non-colocate,
+     * or transiently unaligned range colocate) falls back to position-based
+     * bucketSeq. The dispatch-time alignment guard fires later in
+     * {@link #getBucketNums()} for the colocate-dispatch path.
+     */
+    private void fillTabletId2BucketSeq(@Nullable RangeColocateScanDispatch dispatch,
+                                          MaterializedIndex selectedIndex,
+                                          List<Long> allTabletIds) {
+        if (dispatch != null) {
+            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
+            if (rangeColocateMap != null) {
+                tabletId2BucketSeq.putAll(rangeColocateMap);
+                return;
+            }
+        }
+        for (int i = 0; i < allTabletIds.size(); i++) {
+            tabletId2BucketSeq.put(allTabletIds.get(i), i);
         }
     }
 
@@ -1119,8 +1213,18 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
             }
 
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                msg.lake_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
+            if (enableGlobalLateMaterialization) {
+                msg.lake_scan_node.setEnable_global_late_materialization(true);
+            }
+
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
             msg.lake_scan_node.setSchema_key(getSchemaKey());
+
+            msg.lake_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -1178,12 +1282,17 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.olap_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
             }
 
+            if (enableGlobalLateMaterialization) {
+                msg.olap_scan_node.setEnable_global_late_materialization(true);
+            }
+
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
             if (sample != null && sample.isUseSampling()) {
                 TTableSampleOptions sampleOptions = new TTableSampleOptions();
                 msg.olap_scan_node.setSample_options(sampleOptions);
                 sample.toThrift(sampleOptions);
             }
+            msg.olap_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         }
     }
 
@@ -1634,8 +1743,20 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         // must order in create table
         List<String> keyColumns = olapTable.getKeyColumnsInOrder().stream().map(Column::getName)
                 .collect(Collectors.toList());
-        Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
 
+        // Some partition predicates may have been removed from conjuncts during partition pruning
+        // (e.g. when the partition column is not a distribution column), but are still required
+        // for short-circuit point lookup to identify the full primary key.
+        // Merge prunedPartitionPredicates into conjuncts, using equals()-based linear scan for dedup
+        // to avoid relying on Expr.hashCode() which includes type while equals() does not.
+        List<Expr> mergedConjuncts = new ArrayList<>(conjuncts);
+        for (Expr pred : prunedPartitionPredicates) {
+            if (!conjuncts.contains(pred)) {
+                mergedConjuncts.add(pred);
+            }
+        }
+
+        Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(mergedConjuncts, keyColumns);
         if (points.isPresent()) {
             rowStoreKeyLiterals = points.get();
         }

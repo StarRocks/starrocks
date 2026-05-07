@@ -31,7 +31,7 @@ public:
         CHECK_GE(_wait_per_read, 0);
     }
 
-    ~ThrottledSeekableInputStream() = default;
+    ~ThrottledSeekableInputStream() override = default;
 
     StatusOr<int64_t> read(void* data, int64_t count) override {
         std::this_thread::sleep_for(std::chrono::milliseconds(_wait_per_read));

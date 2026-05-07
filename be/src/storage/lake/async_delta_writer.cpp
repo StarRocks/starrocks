@@ -23,10 +23,10 @@
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
 #include "common/util/stack_trace_mutex.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -170,6 +170,10 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
+        // We're in the execution queue's pthread thread pool — safe to block.
+        // Merge tasks have already been drained by _block_merge_token->shutdown()
+        // in AsyncDeltaWriterImpl::close() before execution_queue_stop().
+        // close() runs here in pthread context, avoiding DCHECK_EQ(0, bthread_self()).
         delta_writer->close();
         return 0;
     }
@@ -183,7 +187,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         if (async_writer->closed()) {
             st.update(Status::InternalError("AsyncDeltaWriter has been closed"));
         }
-        auto task_ptr = *iter;
+        const auto& task_ptr = *iter;
         num_tasks += 1;
         pending_time_ns += MonotonicNanos() - task_ptr->create_time_ns;
         switch (task_ptr->type) {
@@ -250,12 +254,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
     }
     async_writer->_writer->update_task_stat(num_tasks, pending_time_ns);
-    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
-    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
-    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() /
-                                                                                        NANOSECS_PER_USEC);
-    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns /
-                                                                                        NANOSECS_PER_USEC);
+    StorageMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StorageMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StorageMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() /
+                                                                                      NANOSECS_PER_USEC);
+    StorageMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns /
+                                                                                      NANOSECS_PER_USEC);
     return 0;
 }
 
@@ -352,27 +356,28 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
+        // Shutdown merge token first to drain any running/pending merge tasks.
+        // This must happen BEFORE execution_queue_stop() so that merge tasks
+        // (which access writer state like _mem_table_sink, _flush_token) complete
+        // before the stop handler calls delta_writer->close().
+        // Queued FinishTasks that try to submit new merge tasks will get
+        // ServiceUnavailable — that's fine since we're aborting anyway.
+        if (_block_merge_token != nullptr) {
+            _block_merge_token->shutdown();
+        }
+
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
         int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
-        // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
-        // This must happen BEFORE execution_queue_join() because the join triggers the
-        // is_queue_stopped() handler which calls delta_writer->close(), and we need all
-        // merge tasks (which call finish_with_txnlog()) to complete before that.
-        // The token remains allocated (not null) so if execute() is still running and
-        // calls _block_merge_token->submit(), it gets a ServiceUnavailable error instead
-        // of SIGSEGV.
-        if (_block_merge_token != nullptr) {
-            _block_merge_token->shutdown();
-        }
-
-        // Wait for all running tasks completed.
+        // Wait for all running tasks to complete. The stop handler runs in the
+        // execution queue's pthread thread pool and calls delta_writer->close(),
+        // which avoids DCHECK_EQ(0, bthread_self()) failure.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
 
-        // Safe to destroy token now since both execution queue and merge tasks are done.
+        // Safe to destroy token now since shutdown() already drained it.
         _block_merge_token.reset();
     }
 }

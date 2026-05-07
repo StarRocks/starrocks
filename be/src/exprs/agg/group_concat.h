@@ -20,8 +20,8 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
@@ -57,16 +57,14 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(columns[0]->is_binary());
+        DCHECK(columns[0]->is_binary() || columns[0]->is_large_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                const auto val = GetContainer<LT>::get_data(columns[0], row_num);
+                const auto sep = GetContainer<LT>::get_data(columns[1], row_num);
 
                 std::string& result = this->data(state).intermediate_string;
 
-                Slice val = column_val->get_slice(row_num);
-                Slice sep = column_sep->get_slice(row_num);
                 if (!this->data(state).initial) {
                     this->data(state).initial = true;
 
@@ -80,10 +78,9 @@ public:
                 }
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
                 std::string& result = this->data(state).intermediate_string;
 
-                Slice val = column_val->get_slice(row_num);
+                Slice val = GetContainer<LT>::get_data(columns[0], row_num);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
 
                 if (!this->data(state).initial) {
@@ -99,10 +96,9 @@ public:
                 }
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             std::string& result = this->data(state).intermediate_string;
 
-            Slice val = column_val->get_slice(row_num);
+            Slice val = GetContainer<LT>::get_data(columns[0], row_num);
             //DEFAULT sep_length.
             if (!this->data(state).initial) {
                 this->data(state).initial = true;
@@ -120,21 +116,18 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
+        auto val_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[0]).immutable_bytes_size();
         if (ctx->get_num_args() > 1) {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
-                this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() +
-                                                              column_sep->get_immutable_bytes().size());
+                auto sep_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[1]).immutable_bytes_size();
+                this->data(state).intermediate_string.reserve(val_bytes + sep_bytes);
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
-                this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() +
-                                                              sep.get_size() * chunk_size);
+                this->data(state).intermediate_string.reserve(val_bytes + sep.get_size() * chunk_size);
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-            this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() + 2 * chunk_size);
+            this->data(state).intermediate_string.reserve(val_bytes + 2 * chunk_size);
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {

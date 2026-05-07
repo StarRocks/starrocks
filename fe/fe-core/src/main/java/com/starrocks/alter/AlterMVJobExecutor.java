@@ -63,7 +63,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -244,45 +243,29 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                     List<Runnable> appliers,
                                     ConnectContext context) {
         String mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
-        // cannot alter original pct based mv to incremental or auto, only support original ivm/pct based mv
-        MaterializedView.RefreshMode currentRefreshMode =
+        MaterializedView.RefreshMode targetMode =
                 MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT));
-        if (currentRefreshMode.isIncrementalOrAuto()) {
-            ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
-            if ((mvDefinedQueryParseNode instanceof QueryStatement queryStatement)) {
-                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, null, queryStatement);
+        MaterializedView.RefreshMode originalMode = materializedView.getCurrentRefreshMode();
 
-                Optional<IVMAnalyzer.IVMAnalyzeResult> result;
-                try {
-                    result = ivmAnalyzer.rewrite(
-                            MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT)));
-                } catch (SemanticException e) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s: %s",
-                            mvRefreshMode, e.getMessage());
-                }
-                if (result.isEmpty()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " because the materialized view is not eligible for %s refresh mode",
-                            mvRefreshMode, mvRefreshMode);
-                }
-                // if materialized's original refresh mode is not auto or ivm, throw exception
-                if (!materializedView.getCurrentRefreshMode().isIncrementalOrAuto()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " only support alter original incremental/auto based materialized view",
-                            mvRefreshMode);
-                }
-                currentRefreshMode = result.get().currentRefreshMode();
-            } else {
-                throw new SemanticException("Cannot alter materialized view refresh mode to %s", mvRefreshMode);
-            }
+        // Cross-mode ALTER is not supported. The recovery path for changing refresh_mode is
+        // drop-and-recreate. Same-mode ALTER is allowed and behaves as a no-op (modulo the
+        // applier below, which keeps the persisted property and the in-memory mode in sync).
+        if (originalMode != targetMode) {
+            throw new SemanticException(
+                    "Altering refresh_mode from %s to %s is not supported. " +
+                            "Please drop and re-create the materialized view if a mode change is required.",
+                    originalMode, targetMode);
         }
 
-        MaterializedView.RefreshMode finalCurrentRefreshMode = currentRefreshMode;
-        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)) {
+        // Trigger applier when either the persisted property or the in-memory current mode
+        // would change. Comparing only the persisted string would miss cases where the two
+        // are out of sync (e.g. mode promoted internally without rewriting the property).
+        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)
+                || materializedView.getCurrentRefreshMode() != targetMode) {
             appliers.add(() -> {
                 tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
                 tableProperty.setMvRefreshMode(mvRefreshMode);
-                materializedView.setCurrentRefreshMode(finalCurrentRefreshMode);
+                materializedView.setCurrentRefreshMode(targetMode);
             });
         }
     }
@@ -776,11 +759,27 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (baseColumnCreatedTime == -1) {
             // If the new column's definition requires re-calculating historical data to maintain consistency,
             // FSE will throw an exception.
-            if (!mv.isSupportFastSchemaEvolutionInDanger()) {
+            if (!mv.isSupportFastSchemaEvolutionInDanger() && !isMvFastSchemaChangeForceMode()) {
                 String reason = String.format("Cannot add column " +
                         "'%s' to materialized view '%s' because the base column '%s' created time is unknown and needs " +
                         "to refresh the whole base table.", columnName, mv.getName(), baseColumnName);
                 throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
+            }
+            // In force mode with clear partition enabled, invalidate all partitions since we don't know
+            // which partitions are affected when base column timestamp is unknown.
+            if (isMvFastSchemaChangeClearPartition() && baseTable.isNativeTable()) {
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapTableVisiblePartitionMap =
+                        mvAsyncRefreshContext.getBaseTableVisibleVersionMap();
+                if (olapTableVisiblePartitionMap.containsKey(baseTable.getId())) {
+                    Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                            olapTableVisiblePartitionMap.get(baseTable.getId());
+                    if (basePartitionInfoMap != null) {
+                        toRefreshPartitionNames.addAll(basePartitionInfoMap.keySet());
+                        LOG.info("Base column '{}' created time is unknown for materialized view {}, " +
+                                        "invalidating all {} partitions in force mode",
+                                baseColumnName, mv.getName(), toRefreshPartitionNames.size());
+                    }
+                }
             }
         } else {
             checkMVVisibleVersionAffectedBySchemaChange(mv, baseTable,
@@ -799,22 +798,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
 
         try {
-            // TODO(fixme): clear affected partition entries from the version map when FSE is allowed in danger mode
-            // will cause a full refresh for the affected partitions.
-
-            // Clear affected partition entries from the version map when FSE is allowed in danger mode
-            // so that MV refresh will recompute data for those partitions
-            // if (!toRefreshPartitionNames.isEmpty()) {
-            //     LOG.info("Clearing affected partition versions for materialized view {} after adding column: {}",
-            //             mv.getName(), toRefreshPartitionNames);
-            //     Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
-            //             mvAsyncRefreshContext.getBaseTableVisibleVersionMap().get(baseTable.getId());
-            //     if (basePartitionInfoMap != null) {
-            //         for (String partitionName : toRefreshPartitionNames) {
-            //             basePartitionInfoMap.remove(partitionName);
-            //         }
-            //     }
-            // }
+            // Clear affected partition entries from the version map when enabled by config,
+            // so that MV refresh will recompute data for those partitions.
+            if (isMvFastSchemaChangeClearPartition() && !toRefreshPartitionNames.isEmpty()) {
+                LOG.info("Clearing affected partition versions for materialized view {} after adding column: {}",
+                        mv.getName(), toRefreshPartitionNames);
+                Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                        mvAsyncRefreshContext.getBaseTableVisibleVersionMap().get(baseTable.getId());
+                if (basePartitionInfoMap != null) {
+                    for (String partitionName : toRefreshPartitionNames) {
+                        basePartitionInfoMap.remove(partitionName);
+                    }
+                }
+            }
 
             // renew materialized view's defined query
             String newDefinedSql = AST2SQLVisitor.withOptions(FormatOptions.allEnable()
@@ -883,7 +879,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
             }
             // if toRefreshPartitionNames's not empty, throw exception when all partitions are affected
-            if (!toRefreshPartitionNames.isEmpty() && !mv.isSupportFastSchemaEvolutionInDanger()) {
+            if (!toRefreshPartitionNames.isEmpty()
+                    && !mv.isSupportFastSchemaEvolutionInDanger()
+                    && !isMvFastSchemaChangeForceMode()) {
                 LOG.warn("After adding column to materialized view {}, to remove partition infos {} " +
                                 "to trigger full refresh, base column created time: {}, " +
                                 "partition visible version time: {}, to-refresh partitions: {}",
@@ -896,7 +894,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
             }
         } else {
-            if (!mv.isSupportFastSchemaEvolutionInDanger()) {
+            if (!mv.isSupportFastSchemaEvolutionInDanger() && !isMvFastSchemaChangeForceMode()) {
                 String reason = String.format("Cannot add column " +
                         "'%s' to materialized view '%s' because the base table '%s' is not an olap table and " +
                         "we cannot determine which partitions are affected by this schema change.",
@@ -904,6 +902,17 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
             }
         }
+    }
+
+    private static boolean isMvFastSchemaChangeForceMode() {
+        String mode = Config.mv_fast_schema_change_mode;
+        return "force".equalsIgnoreCase(mode) || "force_no_clear".equalsIgnoreCase(mode);
+    }
+
+    private static boolean isMvFastSchemaChangeClearPartition() {
+        // TODO: support clear partition entries in `strict` mode
+        String mode = Config.mv_fast_schema_change_mode;
+        return "force".equalsIgnoreCase(mode);
     }
 
     @Override

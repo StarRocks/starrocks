@@ -38,22 +38,24 @@
 
 #include <string_view>
 
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/stream_load/stream_load_metrics.h"
+#include "runtime/thrift_rpc_helper.h"
+#include "storage/non_retryable_load_errors.h"
 
 namespace starrocks {
 
@@ -75,7 +77,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
         return Status::ServiceUnavailable("Service is shutting down, please retry later!");
     }
 
-    StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
+    StreamLoadMetrics::instance()->txn_exec_plan_total.increment(1);
 // submit this params
 #ifndef BE_TEST
     ctx->ref();
@@ -112,8 +114,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     }
 
                     if (status.ok()) {
-                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
-                        StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
+                        auto* metrics = StreamLoadMetrics::instance();
+                        metrics->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
+                        metrics->stream_load_rows_total.increment(ctx->number_loaded_rows);
                     }
                 } else {
                     LOG(WARNING) << "fragment execute failed"
@@ -167,7 +170,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_begin_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_begin_request_total.increment(1);
 
     TLoadTxnBeginRequest request;
     set_request_auth(&request, ctx->auth);
@@ -211,7 +214,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_commit_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_commit_request_total.increment(1);
 
     TLoadTxnCommitRequest request;
     set_request_auth(&request, ctx->auth);
@@ -233,7 +236,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
-        request.txnCommitAttachment = std::move(attachment);
+        request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
     }
 
@@ -328,7 +331,7 @@ bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::stri
 }
 
 Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_commit_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_commit_request_total.increment(1);
 
     TLoadTxnCommitRequest request;
     set_request_auth(&request, ctx->auth);
@@ -382,7 +385,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_rollback_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_rollback_request_total.increment(1);
 
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnRollbackRequest request;
@@ -469,6 +472,9 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_receivedBytes(ctx->receive_bytes);
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
+        if (!ctx->status.ok() && is_non_retryable_load_error(ctx->status.message())) {
+            rl_attach.__set_nonRetryable(true);
+        }
 
         attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;

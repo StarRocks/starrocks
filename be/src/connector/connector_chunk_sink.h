@@ -23,12 +23,12 @@
 #include "connector/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
-#include "fs/fs.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::connector {
 
 class AsyncFlushStreamPoller;
+class SinkMemoryManager;
 class SinkOperatorMemoryManager;
 
 using PartitionKey = std::pair<std::string, std::vector<int8_t>>;
@@ -44,21 +44,25 @@ public:
 
     void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
 
+    // Expose the writer list so composite sinks can register it with the
+    // outer SinkOperatorMemoryManager for aggregated memory accounting.
+    std::vector<PartitionChunkWriterPtr>* writers() { return &_writers; }
+
     virtual ~ConnectorChunkSink() = default;
 
-    Status init();
+    virtual Status init();
 
     virtual Status add(const ChunkPtr& chunk);
 
     virtual Status finish();
 
-    void rollback();
+    virtual void rollback();
 
     virtual bool is_finished();
 
     virtual void callback_on_commit(const CommitResult& result) = 0;
 
-    Status write_partition_chunk(const std::string& partition, const vector<int8_t>& partition_field_null_list,
+    Status write_partition_chunk(const std::string& partition, const std::vector<int8_t>& partition_field_null_list,
                                  const ChunkPtr& chunk);
 
     Status status();
@@ -94,6 +98,11 @@ protected:
 
 struct ConnectorChunkSinkContext {
     virtual ~ConnectorChunkSinkContext() = default;
+
+    // Called by ConnectorSinkOperatorFactory after SinkMemoryManager is created.
+    // Composite sinks (e.g. IcebergRowDeltaSink) override this to receive the
+    // manager and create per-sub-sink child managers during initialization.
+    virtual void set_sink_mem_mgr(SinkMemoryManager* /*mgr*/) {}
 };
 
 class ConnectorChunkSinkProvider {

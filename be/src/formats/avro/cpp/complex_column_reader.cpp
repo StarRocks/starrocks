@@ -22,7 +22,7 @@
 
 namespace starrocks::avrocpp {
 
-StructColumnReader::StructColumnReader(const std::string& col_name, const TypeDescriptor& type_desc,
+StructColumnReader::StructColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                                        std::vector<ColumnReaderUniquePtr> field_readers)
         : ColumnReader(col_name, type_desc), _field_readers(std::move(field_readers)) {
     DCHECK_EQ(_type_desc.children.size(), _field_readers.size());

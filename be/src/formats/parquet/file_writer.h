@@ -50,13 +50,13 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "formats/parquet/chunk_writer.h"
-#include "fs/fs.h"
+#include "fs/fs_fwd.h"
 #include "gen_cpp/Types_types.h"
 #include "io/async_flush_output_stream.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 #include "types/type_descriptor.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace parquet {
 class FileMetaData;
@@ -65,7 +65,6 @@ namespace starrocks {
 class Chunk;
 class ExprContext;
 class PriorityThreadPool;
-class RuntimeState;
 } // namespace starrocks
 
 namespace starrocks::parquet {

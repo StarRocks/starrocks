@@ -64,9 +64,6 @@ struct SimpleJsonPath {
 
 class JsonFunctions {
 public:
-    static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-    static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-
     /**
      * @param: [json_string, tagged_value]
      * @paramType: [BinaryColumn, BinaryColumn]
@@ -76,6 +73,7 @@ public:
     DEFINE_VECTORIZED_FN(get_json_bigint);
     DEFINE_VECTORIZED_FN(get_json_double);
     DEFINE_VECTORIZED_FN(get_json_string);
+    DEFINE_VECTORIZED_FN(get_json_scalar_string);
 
     /**
      * @param: [json, tagged_value]
@@ -87,6 +85,7 @@ public:
     DEFINE_VECTORIZED_FN(get_native_json_bigint);
     DEFINE_VECTORIZED_FN(get_native_json_double);
     DEFINE_VECTORIZED_FN(get_native_json_string);
+    DEFINE_VECTORIZED_FN(get_native_json_scalar_string);
     DEFINE_VECTORIZED_FN(json_query);
 
     /**
@@ -220,12 +219,15 @@ public:
 private:
     template <LogicalType ResultType>
     static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _json_query_scalar_impl(FunctionContext* context, const Columns& columns);
 
     template <LogicalType RresultType>
-    DEFINE_VECTORIZED_FN(_flat_json_query_impl);
+    static StatusOr<ColumnPtr> _flat_json_query_impl(FunctionContext* context, const Columns& columns,
+                                                     bool scalar_type_only = false);
 
     template <LogicalType RresultType>
-    DEFINE_VECTORIZED_FN(_full_json_query_impl);
+    static StatusOr<ColumnPtr> _full_json_query_impl(FunctionContext* context, const Columns& columns,
+                                                     bool scalar_type_only = false);
 
     /**
      * @param: [json_object, json_path]
@@ -252,6 +254,7 @@ private:
 
     template <LogicalType RresultType>
     DEFINE_VECTORIZED_FN(_get_json_value);
+    DEFINE_VECTORIZED_FN(_get_json_scalar_value);
 
     /**
      * @param: [json_object, json_path]
@@ -264,6 +267,7 @@ private:
 
     // Helper function to check if target JSON contains candidate JSON
     static bool json_value_contains(JsonValue* target, JsonValue* candidate);
+    static bool is_slice_scalar_type(const vpack::Slice& slice);
 };
 
 } // namespace starrocks

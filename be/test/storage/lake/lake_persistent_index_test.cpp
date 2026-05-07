@@ -19,8 +19,10 @@
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
-#include "common/config.h"
+#include "column/raw_data_visitor.h"
+#include "column/runtime_type_traits.h"
+#include "common/config_primary_key_fwd.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -107,6 +109,14 @@ protected:
         TypeDescriptor type_desc(TYPE_VARCHAR);
         var.mutable_type()->CopyFrom(type_desc.to_protobuf());
         var.set_value(v);
+        return var;
+    }
+
+    VariantPB make_null_variant_pb(LogicalType ltype) {
+        VariantPB var;
+        TypeDescriptor type_desc(ltype);
+        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.set_variant_type(VariantTypePB::NULL_VALUE);
         return var;
     }
 };
@@ -316,7 +326,9 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 
@@ -736,7 +748,9 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 
@@ -783,7 +797,9 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 
@@ -802,6 +818,55 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_infinite_bounds) {
 
     ASSERT_TRUE(sst_seek_range.seek_key.empty());
     ASSERT_TRUE(sst_seek_range.stop_key.empty());
+}
+
+// NULL on non-nullable PK columns is treated as type-minimum (MIN sentinel from FE).
+TEST_F(LakePersistentIndexTest, test_tablet_range_null_as_min_on_non_nullable_pk) {
+    auto schema_pb = create_tablet_schema_pb({{"pk1", "INT"}, {"pk2", "INT"}, {"v1", "INT"}}, 2);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+
+    TabletRangePB range_pb;
+    auto* lower = range_pb.mutable_lower_bound();
+    lower->add_values()->CopyFrom(make_int_variant_pb(100));
+    lower->add_values()->CopyFrom(make_null_variant_pb(TYPE_INT));
+    range_pb.set_lower_bound_included(true);
+
+    auto* upper = range_pb.mutable_upper_bound();
+    upper->add_values()->CopyFrom(make_int_variant_pb(200));
+    upper->add_values()->CopyFrom(make_null_variant_pb(TYPE_INT));
+    range_pb.set_upper_bound_included(false);
+
+    ASSIGN_OR_ABORT(auto sst_seek_range, TabletRangeHelper::create_sst_seek_range_from(range_pb, schema));
+
+    // Encode expected: (100, INT_MIN) and (200, INT_MIN).
+    std::vector<ColumnId> pk_columns = {0, 1};
+    auto pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
+
+    auto encode_key = [&](int32_t v1, int32_t v2) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col1->append_datum(Datum(v1));
+        chunk->append_column(std::move(col1), (SlotId)0);
+        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col2->append_datum(Datum(v2));
+        chunk->append_column(std::move(col2), (SlotId)1);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        if (pk_column->is_binary()) {
+            return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
+        } else {
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
+        }
+    };
+
+    ASSERT_EQ(sst_seek_range.seek_key, encode_key(100, std::numeric_limits<int32_t>::lowest()));
+    ASSERT_EQ(sst_seek_range.stop_key, encode_key(200, std::numeric_limits<int32_t>::lowest()));
 }
 
 // Helper: build a RowsetMetadataPB with given id, per-segment row counts (segment_metas populated),
@@ -901,6 +966,177 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
         EXPECT_EQ(file_cnt, 3u); // 1 segment + 2 del files
         EXPECT_EQ(row_cnt, 100);
     }
+}
+
+// Verify that ingest_sst skips SST files that already exist in _sstable_filesets
+// (loaded by init from metadata). This prevents duplicate ingest during tablet split
+// where the SST was already loaded from shared metadata with correct shared/fileset_id.
+TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int M = 3;
+    const int N = 100;
+
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    // Write data in multiple batches to create SST files (same pattern as test_major_compaction)
+    for (int i = 0; i < M; ++i) {
+        vector<Key> keys;
+        vector<Slice> key_slices;
+        vector<IndexValue> values;
+        keys.reserve(N);
+        key_slices.reserve(N);
+        values.reserve(N);
+        for (int j = 0; j < N; j++) {
+            keys.emplace_back(j);
+            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+            values.emplace_back(j * 2);
+        }
+        index->prepare(EditVersion(i, 0), 0);
+        vector<IndexValue> upsert_old_values(keys.size());
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000));
+    }
+
+    // Commit to get sstable_meta
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    ASSERT_OK(index->commit(&builder));
+
+    // Verify we have SST files in metadata
+    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
+
+    // Mark them as shared (simulating tablet split)
+    auto* sstable_meta = tablet_metadata_ptr->mutable_sstable_meta();
+    for (auto& sst_pb : *sstable_meta->mutable_sstables()) {
+        sst_pb.set_shared(true);
+    }
+
+    // Get the filename of the first SST
+    const std::string sst_filename = tablet_metadata_ptr->sstable_meta().sstables(0).filename();
+    int64_t sst_filesize = tablet_metadata_ptr->sstable_meta().sstables(0).filesize();
+
+    // Re-init the index with the updated metadata (shared SSTs)
+    auto index2 = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index2->init(tablet_metadata_ptr));
+
+    // Now try to ingest the same SST again
+    FileMetaPB sst_meta;
+    sst_meta.set_name(sst_filename);
+    sst_meta.set_size(sst_filesize);
+    sst_meta.set_shared(false); // wrong shared value
+
+    PersistentIndexSstableRangePB sst_range;
+    DelvecPagePB delvec_page;
+    // ingest_sst should skip because the SST already exists in _sstable_filesets
+    ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+
+    // Commit and verify: the sstable_meta should have exactly the same SSTs as before,
+    // with shared=true preserved (not overwritten by the duplicate ingest)
+    auto tablet_metadata_ptr2 = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr2->CopyFrom(*tablet_metadata_ptr);
+    MetaFileBuilder builder2(tablet, tablet_metadata_ptr2);
+    ASSERT_OK(index2->commit(&builder2));
+
+    // Count SSTs with matching filename - should be exactly 1 (no duplicate)
+    int match_count = 0;
+    for (const auto& sst : tablet_metadata_ptr2->sstable_meta().sstables()) {
+        if (sst.filename() == sst_filename) {
+            match_count++;
+            EXPECT_TRUE(sst.shared()) << "shared flag should be preserved from init metadata";
+        }
+    }
+    EXPECT_EQ(match_count, 1) << "SST should not be duplicated after ingest_sst";
+
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// Verify that ingest_sst preserves the sst_meta.shared flag when committing a brand-new
+// SST (not already present in _sstable_filesets). This is the cross-publish scenario
+// where set_all_data_files_shared has marked sst_meta.shared=true on the txn log and
+// the downstream tablet must persist it into sstable_meta so that remove_compacted_sst
+// and vacuum continue to see the file as shared.
+TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_sst) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int M = 3;
+    const int N = 100;
+
+    auto tablet_id = _tablet_metadata->id();
+
+    // Phase 1: create an SST on disk by writing and flushing on a temporary index.
+    std::string sst_filename;
+    int64_t sst_filesize = 0;
+    {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+        ASSERT_OK(index->init(_tablet_metadata));
+        for (int i = 0; i < M; ++i) {
+            vector<Key> keys;
+            vector<Slice> key_slices;
+            vector<IndexValue> values;
+            keys.reserve(N);
+            key_slices.reserve(N);
+            values.reserve(N);
+            for (int j = 0; j < N; j++) {
+                keys.emplace_back(j);
+                key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+                values.emplace_back(j * 2);
+            }
+            index->prepare(EditVersion(i, 0), 0);
+            vector<IndexValue> upsert_old_values(keys.size());
+            ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+            ASSERT_OK(index->flush_memtable(true));
+            ASSERT_OK(index->sync_flush_all_memtables(10000000));
+        }
+        Tablet tablet(_tablet_mgr.get(), tablet_id);
+        auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+        tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+        MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+        ASSERT_OK(index->commit(&builder));
+        ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
+        sst_filename = tablet_metadata_ptr->sstable_meta().sstables(0).filename();
+        sst_filesize = tablet_metadata_ptr->sstable_meta().sstables(0).filesize();
+    }
+
+    // Phase 2: build a fresh index backed by the empty _tablet_metadata (no SSTs loaded).
+    // Now ingest the SST from phase 1 with shared=true (as cross-publish would do after
+    // set_all_data_files_shared has marked op_write.ssts shared).
+    auto index2 = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index2->init(_tablet_metadata));
+
+    FileMetaPB sst_meta;
+    sst_meta.set_name(sst_filename);
+    sst_meta.set_size(sst_filesize);
+    sst_meta.set_shared(true); // cross-publish marks this true
+
+    PersistentIndexSstableRangePB sst_range;
+    DelvecPagePB delvec_page;
+    ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+
+    // Commit and verify the shared flag made it into sstable_meta.
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    ASSERT_OK(index2->commit(&builder));
+
+    int match_count = 0;
+    for (const auto& sst : tablet_metadata_ptr->sstable_meta().sstables()) {
+        if (sst.filename() == sst_filename) {
+            match_count++;
+            EXPECT_TRUE(sst.shared()) << "sst_meta.shared=true must be preserved in committed sstable_meta";
+        }
+    }
+    EXPECT_EQ(match_count, 1);
+
+    config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
 } // namespace starrocks::lake

@@ -140,6 +140,17 @@ enum TTimeUnit {
     MINUTE = 4;
 }
 
+enum TBinaryEncodingFormat {
+  RAW = 0;
+  HEX = 1;
+  BASE64 = 2;
+}
+
+enum TBinaryEncodingLevel {
+  ALL = 0;
+  NESTED = 1;
+}
+
 struct TQueryQueueOptions {
   1: optional bool enable_global_query_queue;
   2: optional bool enable_group_level_query_queue;
@@ -293,6 +304,7 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true; // Deprecated
+  117: optional bool error_for_division_by_zero = false;
   // Deprecated
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
@@ -317,6 +329,8 @@ struct TQueryOptions {
   120: optional bool enable_connector_split_io_tasks = false;
   121: optional i64 connector_max_split_size = 0;
   122: optional bool enable_connector_sink_writer_scaling = true;
+  123: optional TBinaryEncodingFormat binary_encoding_format = TBinaryEncodingFormat.HEX;
+  124: optional TBinaryEncodingLevel binary_encoding_level = TBinaryEncodingLevel.NESTED;
 
   130: optional bool enable_wait_dependent_event = false;
 
@@ -360,12 +374,22 @@ struct TQueryOptions {
   // 0: fnv_hash (default, for backward compatibility)
   // 1: xxh3_hash (faster)
   201: optional i32 exchange_hash_function_version = 0;
-   // whether enable predicate column late materialization
+
+  // whether enable predicate column late materialization
   202: optional bool enable_predicate_col_late_materialize;
-  
+
   210: optional bool enable_global_late_materialization;
   211: optional bool enable_schedule_log;
 
+  // http_request function SSL settings
+  212: optional bool http_request_ssl_verification_required = true;
+
+  // http_request function SSRF protection settings
+  213: optional i32 http_request_security_level = 3;
+  214: optional string http_request_ip_allowlist = "";
+  215: optional string http_request_host_allowlist_regexp = "";
+  216: optional bool http_request_allow_private_in_allowlist = false;
+  217: optional bool enable_cache_udaf = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.
@@ -430,6 +454,9 @@ struct TPlanFragmentExecParams {
   // Debug options: perform some action in a particular phase of a particular node
   74: optional list<TExecDebugOption> exec_debug_options
 
+  // used for global lazy materialization
+  75: optional map<Types.TPlanNodeId, i32> per_look_up_num_fetchers
+  76: optional map<Types.TPlanNodeId, Descriptors.TNodesInfo> per_fetch_target_nodes
 }
 
 // Global query parameters assigned by the coordinator.

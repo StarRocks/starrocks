@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "exec/exec_node.h"
+#include "common/statusor.h"
+#include "exec/pipeline_node.h"
 #include "exec/sort_exec_exprs.h"
 
 namespace starrocks {
@@ -26,29 +27,25 @@ class RuntimeFilterBuildDescriptor;
 //
 // It sorts rows in a batch of chunks in turn at the open stage,
 // and keeps LIMIT rows after each step for output.
-class TopNNode final : public ::starrocks::ExecNode {
+class TopNNode final : public PipelineNode {
 public:
     TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~TopNNode() override;
 
-    // overridden methods defined in ::starrocks::ExecNode
+    // overridden methods defined in PipelineNode
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool is_partition_skewed,
-            bool is_merging, bool enable_parallel_merge, bool is_per_pipeline);
+    StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::PipelineBuilderContext* context,
+                                                           bool is_partition_topn, bool is_partition_skewed,
+                                                           bool is_merging, bool enable_parallel_merge,
+                                                           bool is_per_pipeline);
 
-    Status _consume_chunks(RuntimeState* state, ExecNode* child);
     const TPlanNode& _tnode;
 
     // Only used for profile
@@ -77,7 +74,6 @@ private:
 
     std::unique_ptr<ChunksSorter> _chunks_sorter;
 
-    RuntimeProfile::Counter* _sort_timer;
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 

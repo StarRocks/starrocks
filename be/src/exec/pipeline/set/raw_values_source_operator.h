@@ -69,11 +69,11 @@ private:
 class RawValuesSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     RawValuesSourceOperatorFactory(int32_t id, int32_t plan_node_id, const std::vector<SlotDescriptor*>& dst_slots,
-                                   const TypeDescriptor& value_type, std::vector<int64_t>&& long_values,
+                                   TypeDescriptor value_type, std::vector<int64_t>&& long_values,
                                    std::vector<std::string>&& string_values)
             : SourceOperatorFactory(id, "raw_values_source", plan_node_id),
               _dst_slots(dst_slots),
-              _constant_type(value_type),
+              _constant_type(std::move(value_type)),
               _long_values(std::move(long_values)),
               _string_values(std::move(string_values)) {
         DCHECK(_dst_slots.size() == 1);

@@ -99,7 +99,7 @@ public class OptExpression {
 
     public static OptExpression create(Operator op, TvrOptMeta tvrOptMeta, List<OptExpression> inputs) {
         OptExpression expr = new OptExpression(op);
-        expr.inputs = inputs;
+        expr.inputs = Lists.newArrayList(inputs);
         expr.tvrOptMeta = tvrOptMeta;
         return expr;
     }
@@ -321,7 +321,7 @@ public class OptExpression {
         }
 
         public Builder setInputs(List<OptExpression> inputs) {
-            optExpression.inputs = inputs;
+            optExpression.inputs = Lists.newArrayList(inputs);
             return this;
         }
 

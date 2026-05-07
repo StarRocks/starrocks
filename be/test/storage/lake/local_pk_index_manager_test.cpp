@@ -20,7 +20,6 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "column/schema.h"
-#include "common/config.h"
 #include "fs/fs.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"

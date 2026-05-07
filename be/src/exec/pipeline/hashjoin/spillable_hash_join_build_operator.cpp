@@ -20,12 +20,13 @@
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/hash_join_node.h"
 #include "exec/hash_joiner.h"
 #include "exec/join/join_hash_table.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
@@ -34,6 +35,7 @@
 #include "exec/spill/spiller.hpp"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -90,7 +92,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (!_join_builder->spiller()->spilled()) {
         DCHECK(_is_first_time_spill);
         _is_first_time_spill = false;
-        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state()));
+        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(get_factory()->runtime_state()));
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
         ASSIGN_OR_RETURN(_hash_table_slice_iterator, _convert_hash_map_to_chunk());
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
@@ -105,10 +107,12 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         return spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
+    _join_builder->ref();
     auto set_call_back_function = [this](RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
         return spiller->set_flush_all_call_back(
-                [this]() {
+                [this, state]() {
+                    auto defer = DeferOp([&]() { _join_builder->unref(state); });
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     FAIL_POINT_TRIGGER_EXECUTE(spill_flush_set_invalid_status, {
@@ -139,13 +143,13 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
     // we could build global runtime filter for this case later.
 
-    bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
+    bool is_colocate_runtime_filter = get_factory()->runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists;
         RuntimeMembershipFilterList bloom_filters;
-        runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
-                                            std::make_unique<RuntimeFilterCollector>(in_filter_lists));
+        get_factory()->runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
+                                                           std::make_unique<RuntimeFilterCollector>(in_filter_lists));
         state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
     } else {
         auto merged = _partial_rf_merger->set_always_true();
@@ -158,7 +162,7 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
             // publish empty runtime bloom-filters
             state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
             // move runtime filters into RuntimeFilterHub.
-            runtime_filter_hub()->set_collector(
+            get_factory()->runtime_filter_hub()->set_collector(
                     _plan_node_id,
                     std::make_unique<RuntimeFilterCollector>(std::move(in_filters), std::move(bloom_filters)));
         }
@@ -211,7 +215,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
 
     // Estimate the appropriate number of partitions
     if (_is_first_time_spill) {
-        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state()));
+        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(get_factory()->runtime_state()));
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
     }
 
@@ -263,7 +267,8 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
             _hash_table_iterate_idx++;
             for (; _hash_table_iterate_idx < _hash_tables.size(); _hash_table_iterate_idx++) {
                 auto build_chunk = _hash_tables[_hash_table_iterate_idx]->get_build_chunk();
-                if (build_chunk->num_rows() > 0) {
+                // Every build chunk has a dummy row at index 0. Skip partitions that have no real build rows.
+                if (build_chunk->num_rows() > kHashJoinKeyColumnOffset) {
                     _hash_table_build_chunk_slice.reset(build_chunk);
                     _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
                     break;
@@ -275,7 +280,7 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
             }
         }
 
-        ChunkPtr chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
+        ChunkPtr chunk = _hash_table_build_chunk_slice.cutoff(get_factory()->runtime_state()->chunk_size());
         RETURN_IF_ERROR(chunk->downgrade());
         RETURN_IF_ERROR(append_hash_columns(chunk));
         _join_builder->update_build_rows(chunk->num_rows());

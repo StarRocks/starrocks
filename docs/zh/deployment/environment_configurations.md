@@ -74,7 +74,7 @@ netstat -tunlp | grep 8060
 netstat -tunlp | grep 9070
 ```
 
-如果上述任何端口被占用，您必须在部署 CN 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 CN 服务](../deployment/deploy_manually.md#第三步可选启动-cn-服务)。
+如果上述任何端口被占用，您必须在部署 CN 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 CN 服务](../deployment/deploy_shared_data_manually.md#第二步启动-cn-服务)。
 
 ## 主机名
 
@@ -82,9 +82,9 @@ netstat -tunlp | grep 9070
 
 在每个实例的 **/etc/hosts** 文件中，您必须指定集群中其他实例的 IP 地址和相应的主机名。
 
-> **注意**
->
-> **/etc/hosts** 文件中的所有 IP 地址都必须是唯一。
+:::important
+**/etc/hosts** 文件中的所有 IP 地址都必须是唯一。
+:::
 
 ## JDK 设置
 

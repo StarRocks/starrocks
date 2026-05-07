@@ -17,7 +17,7 @@
 #include <cstring>
 
 #include "base/container/raw_container.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
@@ -108,7 +108,7 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         SCOPED_TIMER(_parent->metrics().serialize_timer);
         size_t ALIGNED_SIZE = 1;
         if (aligned) {
-            ALIGNED_SIZE = AlignedBuffer::PAGE_SIZE;
+            ALIGNED_SIZE = AlignedBuffer::kPageSize;
         }
         ctx.serialize_buffer.clear();
         const auto& columns = chunk->columns();

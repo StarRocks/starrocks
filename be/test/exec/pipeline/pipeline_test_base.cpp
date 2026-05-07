@@ -18,13 +18,15 @@
 
 #include "base/testutil/assert.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
@@ -91,9 +93,9 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
-                                           _request.query_options, _request.query_globals, _exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+            _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+            _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
     _fragment_future = _fragment_ctx->finish_future();

@@ -15,7 +15,8 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -41,7 +42,7 @@ public:
         chunk->append_column(std::move(col), 0);
         return chunk;
     }
-    size_t _next_value = 0;
+    uint64_t _next_value = 0;
     size_t _chunk_size;
 };
 
@@ -53,12 +54,13 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_exec_env(_exec_env);
+        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
+                                                        &_exec_env->query_execution_services(), _exec_env);
         _runtime_state->set_query_ctx(_query_context.get());
         _runtime_state->init_instance_mem_tracker();
 
@@ -101,7 +103,7 @@ public:
     void TearDown() override {
         _recvr->close();
         _exec_env->stream_mgr()->close();
-        _query_context->set_exec_env(nullptr);
+        _query_context->set_query_execution_services(nullptr);
     }
 
 protected:

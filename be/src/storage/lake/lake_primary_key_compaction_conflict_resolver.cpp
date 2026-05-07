@@ -54,6 +54,7 @@ StatusOr<FileInfo> LakePrimaryKeyCompactionConflictResolver::filename() const {
 Schema LakePrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(_metadata->schema());
     std::vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
@@ -75,8 +76,12 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     // init delvec loader
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
-    auto delvec_loader =
-            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, lake_io_opts);
+    // Cache the base-version metadata once so per-rssid delvec loads skip get_tablet_metadata
+    // and its TabletMetadataPB deep copy (hot when one compaction merges hundreds of rowsets).
+    ASSIGN_OR_RETURN(auto base_metadata,
+                     _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
+    auto delvec_loader = std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, true /* fill cache */, lake_io_opts,
+                                                            std::move(base_metadata));
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();
@@ -101,8 +106,11 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     // init delvec loader
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
-    auto delvec_loader =
-            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, lake_io_opts);
+    // See the overload above: cache base-version metadata once to skip per-rssid deep copy.
+    ASSIGN_OR_RETURN(auto base_metadata,
+                     _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
+    auto delvec_loader = std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, true /* fill cache */, lake_io_opts,
+                                                            std::move(base_metadata));
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();

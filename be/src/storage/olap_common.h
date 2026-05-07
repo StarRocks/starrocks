@@ -434,9 +434,9 @@ struct HashOfRowsetId {
 struct TabletSegmentId {
     int64_t tablet_id = INT64_MAX;
     uint32_t segment_id = UINT32_MAX;
-    TabletSegmentId() {}
+    TabletSegmentId() = default;
     TabletSegmentId(int64_t tid, uint32_t sid) : tablet_id(tid), segment_id(sid) {}
-    ~TabletSegmentId() {}
+    ~TabletSegmentId() = default;
     bool operator==(const TabletSegmentId& rhs) const {
         return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id;
     }
@@ -465,7 +465,7 @@ struct TabletSegmentIdRange {
     TabletSegmentId right;
     TabletSegmentIdRange(int64_t left_tid, uint32_t left_sid, int64_t right_tid, uint32_t right_sid)
             : left(left_tid, left_sid), right(right_tid, right_sid) {}
-    ~TabletSegmentIdRange() {}
+    ~TabletSegmentIdRange() = default;
     // make sure left <= right
     bool is_valid() const { return left < right || left == right; }
     std::string to_string() const {

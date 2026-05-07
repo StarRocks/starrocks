@@ -81,7 +81,7 @@ The first-time compilation will automatically complete the following steps:
 
 1. Check and configure environment variables
 2. Compile third-party dependencies (protobuf, thrift, brpc, etc.)
-3. Generate code (Thrift/Protobuf)
+3. Generate script-based sources and let CMake materialize BE Thrift/Protobuf outputs
 4. Compile BE code
 5. Install to `output/be/` directory
 
@@ -393,7 +393,7 @@ The macOS compilation implementation follows these principles:
 
 **Q: Getting "protobuf version mismatch" error during compilation**
 
-A: Make sure to use `thirdparty/installed/bin/protoc` (version 3.14.0) instead of system or Homebrew's protobuf:
+A: Make sure the BE CMake build is using `thirdparty/installed/bin/protoc` (version 3.14.0) instead of system or Homebrew's protobuf:
 
 ```bash
 # Check protobuf version

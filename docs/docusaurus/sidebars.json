@@ -12,6 +12,7 @@
                 "introduction/what_is_starrocks",
                 "introduction/Architecture",
                 "introduction/Features",
+                "introduction/feature_difference",
                 "introduction/versioning",
                 "introduction/maturity"
             ]
@@ -78,36 +79,10 @@
                         "deployment/prepare_deployment_files"
                     ]
                 },
-                {
-                    "type": "category",
-                    "label": "Shared-nothing deployment",
-                    "link": {
-                        "type": "doc",
-                        "id": "cover_pages/shared_nothing_deployment"
-                    },
-                    "items": [
-                        "deployment/deploy_manually",
-                        "deployment/sr_operator",
-                        "deployment/helm"
-                    ]
-                },
-                {
-                    "type": "category",
-                    "label": "Shared-data deployment",
-                    "link": {
-                        "type": "doc",
-                        "id": "deployment/shared_data/shared_data"
-                    },
-                    "items": [
-                        "deployment/shared_data/s3",
-                        "deployment/shared_data/gcs",
-                        "deployment/shared_data/azure",
-                        "deployment/shared_data/other",
-                        "deployment/shared_data/minio",
-                        "deployment/shared_data/hdfs",
-                        "deployment/shared_data/feature-support-shared-data"
-                    ]
-                },
+                "deployment/deploy_manually",
+                "deployment/deploy_shared_data_manually",
+                "deployment/sr_operator",
+                "deployment/helm",
                 {
                     "type": "category",
                     "label": "Manage your deployment",
@@ -120,7 +95,8 @@
                         "deployment/upgrade",
                         "deployment/downgrade"
                     ]
-                }
+                },
+                "deployment/feature-support-shared-data"
             ]
         },
         {
@@ -263,7 +239,10 @@
                                 "data_source/catalog/iceberg/iceberg_timetravel",
                                 "data_source/catalog/iceberg/iceberg_meta_table",
                                 "data_source/catalog/iceberg/iceberg_rest_s3",
-                                "data_source/catalog/iceberg/iceberg_rest_security"
+                                "data_source/catalog/iceberg/iceberg_rest_security",
+                                "data_source/catalog/iceberg/DDL",
+                                "data_source/catalog/iceberg/DML",
+                                "data_source/catalog/iceberg/procedures"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -435,12 +414,17 @@
                         "integrations/IDE_integrations/DataGrip",
                         "integrations/IDE_integrations/Dataphin",
                         "integrations/IDE_integrations/DBeaver",
-                        "integrations/IDE_integrations/jupysql"
+                        "integrations/IDE_integrations/jupysql",
+                        "integrations/IDE_integrations/marimo"
                     ]
                 },
                 {
                     "type": "doc",
                     "id": "integrations/other_integrations/datadog_support"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/JDBC_driver"
                 },
                 {
                     "type": "doc",
@@ -472,8 +456,34 @@
                         "id": "administration/management/configuration"
                     },
                     "items": [
-                        "administration/management/FE_configuration",
-                        "administration/management/BE_configuration"
+                        {
+                            "type": "category",
+                            "label": "FE Configuration",
+                            "link": {
+                                "type": "doc",
+                                "id": "administration/management/FE_configuration"
+                            },
+                            "items": [
+                                "administration/management/FE_parameters/log_server_meta",
+                                "administration/management/FE_parameters/user_query_loading",
+                                "administration/management/FE_parameters/stats_storage",
+                                "administration/management/FE_parameters/shared_lake_other"
+                            ]
+                        },
+                        {
+                            "type": "category",
+                            "label": "BE Configuration",
+                            "link": {
+                                "type": "doc",
+                                "id": "administration/management/BE_configuration"
+                            },
+                            "items": [
+                                "administration/management/BE_parameters/log_server_meta",
+                                "administration/management/BE_parameters/query_loading",
+                                "administration/management/BE_parameters/stats_storage",
+                                "administration/management/BE_parameters/shared_lake_other"
+                            ]
+                        }
                 ]
                 },
                 {
@@ -490,20 +500,21 @@
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
                         "administration/cluster_snapshot",
-                        {
-                            "type": "category",
-                            "label": "Monitor and Alert",
-                            "link": {
-                                "type": "doc",
-                                "id": "administration/management/monitoring/Monitor_and_Alert"
-                            },
-                            "items": [
-                                "administration/management/monitoring/metrics",
-                                "administration/management/monitoring/metrics-materialized_view",
-                                "administration/management/monitoring/metrics-shared-data",
-                                "administration/management/monitoring/alert"
-                            ]
-                        },
+
+                    { 
+                        "type": "category",
+                        "label": "Monitor and Alert",
+                        "link": {
+                          "type": "doc",
+                          "id": "administration/management/monitoring/Monitor_and_Alert"
+                         },
+                        "items": [
+                            {
+                              "type": "autogenerated",
+                              "dirName": "administration/management/monitoring"
+                            }
+                         ]
+                       },
                         "administration/management/audit_loader",
                         "administration/management/enable_fqdn",
                         "administration/management/timezone",
@@ -604,6 +615,7 @@
                 "faq/resource_isolation_faq",
                 "faq/fe_mem_faq",
                 "faq/operation_maintenance_faq",
+                "faq/starrocks-wildfly-native-ssl-fix",
                 "faq/Others"
             ]
         },

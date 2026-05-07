@@ -38,9 +38,10 @@
 #include <filesystem>
 #include <set>
 
-#include "agent/master_info.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
@@ -56,12 +57,12 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 #endif
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

@@ -16,7 +16,11 @@
 
 #include <filesystem>
 
-#include "common/config.h"
+#include "cache/disk_cache/block_cache.h"
+#ifdef WITH_STARCACHE
+#include "cache/datacache.h"
+#endif
+#include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
@@ -28,12 +32,14 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -52,14 +58,15 @@ std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_prov
 // ================================
 
 HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {
+        : _plan_node_id(plan_node.node_id), _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
 }
 
-HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const THdfsScanNode& hdfs_scan_node)
-        : _scan_node(scan_node), _hdfs_scan_node(hdfs_scan_node) {
+HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, int32_t plan_node_id,
+                                               const THdfsScanNode& hdfs_scan_node)
+        : _plan_node_id(plan_node_id), _scan_node(scan_node), _hdfs_scan_node(hdfs_scan_node) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
@@ -84,10 +91,15 @@ HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const THd
 Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
         if (!slot->is_nullable()) {
-            return Status::RuntimeError(fmt::format(
-                    "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild the"
-                    "external table and We strongly recommend that you use catalog to access external data.",
-                    slot->col_name()));
+            // Check if the non-nullable column has a default value
+            // If it has a default value, allow scanning as old data files can be filled with the default
+            if (_materialize_slot_default_values.find(slot->id()) == _materialize_slot_default_values.end()) {
+                return Status::RuntimeError(fmt::format(
+                        "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild "
+                        "the"
+                        "external table and We strongly recommend that you use catalog to access external data.",
+                        slot->col_name()));
+            }
         }
     }
     return Status::OK();
@@ -225,26 +237,19 @@ Status HiveDataSource::open(RuntimeState* state) {
 }
 
 void HiveDataSource::_init_global_late_materialization_context(RuntimeState* state) {
-    const auto& slots = _tuple_desc->slots();
-    int32_t row_source_slot_id = -1;
-    bool will_be_lazy_read = std::any_of(slots.begin(), slots.end(), [&](const SlotDescriptor* slot) {
-        if (slot->col_name() == "_row_source_id") {
-            row_source_slot_id = slot->id();
-            return true;
-        }
-        return false;
-    });
+    const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
+    bool will_be_lazy_read = hdfs_scan_node.__isset.enable_global_late_materialization &&
+                             hdfs_scan_node.enable_global_late_materialization;
 
     if (will_be_lazy_read) {
+        int64_t scan_id = _provider->_plan_node_id;
         auto glm_ctx_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
-        pipeline::IcebergGlobalLateMaterilizationContext* glm_ctx =
-                static_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
-                        glm_ctx_mgr->get_or_create_ctx(row_source_slot_id, [&]() {
-                            auto ctx = state->query_ctx()->object_pool()->add(
-                                    new pipeline::IcebergGlobalLateMaterilizationContext());
-                            ctx->hdfs_scan_node = _provider->_hdfs_scan_node;
-                            return ctx;
-                        }));
+        IcebergGlobalLateMaterilizationContext* glm_ctx =
+                static_cast<IcebergGlobalLateMaterilizationContext*>(glm_ctx_mgr->get_or_create_ctx(scan_id, [&]() {
+                    auto ctx = state->query_ctx()->object_pool()->add(new IcebergGlobalLateMaterilizationContext());
+                    ctx->hdfs_scan_node = hdfs_scan_node;
+                    return ctx;
+                }));
         _scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
     }
 }
@@ -417,6 +422,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         } else {
             _materialize_slots.push_back(slots[i]);
             _materialize_index_in_chunk.push_back(i);
+            if (_hive_table != nullptr) {
+                auto default_value = _hive_table->get_column_default_value(slots[i]);
+                if (default_value.has_value()) {
+                    _materialize_slot_default_values.emplace(slots[i]->id(), *default_value);
+                }
+            }
         }
     }
 
@@ -428,6 +439,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+    }
+    // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
+    // a partition column and a placeholder materialized column was injected to satisfy
+    // the "at least one materialized column" requirement.  We propagate this flag so that
+    // the scanner can avoid reading that placeholder column from the data file when
+    // min/max optimization is active.
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _use_count_opt = hdfs_scan_node.can_use_count_opt;
@@ -727,7 +746,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     if (native_file_path.empty()) {
         bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
-        native_file_path = _hive_table->get_base_path() +
+        native_file_path = std::string(_hive_table->get_base_path()) +
                            (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
 
@@ -737,6 +756,25 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     HdfsScannerParams scanner_params;
+    if (hdfs_scan_node.__isset.column_access_paths && !_disable_column_access_path_hints &&
+        _column_access_paths.empty()) {
+        bool failed = false;
+        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
+        for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
+            auto st = ColumnAccessPath::create(thrift_path, path_resolver);
+            if (LIKELY(st.ok())) {
+                _column_access_paths.emplace_back(std::move(st.value()));
+            } else {
+                LOG(WARNING) << "Failed to create column access path: " << st.status();
+                failed = true;
+                break;
+            }
+        }
+        if (failed) {
+            _column_access_paths.clear();
+            _disable_column_access_path_hints = true;
+        }
+    }
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
@@ -748,6 +786,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
+    scanner_params.materialize_slot_default_values = _materialize_slot_default_values;
     scanner_params.partition_slots = _partition_slots;
     scanner_params.partition_index_in_chunk = _partition_index_in_chunk;
     scanner_params._partition_index_in_hdfs_partition_columns = _partition_index_in_hdfs_partition_columns;
@@ -803,8 +842,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
+    if (!_disable_column_access_path_hints && !_column_access_paths.empty()) {
+        scanner_params.column_access_paths = &_column_access_paths;
+    }
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

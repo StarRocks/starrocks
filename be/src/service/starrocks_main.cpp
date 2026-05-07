@@ -41,6 +41,7 @@
 #endif
 
 #include <curl/curl.h>
+#include <gflags/gflags.h>
 #include <thrift/TOutput.h>
 
 #ifndef __APPLE__
@@ -55,8 +56,12 @@
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "base/failpoint/fail_point.h"
+#include "base/path/path_util.h"
 #include "base/uid_util.h"
-#include "common/config.h"
+#include "common/config_object_storage_fwd.h"
+#include "common/config_starlet_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/status.h"
@@ -64,6 +69,9 @@
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "exec/pipeline/query_context.h"
+#include "formats/orc/lzo_decompressor_registration.h"
+#include "fs/fs_provider_bootstrap.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -74,7 +82,6 @@
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
-#include "util/thrift_rpc_helper.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
@@ -120,6 +127,17 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
 extern int meta_tool_main(int argc, char** argv);
 
 int main(int argc, char** argv) {
+    // Record the TP-relative offset of tls_thread_status as early as possible,
+    // before any thread is created (so the main thread's TLS layout is canonical).
+    // External profilers read g_tls_thread_status_tpoff from /proc/PID/mem.
+    starrocks::init_tls_thread_status_offset();
+
+    auto lzo_status = starrocks::register_orc_lzo_decompressor();
+    if (!lzo_status.ok()) {
+        fprintf(stderr, "fail to register ORC LZO decompressor: %s\n", lzo_status.to_string().c_str());
+        return 1;
+    }
+
     if (argc > 1 && strcmp(argv[1], "meta_tool") == 0) {
         return meta_tool_main(argc - 1, argv + 1);
     }
@@ -130,7 +148,8 @@ int main(int argc, char** argv) {
             puts(starrocks::get_build_version(false).c_str());
             exit(0);
         } else if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0) {
-            help(basename(argv[0]));
+            std::string program_name = starrocks::path_util::base_name(argv[0]);
+            help(program_name.c_str());
             exit(0);
         } else if (strcmp(argv[1], "--cn") == 0) {
             as_cn = true;
@@ -225,6 +244,9 @@ int main(int argc, char** argv) {
         Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
     }
 #endif
+
+    EXIT_IF_ERROR(starrocks::fs::install_builtin_file_system_providers());
+    LOG(INFO) << "file system provider registry init successfully";
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);

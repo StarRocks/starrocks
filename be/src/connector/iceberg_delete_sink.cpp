@@ -22,7 +22,7 @@
 
 #include "base/url_coding.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/sink_memory_manager.h"
@@ -36,6 +36,7 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "types/datum.h"
 #include "utils.h"
@@ -55,7 +56,7 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
 
 // Callback for handling commit results
 void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
-    push_rollback_action(std::move(result.rollback_action));
+    push_rollback_action(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
 
@@ -117,14 +118,12 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
     }
     SlotId file_path_slot_id = file_path_it->second.slot_ref.slot_id;
 
-    // Find pos column slot_id from the mapping
     auto pos_it = _column_slot_map.find("_pos");
     if (pos_it == _column_slot_map.end()) {
         return Status::InternalError("Could not find _pos column in column_slot_map");
     }
     SlotId pos_slot_id = pos_it->second.slot_ref.slot_id;
 
-    // Get file_path and pos columns using slot_id
     ColumnPtr file_path_column = chunk->get_column_by_slot_id(file_path_slot_id);
     ColumnPtr pos_column = chunk->get_column_by_slot_id(pos_slot_id);
     if (file_path_column == nullptr || pos_column == nullptr) {
@@ -256,7 +255,8 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
 
     // Create location provider for delete files
     auto location_provider = std::make_shared<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, "parquet");
+            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, "parquet",
+            ctx->writer_tag);
 
     std::vector<formats::FileColumnId> file_column_ids(column_names.size());
     // file_path column (index 0)
@@ -323,11 +323,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
 
     // Create partition chunk writer factory
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
+    auto* query_execution_services = runtime_state->query_execution_services();
 
     auto writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
             {file_writer_factory, location_provider, ctx->max_file_size, ctx->partition_column_names.empty()},
             fs,
             ctx->fragment_context,
+            query_execution_services->runtime->connector_sink_spill_executor,
             delete_tuple_desc,
             column_evaluators,
             sort_ordering});

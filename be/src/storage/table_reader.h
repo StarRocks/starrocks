@@ -17,19 +17,21 @@
 #include <utility>
 #include <vector>
 
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_predicate.h"
 #include "storage/tablet.h"
-#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {
 
+class OlapTableSchemaParam;
 class OlapTablePartitionParam;
 class OlapTableLocationParam;
 class StarRocksNodesInfo;
 class LocalTabletReader;
 class PInternalService_RecoverableStub;
+class RowDescriptor;
 
 namespace serde {
 struct ProtobufChunkMeta;

@@ -144,6 +144,12 @@ public:
     Status prepare() override {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
                                                                  _opts.timezone, &_converter));
+        // Finalize lazy dict-decode eligibility now that _converter is known.
+        // Lazy dict decode is only valid when no value conversion is required, because the dict-decode
+        // path materialises values directly into dst and bypasses converters (e.g. UUID bytes -> string).
+        if (_can_lazy_dict_decode && _converter->need_convert) {
+            _can_lazy_dict_decode = false;
+        }
         return RawColumnReader::prepare();
     }
 
@@ -155,11 +161,17 @@ public:
     Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
                                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
+        // Supply the converter so raw dict bytes (e.g. UUID) are converted to their logical string
+        // form before conjuncts are evaluated. _converter is always valid here because prepare()
+        // is guaranteed to run before rewrite_conjunct_ctxs_to_predicate().
+        _dict_filter_ctx->dict_value_converter = _converter.get();
         return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
     }
 
     void set_can_lazy_decode(bool can_lazy_decode) override {
         _can_lazy_convert = can_lazy_decode;
+        // _converter may not be initialized yet (called before prepare()), so we cannot check
+        // need_convert here. The check is deferred to prepare() which always runs after this call.
         _can_lazy_dict_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
     }
 

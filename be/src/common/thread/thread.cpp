@@ -435,14 +435,10 @@ void Thread::finish_thread(void* arg) {
 }
 
 void Thread::init_threadmgr() {
-    thread_manager.reset(new ThreadMgr());
+    thread_manager = std::make_shared<ThreadMgr>();
 }
 
-ThreadJoiner::ThreadJoiner(Thread* thr)
-        : _thread(CHECK_NOTNULL(thr)),
-          _warn_after_ms(kDefaultWarnAfterMs),
-          _warn_every_ms(kDefaultWarnEveryMs),
-          _give_up_after_ms(kDefaultGiveUpAfterMs) {}
+ThreadJoiner::ThreadJoiner(Thread* thr) : _thread(CHECK_NOTNULL(thr)) {}
 
 ThreadJoiner& ThreadJoiner::warn_after_ms(int ms) {
     _warn_after_ms = ms;

@@ -14,11 +14,10 @@
 
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
 
-#include "agent/master_info.h"
 #include "base/metrics.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
@@ -51,7 +50,7 @@ Status SchemaBeCompactionsScanner::start(RuntimeState* state) {
     info.cumulative_compaction_concurrency = compaction_manager->cumulative_compaction_concurrency();
     info.last_score = compaction_manager->last_score();
     info.max_score = compaction_manager->max_score();
-    _infos.emplace_back(std::move(info));
+    _infos.emplace_back(info);
     _cur_idx = 0;
     return Status::OK();
 }

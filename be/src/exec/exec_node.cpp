@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/util/debug_util.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -54,10 +55,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -70,15 +70,8 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _tuple_ids(tnode.row_tuples),
           _row_descriptor(descs, tnode.row_tuples),
           _resource_profile(tnode.resource_profile),
-          _debug_phase(TExecNodePhase::INVALID),
-          _debug_action(TDebugAction::WAIT),
-          _limit(tnode.limit),
-          _num_rows_returned(0),
-          _rows_returned_counter(nullptr),
-          _rows_returned_rate(nullptr),
-          _memory_used_counter(nullptr),
-          _runtime_state(nullptr),
-          _is_closed(false) {
+
+          _limit(tnode.limit) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
@@ -139,9 +132,11 @@ void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, Ru
 void ExecNode::register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc) {
     rf_desc->set_probe_plan_node_id(_id);
     _runtime_filter_collector.add_descriptor(rf_desc);
-    ExecEnv::GetInstance()->add_rf_event({state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
-                                          strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
-    state->runtime_filter_port()->add_listener(rf_desc);
+    auto* query_execution_services = state->query_execution_services();
+    query_execution_services->runtime->runtime_filter_cache->add_rf_event(
+            {state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
+             strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
+    state->runtime_filter_registry()->register_descriptor(rf_desc);
 }
 
 Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state) {
@@ -158,6 +153,11 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
     }
     if (state != nullptr && state->query_options().__isset.runtime_filter_scan_wait_time_ms) {
         _runtime_filter_collector.set_scan_wait_timeout_ms(state->query_options().runtime_filter_scan_wait_time_ms);
+    }
+    if (state != nullptr && state->query_execution_services() != nullptr &&
+        state->query_execution_services()->runtime != nullptr) {
+        _runtime_filter_collector.set_runtime_filter_cache(
+                state->query_execution_services()->runtime->runtime_filter_cache);
     }
     if (tnode.__isset.filter_null_value_columns) {
         _filter_null_value_columns = tnode.filter_null_value_columns;
@@ -186,8 +186,8 @@ Status ExecNode::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
-                                      _runtime_profile->name(), nullptr));
+    _mem_tracker = std::make_shared<MemTracker>(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
+                                                _runtime_profile->name(), nullptr);
     RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, _runtime_profile.get()));
 
@@ -214,7 +214,7 @@ Status ExecNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::NotSupported("Don't support vector query engine");
 }
 
-pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     pipeline::OpFactories operators;
     return operators;
 }
@@ -373,14 +373,14 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::BENCHMARK_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
-    collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {
     std::stringstream ss;
     ss << name << " (id=" << _id << ")";
-    _runtime_profile.reset(new RuntimeProfile(ss.str()));
+    _runtime_profile = std::make_shared<RuntimeProfile>(ss.str());
     _runtime_profile->set_metadata(_id);
 }
 

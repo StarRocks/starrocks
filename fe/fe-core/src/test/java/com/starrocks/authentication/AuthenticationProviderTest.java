@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlAuthPacket;
@@ -243,5 +244,56 @@ public class AuthenticationProviderTest {
                 "12345".getBytes(StandardCharsets.UTF_8),
                 AuthPlugin.Client.MYSQL_CLEAR_PASSWORD);
         result = MysqlProto.authenticate(ctx, mysqlAuthPacket);
+    }
+
+    @Test
+    public void testLdapAuthenticationWithBindDNPattern() throws IOException, DdlException {
+        new MockUp<MysqlChannel>() {
+            @Mock
+            public void sendAndFlush(ByteBuffer packet) throws IOException {
+                return;
+            }
+
+            @Mock
+            public ByteBuffer fetchOnePacket() throws IOException {
+                return ByteBuffer.wrap(new byte[23]);
+            }
+        };
+
+        // Mock checkPassword to always succeed (no real LDAP server)
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            protected void checkPassword(String dn, String password) throws Exception {
+                // always success
+            }
+        };
+
+        // Set global bind DN pattern
+        String originalPattern = Config.authentication_ldap_simple_bind_dn_pattern;
+        Config.authentication_ldap_simple_bind_dn_pattern = "uid=${USER},ou=People,dc=example,dc=com";
+
+        try {
+            EditLog editLog = spy(new EditLog(null));
+            doNothing().when(editLog).logEdit(anyShort(), any());
+            GlobalStateMgr.getCurrentState().setEditLog(editLog);
+
+            AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+            GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+            // Create user without per-user DN — should use global pattern
+            CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
+                    .parse("create user test_pattern identified with authentication_ldap_simple", 32).get(0);
+            Analyzer.analyze(createUserStmt, ctx);
+            authenticationMgr.createUser(createUserStmt);
+
+            MysqlAuthPacket mysqlAuthPacket = MysqlAuthPacketTest.buildPacket(
+                    "test_pattern",
+                    "mypassword".getBytes(StandardCharsets.UTF_8),
+                    AuthPlugin.Client.MYSQL_CLEAR_PASSWORD);
+            MysqlProto.NegotiateResult result = MysqlProto.authenticate(ctx, mysqlAuthPacket);
+            Assertions.assertEquals(NegotiateState.OK, result.state());
+        } finally {
+            Config.authentication_ldap_simple_bind_dn_pattern = originalPattern;
+        }
     }
 }

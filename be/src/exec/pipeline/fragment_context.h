@@ -18,19 +18,16 @@
 #include <unordered_map>
 
 #include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
 #include "base/uid_util.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -50,6 +47,8 @@ class FragmentDictState;
 
 namespace pipeline {
 
+class PassThroughChunkBufferGuard;
+
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
@@ -59,6 +58,13 @@ class FragmentContext {
 public:
     FragmentContext();
     ~FragmentContext();
+
+    // Fragment-level shared MemPool — delegates to RuntimeState which owns it.
+    MemPool* fragment_mem_pool() { return _runtime_state ? _runtime_state->fragment_mem_pool() : nullptr; }
+
+    // PMR memory resource — delegates to RuntimeState which owns it.
+    std::pmr::memory_resource* mem_resource() { return _runtime_state ? _runtime_state->mem_resource() : nullptr; }
+
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
@@ -141,7 +147,7 @@ public:
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
     const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
-    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = std::move(params); }
+    void set_pred_tree_params(const PredicateTreeParams& params) { _pred_tree_params = params; }
 
     size_t next_driver_id() { return _next_driver_id++; }
 
@@ -149,18 +155,6 @@ public:
     const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
     bool enable_resource_group() const { return _workgroup != nullptr; }
     TQueryType::type query_type() const;
-
-    // STREAM MV
-    Status reset_epoch();
-    void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
-    bool is_stream_pipeline() const { return _is_stream_pipeline; }
-    void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
-
-#ifdef BE_TEST
-    // for ut
-    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
-    bool is_stream_test() const { return _is_stream_test; }
-#endif
 
     size_t expired_log_count() { return _expired_log_count; }
 
@@ -222,9 +216,9 @@ private:
 
     std::unique_ptr<EventScheduler> _event_scheduler;
     PipelineTimer* _pipeline_timer = nullptr;
-    PipelineTimerTask* _timeout_task = nullptr;
-    PipelineTimerTask* _report_state_task = nullptr;
-    std::unordered_map<uint64_t, PipelineTimerTask*> _rf_timeout_tasks;
+    std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
+    std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
+    std::unordered_map<uint64_t, std::shared_ptr<PipelineTimerTask>> _rf_timeout_tasks;
 
     RuntimeFilterHub _runtime_filter_hub;
 
@@ -236,16 +230,11 @@ private:
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
 
+    std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
+
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
-
-    // STREAM MV
-    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
-    bool _is_stream_pipeline = false;
-#ifdef BE_TEST
-    bool _is_stream_test = false;
-#endif
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;

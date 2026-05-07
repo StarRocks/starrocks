@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/set/intersect_context.h"
 #include "exec/pipeline/source_operator.h"
 

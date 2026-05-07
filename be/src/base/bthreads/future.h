@@ -16,6 +16,8 @@
 
 #include <cxxabi.h>
 
+#include <utility>
+
 #include "base/bthreads/future_impl.h"
 
 namespace starrocks::bthreads {
@@ -233,9 +235,9 @@ public:
         return this->_state->value();
     }
 
-    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+    bool operator==(const SharedFuture& rhs) const { return this->_state == rhs._state; }
 
-    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+    bool operator<(const SharedFuture& rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<R>;
@@ -283,9 +285,9 @@ public:
         return this->_state->value();
     }
 
-    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+    bool operator==(const SharedFuture& rhs) const { return this->_state == rhs._state; }
 
-    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+    bool operator<(const SharedFuture& rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<R&>;
@@ -329,9 +331,9 @@ public:
         this->wait_and_check_exception();
     }
 
-    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+    bool operator==(const SharedFuture& rhs) const { return this->_state == rhs._state; }
 
-    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+    bool operator<(const SharedFuture& rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<void>;
@@ -389,7 +391,7 @@ public:
 
     void set_exception(std::exception_ptr ex) {
         SharedStateBase::check_state(this->_state);
-        this->_state->set_exception(ex);
+        this->_state->set_exception(std::move(ex));
     }
 
 private:
@@ -475,7 +477,7 @@ public:
 
     void set_exception(std::exception_ptr e) {
         SharedStateBase::check_state(this->_state);
-        _state->set_exception(e);
+        _state->set_exception(std::move(e));
     }
 };
 

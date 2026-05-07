@@ -113,35 +113,16 @@ MemTrackerType MemTracker::label_to_type(const std::string& label) {
 }
 
 MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent)
-        : _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(&_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(&_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) {
-        _parent->add_child_tracker(this);
-        _level = _parent->_level + 1;
-    }
-    Init();
-}
+        : MemTracker(MemTrackerType::NO_SET, byte_limit, std::move(label), parent) {}
 
 MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string label, MemTracker* parent)
-        : _type(type),
-          _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(&_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(&_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
+        : _type(type), _limit(byte_limit), _label(std::move(label)), _parent(parent) {
+    _local_consumption_holder = std::make_unique<RuntimeProfile::HighWaterMarkCounter>(TUnit::BYTES);
+    _consumption = _local_consumption_holder.get();
+    _local_allocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+    _allocation = _local_allocation_holder.get();
+    _local_deallocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+    _deallocation = _local_deallocation_holder.get();
     if (parent != nullptr) {
         _parent->add_child_tracker(this);
         _level = _parent->_level + 1;
@@ -152,26 +133,29 @@ MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string labe
 MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> attaching_info,
                        const std::string& counter_name_prefix, int64_t byte_limit, std::string label,
                        MemTracker* parent)
-        : _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(std::get<0>(attaching_info)
-                               ? profile->AddHighWaterMarkCounter(
-                                         counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
-                                         RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
-                               : &_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(std::get<1>(attaching_info)
-                              ? profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
-                                                     RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
-                              : &_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(std::get<2>(attaching_info)
-                                ? profile->add_counter(counter_name_prefix + DEALLOCATED_MEMORY_USAGE, TUnit::BYTES,
-                                                       RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
-                                : &_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
+        : _limit(byte_limit), _label(std::move(label)), _parent(parent) {
+    if (std::get<0>(attaching_info)) {
+        _consumption =
+                profile->AddHighWaterMarkCounter(counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
+                                                 RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+    } else {
+        _local_consumption_holder = std::make_unique<RuntimeProfile::HighWaterMarkCounter>(TUnit::BYTES);
+        _consumption = _local_consumption_holder.get();
+    }
+    if (std::get<1>(attaching_info)) {
+        _allocation = profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                           RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    } else {
+        _local_allocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+        _allocation = _local_allocation_holder.get();
+    }
+    if (std::get<2>(attaching_info)) {
+        _deallocation = profile->add_counter(counter_name_prefix + DEALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                             RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    } else {
+        _local_deallocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+        _deallocation = _local_deallocation_holder.get();
+    }
     if (parent != nullptr) {
         _parent->add_child_tracker(this);
         _level = _parent->_level + 1;

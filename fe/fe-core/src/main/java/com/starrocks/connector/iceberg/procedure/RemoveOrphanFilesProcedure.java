@@ -29,11 +29,17 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.GenericManifestFile;
+import org.apache.iceberg.InternalData;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.ManifestReader;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.FileIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -124,19 +130,23 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                 validFileNames.add(fileName(snapshot.manifestListLocation()));
             }
 
-            for (ManifestFile manifest : snapshot.allManifests(table.io())) {
-                if (!processedManifestFilePaths.add(manifest.path())) {
-                    continue;
-                }
-
-                validFileNames.add(fileName(manifest.path()));
-                try (ManifestReader<? extends ContentFile<?>> manifestReader = readerForManifest(table, manifest)) {
-                    for (ContentFile<?> contentFile : manifestReader) {
-                        validFileNames.add(fileName(contentFile.location()));
+            try (CloseableIterable<ManifestFile> manifests = readManifests(snapshot, table.io())) {
+                for (ManifestFile manifest : manifests) {
+                    if (!processedManifestFilePaths.add(manifest.path())) {
+                        continue;
                     }
-                } catch (IOException e) {
-                    throw new StarRocksConnectorException("Unable to list manifest file content from " + manifest.path(), e);
+
+                    validFileNames.add(fileName(manifest.path()));
+                    try (ManifestReader<? extends ContentFile<?>> manifestReader = readerForManifest(table, manifest)) {
+                        for (ContentFile<?> contentFile : manifestReader) {
+                            validFileNames.add(fileName(contentFile.location()));
+                        }
+                    } catch (IOException e) {
+                        throw new StarRocksConnectorException("Unable to list manifest file content from " + manifest.path(), e);
+                    }
                 }
+            } catch (IOException e) {
+                throw new StarRocksConnectorException("Unable to read manifests for snapshot " + snapshot.snapshotId(), e);
             }
         }
 
@@ -152,6 +162,33 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
         scanAndDeleteInvalidFiles(location, olderThanMillis, validFileNames, context.hdfsEnvironment());
         return null;
+    }
+
+    /**
+     * Reads manifest files for a snapshot. When the snapshot has a manifest list file,
+     * reads from it directly (AVRO) for better efficiency; otherwise falls back to
+     * snapshot.allManifests(). Aligned with Iceberg FileCleanupStrategy.readManifests().
+     */
+    private static final Schema MANIFEST_PROJECTION =
+            ManifestFile.schema().select(
+                    "manifest_path",
+                    "manifest_length",
+                    "content",
+                    "partition_spec_id",
+                    "added_snapshot_id",
+                    "deleted_data_files_count");
+
+    private static CloseableIterable<ManifestFile> readManifests(Snapshot snapshot, FileIO fileIO) {
+        if (snapshot.manifestListLocation() != null) {
+            return InternalData.read(
+                            FileFormat.AVRO, fileIO.newInputFile(snapshot.manifestListLocation()))
+                    .setRootType(GenericManifestFile.class)
+                    .project(MANIFEST_PROJECTION)
+                    .reuseContainers()
+                    .build();
+        } else {
+            return CloseableIterable.withNoopClose(snapshot.allManifests(fileIO));
+        }
     }
 
     /**

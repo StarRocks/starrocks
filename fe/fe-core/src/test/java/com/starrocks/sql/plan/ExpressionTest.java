@@ -944,14 +944,14 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  25 <-> 1\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE\n" +
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] MCV: [[1:1]] ESTIMATE\n" +
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE\n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE"), plan);
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] MCV: [[1:1]] ESTIMATE\n" +
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] MCV: [[1:1]] ESTIMATE"), plan);
     }
 
     @Test
@@ -1628,16 +1628,16 @@ public class ExpressionTest extends PlanTestBase {
     public void testStructExpression() throws Exception {
         String sql = "select struct('a', 1, 2, 10000)";
         String plan = getVerboseExplain(sql);
-        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6)>");
+        assertCContains(plan, "struct<`col1` varchar, `col2` tinyint(4), `col3` tinyint(4), `col4` smallint(6)>");
 
         sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, map{'a': 1, 'b': 2})";
         plan = getVerboseExplain(sql);
-        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6), " +
-                "col5 array<tinyint(4)>, col6 boolean, col7 map<varchar,tinyint(4)>>");
+        assertCContains(plan, "struct<`col1` varchar, `col2` tinyint(4), `col3` tinyint(4), `col4` smallint(6), " +
+                "`col5` array<tinyint(4)>, `col6` boolean, `col7` map<varchar,tinyint(4)>>");
 
         sql = "select named_struct('a', 1, 'b', 2)";
         plan = getVerboseExplain(sql);
-        assertCContains(plan, "struct<a tinyint(4), b tinyint(4)>");
+        assertCContains(plan, "struct<`a` tinyint(4), `b` tinyint(4)>");
 
         try {
             sql = "select named_struct('a', 1, 'b', 2, 3, 6)";

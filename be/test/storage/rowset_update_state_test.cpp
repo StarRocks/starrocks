@@ -22,7 +22,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "fs/key_cache.h"
 #include "runtime/mem_pool.h"
@@ -92,7 +92,7 @@ public:
         auto col0 = chunk->get_column_raw_ptr_by_index(0);
         auto col1 = chunk->get_column_raw_ptr_by_index(1);
         auto col2 = chunk->get_column_raw_ptr_by_index(2);
-        for (long key : keys) {
+        for (int64_t key : keys) {
             col0->append_datum(Datum(key));
             col1->append_datum(Datum((int16_t)(key % 100 + 1)));
             col2->append_datum(Datum((int32_t)(key % 1000 + 2)));
@@ -166,7 +166,7 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
         auto cols = chunk->mutable_columns();
-        for (long key : keys) {
+        for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
         }
@@ -340,7 +340,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     auto chunk = ChunkHelper::new_chunk(schema, N);
     auto cols = chunk->mutable_columns();
-    for (size_t i = 0; i < N; i++) {
+    for (uint64_t i = 0; i < N; i++) {
         cols[0]->append_datum(Datum(i));
         cols[1]->append_datum(Datum((int16_t)(i % 100 + 1)));
         cols[2]->append_datum(Datum((int32_t)(i % 1000 + 3)));

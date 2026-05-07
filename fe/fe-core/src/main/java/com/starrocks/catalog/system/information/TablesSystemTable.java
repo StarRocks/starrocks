@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -34,6 +35,7 @@ import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
@@ -42,6 +44,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -152,6 +155,11 @@ public class TablesSystemTable extends SystemTable {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
         TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            userIdentity.setCurrent_role_ids(userRoles);
+        }
         TGetTablesInfoRequest params = new TGetTablesInfoRequest();
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdentity);
@@ -163,10 +171,10 @@ public class TablesSystemTable extends SystemTable {
             ConstantOperator value = binary.getChild(1).cast();
             switch (name.toUpperCase()) {
                 case "TABLE_NAME":
-                    params.setTable_name(value.getVarchar());
+                    params.setTable_name(PatternMatcher.escapeLikeValue(value.getVarchar()));
                     break;
                 case "TABLE_SCHEMA":
-                    authInfo.setPattern(value.getVarchar());
+                    authInfo.setPattern(PatternMatcher.escapeLikeValue(value.getVarchar()));
                     break;
                 default:
                     throw new NotImplementedException("unsupported column: " + name);

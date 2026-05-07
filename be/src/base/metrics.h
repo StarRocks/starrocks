@@ -226,7 +226,7 @@ template <typename T>
 class LockGauge : public LockSimpleMetric<T> {
 public:
     LockGauge(MetricUnit unit) : LockSimpleMetric<T>(MetricType::GAUGE, unit) {}
-    virtual ~LockGauge() = default;
+    ~LockGauge() override = default;
 };
 
 // one key-value pair used to

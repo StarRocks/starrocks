@@ -26,7 +26,7 @@
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/variant_encoder.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
@@ -1156,6 +1156,42 @@ PARALLEL_TEST(VariantColumnTest, test_try_get_row_ref_base_payload_only) {
     EXPECT_EQ(base.get_value(), row_ref.get_value());
 }
 
+PARALLEL_TEST(VariantColumnTest, test_serialize_uses_row_ref_fast_path) {
+    auto col = VariantColumn::create();
+    VariantRowValue base = create_variant_row_from_json_text(R"({"k":"v"})");
+    col->append(&base);
+
+    VariantRowRef row_ref;
+    ASSERT_TRUE(col->try_get_row_ref(0, &row_ref));
+
+    std::vector<uint8_t> row_ref_buf(row_ref.serialize_size(), 0);
+    std::vector<uint8_t> col_buf(col->serialize_size(0), 0);
+    ASSERT_EQ(row_ref.serialize_size(), col->serialize_size(0));
+    ASSERT_EQ(row_ref.serialize(row_ref_buf.data()), row_ref_buf.size());
+    ASSERT_EQ(col->serialize(0, col_buf.data()), col_buf.size());
+    EXPECT_EQ(row_ref_buf, col_buf);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_put_mysql_row_buffer_row_ref_fast_path) {
+    auto col = VariantColumn::create();
+    VariantRowValue base = create_variant_row_from_json_text(R"({"k":"v"})");
+    col->append(&base);
+
+    MysqlRowBuffer buf;
+    col->put_mysql_row_buffer(&buf, 0);
+    ASSERT_EQ(10, buf.data().size());
+    EXPECT_EQ(0x09, buf.data()[0]);
+    EXPECT_EQ(R"({"k":"v"})", buf.data().substr(1));
+}
+
+PARALLEL_TEST(VariantColumnTest, test_debug_item_row_ref_fast_path) {
+    auto col = VariantColumn::create();
+    VariantRowValue base = create_variant_row_from_json_text(R"({"k":"v"})");
+    col->append(&base);
+
+    EXPECT_EQ(R"({"k":"v"})", col->debug_item(0));
+}
+
 PARALLEL_TEST(VariantColumnTest, test_try_get_row_ref_returns_false_when_typed_overlay_exists) {
     auto col = VariantColumn::create();
     VariantRowValue base = create_variant_row_from_json_text(R"({"x":1})");
@@ -1180,6 +1216,112 @@ PARALLEL_TEST(VariantColumnTest, test_try_get_row_ref_returns_false_when_typed_o
     auto json = value_ptr->to_json();
     ASSERT_TRUE(json.ok());
     ASSERT_EQ(R"({"x":7})", json.value());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_row_ref_fast_path) {
+    auto lhs = VariantColumn::create();
+    auto rhs = VariantColumn::create();
+
+    VariantRowValue v1 = create_variant_row_from_json_text(R"({"a":1})");
+    VariantRowValue v2 = create_variant_row_from_json_text(R"({"a":2})");
+    VariantRowValue v3 = create_variant_row_from_json_text(R"({"a":3})");
+
+    lhs->append(&v1);
+    lhs->append(&v2);
+    rhs->append(&v1);
+    rhs->append(&v3);
+
+    ASSERT_EQ(1, lhs->equals(0, *rhs, 0, false));
+    ASSERT_EQ(0, lhs->equals(1, *rhs, 1, false));
+
+    ASSERT_EQ(0, lhs->compare_at(0, 0, *rhs, -1));
+    int cmp = lhs->compare_at(1, 1, *rhs, -1);
+    ASSERT_NE(0, cmp);
+    ASSERT_EQ(-cmp, rhs->compare_at(1, 1, *lhs, -1));
+}
+
+PARALLEL_TEST(VariantColumnTest, test_equals_row_ref_fast_path_unsafe_null) {
+    auto lhs = VariantColumn::create();
+    auto rhs = VariantColumn::create();
+
+    VariantRowValue null_row = VariantRowValue::from_null();
+    lhs->append(&null_row);
+    rhs->append(&null_row);
+
+    ASSERT_EQ(-1, lhs->equals(0, *rhs, 0, false));
+    ASSERT_EQ(1, lhs->equals(0, *rhs, 0, true));
+}
+
+PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_fallback_materialized_row) {
+    auto build_overlay_column = [](int64_t typed_value) {
+        auto col = VariantColumn::create();
+        VariantRowValue base = create_variant_row_from_json_text(R"({"x":1})");
+        std::string metadata(base.get_metadata().raw());
+        std::string value(base.get_value().raw());
+
+        MutableColumns typed;
+        typed.emplace_back(build_nullable_int64_column({typed_value}, {0}));
+        auto metadata_col = BinaryColumn::create();
+        auto remain_col = BinaryColumn::create();
+        metadata_col->append(metadata);
+        remain_col->append(value);
+        col->set_shredded_columns({"x"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata_col),
+                                  std::move(remain_col));
+        return col;
+    };
+
+    auto lhs = build_overlay_column(10);
+    auto rhs_equal = build_overlay_column(10);
+    auto rhs_diff = build_overlay_column(11);
+
+    VariantRowRef row_ref;
+    ASSERT_FALSE(lhs->try_get_row_ref(0, &row_ref));
+
+    ASSERT_EQ(1, lhs->equals(0, *rhs_equal, 0, false));
+    ASSERT_EQ(0, lhs->compare_at(0, 0, *rhs_equal, -1));
+
+    ASSERT_EQ(0, lhs->equals(0, *rhs_diff, 0, false));
+    int cmp = lhs->compare_at(0, 0, *rhs_diff, -1);
+    ASSERT_NE(0, cmp);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_semantic_numeric_across_encodings) {
+    auto lhs = VariantColumn::create();
+    auto rhs = VariantColumn::create();
+
+    const uint8_t int8_chars[] = {primitive_header(VariantType::INT8), 0x02};
+    const uint8_t int16_chars[] = {primitive_header(VariantType::INT16), 0x02, 0x00};
+    VariantRowValue v_int8(VariantMetadata::kEmptyMetadata,
+                           std::string_view(reinterpret_cast<const char*>(int8_chars), sizeof(int8_chars)));
+    VariantRowValue v_int16(VariantMetadata::kEmptyMetadata,
+                            std::string_view(reinterpret_cast<const char*>(int16_chars), sizeof(int16_chars)));
+
+    lhs->append(&v_int8);
+    rhs->append(&v_int16);
+
+    ASSERT_EQ(1, lhs->equals(0, *rhs, 0, false));
+    ASSERT_EQ(0, lhs->compare_at(0, 0, *rhs, -1));
+}
+
+PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_invalid_metadata_fallback_stable) {
+    auto lhs = VariantColumn::create();
+    auto rhs = VariantColumn::create();
+
+    std::string invalid_type_one;
+    std::string invalid_type_two;
+    invalid_type_one.push_back(static_cast<char>((63u << VariantValue::kValueHeaderBitShift)));
+    invalid_type_one.push_back(static_cast<char>(1));
+    invalid_type_two.push_back(static_cast<char>((63u << VariantValue::kValueHeaderBitShift)));
+    invalid_type_two.push_back(static_cast<char>(2));
+    VariantRowValue v1(VariantMetadata::kEmptyMetadata, invalid_type_one);
+    VariantRowValue v2(VariantMetadata::kEmptyMetadata, invalid_type_two);
+
+    lhs->append(&v1);
+    rhs->append(&v2);
+
+    ASSERT_EQ(0, lhs->equals(0, *rhs, 0, false));
+    ASSERT_LT(lhs->compare_at(0, 0, *rhs, -1), 0);
+    ASSERT_GT(rhs->compare_at(0, 0, *lhs, -1), 0);
 }
 
 } // namespace starrocks

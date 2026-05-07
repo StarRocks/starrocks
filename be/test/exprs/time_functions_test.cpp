@@ -1591,6 +1591,37 @@ TEST_F(TimeFunctionsTest, str_to_date_of_datetimeformat) {
     }
 }
 
+TEST_F(TimeFunctionsTest, str_to_date_microsecond) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    const char* fmt = "%Y-%m-%dT%H:%i:%s.%f";
+    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    // const fmt <=> non-const input (simulates Routine Load / Stream Load column mapping)
+    {
+        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt, 1);
+        (void)str_col->append_nulls(1);
+        str_col->append_datum(Slice("2026-02-09T00:15:01.535569"));
+        str_col->append_datum(Slice("2026-02-09T12:30:45.123"));
+        str_col->append_datum(Slice("2026-02-09T12:30:45.000000"));
+
+        Columns columns;
+        columns.emplace_back(str_col);
+        columns.emplace_back(fmt_col);
+
+        ColumnPtr result = TimeFunctions::str_to_date(ctx, columns).value();
+        ASSERT_TRUE(result->is_nullable());
+
+        auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(4, nullable_col->size());
+        ASSERT_TRUE(nullable_col->is_null(0));
+        ASSERT_EQ(TimestampValue::create(2026, 2, 9, 0, 15, 1, 535569), nullable_col->get(1).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2026, 2, 9, 12, 30, 45, 123000), nullable_col->get(2).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2026, 2, 9, 12, 30, 45, 0), nullable_col->get(3).get_timestamp());
+    }
+}
+
 TEST_F(TimeFunctionsTest, date_format) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
@@ -4715,14 +4746,14 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
-        int_value->append_datum(0L);
-        int_value->append_datum(1L);
-        int_value->append_datum(60L);
-        int_value->append_datum(3600L);
-        int_value->append_datum(36000L);
-        int_value->append_datum(86399L);
-        int_value->append_datum(3024000L);
-        int_value->append_datum(4000000L);
+        int_value->append_datum(Datum(int64_t(0)));
+        int_value->append_datum(Datum(int64_t(1)));
+        int_value->append_datum(Datum(int64_t(60)));
+        int_value->append_datum(Datum(int64_t(3600)));
+        int_value->append_datum(Datum(int64_t(36000)));
+        int_value->append_datum(Datum(int64_t(86399)));
+        int_value->append_datum(Datum(int64_t(3024000)));
+        int_value->append_datum(Datum(int64_t(4000000)));
 
         Columns columns;
         columns.emplace_back(int_value);
@@ -4743,14 +4774,14 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
-        int_value->append_datum(-0L);
-        int_value->append_datum(-1L);
-        int_value->append_datum(-60L);
-        int_value->append_datum(-3600L);
-        int_value->append_datum(-36000L);
-        int_value->append_datum(-86399L);
-        int_value->append_datum(-3024000L);
-        int_value->append_datum(-4000000L);
+        int_value->append_datum(Datum(int64_t(0)));
+        int_value->append_datum(Datum(int64_t(-1)));
+        int_value->append_datum(Datum(int64_t(-60)));
+        int_value->append_datum(Datum(int64_t(-3600)));
+        int_value->append_datum(Datum(int64_t(-36000)));
+        int_value->append_datum(Datum(int64_t(-86399)));
+        int_value->append_datum(Datum(int64_t(-3024000)));
+        int_value->append_datum(Datum(int64_t(-4000000)));
 
         Columns columns;
         columns.emplace_back(int_value);

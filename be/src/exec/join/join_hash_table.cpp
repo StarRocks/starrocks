@@ -22,15 +22,14 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/stack_util.h"
 #include "common/statusor.h"
 #include "common/system/cpu_info.h"
-#include "exec/hash_join_node.h"
 #include "exec/join/join_hash_map_method.h"
 #include "exec/join/join_key_constructor.h"
+#include "exprs/column_ref.h"
 #include "runtime/descriptors.h"
-#include "serde/column_array_serde.h"
 #include "types/logical_type_infra.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -724,7 +723,7 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
         if (!columns[i]->is_nullable() && !columns[i]->is_view() && column->is_nullable()) {
             // upgrade to nullable column
             size_t col_size = columns[i]->size();
-            columns[i] = NullableColumn::create(std::move(columns[i]), NullColumn::create(col_size, 0));
+            columns[i] = NullableColumn::create(columns[i], NullColumn::create(col_size, 0));
         }
         columns[i]->as_mutable_raw_ptr()->append(*column);
         FAIL_POINT_TRIGGER_EXECUTE(hash_join_append_bad_alloc, {
@@ -781,7 +780,12 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
                 const size_t row_count = key_columns[i]->size();
                 key_columns[i] = NullableColumn::create(key_columns[i], NullColumn::create(row_count, 0));
             }
-            key_columns[i]->as_mutable_raw_ptr()->append(*other_key_columns[i]);
+            // Skip the dummy row at index 0 (same as build column merge above).
+            // other_sz == 1 means the other partition only had the dummy row and no real rows.
+            const size_t other_sz = other_key_columns[i]->size();
+            if (other_sz > 1) {
+                key_columns[i]->as_mutable_raw_ptr()->append(*other_key_columns[i], 1, other_sz - 1);
+            }
         }
     }
     defer.cancel();

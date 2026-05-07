@@ -25,7 +25,8 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
@@ -69,6 +70,7 @@ protected:
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
+    TupleDescriptor* _create_tuple_desc_with_nullable(SlotDesc* descs, bool nullable);
 
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
@@ -90,7 +92,8 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     if (timezone != "") {
         query_globals.__set_time_zone(timezone);
     }
-    _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
+    _runtime_state =
+            _pool.add(new RuntimeState(fragment_id, query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
     _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
     _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
     _runtime_state->init_instance_mem_tracker();
@@ -152,7 +155,7 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
                                               bool diff_case_sensitive) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
-        std::string col_name = slot->col_name();
+        std::string col_name(slot->col_name());
         if (diff_case_sensitive && std::isupper(col_name[0])) {
             std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::tolower);
         } else if (diff_case_sensitive && std::islower(col_name[0])) {
@@ -164,12 +167,16 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
 }
 
 TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
+    return _create_tuple_desc_with_nullable(descs, true);
+}
+
+TupleDescriptor* HdfsScannerTest::_create_tuple_desc_with_nullable(SlotDesc* descs, bool nullable) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     TTupleDescriptorBuilder tuple_desc_builder;
     int slot_id = 0;
     while (descs->name != "") {
-        slot_desc_builder.column_name(descs->name).type(descs->type).id(slot_id).nullable(true);
+        slot_desc_builder.column_name(descs->name).type(descs->type).id(slot_id).nullable(nullable);
         tuple_desc_builder.add_slot(slot_desc_builder.build());
         descs += 1;
         slot_id += 1;
@@ -258,6 +265,81 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     ASSERT_TRUE(status.is_end_of_file());
 
     scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[1]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[42, NULL]", chunk->debug_row(0));
+}
+
+// Empty string defaults should be preserved for string columns.
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("['']", chunk->debug_row(0));
+}
+
+// Empty string defaults should also work for non-nullable string columns.
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
+    auto* tuple_desc = _create_tuple_desc_with_nullable(descs, false);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("['']", chunk->debug_row(0));
+}
+
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    EXPECT_FALSE(status.ok());
+}
+
+TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMicros) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.is_first_split = true;
+
+    TExprMinMaxValue min_max_value;
+    min_max_value.__set_type(TExprNodeType::INT_LITERAL);
+    min_max_value.__set_has_null(false);
+    min_max_value.__set_all_null(false);
+    min_max_value.__set_min_int_value(-1);
+    min_max_value.__set_max_int_value(0);
+
+    auto col = ctx.create_min_max_value_column(tuple_desc->slots()[0], min_max_value, 2);
+    ASSERT_EQ(2, col->size());
+    EXPECT_EQ("1969-12-31 23:59:59.999999", col->debug_item(0));
+    EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
 }
 
 // ========================= ORC SCANNER ============================

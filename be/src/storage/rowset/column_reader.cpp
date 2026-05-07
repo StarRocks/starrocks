@@ -46,7 +46,7 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -61,6 +61,7 @@
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -80,7 +81,6 @@
 #include "storage/types.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
@@ -242,6 +242,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(3);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
@@ -263,6 +264,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(2);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
@@ -563,13 +565,7 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
     return success_once(
                    _inverted_index_load_once,
                    [&]() {
-                       LogicalType type;
-                       if (_column_type == LogicalType::TYPE_ARRAY) {
-                           type = _column_child_type;
-                       } else {
-                           type = _column_type;
-                       }
-
+                       LogicalType type = _column_type;
                        ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
                        std::string index_path = IndexDescriptor::inverted_index_file_path(
                                opts.rowset_path, opts.rowsetid.to_string(), _segment->id(), index_meta->index_id());

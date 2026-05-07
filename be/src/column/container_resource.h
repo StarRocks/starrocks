@@ -29,8 +29,7 @@ public:
     ContainerResource(const std::shared_ptr<T>& handle, const void* data, size_t length)
             : _owner(std::static_pointer_cast<void>(handle)), _data(data), _length(length) {}
 
-    ContainerResource(const ContainerResource& other)
-            : _owner(other._owner), _data(other._data), _length(other._length) {}
+    ContainerResource(const ContainerResource& other) = default;
 
     ContainerResource& operator=(const ContainerResource& other) {
         if (this != &other) {

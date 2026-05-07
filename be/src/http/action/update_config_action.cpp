@@ -47,9 +47,11 @@
 #include "cache/datacache_utils.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
 #include "exec/workgroup/scan_executor.h"
 #include "gutil/strings/substitute.h"
@@ -59,6 +61,7 @@
 #include "http/http_status.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/txn_state_cache.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
@@ -73,7 +76,6 @@
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
 #include "common/gflags_utils.h"
@@ -242,6 +244,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
                                                             config::transaction_publish_version_thread_pool_num_min));
         });
+        _config_callback.emplace("lake_metadata_fetch_thread_count", [&]() -> Status {
+            if (_exec_env->lake_metadata_fetch_thread_pool() != nullptr) {
+                return _exec_env->lake_metadata_fetch_thread_pool()->update_max_threads(
+                        std::max(1, config::lake_metadata_fetch_thread_count));
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
@@ -291,6 +300,17 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto thread_pool = _exec_env->pk_index_execution_thread_pool();
             if (thread_pool != nullptr) {
                 return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("lake_partial_update_thread_pool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->lake_partial_update_thread_pool();
+            if (thread_pool != nullptr) {
+                int max_thread_count = config::lake_partial_update_thread_pool_max_threads;
+                if (max_thread_count <= 0) {
+                    max_thread_count = CpuInfo::num_cores() / 2;
+                }
+                return thread_pool->update_max_threads(std::max(1, max_thread_count));
             }
             return Status::OK();
         });
@@ -433,13 +453,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
 
 #ifdef USE_STAROS
-#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                             \
-    _config_callback.emplace(#BE_CONFIG, [value]() {                                                 \
-        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
-            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
-            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");     \
-        }                                                                                            \
-        return Status::OK();                                                                         \
+#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                           \
+    _config_callback.emplace(#BE_CONFIG, [&]() {                                                   \
+        auto val = std::to_string(config::BE_CONFIG);                                              \
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, val).empty()) { \
+            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                \
+            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");   \
+        }                                                                                          \
+        return Status::OK();                                                                       \
     });
 
         UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);

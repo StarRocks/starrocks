@@ -23,7 +23,7 @@
 #include "column/column_visitor_mutable.h"
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
-#include "common/config_cow.h"
+#include "common/config_cow_fwd.h"
 #include "common/cow.h"
 #include "common/delete_condition.h" // for DelCondSatisfied
 #include "common/memory/column_allocator.h"
@@ -68,7 +68,7 @@ public:
     static const int EQUALS_NULL = -1;
     static const int EQUALS_TRUE = 1;
 
-    virtual ~Column() = default;
+    ~Column() override = default;
 
     // If true means this is a null literal column
     virtual bool only_null() const { return false; }
@@ -112,12 +112,6 @@ public:
     virtual bool is_map() const { return false; }
 
     virtual bool is_struct() const { return false; }
-
-    virtual const uint8_t* raw_data() const = 0;
-
-    virtual uint8_t* mutable_raw_data() = 0;
-
-    virtual const uint8_t* continuous_data() const { return raw_data(); }
 
     // Return number of values in column.
     virtual size_t size() const = 0;

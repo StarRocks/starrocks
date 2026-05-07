@@ -657,6 +657,10 @@ const char* getTimezoneDirectory() {
    * Get a timezone by absolute filename.
    * Results are cached.
    */
+#ifdef __clang__
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wthread-safety-negative")
+#endif
 const Timezone& getTimezoneByFilename(const std::string& filename) {
     // ORC-110
     std::lock_guard<std::mutex> timezone_lock(timezone_mutex);
@@ -675,6 +679,9 @@ const Timezone& getTimezoneByFilename(const std::string& filename) {
     }
     return *timezoneCache[filename].get();
 }
+#ifdef __clang__
+DIAGNOSTIC_POP
+#endif
 
 /**
    * Get the local timezone.

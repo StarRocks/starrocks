@@ -26,10 +26,9 @@
 #include "base/utility/defer_op.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
@@ -207,7 +206,7 @@ public:
             auto chunk = ChunkHelper::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
             auto cols = chunk->mutable_columns();
-            for (long key : keys) {
+            for (int64_t key : keys) {
                 cols[0]->append_datum(Datum(key));
                 cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
             }

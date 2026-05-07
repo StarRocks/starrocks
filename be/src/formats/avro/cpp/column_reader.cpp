@@ -22,7 +22,7 @@
 
 namespace starrocks::avrocpp {
 
-ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string& col_name,
+ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string_view col_name,
                                                                const TypeDescriptor& type_desc,
                                                                const cctz::time_zone& timezone, bool invalid_as_null) {
     ColumnReaderUniquePtr reader = nullptr;
@@ -81,6 +81,7 @@ ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string
 
     case TYPE_STRUCT: {
         std::vector<ColumnReaderUniquePtr> field_readers;
+        field_readers.reserve(type_desc.children.size());
         for (size_t i = 0; i < type_desc.children.size(); ++i) {
             field_readers.emplace_back(get_nullable_column_reader(type_desc.field_names[i], type_desc.children[i],
                                                                   timezone, invalid_as_null));

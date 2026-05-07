@@ -18,6 +18,7 @@
 #include "exprs/expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "runtime/descriptors_ext.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -142,7 +143,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
             if (pred->is_not_in()) {                                                          \
                 continue;                                                                     \
             }                                                                                 \
-            auto& field_name = iter->second->col_name();                                      \
+            auto field_name = std::string(iter->second->col_name());                          \
             filters_null_in_set[field_name] = pred->null_in_set();                            \
             std::vector<std::string> vector_values;                                           \
             vector_values.reserve(1024);                                                      \

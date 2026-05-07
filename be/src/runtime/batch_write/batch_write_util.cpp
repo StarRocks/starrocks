@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_merge_commit_fwd.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
 
@@ -57,7 +57,8 @@ const std::vector<std::string> LOAD_PARAMETER_NAMES = {HTTP_FORMAT_KEY,
                                                        HTTP_ESCAPE,
                                                        HTTP_JSONPATHS,
                                                        HTTP_JSONROOT,
-                                                       HTTP_STRIP_OUTER_ARRAY};
+                                                       HTTP_STRIP_OUTER_ARRAY,
+                                                       HTTP_ENVELOPE};
 
 std::ostream& operator<<(std::ostream& out, const BatchWriteId& id) {
     out << "db: " << id.db << ", table: " << id.table << ", load_params: {";

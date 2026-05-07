@@ -21,6 +21,7 @@
 #include <queue>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
@@ -34,11 +35,12 @@
 #include "exec/spill/partition.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spill_components.h"
+#include "exec/spill/spill_metrics.h"
 #include "exec/spill/spiller_factory.h"
 #include "fs/fs.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
-#include "util/compression/block_compression.h"
+#include "runtime/runtime_state_fwd.h"
 
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
 
@@ -48,6 +50,8 @@
     }
 
 namespace starrocks::spill {
+
+TQueryType::type spill_query_type(RuntimeState* state);
 
 // some metrics for spill
 struct SpillProcessMetrics {
@@ -138,6 +142,17 @@ public:
     RuntimeProfile::Counter* skew_mem_table_output_rows = nullptr;
     RuntimeProfile::Counter* skew_mem_table_input_bytes = nullptr;
     RuntimeProfile::Counter* skew_mem_table_output_bytes = nullptr;
+
+    // Server-level counters pre-resolved in the SpillProcessMetrics
+    // constructor so the pointers travel with the value (operators may
+    // reassign SpillProcessMetrics via Spiller::set_metrics after prepare,
+    // which would lose pointers cached on Spiller itself). Stable for the
+    // lifetime of SpillMetrics; callers use `global(is_remote)`
+    // and skip updates when null (e.g. in unit tests without a registry).
+    SpillMetrics::LabeledCounters* global_local = nullptr;
+    SpillMetrics::LabeledCounters* global_remote = nullptr;
+
+    SpillMetrics::LabeledCounters* global(bool is_remote) const { return is_remote ? global_remote : global_local; }
 };
 
 // major spill interfaces
@@ -244,6 +259,12 @@ public:
     BlockManager* block_manager() { return _block_manager; }
     const ChunkBuilder& chunk_builder() { return _chunk_builder; }
 
+    // Shared flag used to bump the global query_spill_trigger_total
+    // counter at most once per Spiller instance. Lives on Spiller itself
+    // (not SpillProcessMetrics) because std::atomic_bool would break
+    // SpillProcessMetrics copy-assignment in set_metrics().
+    std::atomic_bool& global_spill_triggered() { return _global_spill_triggered; }
+
     Status reset_state(RuntimeState* state);
 
     size_t max_sorted_block_cnt() const { return _max_sorted_block_cnt; }
@@ -281,6 +302,7 @@ private:
     spill::BlockManager* _block_manager = nullptr;
     size_t _max_sorted_block_cnt = 0;
     std::atomic_bool _is_cancel = false;
+    std::atomic_bool _global_spill_triggered{false};
 };
 
 } // namespace starrocks::spill

@@ -56,7 +56,7 @@ public:
                                     std::unique_ptr<LoadSpillPipelineMergeTask> task, const Schema* schema,
                                     std::atomic<bool>* quit_flag, RuntimeProfile::Counter* write_io_timer);
 
-    ~TabletInternalParallelMergeTask();
+    ~TabletInternalParallelMergeTask() override;
 
     /**
      * Executes merge: reads from task's iterator, writes to writer.

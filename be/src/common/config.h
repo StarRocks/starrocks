@@ -34,10 +34,16 @@
 
 #pragma once
 
-#include "config_cow.h"
 #include "configbase.h"
 
 namespace starrocks::config {
+// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing
+// columns.
+CONF_mBool(enable_cow_optimization, "true");
+// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means
+// diagnose when use_count > 2.
+CONF_Int32(cow_optimization_diagnose_level, "0");
+
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
@@ -210,6 +216,11 @@ CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 CONF_mInt64(lake_replication_slow_log_ms, "30000");
 // The buffer size used for reading remote data during lake replication
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
+// Maximum retry count for non-segment file copy during lake-to-lake replication
+CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+// Minimum number of files required to enable parallel copy in lake-to-lake replication.
+// Set to 0 to force disable parallel copy.
+CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -253,6 +264,8 @@ CONF_Bool(compress_rowbatches, "true");
 // Compress ratio when shuffle row_batches in network, not in storage engine.
 // If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+// If true, skip compression when serialized_size exceeds the codec's max input size limit (instead of returning an error).
+CONF_mBool(enable_rpc_compress_overflow_skip, "true");
 // Acceleration of LZ4 Compression, the larger the acceleration value, the faster the algorithm, but also the lesser the compression.
 // Default 1, MIN=1, MAX=65537
 CONF_mInt32(lz4_acceleration, "1");
@@ -305,6 +318,13 @@ CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
+// Row interval between consecutive sort-key samples recorded by the segment
+// writer. Samples are consumed by tablet split and range-split parallel
+// compaction to accurately estimate row distribution for overlapping segments.
+// Setting to 0 disables sampling. The per-segment value is persisted in
+// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
+// does not break cross-version readers.
+CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
@@ -466,6 +486,11 @@ CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
+// Max threads for lake partial update segment-level parallelism.
+// <= 0 means use half of CPU core count. Runtime on/off is controlled by enable_pk_index_parallel_execution.
+CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
+// Queue size for the lake partial update threadpool.
+CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
@@ -748,6 +773,19 @@ CONF_mInt32(retry_apply_timeout_second, "7200");
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
 
+// Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
+// When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
+// significantly increase the overhead of get_tablet_stats RPC.
+// When disabled, the approximate num_dels field stored in rowset metadata is used,
+// which avoids remote I/O but may slightly overcount rows that are deleted but not yet compacted.
+CONF_mBool(lake_enable_accurate_pk_row_count, "true");
+
+// Threshold in milliseconds for logging slow tablet stat collection tasks.
+// When a single tablet stat task takes longer than this threshold, a warning log is emitted
+// with diagnostic info (tablet_id, version, rowset count, accurate_mode, elapsed time).
+// Default is 5 minutes (300000 ms).
+CONF_mInt64(lake_tablet_stat_slow_log_ms, "300000");
+
 // Result buffer cancelled time (unit: second).
 CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 
@@ -979,7 +1017,7 @@ CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
 CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
 
 // whether to enable large column detection in the pipeline execution framework.
-CONF_mBool(pipeline_enable_large_column_checker, "false");
+CONF_mBool(pipeline_enable_large_column_checker, "true");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
@@ -997,6 +1035,8 @@ CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
+// The number of threads for automatic partition thread pool. Queue size is 10x thread count.
+CONF_Int64(automatic_partition_thread_pool_thread_num, "1000");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
@@ -1291,7 +1331,6 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
-CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
@@ -1300,6 +1339,11 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Enable cleanup of orphan delvec entries during compaction.
+// Orphan delvecs are leaked metadata entries from a historical bug that reference
+// non-existent segments and prevent delvec file garbage collection.
+// Turn this on after upgrade to clean up existing orphans, then turn it off once done.
+CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
@@ -1322,7 +1366,8 @@ CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
-
+// The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
+CONF_mInt32(lake_metadata_fetch_thread_count, "3");
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
 // A comma-separated list of debug contexts to enable.
@@ -1354,6 +1399,15 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
+// Maximum lifetime of a connection in the JDBC connection pool (ms).
+// Minimum allowed value is 30000 (30 seconds). Default: 300000 (5 minutes).
+CONF_Int64(jdbc_connection_max_lifetime_ms, "300000");
+// Keepalive interval for idle JDBC connections (ms).
+// Idle connections are tested at this interval to detect stale connections proactively.
+// Set to 0 to disable keepalive probing.
+// When enabled, must be >= 30000 and < jdbc_connection_max_lifetime_ms.
+// Invalid enabled values are silently disabled (reset to 0). Default: 30000 (30 seconds).
+CONF_Int64(jdbc_connection_keepalive_time_ms, "30000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
@@ -1489,12 +1543,15 @@ CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
 CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
-// max wal file size in l0
-CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
-CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
-CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
+// max wal file size in l0, 200MB
+CONF_mInt64(l0_max_file_size, "209715200");
+// 2MB
+CONF_mInt64(l0_min_mem_usage, "2097152");
+// 100MB
+CONF_mInt64(l0_max_mem_usage, "104857600");
 // if l0_mem_size exceeds this value, l0 need snapshot
-CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
+// 16MB
+CONF_mInt64(l0_snapshot_size, "16777216");
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "false");
 // Control if using the minor compaction strategy
@@ -1585,6 +1642,8 @@ CONF_Int64(rocksdb_max_write_buffer_memory_bytes, "1073741824");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
+// limit local exchange buffer size by dop * local_exchange_buffer_mem_limit_per_driver for union operators.
+CONF_mBool(local_exchange_buffer_mem_limit_by_consumer_dop, "true");
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 // mem limit for partition hash join probe side buffer
@@ -1661,6 +1720,10 @@ CONF_mInt32(desc_hint_split_range, "10");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
+
+// If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
+// If set to false, skip LIST and use approximate tablet size (base_size=0).
+CONF_mBool(allow_list_object_for_random_bucketing_on_cache_miss, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
@@ -1761,7 +1824,6 @@ CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
-CONF_mBool(skip_pk_preload, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:
@@ -1792,7 +1854,13 @@ CONF_mBool(enable_vector_index_block_cache, "true");
 CONF_mInt32(config_vector_index_build_concurrency, "8");
 
 // default not to build the empty index
-CONF_mInt32(config_vector_index_default_build_threshold, "100");
+CONF_mInt32(config_vector_index_default_build_threshold, "10000");
+
+// Maximum fraction of CPU cores that vector index build targets to use.
+// Effective pool_size * omp_threads is sized from nproc * this value, but a minimum
+// budget of 2 is enforced, so on small-core machines or with small ratios the effective
+// value may exceed nproc * this value.
+CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
 
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.
@@ -1814,6 +1882,9 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
 // for now, only support non-pk LAKE compaction in size tierd compaction.
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// If turned on, parallel compaction will split by sort key range instead of segment index.
+// This produces non-overlapping output rowsets, improving subsequent query performance.
+CONF_mBool(enable_lake_compaction_range_split, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 
@@ -1919,6 +1990,8 @@ CONF_Int32(llm_max_concurrent_queries, "8");
 CONF_Int32(llm_cache_size, "131072");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+// When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.
+CONF_mBool(enable_lock_free_scan_task_queue, "true");
 
 // used by global late materialization, may be removed in the future
 CONF_mInt64(fetch_max_buffer_chunk_num, "8");

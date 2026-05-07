@@ -125,8 +125,6 @@ struct DeltaWriterStat {
     std::atomic_int64_t commit_wait_flush_time_ns = 0;
     // Time to build rowset in commit()
     std::atomic_int64_t commit_rowset_build_time_ns = 0;
-    // Time to deal with primary key in commit() which may load data from disk
-    std::atomic_int64_t commit_pk_preload_time_ns = 0;
     // Time to wait for replica sync in commit()
     std::atomic_int64_t commit_wait_replica_time_ns = 0;
     // Time to commit txn in commit()
@@ -252,7 +250,7 @@ private:
 
     void _set_state(State state, const Status& st);
 
-    State _state;
+    State _state{kUninitialized};
     Status _err_status;
     mutable std::mutex _state_lock;
 
@@ -264,7 +262,7 @@ private:
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    bool _schema_initialized;
+    bool _schema_initialized{false};
     Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
@@ -276,7 +274,7 @@ private:
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     std::unique_ptr<SegmentFlushToken> _segment_flush_token;
-    bool _with_rollback_log;
+    bool _with_rollback_log{true};
     // initial value is max value
     size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
     bool _partial_schema_with_sort_key_conflict = false;

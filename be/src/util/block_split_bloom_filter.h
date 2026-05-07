@@ -47,7 +47,7 @@ class BlockSplitBloomFilter : public BloomFilter {
 public:
     BlockSplitBloomFilter() = default;
 
-    virtual ~BlockSplitBloomFilter() = default;
+    ~BlockSplitBloomFilter() override = default;
 
     void add_hash(uint64_t hash) override;
 

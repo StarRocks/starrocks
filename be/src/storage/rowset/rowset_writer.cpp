@@ -43,7 +43,10 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
@@ -307,7 +310,10 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     // 3. update statistic
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_pb.data_size();
+        // segment_pb.data_size() is full segment file bytes (column data + embedded index pages).
+        // Subtract embedded index so _total_data_size holds only column data bytes;
+        // invariant: data_disk_size + index_disk_size == total_disk_size == segment file size.
+        _total_data_size += segment_pb.data_size() - segment_pb.index_size();
         _total_index_size += segment_pb.index_size();
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
@@ -753,7 +759,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
     }
 }
 
-Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
+Status HorizontalRowsetWriter::add_rowset(const RowsetSharedPtr& rowset) {
     RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
@@ -766,7 +772,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     auto& meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (meta_pb.segment_encryption_metas_size() == 0) {
         for (int i = 0; i < rowset->num_segments(); ++i) {
-            _segment_encryption_metas.emplace_back(string());
+            _segment_encryption_metas.emplace_back();
         }
     } else {
         DCHECK_EQ(meta_pb.segment_encryption_metas_size(), rowset->num_segments());
@@ -786,7 +792,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     return Status::OK();
 }
 
-Status HorizontalRowsetWriter::add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
+Status HorizontalRowsetWriter::add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
                                                                    const SchemaMapping& schema_mapping) {
     // TODO use schema_mapping to transfer zonemap
     return add_rowset(rowset);
@@ -1170,7 +1176,9 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     }
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += static_cast<int64_t>(segment_size);
+        // segment_size is full segment file bytes; subtract index_size so
+        // _total_data_size holds only column data bytes.
+        _total_data_size += static_cast<int64_t>(segment_size) - static_cast<int64_t>(index_size);
         _total_index_size += static_cast<int64_t>(index_size);
     }
 
@@ -1345,6 +1353,7 @@ Status VerticalRowsetWriter::flush_columns() {
 }
 
 Status VerticalRowsetWriter::final_flush() {
+    int64_t total_segment_file_bytes = 0;
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -1357,15 +1366,18 @@ Status VerticalRowsetWriter::final_flush() {
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);
         }
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += static_cast<int64_t>(segment_size);
-        }
+        total_segment_file_bytes += static_cast<int64_t>(segment_size);
 
         // check global_dict efficacy
         _check_global_dict(segment_writer.get());
 
         segment_writer.reset();
+    }
+    {
+        // _total_index_size was accumulated in _flush_columns() via finalize_columns().
+        // Match horizontal RowsetWriter::flush: data_disk_size is column bytes only (segment file minus embedded index).
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += total_segment_file_bytes - _total_index_size;
     }
     return Status::OK();
 }

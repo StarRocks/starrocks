@@ -39,6 +39,8 @@
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TSocket.h>
 
+#include <cinttypes>
+#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
@@ -47,7 +49,10 @@
 #include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/configbase.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"
@@ -90,7 +95,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
-#include "util/global_metrics_registry.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -117,11 +121,12 @@ using starrocks::ColumnIndexTypePB;
 using starrocks::OrdinalIndexReader;
 
 DEFINE_string(root_path, "", "storage root path");
-DEFINE_string(operation, "",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
-              "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap, "
-              "dump_lake_persistent_index_sst");
+DEFINE_string(
+        operation, "",
+        "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
+        "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
+        "print_lake_bundle_metadata, print_lake_txn_log, print_lake_combined_txn_log, print_lake_schema, dump_zonemap, "
+        "dump_lake_persistent_index_sst, dump_page_footer");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -180,6 +185,8 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=show_meta --pb_meta_path=<path>
     dump_ordinal_index:
       {progname} --operation=dump_ordinal_index --file=</path/to/segment/file> --column_index=<column index>
+    dump_page_footer:
+      {progname} --operation=dump_page_footer --file=</path/to/segment/file> --column_index=<column index>
     verify_page_checksum:
       {progname} --operation=verify_page_checksum --file=</path/to/segment/file> --page_offset=<page offset> --page_size=<page size>
     show_segment_footer:
@@ -206,6 +213,8 @@ std::string get_usage(const std::string& progname) {
       cat <tablet_meta_file.meta> | {progname} --operation=print_lake_bundle_metadata
     print_lake_txn_log:
       cat <tablet_transaction_log_file.log> | {progname} --operation=print_lake_txn_log
+    print_lake_combined_txn_log:
+      cat <combined_txn_log_file.log> | {progname} --operation=print_lake_combined_txn_log
     print_lake_schema:
       cat <tablet_schema_file> | {progname} --operation=print_lake_schema
     lake_datafile_gc:
@@ -601,9 +610,10 @@ void list_meta(DataDir* data_dir) {
            "pending_rowset_meta_bytes");
     for (auto& e : stats.tablets) {
         auto& st = e.second;
-        printf("%8ld %8ld %18zu %4zu %16zu %8zu %18zu %6zu %18lu %18lu %26lu\n", st.table_id, st.tablet_id,
-               st.tablet_meta_bytes, st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes,
-               st.rowset_count, st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
+        printf("%8" PRId64 " %8" PRId64 " %18zu %4zu %16zu %8zu %18zu %6zu %18zu %18zu %26zu\n",
+               static_cast<int64_t>(st.table_id), static_cast<int64_t>(st.tablet_id), st.tablet_meta_bytes,
+               st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes, st.rowset_count,
+               st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
     }
     printf("  Total KV: %zu Bytes: %zu Tablets: %zu (PK: %zu Other: %zu) Error: %zu\n", stats.total_count,
            stats.total_meta_bytes, stats.tablets.size(), stats.update_tablet_count, stats.tablet_count,
@@ -883,6 +893,111 @@ void dump_ordinal_index(const std::string& file_name, const int32_t column_index
     }
 }
 
+void dump_page_footer_at(RandomAccessFile* input_file, const PagePointer& pp, const std::string& label,
+                         size_t* num_values, size_t* uncompressed_size) {
+    if (pp.size < 8) {
+        std::cout << label << ": page too small (" << pp.size << " bytes)" << std::endl;
+        return;
+    }
+    std::unique_ptr<char[]> buf(new char[pp.size]);
+    auto st = input_file->read_at_fully(pp.offset, buf.get(), pp.size);
+    if (!st.ok()) {
+        std::cout << label << ": read failed: " << st << std::endl;
+        return;
+    }
+    // Page layout: [body | PageFooterPB | footer_size(4 bytes) | checksum(4 bytes)]
+    uint32_t footer_size = starrocks::decode_fixed32_le((uint8_t*)buf.get() + pp.size - 8);
+    uint32_t footer_offset = pp.size - 8 - footer_size;
+    PageFooterPB footer;
+    if (!footer.ParseFromArray(buf.get() + footer_offset, footer_size)) {
+        std::cout << label << ": failed to parse PageFooterPB" << std::endl;
+        return;
+    }
+    if (num_values != nullptr) {
+        *num_values = footer.data_page_footer().num_values();
+    }
+    if (uncompressed_size != nullptr) {
+        *uncompressed_size = footer.uncompressed_size();
+    }
+    std::string json;
+    json2pb::Pb2JsonOptions json_options;
+    json_options.pretty_json = true;
+    json2pb::ProtoMessageToJson(footer, &json, json_options);
+    std::cout << label << ": offset=" << pp.offset << " size=" << pp.size << std::endl;
+    std::cout << json << std::endl;
+}
+
+void dump_page_footer(const std::string& file_name, int32_t column_index) {
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
+        return;
+    }
+    auto input_file = std::move(res).value();
+    SegmentFooterPB footer;
+    auto status = get_segment_footer(input_file.get(), &footer);
+    if (!status.ok()) {
+        std::cout << "get footer failed: " << status.to_string() << std::endl;
+        return;
+    }
+
+    if (column_index < 0 || column_index >= footer.columns_size()) {
+        std::cout << "invalid column_index " << column_index << ", segment has " << footer.columns_size() << " columns"
+                  << std::endl;
+        return;
+    }
+
+    const ColumnMetaPB& column_meta = footer.columns(column_index);
+    std::cout << "Column " << column_index << ": type=" << column_meta.type()
+              << " encoding=" << EncodingTypePB_Name(column_meta.encoding())
+              << " compression=" << CompressionTypePB_Name(column_meta.compression())
+              << " num_rows=" << column_meta.num_rows() << std::endl;
+
+    // Dump dictionary page footer if present
+    if (column_meta.has_dict_page()) {
+        PagePointer dict_pp(column_meta.dict_page());
+        dump_page_footer_at(input_file.get(), dict_pp, "DICT_PAGE", nullptr, nullptr);
+    }
+
+    size_t page_total_bytes = 0;
+    size_t page_total_values = 0;
+    size_t page_total_uncompressed_size = 0;
+    // Load ordinal index and dump each data page footer
+    for (const auto& index_meta : column_meta.indexes()) {
+        if (index_meta.type() != ColumnIndexTypePB::ORDINAL_INDEX) {
+            continue;
+        }
+        const OrdinalIndexPB& ordinal_index_meta = index_meta.ordinal_index();
+        auto reader = std::make_unique<OrdinalIndexReader>();
+        starrocks::IndexReadOptions opts;
+        starrocks::OlapReaderStatistics stats;
+        opts.use_page_cache = false;
+        opts.read_file = input_file.get();
+        opts.stats = &stats;
+
+        auto load_st = reader->load(opts, ordinal_index_meta, column_meta.num_rows());
+        if (!load_st.ok()) {
+            std::cout << "load ordinal index failed: " << load_st.status() << std::endl;
+            return;
+        }
+
+        std::cout << "Total data pages: " << reader->num_data_pages() << std::endl;
+        auto iter = reader->begin();
+        while (iter.valid()) {
+            auto pp = iter.page();
+            size_t num_values = 0, uncompressed_size = 0;
+            std::string label = "DATA_PAGE(" + std::to_string(iter.page_index()) + ")";
+            dump_page_footer_at(input_file.get(), pp, label, &num_values, &uncompressed_size);
+            page_total_bytes += pp.size;
+            page_total_uncompressed_size += uncompressed_size;
+            page_total_values += num_values;
+            iter.next();
+        }
+    }
+    std::cout << "page_total_bytes=" << page_total_bytes << ", page_total_values=" << page_total_values
+              << ", page_total_uncompressed_size=" << page_total_uncompressed_size << std::endl;
+}
+
 // This function will check the consistency of tablet meta and segment_footer
 // #issue 5415
 void check_meta_consistency(DataDir* data_dir) {
@@ -1140,7 +1255,7 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
 #define M(logical_type)                                                                                   \
     case logical_type: {                                                                                  \
         Datum data;                                                                                       \
-        data.set<TypeTraits<logical_type>::CppType>(*(TypeTraits<logical_type>::CppType*)(tmp_mem));      \
+        data.set<StorageCppType<logical_type>>(*(StorageCppType<logical_type>*)(tmp_mem));                \
         result->append(" key");                                                                           \
         result->append(std::to_string(idx));                                                              \
         result->append("(");                                                                              \
@@ -1592,7 +1707,9 @@ int meta_tool_main(int argc, char** argv) {
     }
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
-    starrocks::register_mem_chunk_allocator_metrics(starrocks::GlobalMetricsRegistry::instance()->metrics());
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    starrocks::register_mem_chunk_allocator_metrics(process_metrics_registry->root_registry());
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();
@@ -1620,6 +1737,16 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         dump_ordinal_index(FLAGS_file, FLAGS_column_index);
+    } else if (FLAGS_operation == "dump_page_footer") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for dump page footer" << std::endl;
+            return -1;
+        }
+        if (FLAGS_column_index == -1) {
+            std::cout << "no column_index flag for dump page footer" << std::endl;
+            return -1;
+        }
+        dump_page_footer(FLAGS_file, FLAGS_column_index);
     } else if (FLAGS_operation == "verify_page_checksum") {
         if (FLAGS_file == "") {
             std::cout << "no file flag for verify page checksum" << std::endl;
@@ -1875,6 +2002,21 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_combined_txn_log") {
+        starrocks::CombinedTxnLogPB combined_txn_log;
+        if (!combined_txn_log.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse combined txn log\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(combined_txn_log, &json, options, &error)) {
             std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }

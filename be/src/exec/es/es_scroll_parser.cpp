@@ -20,6 +20,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
@@ -127,8 +128,7 @@ static Status get_int_value(const rapidjson::Value& col, LogicalType type, void*
     return Status::OK();
 }
 
-ScrollParser::ScrollParser(bool doc_value_mode)
-        : _tuple_desc(nullptr), _doc_value_context(nullptr), _size(0), _cur_line(0), _temp_writer(_scratch_buffer) {}
+ScrollParser::ScrollParser(bool doc_value_mode) : _temp_writer(_scratch_buffer) {}
 
 Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) {
     _size = 0;
@@ -245,8 +245,8 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
             // if pure_doc_value enabled, docvalue_context must contains the key
             // todo: need move all `pure_docvalue` for every tuple outside fill_tuple
             //  should check pure_docvalue for one table scan not every tuple
-            const char* col_name = pure_doc_value ? _doc_value_context->at(slot_desc->col_name()).c_str()
-                                                  : slot_desc->col_name().c_str();
+            const char* col_name = pure_doc_value ? _doc_value_context->at(std::string(slot_desc->col_name())).c_str()
+                                                  : slot_desc->col_name().data();
 
             auto has_col = line.HasMember(col_name);
             if (has_col) {

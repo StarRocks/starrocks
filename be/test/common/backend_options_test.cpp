@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "base/network/cidr.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "gen_cpp/Types_types.h"
 #include "gtest/gtest.h"
 

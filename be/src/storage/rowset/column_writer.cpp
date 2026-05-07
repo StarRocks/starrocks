@@ -38,16 +38,23 @@
 #include <memory>
 
 #include "base/simd/simd.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_compression_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "object_column_writer.h"
 #include "storage/index/inverted/inverted_index_option.h"
 
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
 #include "base/string/faststring.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -64,7 +71,6 @@
 #include "storage/rowset/zone_map_index.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
@@ -180,7 +186,9 @@ public:
             _encode_buf.resize(codec->max_compressed_len(_null_map.size()));
             Slice origin_slice(_null_map);
             Slice compressed_slice(_encode_buf);
-            status = codec->compress(origin_slice, &compressed_slice);
+            BlockCompressionOptions compression_options;
+            compression_options.lz4_acceleration = config::lz4_acceleration;
+            status = codec->compress(origin_slice, &compressed_slice, compression_options);
             if (!status.ok()) {
                 LOG(ERROR) << "compress null map failed";
                 return {};
@@ -324,9 +332,14 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         dict_opts.need_speculate_encoding = true;
         auto column_writer = std::make_unique<ScalarColumnWriter>(dict_opts, type_info, wfile);
         return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
-    } else if (column->type() == LogicalType::TYPE_JSON) {
+    } else if (is_object_type(column->type())) {
         auto column_writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
-        return create_json_column_writer(opts, std::move(type_info), wfile, std::move(column_writer));
+        if (column->type() == TYPE_JSON) {
+            auto object_writer = std::make_unique<ObjectColumnWriter>(opts, type_info, std::move(column_writer));
+            return create_json_column_writer(opts, std::move(type_info), wfile, std::move(object_writer));
+        } else {
+            return std::make_unique<ObjectColumnWriter>(opts, std::move(type_info), std::move(column_writer));
+        }
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
         str_opts.field_name = column->name();
@@ -351,8 +364,7 @@ ScalarColumnWriter::ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfo
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _opts(opts),
           _wfile(wfile),
-          _curr_page_format(_opts.page_format),
-          _data_size(0) {
+          _curr_page_format(_opts.page_format) {
     // these opts.meta fields should be set by client
     DCHECK(opts.meta->has_column_id());
     DCHECK(opts.meta->has_unique_id());
@@ -591,6 +603,7 @@ Status ScalarColumnWriter::write_inverted_index() {
 Status ScalarColumnWriter::_write_data_page(Page* page) {
     PagePointer pp;
     std::vector<Slice> compressed_body;
+    compressed_body.reserve(page->data.size());
     for (auto& data : page->data) {
         compressed_body.push_back(data.slice());
     }
@@ -694,10 +707,29 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
-    const uint8_t* ptr = column.raw_data();
-    const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
-    return append(ptr, null, column.size(), column.has_null());
+    // Currently, ColumnWriter does not support null-only columns
+    const uint8_t* null = ColumnHelper::get_null_data_ptr(&column);
+    const Column* data_column = ColumnHelper::get_data_column(&column);
+    const uint8_t* ptr;
+    // TODO: Remove slice cache from column writer
+    if (data_column->is_binary() || data_column->is_large_binary()) {
+        data_column->is_large_binary() ? down_cast<const LargeBinaryColumn*>(data_column)->build_slices(_slice_buf)
+                                       : down_cast<const BinaryColumn*>(data_column)->build_slices(_slice_buf);
+        ptr = reinterpret_cast<const uint8_t*>(_slice_buf.data());
+    } else {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(data_column->accept(&visitor));
+        ptr = visitor.result();
+    }
+    return _append(ptr, null, column.size(), column.has_null());
+}
+
+Status ScalarColumnWriter::append(const Column& column, const Buffer<Slice>& data) {
+    _total_mem_footprint += column.byte_size();
+    // Currently, ColumnWriter does not support null-only columns
+    const auto* null = ColumnHelper::get_null_data_ptr(&column);
+    const auto* ptr = reinterpret_cast<const uint8_t*>(data.data());
+    return _append(ptr, null, column.size(), column.has_null());
 }
 
 Status ScalarColumnWriter::append_array_offsets(const Column& column) {
@@ -740,7 +772,7 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
+Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
     const size_t field_size = type_info()->size();
     size_t remaining = count;
     while (remaining > 0) {
@@ -924,7 +956,7 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     size_t limit = length();
     auto row_count = column.size();
     const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->immutable_null_column_data().data() : nullptr;
     const BinaryColumn* bin_col;
 
     if (is_nullable()) {
@@ -935,12 +967,9 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     }
     for (size_t i = 0; i < row_count; i++) {
         // skip string length check if it is null
-        if (null != nullptr && null[i] == starrocks::DATUM_NULL) {
+        if (null != nullptr && null[i] == DATUM_NULL) {
             continue;
         }
-        // here we shouldn't use raw_data() api of column to get a vector of slices in advance,
-        // because raw_data() will call _build_slices() api, which will create a vector of slices,
-        // if there are many StringColumnWriter, each of them will have a vector of slices, which will consume many memory.
         Slice slice = bin_col->get_slice(i);
         if (slice.get_size() > limit) {
             return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}", slice.get_size(),

@@ -31,6 +31,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
@@ -1031,6 +1032,61 @@ TEST_F(LakeServiceTest, test_publish_splitting_tablet) {
     }
 }
 
+TEST_F(LakeServiceTest, test_publish_splitting_tablet_clears_inherited_garbage) {
+    auto txn_log = generate_write_txn_log(2, 100, 100);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    PublishVersionRequest publish_request;
+    publish_request.set_base_version(1);
+    publish_request.set_new_version(2);
+    publish_request.add_tablet_ids(_tablet_id);
+    publish_request.add_txn_ids(txn_log.txn_id());
+
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+    ASSERT_EQ(0, response.status().status_code());
+
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    auto dirty_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    dirty_metadata->add_compaction_inputs()->CopyFrom(base_metadata->rowsets(0));
+    auto* orphan_file = dirty_metadata->add_orphan_files();
+    orphan_file->set_name("split_orphan.dat");
+    orphan_file->set_size(1);
+    dirty_metadata->set_prev_garbage_version(1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(dirty_metadata));
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* splitting_tablet_info = resharding_tablet_info.mutable_splitting_tablet_info();
+    splitting_tablet_info->set_old_tablet_id(_tablet_id);
+    std::vector<int64_t> new_tablet_ids{next_id(), next_id()};
+    for (auto new_tablet_id : new_tablet_ids) {
+        splitting_tablet_info->add_new_tablet_ids(new_tablet_id);
+    }
+
+    PublishVersionRequest reshard_request;
+    reshard_request.set_base_version(2);
+    reshard_request.set_new_version(3);
+    auto* txn_info = reshard_request.add_txn_infos();
+    txn_info->set_txn_id(next_id());
+    txn_info->set_txn_type(TXN_TABLET_RESHARD);
+    txn_info->set_combined_txn_log(false);
+    txn_info->set_commit_time(12345);
+    txn_info->set_force_publish(false);
+    reshard_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+    PublishVersionResponse reshard_response;
+    _lake_service.publish_version(nullptr, &reshard_request, &reshard_response, nullptr);
+    ASSERT_EQ(0, reshard_response.status().status_code());
+
+    for (auto new_tablet_id : new_tablet_ids) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
+        EXPECT_EQ(0, metadata->compaction_inputs_size());
+        EXPECT_EQ(0, metadata->orphan_files_size());
+        EXPECT_FALSE(metadata->has_prev_garbage_version());
+    }
+}
+
 TEST_F(LakeServiceTest, test_splitting_tablet_split_count_three_with_tail_stats) {
     auto txn_log = generate_write_txn_log_with_segments({0, 100, 200, 300}, {100, 200, 300, 400}, {34, 34, 34, 1},
                                                         {100, 100, 100, 10});
@@ -1216,16 +1272,25 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
 
     int64_t total_rows = 0;
     int64_t total_size = 0;
+    int64_t total_num_dels = 0;
     for (auto new_tablet_id : new_tablet_ids) {
         ASSIGN_OR_ABORT(auto new_metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, metadata->version() + 1));
         ASSERT_EQ(1, new_metadata->rowsets_size());
-        EXPECT_GT(new_metadata->rowsets(0).num_rows(), 0);
-        EXPECT_GT(new_metadata->rowsets(0).data_size(), 0);
-        total_rows += new_metadata->rowsets(0).num_rows();
-        total_size += new_metadata->rowsets(0).data_size();
+        const auto& child_rowset = new_metadata->rowsets(0);
+        EXPECT_GT(child_rowset.num_rows(), 0);
+        EXPECT_GT(child_rowset.data_size(), 0);
+        EXPECT_TRUE(child_rowset.has_num_dels()) << "split must write num_dels on PK children";
+        EXPECT_LE(child_rowset.num_dels(), child_rowset.num_rows());
+        total_rows += child_rowset.num_rows();
+        total_size += child_rowset.data_size();
+        total_num_dels += child_rowset.num_dels();
     }
-    EXPECT_EQ(100, total_rows);
-    EXPECT_EQ(1000, total_size);
+    EXPECT_EQ(150, total_rows);
+    EXPECT_EQ(1500, total_size);
+    // Parent had 40 deletes on seg_0 and 10 on seg_1 = 50 total. The split reads those
+    // through UpdateManager::get_rowset_num_deletes (num_dels unset on the parent rowset)
+    // and the largest-remainder allocator must conserve the sum.
+    EXPECT_EQ(50, total_num_dels);
 }
 
 TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {
@@ -1241,6 +1306,16 @@ TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {
     PublishVersionResponse response;
     _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
     ASSERT_EQ(0, response.status().status_code());
+
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    auto dirty_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    dirty_metadata->add_compaction_inputs()->CopyFrom(base_metadata->rowsets(0));
+    auto* orphan_file = dirty_metadata->add_orphan_files();
+    orphan_file->set_name("split_fallback_orphan.dat");
+    orphan_file->set_size(1);
+    dirty_metadata->set_prev_garbage_version(1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(dirty_metadata));
 
     ReshardingTabletInfoPB resharding_tablet_info;
     auto* splitting_tablet_info = resharding_tablet_info.mutable_splitting_tablet_info();
@@ -1268,6 +1343,9 @@ TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {
 
     ASSIGN_OR_ABORT(auto metadata_first, _tablet_mgr->get_tablet_metadata(new_tablet_ids.front(), 3));
     EXPECT_EQ(new_tablet_ids.front(), metadata_first->id());
+    EXPECT_EQ(0, metadata_first->compaction_inputs_size());
+    EXPECT_EQ(0, metadata_first->orphan_files_size());
+    EXPECT_FALSE(metadata_first->has_prev_garbage_version());
     auto metadata_second = _tablet_mgr->get_tablet_metadata(new_tablet_ids[1], 3);
     EXPECT_TRUE(metadata_second.status().is_not_found());
     auto metadata_third = _tablet_mgr->get_tablet_metadata(new_tablet_ids[2], 3);
@@ -1667,6 +1745,57 @@ TEST_F(LakeServiceTest, test_publish_identical_tablet) {
             ASSERT_EQ(0, response.tablet_ranges_size());
         }
     }
+}
+
+TEST_F(LakeServiceTest, test_publish_identical_tablet_clears_inherited_garbage) {
+    auto txn_log = generate_write_txn_log(1, 100, 100);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    PublishVersionRequest publish_request;
+    publish_request.set_base_version(1);
+    publish_request.set_new_version(2);
+    publish_request.add_tablet_ids(_tablet_id);
+    publish_request.add_txn_ids(txn_log.txn_id());
+
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+    ASSERT_EQ(0, response.status().status_code());
+
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    auto dirty_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    dirty_metadata->add_compaction_inputs()->CopyFrom(base_metadata->rowsets(0));
+    auto* orphan_file = dirty_metadata->add_orphan_files();
+    orphan_file->set_name("identical_orphan.dat");
+    orphan_file->set_size(1);
+    dirty_metadata->set_prev_garbage_version(1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(dirty_metadata));
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* identical_tablet_info = resharding_tablet_info.mutable_identical_tablet_info();
+    identical_tablet_info->set_old_tablet_id(_tablet_id);
+    const int64_t new_tablet_id = next_id();
+    identical_tablet_info->set_new_tablet_id(new_tablet_id);
+
+    PublishVersionRequest reshard_request;
+    reshard_request.set_base_version(2);
+    reshard_request.set_new_version(3);
+    auto* txn_info = reshard_request.add_txn_infos();
+    txn_info->set_txn_id(next_id());
+    txn_info->set_txn_type(TXN_TABLET_RESHARD);
+    txn_info->set_combined_txn_log(false);
+    txn_info->set_commit_time(12345);
+    txn_info->set_force_publish(false);
+    reshard_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+    PublishVersionResponse reshard_response;
+    _lake_service.publish_version(nullptr, &reshard_request, &reshard_response, nullptr);
+    ASSERT_EQ(0, reshard_response.status().status_code());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
+    EXPECT_EQ(0, metadata->compaction_inputs_size());
+    EXPECT_EQ(0, metadata->orphan_files_size());
+    EXPECT_FALSE(metadata->has_prev_garbage_version());
 }
 
 TEST_F(LakeServiceTest, test_abort) {
@@ -2856,6 +2985,10 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
+    // Prune the metacache so we can verify that get_tablet_stats() itself does not refill it.
+    // publish_version() above may have cached v3 metadata.
+    _tablet_mgr->metacache()->prune();
+
     { // get the tablet stat again
         TabletStatRequest request;
         TabletStatResponse response;
@@ -2869,9 +3002,12 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
         EXPECT_EQ(expected_data_size, response.tablet_stats(0).data_size());
     }
 
-    // get_tablet_stats() should not fill metadata cache
-    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
+    // get_tablet_stats() should not fill the metadata cache (fill_cache=false) to avoid polluting
+    // the precious LRU metacache with stat-collection workloads.
+    auto cache_key_v1 = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    auto cache_key_v3 = _tablet_mgr->tablet_metadata_location(_tablet_id, 3);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v1) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v3) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
@@ -2887,6 +3023,215 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
 
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(0, response.tablet_stats_size());
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_stats_null_thread_pool) {
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:thread_pool",
+                                          [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_stats:thread_pool");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    brpc::Controller cntl;
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+    _lake_service.get_tablet_stats(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("lake metadata fetch thread pool is null", cntl.ErrorText());
+}
+
+// Verify that DUP_KEYS tablet stats are computed correctly without involving
+// get_rowset_num_deletes() (which is only meaningful for PK tablets).
+TEST_F(LakeServiceTest, test_get_tablet_stats_dup_keys_no_delvec) {
+    // Create a DUP_KEYS tablet (the default fixture tablet type)
+    size_t expected_num_rows = 500;
+    size_t expected_data_size = 8192;
+    auto txn_log = generate_write_txn_log(1, expected_num_rows, expected_data_size);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(_tablet_id);
+        req.add_txn_ids(txn_log.txn_id());
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(2);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+    // For DUP_KEYS tablets num_dels in rowset metadata is always 0, so num_rows == expected
+    EXPECT_EQ(expected_num_rows, response.tablet_stats(0).num_rows());
+    EXPECT_EQ(expected_data_size, response.tablet_stats(0).data_size());
+}
+
+// Verify that in approximate mode (default), num_dels from rowset metadata is used for PK tablets
+// instead of calling get_rowset_num_deletes() which reads delete vectors from object storage.
+TEST_F(LakeServiceTest, test_get_tablet_stats_pk_approximate_mode) {
+    // Re-create the test tablet as a PRIMARY_KEYS tablet
+    auto pk_metadata = lake::generate_simple_tablet_metadata(PRIMARY_KEYS);
+    int64_t pk_tablet_id = pk_metadata->id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(pk_metadata));
+
+    // Simulate a rowset with num_rows=100 and num_dels=20 (80 live rows)
+    auto txn_id = next_id();
+    TxnLog txn_log;
+    txn_log.set_tablet_id(pk_tablet_id);
+    txn_log.set_partition_id(_partition_id);
+    txn_log.set_txn_id(txn_id);
+    auto* rowset = txn_log.mutable_op_write()->mutable_rowset();
+    rowset->set_num_rows(100);
+    rowset->set_data_size(4096);
+    rowset->set_num_dels(20); // 20 rows deleted but not yet compacted
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(pk_tablet_id);
+        req.add_txn_ids(txn_id);
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
+
+    // Force approximate mode for this case, independent of global default value.
+    bool old_value = config::lake_enable_accurate_pk_row_count;
+    config::lake_enable_accurate_pk_row_count = false;
+    DeferOp restore_config([old_value] { config::lake_enable_accurate_pk_row_count = old_value; });
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(pk_tablet_id);
+    info->set_version(2);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(pk_tablet_id, response.tablet_stats(0).tablet_id());
+    // Approximate mode: num_rows - num_dels = 100 - 20 = 80
+    EXPECT_EQ(80, response.tablet_stats(0).num_rows());
+}
+
+// Verify that in accurate mode, get_rowset_num_deletes() is used for PK tablets
+// to get precise row counts by reading delete vectors from object storage.
+TEST_F(LakeServiceTest, test_get_tablet_stats_pk_accurate_mode) {
+    // Re-create the test tablet as a PRIMARY_KEYS tablet
+    auto pk_metadata = lake::generate_simple_tablet_metadata(PRIMARY_KEYS);
+    int64_t pk_tablet_id = pk_metadata->id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(pk_metadata));
+
+    // Simulate a rowset with num_rows=200 and num_dels=50
+    auto txn_id = next_id();
+    TxnLog txn_log;
+    txn_log.set_tablet_id(pk_tablet_id);
+    txn_log.set_partition_id(_partition_id);
+    txn_log.set_txn_id(txn_id);
+    auto* rowset = txn_log.mutable_op_write()->mutable_rowset();
+    rowset->set_num_rows(200);
+    rowset->set_data_size(8192);
+    rowset->set_num_dels(50);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(pk_tablet_id);
+        req.add_txn_ids(txn_id);
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
+
+    // Enable accurate mode
+    bool old_value = config::lake_enable_accurate_pk_row_count;
+    config::lake_enable_accurate_pk_row_count = true;
+    DeferOp restore_config([old_value] { config::lake_enable_accurate_pk_row_count = old_value; });
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(pk_tablet_id);
+    info->set_version(2);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(pk_tablet_id, response.tablet_stats(0).tablet_id());
+    // In accurate mode, get_rowset_num_deletes() reads actual delete vectors.
+    // Without actual delete vectors written, no deletes should be deducted.
+    EXPECT_EQ(200, response.tablet_stats(0).num_rows());
+    EXPECT_EQ(8192, response.tablet_stats(0).data_size());
+}
+
+// Verify that tablet stat collection logs a slow warning when elapsed time exceeds
+// the configured threshold (lake_tablet_stat_slow_log_ms).
+TEST_F(LakeServiceTest, test_get_tablet_stats_slow_log) {
+    // Set a very low threshold so that even a fast task triggers the slow log
+    int64_t old_threshold = config::lake_tablet_stat_slow_log_ms;
+    config::lake_tablet_stat_slow_log_ms = 0; // 0 ms: any task should be logged as slow
+    DeferOp restore_config([old_threshold] { config::lake_tablet_stat_slow_log_ms = old_threshold; });
+    std::atomic<bool> slow_log_triggered = false;
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:slow_log",
+                                          [&](void* /*arg*/) { slow_log_triggered.store(true); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_stats:slow_log");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_TRUE(slow_log_triggered.load());
+    EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+    EXPECT_EQ(0, response.tablet_stats(0).num_rows());
+    EXPECT_EQ(0, response.tablet_stats(0).data_size());
+}
+
+// Verify that get_tablet_stats() does NOT fill the metadata cache (fill_cache=false) so that
+// stat-collection workloads do not evict hot metadata entries from the precious LRU metacache.
+TEST_F(LakeServiceTest, test_get_tablet_stats_does_not_pollute_metacache) {
+    _tablet_mgr->metacache()->prune();
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+
+    // Metadata must NOT be in the metacache after a stat request
+    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr)
+            << "get_tablet_stats should not fill the metacache (fill_cache=false)";
 }
 
 TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
@@ -3840,11 +4185,11 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
 
     // 2. thread pool is null
     {
-        SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
-                                              [](void* arg) { *(ThreadPool**)arg = nullptr; });
+        SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_metadatas:thread_pool",
+                                              [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
         SyncPoint::GetInstance()->EnableProcessing();
         DeferOp defer([]() {
-            SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+            SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_metadatas:thread_pool");
             SyncPoint::GetInstance()->DisableProcessing();
         });
 
@@ -3857,7 +4202,7 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
-        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "tablet stats thread pool is null"));
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "lake metadata fetch thread pool is null"));
     }
 
     // 3. success case
@@ -4076,6 +4421,166 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_EQ(1, response.tablet_results(0).metadata_entries_size());
         ASSERT_EQ(1, response.tablet_results(0).metadata_entries(0).missing_files_size());
         ASSERT_EQ(seg_name, response.tablet_results(0).metadata_entries(0).missing_files(0));
+    }
+}
+
+TEST_F(LakeServiceTest, test_check_missing_files_across_versions) {
+    // Validates that missing files are correctly reported across multiple versions
+    // when check_missing_files is enabled, including files shared between versions
+    // and files unique to a single version.
+
+    auto publish_version = [&](int64_t base_version, int64_t new_version) {
+        auto txn_log = generate_write_txn_log(1, 10 * new_version, 100 * new_version);
+        CHECK_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(base_version);
+        request.set_new_version(new_version);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(txn_log.txn_id());
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        CHECK_EQ(0, response.failed_tablets_size());
+        CHECK_EQ(0, response.status().status_code());
+    };
+
+    publish_version(1, 2);
+    publish_version(2, 3);
+    publish_version(3, 4);
+
+    // 1. All files exist: check across versions 2-4, no missing files expected
+    {
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(2);
+        request.set_max_version(4);
+        request.set_check_missing_files(true);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+        ASSERT_EQ(1, response.tablet_results_size());
+        const auto& tablet_result = response.tablet_results(0);
+        ASSERT_EQ(TStatusCode::OK, tablet_result.status().status_code());
+        ASSERT_EQ(3, tablet_result.metadata_entries_size());
+
+        for (const auto& entry : tablet_result.metadata_entries()) {
+            ASSERT_EQ(0, entry.missing_files_size())
+                    << "version " << entry.metadata().version() << " should have no missing files";
+        }
+    }
+
+    // 2. Delete a segment that is shared across versions 2, 3, 4
+    //    (the segment added in version 2 appears in all subsequent versions)
+    {
+        // First, get version 4 metadata to find the segment from version 2
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(4);
+        request.set_max_version(4);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(1, response.tablet_results_size());
+        ASSERT_EQ(1, response.tablet_results(0).metadata_entries_size());
+        const auto& metadata = response.tablet_results(0).metadata_entries(0).metadata();
+        // Version 4 should have 3 rowsets (from version 2, 3, 4)
+        ASSERT_EQ(3, metadata.rowsets_size());
+
+        // Delete the segment from the first rowset (added in version 2)
+        std::string shared_seg = metadata.rowsets(0).segments(0);
+        ASSERT_OK(fs::remove(_tablet_mgr->segment_location(_tablet_id, shared_seg)));
+
+        // Now check missing files across versions 2-4
+        response.Clear();
+        request.Clear();
+        cntl.Reset();
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(2);
+        request.set_max_version(4);
+        request.set_check_missing_files(true);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+        ASSERT_EQ(1, response.tablet_results_size());
+        const auto& tablet_result = response.tablet_results(0);
+        ASSERT_EQ(TStatusCode::OK, tablet_result.status().status_code());
+        ASSERT_EQ(3, tablet_result.metadata_entries_size());
+
+        // The deleted segment is shared across versions 2, 3, 4.
+        // Version 4 is checked first (max_version), should detect the missing file via fs check.
+        // Versions 3 and 2 should detect the same missing file via the cache (no extra fs check).
+        for (const auto& entry : tablet_result.metadata_entries()) {
+            bool found_missing = false;
+            for (int j = 0; j < entry.missing_files_size(); j++) {
+                if (entry.missing_files(j) == shared_seg) {
+                    found_missing = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(found_missing) << "version " << entry.metadata().version() << " should report " << shared_seg
+                                       << " as missing";
+        }
+    }
+
+    // 3. Delete a segment only present in version 4 (not shared with lower versions)
+    {
+        // Get version 4 metadata to find the segment unique to version 4
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(4);
+        request.set_max_version(4);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        const auto& metadata = response.tablet_results(0).metadata_entries(0).metadata();
+        ASSERT_EQ(3, metadata.rowsets_size());
+
+        // The last rowset's segment is unique to version 4
+        std::string unique_seg = metadata.rowsets(2).segments(0);
+        ASSERT_OK(fs::remove(_tablet_mgr->segment_location(_tablet_id, unique_seg)));
+
+        // Check missing files across versions 2-4
+        response.Clear();
+        request.Clear();
+        cntl.Reset();
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(2);
+        request.set_max_version(4);
+        request.set_check_missing_files(true);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(1, response.tablet_results_size());
+        const auto& tablet_result = response.tablet_results(0);
+        ASSERT_EQ(3, tablet_result.metadata_entries_size());
+
+        // Only version 4 should report unique_seg as missing
+        for (const auto& entry : tablet_result.metadata_entries()) {
+            bool has_unique_seg_missing = false;
+            for (int j = 0; j < entry.missing_files_size(); j++) {
+                if (entry.missing_files(j) == unique_seg) {
+                    has_unique_seg_missing = true;
+                    break;
+                }
+            }
+            if (entry.metadata().version() == 4) {
+                ASSERT_TRUE(has_unique_seg_missing) << "version 4 should report " << unique_seg << " as missing";
+            } else {
+                ASSERT_FALSE(has_unique_seg_missing) << "version " << entry.metadata().version()
+                                                     << " should NOT report " << unique_seg << " as missing";
+            }
+        }
     }
 }
 
@@ -4478,6 +4983,97 @@ TEST_F(LakeServiceTest, test_get_txn_ids_string_priority) {
         // Should use txn_infos since it has data
         EXPECT_EQ("99999", result);
     }
+}
+
+// ==================== build_vector_index RPC ====================
+
+TEST_F(LakeServiceTest, test_build_vector_index_missing_tablet_id) {
+    BuildVectorIndexRequest request;
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing tablet_id", cntl.ErrorText());
+}
+
+TEST_F(LakeServiceTest, test_build_vector_index_missing_version) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing version", cntl.ErrorText());
+}
+
+// Tablet metadata exists at version 1 (created in SetUp) but has no rowsets and
+// no vector_index_built_version. Calling with target version=1 should advance
+// the watermark via the _target_version fallback (no work needed).
+TEST_F(LakeServiceTest, test_build_vector_index_no_work_advances_watermark) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(1);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(0, response.status().status_code());
+    // No rowsets above _built_version (=0), so compute_built_version walks an empty
+    // _rowset_versions and falls back to the request's target version.
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(1, response.new_built_version());
+}
+
+// Tablet metadata is missing at the requested version → RPC reports a NotFound
+// (or similar) status without advancing the watermark.
+TEST_F(LakeServiceTest, test_build_vector_index_metadata_not_found) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(99999); // version that has no metadata
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    // RPC always returns OK at the controller level (status only conveys orchestration);
+    // build_task.prepare() fails to load the metadata and the failure is reflected in
+    // response.status.
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    EXPECT_NE(0, response.status().status_code());
+    EXPECT_FALSE(response.has_new_built_version());
+}
+
+// Honors a non-default max_rowsets_per_batch by passing it through to the build task.
+// With no rowsets to build, the watermark should still advance to the request's target
+// version regardless of batch size.
+TEST_F(LakeServiceTest, test_build_vector_index_custom_batch_limit) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(1);
+    request.set_max_rowsets_per_batch(3);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code());
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(1, response.new_built_version());
+}
+
+// FE-supplied built_version above metadata's vector_index_built_version is honored as
+// the floor; with no new rowsets above it, the watermark advances to target version.
+TEST_F(LakeServiceTest, test_build_vector_index_request_built_version_floor) {
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(_tablet_id);
+    request.set_version(1);
+    request.set_built_version(0); // explicit zero, same as default
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    _lake_service.build_vector_index(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_EQ(0, response.status().status_code());
+    EXPECT_EQ(1, response.new_built_version());
 }
 
 } // namespace starrocks

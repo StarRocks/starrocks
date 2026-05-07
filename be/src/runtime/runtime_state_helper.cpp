@@ -21,10 +21,11 @@
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_cache/block_cache.h"
-#include "common/config.h"
+#include "common/config_starlet_fwd.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -49,6 +50,7 @@ void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
     if (state->_runtime_filter_port != nullptr) {
         return;
     }
+    state->_runtime_filter_registry = state->_obj_pool->add(new RuntimeFilterRegistry());
     state->_runtime_filter_port = state->_obj_pool->add(new RuntimeFilterPort(state));
 }
 

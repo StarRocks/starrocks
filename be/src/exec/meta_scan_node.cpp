@@ -14,11 +14,14 @@
 
 #include "exec/meta_scan_node.h"
 
+#include "exprs/column_access_path_resolver.h"
+#include "runtime/runtime_state.h"
+
 namespace starrocks {
 
 MetaScanNode::MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
-          _is_init(false),
+
           _desc_tbl(descs),
           _meta_scan_node(tnode.meta_scan_node),
           _tuple_id(tnode.olap_scan_node.tuple_id) {}
@@ -33,8 +36,10 @@ Status MetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
 
     if (_meta_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, _pool);
         for (int i = 0; i < _meta_scan_node.column_access_paths.size(); ++i) {
-            ASSIGN_OR_RETURN(auto path, ColumnAccessPath::create(_meta_scan_node.column_access_paths[i], state, _pool));
+            ASSIGN_OR_RETURN(auto path,
+                             ColumnAccessPath::create(_meta_scan_node.column_access_paths[i], path_resolver));
             _column_access_paths.emplace_back(std::move(path));
         }
     }

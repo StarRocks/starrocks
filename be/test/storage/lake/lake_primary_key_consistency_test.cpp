@@ -24,9 +24,12 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"
@@ -537,7 +540,7 @@ public:
     Status upsert_with_batch_pub_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
         std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
-        size_t batch_cnt = std::max(_random_generator->random() % MaxBatchCnt, (size_t)1);
+        size_t batch_cnt = std::max<size_t>(static_cast<size_t>(_random_generator->random() % MaxBatchCnt), 1);
         std::vector<int64_t> txn_ids;
         for (int i = 0; i < batch_cnt; i++) {
             auto txn_id = next_id();

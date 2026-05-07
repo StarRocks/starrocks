@@ -16,11 +16,17 @@
 
 #include "fmt/format.h"
 #include "gutil/casts.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
+// Legacy parquet variant layout: group(metadata, value).
 static constexpr int VARIANT_UNSHREDDING_FIELD_COUNT = 2;
+// Shredded parquet variant layout: group(metadata, value, typed_value).
 static constexpr int VARIANT_SHREDDING_COUNT = 3;
+// UUID is encoded as 16 bytes in parquet but represented as a 36-character string
+// (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) in StarRocks VARCHAR.
+static constexpr int UUID_VARCHAR_LENGTH = 36;
 
 static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
@@ -105,8 +111,16 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
             *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
                                                               decimal_logical_type->scale());
+        } else if (logical_type->is_UUID()) {
+            // UUID bytes are converted to canonical string form (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+            // by FixedLenByteArrayToUUIDConverter during scan.  Dict filtering is supported for UUID:
+            // ScalarColumnReader::rewrite_conjunct_ctxs_to_predicate() sets dict_value_converter so
+            // raw 16-byte dict entries are converted to canonical strings before predicates are applied.
+            *type_desc = TypeDescriptor::create_varchar_type(UUID_VARCHAR_LENGTH);
         } else {
-            *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            // INTERVAL (12B), BSON, and unannotated FLBA all carry raw binary data.
+            // VARBINARY is the correct SR type for all of these.
+            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         }
         break;
     }
@@ -187,10 +201,6 @@ static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, T
     if (field_count != VARIANT_UNSHREDDING_FIELD_COUNT && field_count != VARIANT_SHREDDING_COUNT) {
         return Status::InvalidArgument("Not a variant type");
     }
-    if (field_count == VARIANT_SHREDDING_COUNT) {
-        return Status::NotSupported("shredded variant type is not supported yet");
-    }
-
     *type_desc = TypeDescriptor::create_variant_type();
     return Status::OK();
 }

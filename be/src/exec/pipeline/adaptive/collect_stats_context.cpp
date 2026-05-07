@@ -21,6 +21,7 @@
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/adaptive/utils.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

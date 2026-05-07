@@ -15,11 +15,10 @@
 #include "exec/pipeline/pipeline_metrics.h"
 
 #include <numeric>
+#include <utility>
 
 #include "base/metrics.h"
 #include "common/thread/threadpool.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks::pipeline {
 
@@ -85,24 +84,46 @@ void ScanExecutorMetrics::register_all_metrics(MetricRegistry* registry, const s
     registry->register_metric(base_name + "pending_tasks", &pending_tasks);
 }
 
-#define ACCUMULATED(array, field)                                                                                     \
-    [this]() {                                                                                                        \
-        std::lock_guard guard(_mutex);                                                                                \
-        return std::accumulate(array.begin(), array.end(), 0, [](int64_t a, const auto& b) { return a + b->field; }); \
+void ThreadPoolMetrics::register_all_metrics(MetricRegistry* registry, const std::string& prefix) {
+    registry->register_metric(prefix + "_threadpool_size", &threadpool_size);
+    registry->register_metric(prefix + "_executed_tasks_total", &executed_tasks_total);
+    registry->register_metric(prefix + "_pending_time_ns_total", &pending_time_ns_total);
+    registry->register_metric(prefix + "_execute_time_ns_total", &execute_time_ns_total);
+    registry->register_metric(prefix + "_queue_count", &queue_count);
+    registry->register_metric(prefix + "_running_threads", &running_threads);
+    registry->register_metric(prefix + "_active_threads", &active_threads);
+}
+
+void ThreadPoolMetrics::update(const std::vector<ThreadPool*>& thread_pools) {
+    auto accumulated = [&thread_pools](auto getter) {
+        return std::accumulate(thread_pools.begin(), thread_pools.end(), uint64_t{0},
+                               [getter](uint64_t total, const auto* pool) { return total + getter(pool); });
+    };
+
+    threadpool_size.set_value(accumulated([](const auto* pool) { return pool->max_threads(); }));
+    executed_tasks_total.set_value(accumulated([](const auto* pool) { return pool->total_executed_tasks(); }));
+    pending_time_ns_total.set_value(accumulated([](const auto* pool) { return pool->total_pending_time_ns(); }));
+    execute_time_ns_total.set_value(accumulated([](const auto* pool) { return pool->total_execute_time_ns(); }));
+    queue_count.set_value(accumulated([](const auto* pool) { return pool->num_queued_tasks(); }));
+    running_threads.set_value(accumulated([](const auto* pool) { return pool->num_threads(); }));
+    active_threads.set_value(accumulated([](const auto* pool) { return pool->active_threads(); }));
+}
+
+void ExecStateReporterMetrics::register_all_metrics(MetricRegistry* registry) {
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        return;
     }
+    _registry = registry;
+    _reporter_metrics.register_all_metrics(registry, "exec_state_report");
+    _priority_reporter_metrics.register_all_metrics(registry, "priority_exec_state_report");
+    registry->register_hook("exec_state_report_threadpool_metrics", [this] { _update(); });
+}
 
-#define REGISTER_POOLS_METRICS(name, threadpool)                                                                     \
-    REGISTER_GAUGE_STARROCKS_METRIC(name##_threadpool_size, ACCUMULATED(threadpool, max_threads()))                  \
-    REGISTER_GAUGE_STARROCKS_METRIC(name##_executed_tasks_total, ACCUMULATED(threadpool, total_executed_tasks()));   \
-    REGISTER_GAUGE_STARROCKS_METRIC(name##_pending_time_ns_total, ACCUMULATED(threadpool, total_pending_time_ns())); \
-    REGISTER_GAUGE_STARROCKS_METRIC(name##_execute_time_ns_total, ACCUMULATED(threadpool, total_execute_time_ns())); \
-    REGISTER_GAUGE_STARROCKS_METRIC(name##_queue_count, ACCUMULATED(threadpool, num_queued_tasks()));                \
-    REGISTER_GAUGE_STARROCKS_METRIC(name##_running_threads, ACCUMULATED(threadpool, num_threads()));                 \
-    REGISTER_GAUGE_STARROCKS_METRIC(name##_active_threads, ACCUMULATED(threadpool, active_threads()));
-
-void ExecStateReporterMetrics::register_all_metrics() {
-    REGISTER_POOLS_METRICS(exec_state_report, _reporter_thr_pools);
-    REGISTER_POOLS_METRICS(priority_exec_state_report, _priority_reporter_thr_pools);
+void ExecStateReporterMetrics::_update() {
+    std::lock_guard guard(_mutex);
+    _reporter_metrics.update(_reporter_thr_pools);
+    _priority_reporter_metrics.update(_priority_reporter_thr_pools);
 }
 
 void DriverQueueMetrics::register_all_metrics(MetricRegistry* registry) {
@@ -115,17 +136,60 @@ void PollerMetrics::register_all_metrics(MetricRegistry* registry) {
 
 void DriverExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
     registry->register_metric("pipe_driver_schedule_count", &driver_schedule_count);
+    registry->register_metric("pipe_driver_overloaded", &driver_overloaded);
     driver_execution_time.register_metrics(registry, "pipe_driver_execution_time");
     registry->register_metric("pipe_exec_running_tasks", &exec_running_tasks);
     registry->register_metric("pipe_exec_finished_tasks", &exec_finished_tasks);
 }
 
 void PipelineExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
+    if (_registry != nullptr) {
+        DCHECK_EQ(_registry, registry);
+        return;
+    }
+    _registry = registry;
     poller_metrics.register_all_metrics(registry);
     driver_executor_metrics.register_all_metrics(registry);
     scan_executor_metrics.register_all_metrics(registry, "scan");
     connector_scan_executor_metrics.register_all_metrics(registry, "connector_scan");
-    exec_state_reporter_metrics.register_all_metrics();
+    exec_state_reporter_metrics.register_all_metrics(registry);
+
+    for (auto& pending : _pending_int_gauge_hooks) {
+        _register_int_gauge_hook(pending.name, pending.metric, std::move(pending.value_fn));
+    }
+    _pending_int_gauge_hooks.clear();
+}
+
+PipelineExecutorMetrics* PipelineExecutorMetrics::instance() {
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new PipelineExecutorMetrics();
+    return instance;
+}
+
+void PipelineExecutorMetrics::register_pipe_prepare_pool_queue_len_hook(std::function<int64_t()> value_fn) {
+    if (_registry == nullptr) {
+        _pending_int_gauge_hooks.emplace_back(
+                PendingIntGaugeHook{"pipe_prepare_pool_queue_len", &pipe_prepare_pool_queue_len, std::move(value_fn)});
+        return;
+    }
+    _register_int_gauge_hook("pipe_prepare_pool_queue_len", &pipe_prepare_pool_queue_len, std::move(value_fn));
+}
+
+void PipelineExecutorMetrics::register_pipe_drivers_hook(std::function<int64_t()> value_fn) {
+    if (_registry == nullptr) {
+        _pending_int_gauge_hooks.emplace_back(PendingIntGaugeHook{"pipe_drivers", &pipe_drivers, std::move(value_fn)});
+        return;
+    }
+    _register_int_gauge_hook("pipe_drivers", &pipe_drivers, std::move(value_fn));
+}
+
+void PipelineExecutorMetrics::_register_int_gauge_hook(const std::string& name, IntGauge* metric,
+                                                       std::function<int64_t()> value_fn) {
+    DCHECK(_registry != nullptr);
+    DCHECK(metric != nullptr);
+    _registry->register_metric(name, metric);
+    _registry->register_hook(name, [metric, value_fn = std::move(value_fn)] { metric->set_value(value_fn()); });
 }
 
 } // namespace starrocks::pipeline

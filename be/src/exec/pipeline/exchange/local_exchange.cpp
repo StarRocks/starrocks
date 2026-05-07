@@ -14,11 +14,12 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
@@ -37,10 +38,8 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
     // step2: shuffle chunk into dest partitions.
     {
         _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
-        _partition_memory_usage.assign(num_partitions, 0);
         for (size_t i = 0; i < num_rows; ++i) {
             _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
-            _partition_memory_usage[_shuffle_channel_id[i]] += chunk->bytes_usage(i, 1);
         }
         // We make the last item equal with number of rows of this chunk.
         for (int32_t i = 1; i <= num_partitions; ++i) {
@@ -58,6 +57,17 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
 Status Partitioner::send_chunk(const ChunkPtr& chunk,
                                const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes) {
     size_t num_partitions = _source->get_sources().size();
+    // Unpack const columns now (instead of inside each per-source add_chunk) so the
+    // accounted memory reflects the materialized post-unpack footprint. For const
+    // columns the pre-unpack memory is O(1) while the buffered, unpacked memory is
+    // O(num_rows); accounting before the unpack would let the manager undercount by
+    // orders of magnitude and weaken is_full() back-pressure.
+    chunk->unpack_and_duplicate_const_columns();
+    // Account this chunk against the shared memory manager exactly once. The entry is
+    // shared by every partition shard via shared_ptr, so the record is only released
+    // when the last shard is consumed across all source operators.
+    auto memory_entry = std::make_shared<ChunkBufferMemoryEntry>(_source->memory_manager(), chunk->memory_usage(),
+                                                                 chunk->num_rows());
     for (size_t i = 0; i < num_partitions; ++i) {
         size_t from = partition_begin_offset(i);
         size_t size = partition_end_offset(i) - from;
@@ -66,8 +76,7 @@ Status Partitioner::send_chunk(const ChunkPtr& chunk,
             continue;
         }
 
-        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
-                                                             partition_memory_usage(i)));
+        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size, memory_entry));
     }
     return Status::OK();
 }
@@ -195,7 +204,7 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -432,12 +441,11 @@ Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const in
             _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
             _writer_count++;
         }
-        // set to default value in case of _source vector out of bound in multi thread
-        if (_writer_count > sources_num) {
-            _writer_count = sources_num;
-        }
-        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
-        if (_writer_count < sources_num) {
+        // Snapshot and clamp locally so the index computation is immune to concurrent increments
+        // that may push _writer_count transiently above sources_num between the clamp write and use.
+        size_t writer_count = std::min(_writer_count.load(), sources_num);
+        _source->get_sources()[(_next_accept_source++) % writer_count]->add_chunk(chunk);
+        if (writer_count < sources_num) {
             _data_processed += chunk->bytes_usage();
         }
     }
@@ -465,7 +473,7 @@ Status RandomPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t s
     auto& partitioner = _random_partitioners[sink_driver_sequence];
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -501,7 +509,7 @@ Status AdaptivePassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t
         std::shared_ptr<std::vector<uint32_t>> partition_row_indexes =
                 std::make_shared<std::vector<uint32_t>>(num_rows);
         RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-        RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+        RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     }
     return Status::OK();
 }

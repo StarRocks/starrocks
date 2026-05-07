@@ -49,7 +49,7 @@ Status BinaryColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
     }
 }
 
-static inline Status check_append_binary_column(const std::string& from, const std::string& col_name,
+static inline Status check_append_binary_column(std::string_view from, std::string_view col_name,
                                                 const TypeDescriptor& type_desc, BinaryColumn* column) {
     if (UNLIKELY(from.size() > type_desc.len)) {
         return Status::DataQualityError(

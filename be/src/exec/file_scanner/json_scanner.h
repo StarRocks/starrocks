@@ -15,6 +15,7 @@
 #pragma once
 
 #include <string_view>
+#include <utility>
 
 #include "column/nullable_column.h"
 #include "exec/file_scanner/file_scanner.h"
@@ -54,12 +55,12 @@ private:
     friend class JsonReader;
 
     const TBrokerScanRange& _scan_range;
-    int _next_range;
+    int _next_range{0};
     const uint64_t _max_chunk_size;
 
     // used to hold current StreamLoadPipe
     std::unique_ptr<JsonReader> _cur_file_reader;
-    bool _cur_file_eof; // indicate the current file is eof
+    bool _cur_file_eof{true}; // indicate the current file is eof
 
     std::vector<std::shared_ptr<SequentialFile>> _files;
 
@@ -97,8 +98,8 @@ public:
 
     struct PreviousParsedItem {
         PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
-        PreviousParsedItem(const std::string_view& key, int column_index, const TypeDescriptor& type)
-                : key(key), type(type), column_index(column_index) {}
+        PreviousParsedItem(const std::string_view& key, int column_index, TypeDescriptor type)
+                : key(key), type(std::move(type)), column_index(column_index) {}
 
         std::string key;
         TypeDescriptor type;
@@ -121,7 +122,7 @@ private:
     Status _construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
-                             const std::string& col_name);
+                             std::string_view col_name);
 
     Status _check_ndjson();
 
@@ -154,7 +155,7 @@ private:
     // record the parsed column index for current json object
     std::vector<uint8_t> _parsed_columns;
     // record the "__op" column's index
-    int _op_col_index;
+    int _op_col_index{-1};
 
     ByteBufferPtr _file_stream_buffer;
 
@@ -167,6 +168,11 @@ private:
     size_t _payload_capacity = 0;
 
     TBrokerRangeDesc _range_desc;
+
+    // CDC envelope type
+    TEnvelopeType::type _envelope_type = TEnvelopeType::NONE;
+    // CDC operation for current row: 0 = upsert, 1 = delete; 0xFF = sentinel (not yet set this row)
+    uint8_t _cdc_op = 0xFF;
 };
 
 } // namespace starrocks

@@ -16,7 +16,7 @@
 
 #include <gutil/strings/substitute.h>
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"

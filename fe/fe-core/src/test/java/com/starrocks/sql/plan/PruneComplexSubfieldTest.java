@@ -103,6 +103,17 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE `variant0` (\n" +
+                "  `v1` bigint NULL, \n" +
+                "  `v` VARIANT NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS t1(\n" +
                 "    tenant_id BIGINT NOT NULL,\n" +
                 "    id BIGINT NOT NULL,\n" +
@@ -150,8 +161,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  1:Project\n"
                 + "  |  output columns:\n"
                 + "  |  3 <-> [3: v1, BIGINT, true]\n"
-                + "  |  12 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
-                + "  |  13 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s2[false]\n"
+                + "  |  12 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  13 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s2[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  0:OlapScanNode");
@@ -167,13 +178,13 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "[/st1/s1]");
         assertContains(plan, "  5:Project\n"
                 + "  |  output columns:\n"
-                + "  |  22 <-> [9: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
+                + "  |  22 <-> [9: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  4:OlapScanNode");
         assertContains(plan, "  2:Project\n"
                 + "  |  output columns:\n"
-                + "  |  21 <-> [2: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
+                + "  |  21 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  1:OlapScanNode");
@@ -187,8 +198,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  1:Project\n"
                 + "  |  output columns:\n"
                 + "  |  1 <-> [1: v1, BIGINT, true]\n"
-                + "  |  26 <-> [2: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
-                + "  |  27 <-> [3: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  26 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  27 <-> [3: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  0:OlapScanNode");
@@ -414,14 +425,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  4:Project\n"
                 + "  |  output columns:\n"
                 + "  |  15 <-> [15: v1, BIGINT, true]\n"
-                + "  |  25 <-> [17: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  25 <-> [17: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  3:OlapScanNode");
         assertContains(plan, "1:Project\n"
                 + "  |  output columns:\n"
                 + "  |  8 <-> [8: v1, BIGINT, true]\n"
-                + "  |  24 <-> [9: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
+                + "  |  24 <-> [9: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  0:OlapScanNode");
@@ -439,25 +450,26 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  9:Project\n"
                 + "  |  output columns:\n"
                 + "  |  22 <-> [22: v1, BIGINT, true]\n"
-                + "  |  33 <-> [24: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true].sm3[true][1]\n"
+                + "  |  33 <-> [24: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].sm3[true][1]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  8:OlapScanNode");
         assertContains(plan, "ColumnAccessPath: [/st2/sm3/INDEX]");
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
-                "  |      [15, BIGINT, true] | [34, struct<s31 int(11), s32 int(11)>, true] | " +
+                "  |      [15, BIGINT, true] | [34, struct<`s31` int(11), `s32` int(11)>, true] | " +
                 "[32, ARRAY<INT>, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [1: v1, BIGINT, true] | [35: expr, struct<s31 int(11), s32 int(11)>, true] | " +
+                "  |      [1: v1, BIGINT, true] | [35: expr, struct<`s31` int(11), `s32` int(11)>, true] | " +
                 "[36: expr, ARRAY<INT>, true]\n" +
-                "  |      [8: v1, BIGINT, true] | [37: expr, struct<s31 int(11), s32 int(11)>, true] | " +
+                "  |      [8: v1, BIGINT, true] | [37: expr, struct<`s31` int(11), `s32` int(11)>, true] | " +
                 "[38: expr, ARRAY<INT>, true]");
         assertContains(plan, "  5:Project\n"
                 + "  |  output columns:\n"
                 + "  |  8 <-> [8: v1, BIGINT, true]\n"
-                + "  |  37 <-> [12: st4, struct<s1 int(11), s2 int(11), ss3 struct<s31 int(11), s32 int(11)>>, true].ss3[false]\n"
-                + "  |  38 <-> [11: st3, struct<s1 int(11), s2 int(11), sa3 array<int(11)>>, true].sa3[false]\n"
+                + "  |  37 <-> [12: st4, struct<`s1` int(11), `s2` int(11), `ss3` struct<`s31` int(11), "
+                + "`s32` int(11)>>, true].ss3[false]\n"
+                + "  |  38 <-> [11: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  4:OlapScanNode");
@@ -465,8 +477,9 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  2:Project\n"
                 + "  |  output columns:\n"
                 + "  |  1 <-> [1: v1, BIGINT, true]\n"
-                + "  |  35 <-> [5: st4, struct<s1 int(11), s2 int(11), ss3 struct<s31 int(11), s32 int(11)>>, true].ss3[false]\n"
-                + "  |  36 <-> [4: st3, struct<s1 int(11), s2 int(11), sa3 array<int(11)>>, true].sa3[false]\n"
+                + "  |  35 <-> [5: st4, struct<`s1` int(11), `s2` int(11), "
+                + "`ss3` struct<`s31` int(11), `s32` int(11)>>, true].ss3[false]\n"
+                + "  |  36 <-> [4: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
                 + "  |  cardinality: 1");
         assertContains(plan, "ColumnAccessPath: [/st3/sa3, /st4/ss3]");
     }
@@ -478,30 +491,33 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "union all " +
                 "select v1, st1, st3, st4 from sc0 group by v1, st1, st3, st4) x1 join sc0 x2 on x1.v1 = x2.v1";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "30 <-> [21: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true].sm3[true][1]");
+        assertContains(plan, "30 <-> [21: st2, struct<`s1` int(11), `s2` int(11), "
+                + "`sm3` map<int(11),int(11)>>, true].sm3[true][1]");
         assertContains(plan, "ColumnAccessPath: [/st2/sm3/INDEX]");
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      [15, BIGINT, true] | [29, ARRAY<INT>, true] | " +
-                "[31, struct<s31 int(11), s32 int(11)>, true]\n" +
+                "[31, struct<`s31` int(11), `s32` int(11)>, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: v1, BIGINT, true] | [32: expr, ARRAY<INT>, true] | " +
-                "[33: expr, struct<s31 int(11), s32 int(11)>, true]\n" +
+                "[33: expr, struct<`s31` int(11), `s32` int(11)>, true]\n" +
                 "  |      [8: v1, BIGINT, true] | [34: expr, ARRAY<INT>, true] | " +
-                "[35: expr, struct<s31 int(11), s32 int(11)>, true]");
+                "[35: expr, struct<`s31` int(11), `s32` int(11)>, true]");
         assertContains(plan, "  6:Project\n"
                 + "  |  output columns:\n"
                 + "  |  8 <-> [8: v1, BIGINT, true]\n"
-                + "  |  34 <-> [11: st3, struct<s1 int(11), s2 int(11), sa3 array<int(11)>>, true].sa3[false]\n"
-                + "  |  35 <-> [12: st4, struct<s1 int(11), s2 int(11), ss3 struct<s31 int(11), s32 int(11)>>, true].ss3[false]\n"
+                + "  |  34 <-> [11: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
+                + "  |  35 <-> [12: st4, struct<`s1` int(11), `s2` int(11), "
+                + "`ss3` struct<`s31` int(11), `s32` int(11)>>, true].ss3[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  5:AGGREGATE");
         assertContains(plan, "  2:Project\n"
                 + "  |  output columns:\n"
                 + "  |  1 <-> [1: v1, BIGINT, true]\n"
-                + "  |  32 <-> [4: st3, struct<s1 int(11), s2 int(11), sa3 array<int(11)>>, true].sa3[false]\n"
-                + "  |  33 <-> [5: st4, struct<s1 int(11), s2 int(11), ss3 struct<s31 int(11), s32 int(11)>>, true].ss3[false]\n"
+                + "  |  32 <-> [4: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
+                + "  |  33 <-> [5: st4, struct<`s1` int(11), `s2` int(11), "
+                + "`ss3` struct<`s31` int(11), `s32` int(11)>>, true].ss3[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  1:OlapScanNode");
@@ -518,8 +534,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  2:Project\n"
                 + "  |  output columns:\n"
                 + "  |  3 <-> [3: v1, BIGINT, true]\n"
-                + "  |  12 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
-                + "  |  13 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s2[false]\n");
+                + "  |  12 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  13 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s2[false]\n");
     }
 
     @Test
@@ -532,13 +548,13 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  1:Project\n"
                 + "  |  output columns:\n"
                 + "  |  3 <-> [3: v1, BIGINT, true]\n"
-                + "  |  4 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true]\n"
-                + "  |  10 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s1[true]");
+                + "  |  4 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true]\n"
+                + "  |  10 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[true]");
         assertContains(plan, "  3:Project\n"
                 + "  |  output columns:\n"
                 + "  |  3 <-> [3: v1, BIGINT, true]\n"
-                + "  |  13 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
-                + "  |  14 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s2[false]");
+                + "  |  13 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  14 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s2[false]");
     }
 
     @Test
@@ -564,14 +580,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  7:Project\n"
                 + "  |  output columns:\n"
                 + "  |  15 <-> [15: v1, BIGINT, true]\n"
-                + "  |  25 <-> [17: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  25 <-> [17: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  6:AGGREGATE");
         assertContains(plan, "  1:Project\n"
                 + "  |  output columns:\n"
                 + "  |  8 <-> [8: v1, BIGINT, true]\n"
-                + "  |  24 <-> [9: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
+                + "  |  24 <-> [9: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  0:OlapScanNode");
@@ -589,7 +605,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  12:Project\n"
                 + "  |  output columns:\n"
                 + "  |  15 <-> [15: v1, BIGINT, true]\n"
-                + "  |  25 <-> [17: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  25 <-> [17: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  11:AGGREGATE");
@@ -599,9 +615,9 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  1:Project\n"
                 + "  |  output columns:\n"
                 + "  |  1 <-> [1: v1, BIGINT, true]\n"
-                + "  |  2 <-> [2: st1, struct<s1 int(11), s2 int(11)>, true]\n"
-                + "  |  3 <-> [3: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true]\n"
-                + "  |  26 <-> [2: st1, struct<s1 int(11), s2 int(11)>, true].s1[true]\n"
+                + "  |  2 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true]\n"
+                + "  |  3 <-> [3: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true]\n"
+                + "  |  26 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[true]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  0:OlapScanNode");
@@ -617,7 +633,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  6:Project\n"
                 + "  |  output columns:\n"
                 + "  |  10 <-> [12: expr, INT, true]\n"
-                + "  |  11 <-> [6: st3, struct<s1 int(11), s2 int(11), sa3 array<int(11)>>, true] IS NULL\n"
+                + "  |  11 <-> [6: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true] IS NULL\n"
                 + "  |  hasNullableGenerateChild: true\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
@@ -625,8 +641,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  1:Project\n"
                 + "  |  output columns:\n"
                 + "  |  3 <-> [3: v1, BIGINT, true]\n"
-                + "  |  6 <-> [6: st3, struct<s1 int(11), s2 int(11), sa3 array<int(11)>>, true]\n"
-                + "  |  12 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true].s1[false]\n"
+                + "  |  6 <-> [6: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true]\n"
+                + "  |  12 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
                 + "  |  cardinality: 1\n"
                 + "  |  \n"
                 + "  0:OlapScanNode");
@@ -695,7 +711,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
                     + "     tabletList=\n"
                     + "     actualRows=0, avgRowSize=3.0\n"
-                    + "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n"
+                    + "     Pruned type: 4 <-> [struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>]\n"
                     + "     ColumnAccessPath: [/st3/sa3]\n"
                     + "     cardinality: 1");
         }
@@ -719,7 +735,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         {
             String sql = "select st3.sa3[0], array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
+            assertContains(plan, "     Pruned type: 4 <-> [struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>]\n" +
                     "     ColumnAccessPath: [/st3/sa3/ALL]\n" +
                     "     cardinality: 1\n");
         }
@@ -747,7 +763,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "5:Project\n" +
                 "  |  <slot 15> : row(1, 2, 3).col2[true] IS NULL");
     }
-
 
     @Test
     public void testForceReuseCTE1() throws Exception {
@@ -1010,7 +1025,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "from js0;";
         plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
-        
+
         sql = "select " +
                 "get_json_int(j1, '$.') " +
                 "from js0;";
@@ -1140,6 +1155,45 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select get_json_bool(j1, 'a') from js0";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+    }
+
+    @Test
+    public void testVariantSubfieldPruning() throws Exception {
+        String sql = "select get_variant_int(v, '$.a.b'), get_variant_string(v, '$.c') from variant0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a/b(bigint(20)), /v/c(varchar)]");
+
+        sql = "select get_variant_int(v, '$.a'), get_variant_string(v, '$.a') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+        sql = "select variant_query(v, '$.profile.rank') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/profile/rank(variant)]");
+
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
+
+        sql = "select get_variant_int(v, '$.a.b') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+        sql = "select get_variant_int(v, '$.a[0]') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+
+        sql = "select get_variant_int(v, 'a.b'), get_variant_string(v, '$.\"profile.name\".first') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/\"profile.name\"/first(varchar), /v/a/b(bigint(20))]");
+
+        sql = "select variant_query(v, '$.a.b'), get_variant_string(v, '$.a.b') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a/b(variant)]");
+
+        sql = "select get_variant_int(v, '$.a.b'), get_variant_double(v, '$.a.b') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a/b(variant)]");
     }
 
     @Test

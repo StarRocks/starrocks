@@ -33,6 +33,7 @@
 #include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/util/debug_util.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
@@ -42,7 +43,6 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 class Chunk;
@@ -264,7 +264,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::
         fields.push_back(std::move(node));
     }
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
-            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, fields));
 }
 
 Status ParquetFileWriter::init() {
