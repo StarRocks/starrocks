@@ -172,7 +172,8 @@ StatusOr<std::string> url_decode(const std::string& in) {
         return Status::InvalidArgument("invalid encoding in URL");
     }
     DeferOp guard([&] { curl_free(decoded_value); });
-    return std::string(decoded_value);
+    // Use the explicit length so embedded NULs in the decoded payload are preserved.
+    return std::string(decoded_value, decoded_length);
 }
 
 } // namespace starrocks
