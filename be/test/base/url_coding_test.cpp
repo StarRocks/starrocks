@@ -84,12 +84,10 @@ TEST(UrlCodingTest, UrlEncodeDecodeRoundtrip) {
 TEST(Base64CodingTest, EncodeDecodeRoundtrip) {
     const std::string cases[] = {
             "",
-            "f",          // 1 byte  -> 2 chars + 2 pads
-            "fo",         // 2 bytes -> 3 chars + 1 pad
-            "foo",        // 3 bytes -> no pad
-            "foobar",
-            "Hello, World!",
-            std::string("\x00\x01\x02\xff\xfe", 5), // binary
+            "f",                                                               // 1 byte  -> 2 chars + 2 pads
+            "fo",                                                              // 2 bytes -> 3 chars + 1 pad
+            "foo",                                                             // 3 bytes -> no pad
+            "foobar", "Hello, World!", std::string("\x00\x01\x02\xff\xfe", 5), // binary
     };
     for (const auto& original : cases) {
         std::string encoded;
