@@ -187,6 +187,7 @@ void BinlogTestBase::verify_dup_key_multiple_versions(std::vector<DupKeyVersionI
                                                       std::vector<BinlogFileMetaPBPtr> file_metas) {
     if (versions.empty()) {
         ASSERT_TRUE(file_metas.empty());
+        return;
     }
     std::shared_ptr<BinlogFileMergeReader> reader =
             std::make_shared<BinlogFileMergeReader>(binlog_storage_path, file_metas);
