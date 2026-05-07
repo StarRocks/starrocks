@@ -85,8 +85,7 @@ public class VectorIndexBuildSchedulerTest {
         if (old != null) {
             scheduler.getPendingTabletsForTest().put(tabletId,
                     new VectorIndexBuildScheduler.Pending(
-                            old.latestVersion, old.latestCompactionVersion,
-                            old.enqueueTimeMs, ms));
+                            old.latestVersion, old.latestCompactionVersion, ms));
         }
     }
 
@@ -235,7 +234,7 @@ public class VectorIndexBuildSchedulerTest {
         setupRecoveryScanExpectations(db);
         scheduler.recoveryScan();
 
-        ConcurrentHashMap<Long, Long> pending = getPendingTablets();
+        ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> pending = getPendingTablets();
         Assertions.assertEquals(5L, pending.get(2001L).latestVersion);
         Assertions.assertEquals(5L, pending.get(2002L).latestVersion);
     }
@@ -616,7 +615,9 @@ public class VectorIndexBuildSchedulerTest {
         long tabletId = 8001L;
         long version = 12L;
         LakeTablet tablet = new LakeTablet(tabletId);
-        scheduler.addPendingTablet(tabletId, version, false);
+        // fromCompaction=true so we go through phase 1 and dispatch immediately,
+        // exercising the dispatch mechanism without the phase-2 wait.
+        scheduler.addPendingTablet(tabletId, version, true);
         setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
 
         ComputeNode node = Mockito.mock(ComputeNode.class);
@@ -642,7 +643,7 @@ public class VectorIndexBuildSchedulerTest {
 
         scheduler.scheduleFromPending();
 
-        Assertions.assertTrue(getPendingTablets().isEmpty(), "tablet moved out of pending");
+        // Pending entry is intentionally preserved until task-completion path runs.
         Assertions.assertTrue(getRunningTasks().containsKey(tabletId), "task added to runningTasks");
     }
 
@@ -652,7 +653,7 @@ public class VectorIndexBuildSchedulerTest {
         long tabletId = 8002L;
         long version = 5L;
         LakeTablet tablet = new LakeTablet(tabletId);
-        scheduler.addPendingTablet(tabletId, version, false);
+        scheduler.addPendingTablet(tabletId, version, true);
         setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
 
         ComputeNode preferred = Mockito.mock(ComputeNode.class);
