@@ -863,9 +863,16 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
+        // Intensive path: IX on DB + WRITE on this one table. The mutation is
+        // strictly tablet-local (tablet.addReplica) on a single known table.
+        // Concurrent DROP TABLE / DROP DATABASE still take DB WRITE and conflict
+        // with our IX, so the surrounding correctness invariants (no clone task
+        // for a dropped table) are preserved.
+        // Lock acquisition is outside the try so the finally cannot try to unlock
+        // a never-acquired lock if lockTableWithIntensiveDbLock itself throws.
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             if (tabletHealthStatus == TabletHealthStatus.REPLICA_MISSING
                     || tabletHealthStatus == TabletHealthStatus.REPLICA_RELOCATING
                     || tabletHealthStatus == TabletHealthStatus.LOCATION_MISMATCH
@@ -920,7 +927,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         }
 
         this.state = State.RUNNING;
@@ -938,9 +945,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
         }
+        // Intensive path: IX on DB + WRITE on this one table. The mutation is
+        // tablet-local (tablet.addReplica) on a single known table; reads of
+        // partition / index / schema metadata are all on the same table.
+        // Lock acquisition is outside the try so the finally cannot try to unlock
+        // a never-acquired lock if lockTableWithIntensiveDbLock itself throws.
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(
                     globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId),
                     tblId);
@@ -998,7 +1010,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             state = State.RUNNING;
             return task;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         }
     }
 
