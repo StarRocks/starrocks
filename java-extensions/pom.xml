@@ -63,16 +63,12 @@
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
-<<<<<<< HEAD
         <zookeeper.version>3.8.6</zookeeper.version>
-=======
         <bouncycastle.version>1.84</bouncycastle.version>
->>>>>>> dfa0198b3e ([BugFix][CVE] bump pgjdbc to 42.7.11 and BouncyCastle to 1.84 (#72797))
     </properties>
 
     <dependencyManagement>
         <dependencies>
-<<<<<<< HEAD
 
             <!-- CVE-2026-24281 / CVE-2026-24308: pin zookeeper to fix version -->
             <dependency>
@@ -80,7 +76,6 @@
                 <artifactId>zookeeper</artifactId>
                 <version>${zookeeper.version}</version>
             </dependency>
-=======
             <dependency>
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcprov-jdk18on</artifactId>
@@ -97,7 +92,6 @@
                 <version>${bouncycastle.version}</version>
             </dependency>
 
->>>>>>> dfa0198b3e ([BugFix][CVE] bump pgjdbc to 42.7.11 and BouncyCastle to 1.84 (#72797))
             <!-- jni connector -->
             <dependency>
                 <groupId>com.starrocks</groupId>
