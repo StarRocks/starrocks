@@ -60,7 +60,7 @@ subprojects {
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
         set("iceberg.version", "1.10.0")
-        set("io.netty.version", "4.1.132.Final")
+        set("io.netty.version", "4.1.133.Final")
         set("jackson.version", "2.21.1")
         set("jackson-annotations.version", "2.21")
         set("jetty.version", "9.4.57.v20241219")
