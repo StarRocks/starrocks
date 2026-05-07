@@ -803,6 +803,28 @@ public class PrivilegeStmtAnalyzerV2Test {
     }
 
     @Test
+    public void testGrantFunctionWithUnsizedParameterizedTypes() {
+        analyzeFail("GRANT usage ON FUNCTION db1.non_existent_func(varchar) TO USER test_user",
+                "cannot find function");
+        analyzeFail("GRANT usage ON FUNCTION db1.non_existent_func(char) TO USER test_user",
+                "cannot find function");
+        analyzeFail("GRANT usage ON FUNCTION db1.non_existent_func(int, varchar) TO USER test_user",
+                "cannot find function");
+        analyzeFail("GRANT usage ON FUNCTION db1.non_existent_func(varchar, char) TO USER test_user",
+                "cannot find function");
+
+        // Global function with unsized types
+        analyzeFail("GRANT usage ON GLOBAL FUNCTION non_existent_global_func(varchar) TO USER test_user",
+                "cannot find function");
+        analyzeFail("GRANT usage ON GLOBAL FUNCTION non_existent_global_func(varchar, int) TO USER test_user",
+                "cannot find function");
+
+        // Grant to the built-in public role with unsized types
+        analyzeFail("GRANT usage ON FUNCTION db1.non_existent_func(varchar) TO ROLE public",
+                "cannot find function");
+    }
+
+    @Test
     public void testErrorParam() {
         analyzeFail("grant SELECT on ALL TABLES to test_user",
                 "Invalid grant statement with error privilege object");

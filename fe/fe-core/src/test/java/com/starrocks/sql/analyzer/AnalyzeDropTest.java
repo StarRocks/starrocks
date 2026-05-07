@@ -83,6 +83,34 @@ public class AnalyzeDropTest {
     }
 
     @Test
+    public void testDropFunctionWithUnsizedParameterizedTypes() {
+        analyzeSuccess("drop function if exists non_existent_func(varchar)");
+        analyzeSuccess("drop function if exists non_existent_func(char)");
+        analyzeSuccess("drop function if exists non_existent_func(varchar, char)");
+        analyzeSuccess("drop function if exists non_existent_func(int, varchar)");
+        analyzeSuccess("drop function if exists non_existent_func(string, varchar)");
+        analyzeSuccess("drop function if exists non_existent_func(decimal)");
+    }
+
+    @Test
+    public void testDropFunctionWithUnsizedTypesInsideComplexTypes() {
+        // ArrayType wrapping an unsized scalar
+        analyzeSuccess("drop function if exists non_existent_func(array<varchar>)");
+        analyzeSuccess("drop function if exists non_existent_func(array<char>)");
+        analyzeSuccess("drop function if exists non_existent_func(array<array<varchar>>)");
+
+        // MapType with unsized key and/or value
+        analyzeSuccess("drop function if exists non_existent_func(map<varchar, int>)");
+        analyzeSuccess("drop function if exists non_existent_func(map<int, varchar>)");
+        analyzeSuccess("drop function if exists non_existent_func(map<varchar, varchar>)");
+        analyzeSuccess("drop function if exists non_existent_func(map<char, varchar>)");
+
+        // StructType with unsized field types
+        analyzeSuccess("drop function if exists non_existent_func(struct<a varchar>)");
+        analyzeSuccess("drop function if exists non_existent_func(struct<a varchar, b int>)");
+    }
+
+    @Test
     public void testDropView() {
         analyzeSuccess("drop view if exists view_to_drop");
         analyzeSuccess("drop view view_to_drop");
