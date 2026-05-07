@@ -31,6 +31,7 @@ import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -450,7 +451,7 @@ public class MergeTabletJobTest {
         ComputeResource expectedResource = WarehouseComputeResource.of(10010L);
         AtomicReference<ComputeResource> actualResource = new AtomicReference<>();
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeResource getBackgroundComputeResource(long tableId) {
                 Assertions.assertEquals(table.getId(), tableId);
