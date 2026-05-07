@@ -20,11 +20,11 @@
 
 #include "base/brpc/reusable_closure.h"
 #include "base/concurrency/spinlock.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
-#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {
 

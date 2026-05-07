@@ -20,6 +20,7 @@
 #include "base/brpc/ref_count_closure.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/configbase.h"
 #include "common/runtime_profile.h"
 #include "common/system/master_info.h"
@@ -33,7 +34,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/datum.h"
-#include "util/brpc_stub_cache.h"
 #include "util/stack_util.h"
 
 namespace starrocks {

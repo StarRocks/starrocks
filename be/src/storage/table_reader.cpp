@@ -18,6 +18,8 @@
 #include <queue>
 
 #include "base/brpc/ref_count_closure.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -28,8 +30,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
-#include "util/brpc_stub_cache.h"
-#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {
 

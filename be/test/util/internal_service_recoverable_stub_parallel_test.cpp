@@ -19,7 +19,7 @@
 #include <thread>
 
 #include "base/brpc/ref_count_closure.h"
-#include "util/internal_service_recoverable_stub.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 
 namespace starrocks {
 

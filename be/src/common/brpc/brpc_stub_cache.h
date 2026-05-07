@@ -41,13 +41,13 @@
 #include "base/brpc/brpc.h"
 #include "base/concurrency/spinlock.h"
 #include "base/network/network_util.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/bthread_timer.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
-#include "util/internal_service_recoverable_stub.h"
 
 #ifndef __APPLE__
-#include "util/lake_service_recoverable_stub.h"
+#include "common/brpc/lake_service_recoverable_stub.h"
 #endif
 
 namespace starrocks {
@@ -78,6 +78,7 @@ public:
     void cleanup_expired(const butil::EndPoint& endpoint);
 
 private:
+    struct Metrics;
     struct StubPool {
         StubPool();
         ~StubPool();
@@ -91,6 +92,7 @@ private:
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<StubPool>> _stub_map;
     BthreadTimer* _timer;
+    std::unique_ptr<Metrics> _metrics;
 };
 
 class HttpBrpcStubCache {

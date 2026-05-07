@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
@@ -42,7 +43,6 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "util/brpc_stub_cache.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

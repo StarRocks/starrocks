@@ -15,11 +15,11 @@
 #include "cache/peer_cache_engine.h"
 
 #include "base/hash/hash_std.hpp"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/logging.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/exec_env.h"
-#include "util/brpc_stub_cache.h"
-#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {
 

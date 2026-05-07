@@ -45,6 +45,7 @@
 #include "base/concurrency/concurrent_limiter.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
@@ -58,7 +59,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "util/brpc_stub_cache.h"
 
 class mg_connection;
 

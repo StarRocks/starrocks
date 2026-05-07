@@ -25,6 +25,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
@@ -37,7 +38,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/brpc_stub_cache.h"
 
 class mg_connection;
 

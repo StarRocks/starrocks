@@ -23,6 +23,8 @@
 
 #include "base/compression/block_compression.h"
 #include "base/compression/compression_utils.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
@@ -41,8 +43,6 @@
 #include "runtime/runtime_state.h"
 #include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
-#include "util/brpc_stub_cache.h"
-#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks::pipeline {
 

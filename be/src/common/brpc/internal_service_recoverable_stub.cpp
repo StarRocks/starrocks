@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/internal_service_recoverable_stub.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 
 #include <memory>
 

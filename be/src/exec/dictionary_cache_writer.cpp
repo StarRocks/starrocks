@@ -15,6 +15,7 @@
 #include "exec/dictionary_cache_writer.h"
 
 #include "base/compression/block_compression.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
@@ -22,7 +23,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/service_contexts.h"
 #include "serde/protobuf_serde.h"
-#include "util/brpc_stub_cache.h"
 
 namespace starrocks {
 

@@ -27,14 +27,14 @@
     {
       "id": "common",
       "doc_label": "Common",
-      "summary": "Core shared infrastructure above Base/Gutil only. Higher-level BE modules must not leak back into it.",
+      "summary": "Core shared infrastructure above Base/Gutil and generated code only. Higher-level BE modules must not leak back into it.",
       "owned_targets": ["Common"],
       "owned_roots": ["be/src/common"],
       "allowed_include_prefixes": ["common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["Base", "Gutil"],
+      "allowed_target_deps": ["Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["common_test"],
       "allowed_test_link_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated headers."
+      "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code."
     },
     {
       "id": "cachecore",
