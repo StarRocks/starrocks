@@ -945,7 +945,7 @@ CONF_mInt32(tablet_meta_checkpoint_min_new_rowsets_num, "10");
 CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");
 
 // Maximum size of a single message body in all protocols.
-CONF_Int64(brpc_max_body_size, "2147483648");
+CONF_Int64(brpc_max_body_size, "2147483647");
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc connection types, "single", "pooled", "short".
@@ -1847,7 +1847,7 @@ CONF_mInt64(writer_scaling_min_size_mb, "128");
 CONF_mBool(enable_profile_for_external_plan, "false");
 
 // the max length supported for varchar type
-CONF_mInt32(olap_string_max_length, "1048576");
+CONF_mInt32(olap_string_max_length, "2147483638");
 
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");
@@ -1954,8 +1954,8 @@ CONF_mInt64(vector_index_build_flush_threshold_rows, "262144");
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.
 // This will cause FE to fail during deserialization when the returned result set is larger than 100M. Therefore,
-// we set a default value of 1G and the maximum configurable value is 2G.
-CONF_mInt32(thrift_max_message_size, "1073741824");
+// we set a default value close to 2G and the maximum configurable value is 2G - 1.
+CONF_mInt32(thrift_max_message_size, "2147483647");
 
 // MaxFrameSize limits the size of one frame of data for the TFramedTransport. Since all implementations currently send
 // messages in one frame only if TFramedTransport is used, this value may interfere with MaxMessageSize.

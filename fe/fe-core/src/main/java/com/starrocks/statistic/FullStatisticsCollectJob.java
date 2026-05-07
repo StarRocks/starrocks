@@ -72,8 +72,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     //| data_size      | bigint           | NO   | false | <null>  |       |
     //| ndv            | hll              | NO   | false |         |       |
     //| null_count     | bigint           | NO   | false | <null>  |       |
-    //| max            | varchar(1048576) | NO   | false | <null>  |       |
-    //| min            | varchar(1048576) | NO   | false | <null>  |       |
+    //| max            | varchar(2147483638) | NO   | false | <null>  |       |
+    //| min            | varchar(2147483638) | NO   | false | <null>  |       |
     //| update_time    | datetime         | NO   | false | <null>  |       |
     //| collection_size| bigint           | NO   | false | <null>  |       |
     private static final String TABLE_NAME = "column_statistics";

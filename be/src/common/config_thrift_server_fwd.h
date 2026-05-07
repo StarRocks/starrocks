@@ -28,8 +28,8 @@ CONF_Int32(thrift_rpc_max_body_size, "0");
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.
 // This will cause FE to fail during deserialization when the returned result set is larger than 100M. Therefore,
-// we set a default value of 1G and the maximum configurable value is 2G.
-CONF_mInt32(thrift_max_message_size, "1073741824");
+// we set a default value close to 2G and the maximum configurable value is 2G - 1.
+CONF_mInt32(thrift_max_message_size, "2147483647");
 
 // MaxFrameSize limits the size of one frame of data for the TFramedTransport. Since all implementations currently send
 // messages in one frame only if TFramedTransport is used, this value may interfere with MaxMessageSize.

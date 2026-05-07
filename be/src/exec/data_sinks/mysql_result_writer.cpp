@@ -251,7 +251,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
             }
             size_t len = _row_buffer->length();
 
-            if (UNLIKELY(len >= row_hard_limit)) {
+            if (UNLIKELY(len > row_hard_limit)) {
                 return Status::NotSupported(
                         fmt::format("mysql result row size {} exceeds limit {}", len, row_hard_limit));
             }

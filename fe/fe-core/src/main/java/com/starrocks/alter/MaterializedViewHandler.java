@@ -44,6 +44,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.OlapTableSchemaValidator;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -333,6 +334,7 @@ public class MaterializedViewHandler extends AlterHandler {
             // assign rollup index's key type, same as base index's
             mvKeysType = olapTable.getKeysType();
         }
+        OlapTableSchemaValidator.checkKeyColumns(mvColumns);
         // get short key column count
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
         // get timeout

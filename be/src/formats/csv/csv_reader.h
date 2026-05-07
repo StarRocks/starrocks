@@ -155,7 +155,7 @@ struct CSVParseOptions {
 class CSVReader {
 #ifndef BE_TEST
     constexpr static size_t kMinBufferSize = 8 * 1024 * 1024L;
-    constexpr static size_t kMaxBufferSize = 512 * 1024 * 1024L;
+    constexpr static size_t kMaxBufferSize = 2 * 1024UL * 1024 * 1024 + 100 * 1024UL * 1024;
 #else
     constexpr static size_t kMinBufferSize = 128 * 1024L;
     constexpr static size_t kMaxBufferSize = 512 * 1024L;

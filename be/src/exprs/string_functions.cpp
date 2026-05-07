@@ -403,28 +403,36 @@ Status StringFunctions::concat_prepare(FunctionContext* context, FunctionContext
         return Status::OK();
     }
 
-    std::string tail;
     // size of concatenation of tail columns(i.e. columns except the 1st one)
     // must not exceeds SIZE_LIMIT, otherwise the result is oversize in which
     // case NULL is returned according to mysql.
-    raw::make_room(&tail, get_olap_string_max_length());
+    const size_t max_length = get_olap_string_max_length();
+    size_t tail_size = 0;
+    for (auto i = 1; i < num_args; ++i) {
+        auto const_arg = context->get_constant_column(i);
+        auto s = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_arg);
+        if (s.size > max_length || tail_size > max_length - s.size) {
+            state->is_oversize = true;
+            break;
+        }
+        tail_size += s.size;
+    }
+    if (state->is_oversize) {
+        return Status::OK();
+    }
+
+    std::string tail;
+    raw::make_room(&tail, tail_size);
     auto* tail_begin = (uint8_t*)tail.data();
     size_t tail_off = 0;
 
     for (auto i = 1; i < num_args; ++i) {
         auto const_arg = context->get_constant_column(i);
         auto s = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_arg);
-        if (tail_off + s.size > get_olap_string_max_length()) {
-            //oversize
-            state->is_oversize = true;
-            break;
-        }
         strings::memcpy_inlined(tail_begin + tail_off, s.data, s.size);
         tail_off += s.size;
     }
-    if (!state->is_oversize) {
-        state->tail.assign(tail_begin, tail_begin + tail_off);
-    }
+    state->tail = std::move(tail);
     return Status::OK();
 }
 

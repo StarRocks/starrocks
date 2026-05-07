@@ -80,6 +80,7 @@ public class DistributionInfoBuilder {
                         throw new DdlException(column.getType() + " column can not be distribution column");
                     }
 
+                    OlapTableSchemaValidator.checkLargeVarcharColumn(column, "hash distribution column");
                     distributionColumns.add(column);
                     find = true;
                     break;
