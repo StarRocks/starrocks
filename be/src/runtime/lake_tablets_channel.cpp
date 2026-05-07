@@ -1172,7 +1172,6 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
     ADD_AND_SET_TIMER(profile, "FinishWaitFlushTime", writer_stat.finish_wait_flush_time_ns.load());
     ADD_AND_SET_TIMER(profile, "FinishPrepareTxnLogTime", writer_stat.finish_prepare_txn_log_time_ns.load());
     ADD_AND_SET_TIMER(profile, "FinishPutTxnLogTime", writer_stat.finish_put_txn_log_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "FinishPkPreloadTime", writer_stat.finish_pk_preload_time_ns.load());
 
     // Use get_flush_token() to hold a shared_ptr, keeping the FlushToken alive
     // while we read its stats. This prevents use-after-free when close()

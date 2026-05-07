@@ -270,9 +270,6 @@ public:
     // Accumulated time that delta writer waits for memtable flush. It's part of
     // async_delta_writer_task_execute_duration_us
     METRIC_DEFINE_INT_COUNTER(delta_writer_wait_flush_duration_us, MetricUnit::MICROSECONDS);
-    // Accumulated time that delta writer preload rowset for pk table. It's part of
-    // async_delta_writer_task_execute_duration_us
-    METRIC_DEFINE_INT_COUNTER(delta_writer_pk_preload_duration_us, MetricUnit::MICROSECONDS);
     // Accumulated time that delta writer waits for secondary replicas sync. It's part of
     // async_delta_writer_task_execute_duration_us
     METRIC_DEFINE_INT_COUNTER(delta_writer_wait_replica_duration_us, MetricUnit::MICROSECONDS);

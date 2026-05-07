@@ -840,9 +840,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     }
 
     // handle partial update
-    // If there is bundle data file, we will skip preload pk state, because the bundle data file hasn't been
-    // flushed to storage yet.
-    bool skip_pk_preload = config::skip_pk_preload || op_write->rowset().bundle_file_offsets_size() > 0;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {
@@ -857,8 +854,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
-            } else {
-                skip_pk_preload = true;
             }
             // handle partial update
             op_write->mutable_txn_meta()->set_partial_update_mode(_partial_update_mode);
@@ -919,15 +914,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     auto commit_txn_duration_ns = put_txn_log_ts - prepare_txn_log_ts;
     ADD_COUNTER_RELAXED(_stats.finish_put_txn_log_time_ns, commit_txn_duration_ns);
     StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment(commit_txn_duration_ns /
-                                                                                NANOSECS_PER_USEC);
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
-        // preload update state here to minimaze the cost when publishing.
-        FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(load_pk_preload, (void)PK_PRELOAD_FP_ACTION(_txn_id, _tablet_id),
-                                              tablet.update_mgr()->preload_update_state(*txn_log, &tablet));
-    }
-    auto pk_preload_duration_ns = watch.elapsed_time() - put_txn_log_ts;
-    ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, pk_preload_duration_ns);
-    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
                                                                                 NANOSECS_PER_USEC);
     VLOG(2) << "txn_log: " << txn_log->DebugString();
 

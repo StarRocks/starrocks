@@ -303,7 +303,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    // Snapshot IO stats before publish to exclude preload IO from trace counters.
+    // Snapshot IO stats so trace counters reflect only this publish call (state may be reused on retry).
     const int64_t io_local_disk_ns_before = state.stats().io_ns_read_local_disk;
     const int64_t io_remote_ns_before = state.stats().io_ns_remote;
     const int64_t io_count_local_disk_before = state.stats().io_count_local_disk;
@@ -1713,7 +1713,7 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         }
 
         if (params.container.rssid_to_file().count(rssid) == 0) {
-            // It may happen when preload partial update state by old tablet meta
+            // It may happen when partial update state was loaded with old tablet meta
             return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist",
                                                  params.metadata->id(), params.metadata->version(), rssid));
         }
@@ -2179,71 +2179,6 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
     auto key = cache_key(tablet_id, txn_id);
     _update_state_cache.try_remove_by_key(key);
     _compaction_cache.try_remove_by_key(key);
-}
-
-void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
-    // use process mem tracker instread of load mem tracker here.
-    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
-    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
-                                                                                             : nullptr);
-    scoped_refptr<Trace> trace_guard(new Trace);
-    ADOPT_TRACE(trace_guard.get());
-    TRACE("start preload_update_state tablet_id=$0 txn_id=$1", tablet->id(), txnlog.txn_id());
-    auto start_ts = MonotonicMillis();
-    // use tabletid-txnid as update state cache's key, so it can retry safe.
-    auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
-    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& state = state_entry->value();
-    // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
-    auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
-    const int segments_size = txnlog.op_write().rowset().segments_size();
-    // skip preload if memory limit exceed
-    if (metadata_ptr != nullptr && segments_size > 0 && !_update_state_mem_tracker->any_limit_exceeded()) {
-        auto tablet_schema = std::make_shared<TabletSchema>(metadata_ptr->schema());
-        RssidFileInfoContainer rssid_fileinfo_container;
-        rssid_fileinfo_container.add_rssid_to_file(*metadata_ptr);
-        RowsetUpdateStateParams params{
-                .op_write = txnlog.op_write(),
-                .tablet_schema = tablet_schema,
-                .metadata = metadata_ptr,
-                .tablet = tablet,
-                .container = rssid_fileinfo_container,
-        };
-        state.init(params);
-        auto st = Status::OK();
-        for (uint32_t segment_id = 0; segment_id < segments_size && !_update_state_mem_tracker->any_limit_exceeded();
-             segment_id++) {
-            st = state.load_segment(segment_id, params, metadata_ptr->version(), false /* resolve conflict*/,
-                                    true /* need lock */);
-            _update_state_cache.update_object_size(state_entry, state.memory_usage());
-            if (!st.ok()) {
-                break;
-            }
-        }
-        if (!st.ok()) {
-            _update_state_cache.remove(state_entry);
-            if (!st.is_uninitialized() && !st.is_cancelled()) {
-                LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1",
-                                                  tablet->id(), st.to_string());
-            } else {
-                LOG(INFO) << strings::Substitute("lake primary table preload_update_state id:$0 failed:$1",
-                                                 tablet->id(), st.to_string());
-            }
-            // not return error even it fail, because we can load update state in publish again.
-        } else {
-            // just release it, will use it again in publish
-            _update_state_cache.release(state_entry);
-        }
-    } else {
-        _update_state_cache.remove(state_entry);
-    }
-    auto cost_ms = MonotonicMillis() - start_ts;
-    if (cost_ms >= config::lake_publish_version_slow_log_ms) {
-        LOG(INFO) << "Slow preload_update_state tablet_id=" << tablet->id() << " txn_id=" << txnlog.txn_id()
-                  << " segments=" << segments_size << " cost=" << cost_ms
-                  << "ms, trace: " << trace_guard->MetricsAsJSON();
-    }
-    TEST_SYNC_POINT("UpdateManager::preload_update_state:return");
 }
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
