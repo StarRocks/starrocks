@@ -2168,6 +2168,14 @@ const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(
     return found_node->typed_value_reader.get();
 }
 
+ColumnReader* VariantColumnReader::scalar_typed_value_reader_for_path(const VariantPath& path) {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr) return nullptr;
+    if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->typed_value_reader == nullptr) return nullptr;
+    return found_node->typed_value_reader.get();
+}
+
 const TypeDescriptor* VariantColumnReader::typed_value_read_type_for_path(const VariantPath& path) const {
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
