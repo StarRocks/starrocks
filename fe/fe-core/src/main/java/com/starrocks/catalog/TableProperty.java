@@ -252,6 +252,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Only meaningful when enablePersistentIndex = true.
     TPersistentIndexType persistentIndexType;
 
+    @SerializedName(value = "lightWeightTabletCreation")
+    private boolean lightWeightTabletCreation = false;
+
     private int primaryIndexCacheExpireSec = 0;
 
     /*
@@ -383,6 +386,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.mvTransparentRewriteMode = other.mvTransparentRewriteMode;
         this.enablePersistentIndex = other.enablePersistentIndex;
         this.persistentIndexType = other.persistentIndexType;
+        this.lightWeightTabletCreation = other.lightWeightTabletCreation;
         this.primaryIndexCacheExpireSec = other.primaryIndexCacheExpireSec;
         this.storageVolume = other.storageVolume;
         this.storageCoolDownTTL = other.storageCoolDownTTL;
@@ -879,6 +883,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildLightWeightTabletCreation() {
+        lightWeightTabletCreation = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION, "false"));
+        return this;
+    }
+
     public TableProperty buildPrimaryIndexCacheExpireSec() {
         primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
                 PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
@@ -1207,6 +1217,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public boolean enablePersistentIndex() {
         return enablePersistentIndex;
+    }
+
+    public boolean lightWeightTabletCreation() {
+        return lightWeightTabletCreation;
     }
 
     public boolean isFileBundling() {

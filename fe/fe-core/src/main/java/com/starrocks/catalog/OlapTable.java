@@ -1207,7 +1207,7 @@ public class OlapTable extends Table {
             if (numBucket > 0) {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
-                numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(isLightWeightTabletCreation());
                 info.setBucketNum((int) numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {
@@ -2064,6 +2064,16 @@ public class OlapTable extends Table {
 
     public Boolean enablePersistentIndex() {
         return tableProperty.enablePersistentIndex();
+    }
+
+    public boolean isLightWeightTabletCreation() {
+        return tableProperty.lightWeightTabletCreation();
+    }
+
+    public void setLightWeightTabletCreation(boolean lightWeightTabletCreation) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION,
+                Boolean.valueOf(lightWeightTabletCreation).toString());
+        tableProperty.buildLightWeightTabletCreation();
     }
 
     public int primaryIndexCacheExpireSec() {
@@ -3019,6 +3029,11 @@ public class OlapTable extends Table {
         if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
             properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
+        }
+
+        if (isCloudNativeTable()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION,
+                    Boolean.toString(isLightWeightTabletCreation()));
         }
 
         // lake_compaction_max_parallel (only for cloud native table, only show when not default)
