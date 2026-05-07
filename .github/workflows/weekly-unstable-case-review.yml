@@ -79,22 +79,21 @@ jobs:
     if: ${{ needs.prepare.outputs.RUN_FE_UT == 'true' }}
     runs-on: [self-hosted, normal]
     env:
-      BRANCH:     ${{ needs.prepare.outputs.BRANCH }}
-      PR_NUMBER:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+      BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
+      COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
     outputs:
       oss_path: ${{ steps.run_ut.outputs.oss_path }}
     steps:
-      - name: Run FE-UT (inspection mode)
+      - name: Run FE-UT (targeted unstable cases only)
         id: run_ut
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
-          ./bin/elastic-ut.sh \
+          ./bin/elastic-ut-review.sh \
             --repository ${{ github.repository }} \
             --branch ${BRANCH} \
-            --pr ${PR_NUMBER} \
+            --commit ${COMMIT_SHA} \
             --module fe \
-            --build Release \
             --linuxdistro ubuntu
 
       - name: Clean ECI
@@ -116,22 +115,21 @@ jobs:
     if: ${{ needs.prepare.outputs.RUN_BE_UT == 'true' }}
     runs-on: [self-hosted, normal]
     env:
-      BRANCH:     ${{ needs.prepare.outputs.BRANCH }}
-      PR_NUMBER:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+      BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
+      COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
     outputs:
       oss_path: ${{ steps.run_ut.outputs.oss_path }}
     steps:
-      - name: Run BE-UT (inspection mode)
+      - name: Run BE-UT (targeted unstable cases only)
         id: run_ut
         timeout-minutes: 120
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
-          ./bin/elastic-ut.sh \
+          ./bin/elastic-ut-review.sh \
             --repository ${{ github.repository }} \
             --branch ${BRANCH} \
-            --pr ${PR_NUMBER} \
+            --commit ${COMMIT_SHA} \
             --module be \
-            --build Release \
             --linuxdistro ubuntu
 
       - name: Clean ECI
@@ -143,7 +141,6 @@ jobs:
         run: |
           rm -f  "${{ steps.run_ut.outputs.RES_FILE }}"  || true
           rm -f  "${{ steps.run_ut.outputs.RES_LOG }}"   || true
-          rm -f  "${{ steps.run_ut.outputs.BE_LOG }}"    || true
           rm -rf ${{ github.workspace }}/*
 
   # ─── Deploy StarRocks cluster (for SQL-Tester) ───────────────────────────
