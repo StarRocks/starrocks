@@ -416,4 +416,182 @@ TEST(TabletSplitterTest, rca_reproducer_scaled_down) {
     EXPECT_LT(std::abs(left - right) * 4, 4000) << "sampled-path split should be within 25% imbalance";
 }
 
+// -----------------------------------------------------------------------------
+// PR #1: precise tablet_range clipping in calculate_range_split_boundaries.
+//
+// shared-data tablet split shares physical segments across child tablets, so
+// after a tablet has been split once its remaining shared rowsets still report
+// physical sort_key_min / sort_key_max that extend past the child tablet's
+// range. When that child is split again, the algorithm builds ordered_ranges
+// from segment boundaries plus tablet_range bounds (after this fix). The
+// candidate filter must precisely exclude any ordered_range that falls
+// outside the tablet's range, including ordered_ranges that previously
+// straddled a tablet edge.
+// -----------------------------------------------------------------------------
+
+// Upper crossing: a segment whose physical extent crosses the tablet's
+// upper_bound used to leak its out-of-range rows/bytes into the per-split
+// estimates because the candidate filter only excluded ranges with no overlap.
+TEST(TabletSplitterTest, tablet_range_excludes_data_past_upper_when_segments_straddle) {
+    // seg1 [0, 50) is fully within tablet [0, 70).
+    // seg2 [40, 100) physically crosses tablet's upper bound 70.
+    auto seg1 = make_seg(/*min=*/0, /*max=*/50, /*num_rows=*/50, /*data_size=*/500, /*source_id=*/1);
+    auto seg2 = make_seg(/*min=*/40, /*max=*/100, /*num_rows=*/60, /*data_size=*/600, /*source_id=*/2);
+
+    TabletRange tablet_range(make_int_tuple(0), make_int_tuple(70),
+                             /*lower_bound_included=*/true, /*upper_bound_included=*/false);
+
+    ASSIGN_OR_ABORT(auto result,
+                    calculate_range_split_boundaries({seg1, seg2}, /*target_split_count=*/2,
+                                                     /*target_value_per_split=*/40,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true, &tablet_range));
+    ASSERT_EQ(1u, result.boundaries.size());
+    int64_t total_rows = 0;
+    int64_t total_bytes = 0;
+    for (size_t i = 0; i < result.range_num_rows.size(); ++i) {
+        total_rows += result.range_num_rows[i];
+        total_bytes += result.range_data_sizes[i];
+    }
+    // After inserting tablet_range bound 70, ordered_ranges become
+    //   [0,40), [40,50), [50,70), [70,100)
+    // seg2's 60 rows are split evenly across the 3 overlapping ranges
+    // [40,50)/[50,70)/[70,100), giving 20 rows each. Only [70,100) is outside
+    // the tablet, so seg2 contributes 40 rows. seg1 stays at 50 rows.
+    EXPECT_EQ(90, total_rows);
+    EXPECT_EQ(900, total_bytes);
+    // Per-source sums: seg1 fully kept, seg2 trimmed.
+    auto [s1_rows, s1_bytes] = sum_source_stats(result, 1);
+    EXPECT_EQ(50, s1_rows);
+    EXPECT_EQ(500, s1_bytes);
+    auto [s2_rows, s2_bytes] = sum_source_stats(result, 2);
+    EXPECT_EQ(40, s2_rows);
+    EXPECT_EQ(400, s2_bytes);
+}
+
+// Lower-bound inclusivity: child tablets produced by split have
+// lower_bound_included=true, but TabletRange::greater_than returns false when
+// r.max == lower_bound under that flag. Without inserting the tablet bound and
+// using a precise overlap predicate, an ordered_range whose r.max ==
+// tablet.lower_bound is incorrectly kept and inflates the in-tablet sum.
+TEST(TabletSplitterTest, tablet_range_excludes_data_below_when_lower_bound_inclusive) {
+    auto seg1 = make_seg(/*min=*/0, /*max=*/60, /*num_rows=*/30, /*data_size=*/300, /*source_id=*/1);
+    auto seg2 = make_sampled_seg(/*min=*/50, /*max=*/90, /*num_rows=*/40, /*data_size=*/400,
+                                 /*iv=*/20, /*samples=*/{60}, /*source_id=*/2);
+    auto seg3 = make_seg(/*min=*/70, /*max=*/100, /*num_rows=*/25, /*data_size=*/250, /*source_id=*/3);
+
+    TabletRange tablet_range(make_int_tuple(60), make_int_tuple(100),
+                             /*lower_bound_included=*/true, /*upper_bound_included=*/false);
+
+    ASSIGN_OR_ABORT(auto result,
+                    calculate_range_split_boundaries({seg1, seg2, seg3}, /*target_split_count=*/2,
+                                                     /*target_value_per_split=*/30,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true, &tablet_range));
+    ASSERT_EQ(1u, result.boundaries.size());
+
+    // seg1 [0, 60) is entirely below the tablet (its r.max == tablet.lower_bound,
+    // and the tablet's smallest key is 60-included; seg1 has no key in [60, _)).
+    auto [s1_rows, s1_bytes] = sum_source_stats(result, 1);
+    EXPECT_EQ(0, s1_rows);
+    EXPECT_EQ(0, s1_bytes);
+    // seg2's sample at 60 splits its rows into [50,60) (below) and [60,90)
+    // (within), 20 rows per sub-segment.
+    auto [s2_rows, s2_bytes] = sum_source_stats(result, 2);
+    EXPECT_EQ(20, s2_rows);
+    EXPECT_EQ(200, s2_bytes);
+    // seg3 is fully within the tablet.
+    auto [s3_rows, s3_bytes] = sum_source_stats(result, 3);
+    EXPECT_EQ(25, s3_rows);
+    EXPECT_EQ(250, s3_bytes);
+
+    int64_t total_rows = 0;
+    int64_t total_bytes = 0;
+    for (size_t i = 0; i < result.range_num_rows.size(); ++i) {
+        total_rows += result.range_num_rows[i];
+        total_bytes += result.range_data_sizes[i];
+    }
+    EXPECT_EQ(45, total_rows);
+    EXPECT_EQ(450, total_bytes);
+}
+
+// Regression: when segment boundaries are entirely inside tablet_range (the
+// first-split shape), adding tablet_range bounds to ordered_boundaries must
+// not change the per-split totals. The empty edge ranges contribute zero and
+// the greedy still picks the same split point.
+TEST(TabletSplitterTest, tablet_range_covering_all_data_does_not_change_totals) {
+    auto seg1 = make_seg(/*min=*/10, /*max=*/50, /*num_rows=*/50, /*data_size=*/500, /*source_id=*/1);
+    auto seg2 = make_seg(/*min=*/60, /*max=*/100, /*num_rows=*/50, /*data_size=*/500, /*source_id=*/2);
+
+    ASSIGN_OR_ABORT(auto without, calculate_range_split_boundaries({seg1, seg2}, /*target_split_count=*/2,
+                                                                   /*target_value_per_split=*/50,
+                                                                   /*use_num_rows=*/true, /*track_sources=*/true));
+
+    TabletRange tablet_range(make_int_tuple(0), make_int_tuple(150),
+                             /*lower_bound_included=*/true, /*upper_bound_included=*/false);
+    ASSIGN_OR_ABORT(auto with,
+                    calculate_range_split_boundaries({seg1, seg2}, /*target_split_count=*/2,
+                                                     /*target_value_per_split=*/50,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true, &tablet_range));
+
+    ASSERT_EQ(without.boundaries.size(), with.boundaries.size());
+    EXPECT_EQ(without.range_num_rows, with.range_num_rows);
+    EXPECT_EQ(without.range_data_sizes, with.range_data_sizes);
+    // Both source totals must match too.
+    auto [w_s1_r, w_s1_b] = sum_source_stats(without, 1);
+    auto [t_s1_r, t_s1_b] = sum_source_stats(with, 1);
+    EXPECT_EQ(w_s1_r, t_s1_r);
+    EXPECT_EQ(w_s1_b, t_s1_b);
+    auto [w_s2_r, w_s2_b] = sum_source_stats(without, 2);
+    auto [t_s2_r, t_s2_b] = sum_source_stats(with, 2);
+    EXPECT_EQ(w_s2_r, t_s2_r);
+    EXPECT_EQ(w_s2_b, t_s2_b);
+}
+
+// Conservation across split count: for the same input + tablet_range, the sum
+// of per-split rows/bytes must be invariant regardless of the split count
+// chosen. Runs split_count = 2..5 against a tablet whose bounds fall inside
+// the segments' physical extent on both sides.
+TEST(TabletSplitterTest, tablet_range_total_invariant_across_split_counts) {
+    std::vector<int64_t> samples;
+    for (int64_t v = 20; v <= 180; v += 20) samples.push_back(v);
+    std::vector<SegmentSplitInfo> segs;
+    segs.push_back(make_sampled_seg(/*min=*/0, /*max=*/200, /*num_rows=*/200, /*data_size=*/2000,
+                                    /*iv=*/20, samples, /*source_id=*/1));
+    segs.push_back(make_seg(/*min=*/50, /*max=*/150, /*num_rows=*/100, /*data_size=*/1000, /*source_id=*/2));
+
+    TabletRange tablet_range(make_int_tuple(30), make_int_tuple(170),
+                             /*lower_bound_included=*/true, /*upper_bound_included=*/false);
+
+    int64_t reference_rows = -1;
+    int64_t reference_bytes = -1;
+    int succeeded_runs = 0;
+    for (int32_t split_count = 2; split_count <= 5; ++split_count) {
+        ASSIGN_OR_ABORT(auto result,
+                        calculate_range_split_boundaries(segs, split_count, /*target_value_per_split=*/0,
+                                                         /*use_num_rows=*/true, /*track_sources=*/true, &tablet_range));
+        if (result.boundaries.empty()) continue;
+        ++succeeded_runs;
+        int64_t total_rows = 0;
+        int64_t total_bytes = 0;
+        for (auto v : result.range_num_rows) total_rows += v;
+        for (auto v : result.range_data_sizes) total_bytes += v;
+        if (reference_rows < 0) {
+            reference_rows = total_rows;
+            reference_bytes = total_bytes;
+        } else {
+            EXPECT_EQ(reference_rows, total_rows) << "row total should be invariant across split count " << split_count;
+            EXPECT_EQ(reference_bytes, total_bytes)
+                    << "byte total should be invariant across split count " << split_count;
+        }
+    }
+    EXPECT_GT(succeeded_runs, 0) << "expected at least one split count to succeed";
+    EXPECT_GT(reference_rows, 0);
+    EXPECT_GT(reference_bytes, 0);
+}
+
+// Helper unit tests for `allocate_proportionally` and `cap_and_redistribute_dels`
+// live in `tablet_reshard_helper_test.cpp` — those helpers were moved to the
+// `tablet_reshard_helper` namespace as part of the per-rowset anchor change so
+// they can be reused by the planned cross-publish (P2) refactor without
+// re-introducing a private split-only header.
+
 } // namespace starrocks::lake

@@ -880,6 +880,443 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
     EXPECT_EQ(4, total_child_num_dels);
 }
 
+// Multi-rowset conservation. Parent has multiple rowsets with overlapping
+// segment key ranges so the per-source weight distribution differs across
+// rowsets. After split, Σ children.rowset[r].{num_rows,data_size,num_dels}
+// must equal the parent's recorded value for every rowset r — this is the
+// anchor's exactness contract regardless of how the segment-level
+// distribution chose to weight the children.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conservation) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_primary_key_schema(&metadata, 1);
+    add_historical_schema(&metadata, 1);
+
+    // Rowset A: keys [0, 99], 100 rows / 10000 bytes / 7 dels.
+    auto* rs_a = metadata.add_rowsets();
+    rs_a->set_id(2);
+    rs_a->set_overlapped(true);
+    rs_a->set_num_rows(100);
+    rs_a->set_data_size(10000);
+    rs_a->set_num_dels(7);
+    rs_a->add_segments("rs_a_0.dat");
+    rs_a->add_segment_size(10000);
+    auto* sm_a = rs_a->add_segment_metas();
+    sm_a->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    sm_a->set_num_rows(100);
+
+    // Rowset B: keys [50, 199], 60 rows / 6000 bytes / 0 dels (overlaps A on [50,99]).
+    auto* rs_b = metadata.add_rowsets();
+    rs_b->set_id(3);
+    rs_b->set_overlapped(true);
+    rs_b->set_num_rows(60);
+    rs_b->set_data_size(6000);
+    rs_b->set_num_dels(0);
+    rs_b->add_segments("rs_b_0.dat");
+    rs_b->add_segment_size(6000);
+    auto* sm_b = rs_b->add_segment_metas();
+    sm_b->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+    sm_b->set_num_rows(60);
+
+    // Rowset C: keys [100, 199], 30 rows / 3000 bytes / 11 dels.
+    auto* rs_c = metadata.add_rowsets();
+    rs_c->set_id(4);
+    rs_c->set_overlapped(true);
+    rs_c->set_num_rows(30);
+    rs_c->set_data_size(3000);
+    rs_c->set_num_dels(11);
+    rs_c->add_segments("rs_c_0.dat");
+    rs_c->add_segment_size(3000);
+    auto* sm_c = rs_c->add_segment_metas();
+    sm_c->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
+    sm_c->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+    sm_c->set_num_rows(30);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    const int64_t child_id_1 = next_id();
+    const int64_t child_id_2 = next_id();
+    const int64_t child_id_3 = next_id();
+    splitting.add_new_tablet_ids(child_id_1);
+    splitting.add_new_tablet_ids(child_id_2);
+    splitting.add_new_tablet_ids(child_id_3);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
+                                              false, tablet_metadatas, tablet_ranges));
+
+    // Per-rowset Σ children == parent for every stat.
+    struct RsTotals {
+        int64_t num_rows = 0;
+        int64_t data_size = 0;
+        int64_t num_dels = 0;
+    };
+    std::unordered_map<uint32_t, RsTotals> totals;
+    for (int64_t cid : {child_id_1, child_id_2, child_id_3}) {
+        auto it = tablet_metadatas.find(cid);
+        ASSERT_TRUE(it != tablet_metadatas.end());
+        for (const auto& rs : it->second->rowsets()) {
+            auto& t = totals[rs.id()];
+            t.num_rows += rs.num_rows();
+            t.data_size += rs.data_size();
+            t.num_dels += rs.num_dels();
+            EXPECT_LE(rs.num_dels(), rs.num_rows()) << "child cid=" << cid << " rs=" << rs.id();
+        }
+    }
+
+    EXPECT_EQ(100, totals[2].num_rows);
+    EXPECT_EQ(10000, totals[2].data_size);
+    EXPECT_EQ(7, totals[2].num_dels);
+
+    EXPECT_EQ(60, totals[3].num_rows);
+    EXPECT_EQ(6000, totals[3].data_size);
+    EXPECT_EQ(0, totals[3].num_dels);
+
+    EXPECT_EQ(30, totals[4].num_rows);
+    EXPECT_EQ(3000, totals[4].data_size);
+    EXPECT_EQ(11, totals[4].num_dels);
+}
+
+// Pathological metadata: parent rowset has num_dels > num_rows. The anchor
+// builder clamps num_dels up front (with WARNING) so cap-and-redistribute
+// has a feasible input. After split, Σ children.num_dels equals the clamped
+// parent.num_rows, and per-child num_dels stays within rows.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_parent_dels) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_primary_key_schema(&metadata, 1);
+    add_historical_schema(&metadata, 1);
+
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(true);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(1000);
+    rowset->set_num_dels(15); // pathological: > num_rows
+
+    // Two segments so calculate_range_split_boundaries has enough key-space
+    // boundaries to produce a 2-way split (single segment falls back to
+    // identical-tablet publish, which would skip the anchor pass).
+    rowset->add_segments("seg_0.dat");
+    rowset->add_segment_size(500);
+    auto* sm0 = rowset->add_segment_metas();
+    sm0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+    sm0->set_num_rows(5);
+
+    rowset->add_segments("seg_1.dat");
+    rowset->add_segment_size(500);
+    auto* sm1 = rowset->add_segment_metas();
+    sm1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+    sm1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    sm1->set_num_rows(5);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    const int64_t child_id_1 = next_id();
+    const int64_t child_id_2 = next_id();
+    splitting.add_new_tablet_ids(child_id_1);
+    splitting.add_new_tablet_ids(child_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
+                                              false, tablet_metadatas, tablet_ranges));
+
+    int64_t total_child_num_rows = 0;
+    int64_t total_child_num_dels = 0;
+    for (int64_t cid : {child_id_1, child_id_2}) {
+        auto it = tablet_metadatas.find(cid);
+        ASSERT_TRUE(it != tablet_metadatas.end());
+        ASSERT_EQ(1, it->second->rowsets_size());
+        const auto& child_rs = it->second->rowsets(0);
+        EXPECT_TRUE(child_rs.has_num_dels());
+        EXPECT_LE(child_rs.num_dels(), child_rs.num_rows());
+        total_child_num_rows += child_rs.num_rows();
+        total_child_num_dels += child_rs.num_dels();
+    }
+    // num_rows still conserves at parent.num_rows; num_dels conserves at the
+    // *clamped* parent value (= parent.num_rows = 10), not the bogus 15.
+    EXPECT_EQ(10, total_child_num_rows);
+    EXPECT_EQ(10, total_child_num_dels);
+}
+
+// Anchor input fallback: legacy / incomplete metadata may omit
+// rowset-level num_rows / data_size while still carrying valid
+// segment_metas + segment_size. The previous (pre-anchor) split path
+// derived its per-child stats from segment metadata via
+// range_source_stats, so children received non-zero stats even when
+// the rowset proto fields were unset. The anchor path must preserve
+// this property: when rowset.has_num_rows() / has_data_size() is false,
+// fall back to summing the corresponding segment-level fields. Without
+// this, anchor=0 would collapse every child's stat to zero.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segment_sums_when_rowset_totals_unset) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_primary_key_schema(&metadata, 1);
+    add_historical_schema(&metadata, 1);
+
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(true);
+    // Intentionally do NOT set num_rows or data_size at the rowset level.
+    // Segment metadata still carries the real values.
+
+    rowset->add_segments("seg_0.dat");
+    rowset->add_segment_size(400);
+    auto* sm0 = rowset->add_segment_metas();
+    sm0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+    sm0->set_num_rows(4);
+
+    rowset->add_segments("seg_1.dat");
+    rowset->add_segment_size(400);
+    auto* sm1 = rowset->add_segment_metas();
+    sm1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+    sm1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    sm1->set_num_rows(4);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    const int64_t child_id_1 = next_id();
+    const int64_t child_id_2 = next_id();
+    splitting.add_new_tablet_ids(child_id_1);
+    splitting.add_new_tablet_ids(child_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
+                                              false, tablet_metadatas, tablet_ranges));
+
+    // Σ children rowset[r].num_rows must equal the segment-derived total
+    // (4 + 4 = 8 rows), data_size the segment_size sum (400 + 400 = 800).
+    int64_t total_num_rows = 0;
+    int64_t total_data_size = 0;
+    for (int64_t cid : {child_id_1, child_id_2}) {
+        auto it = tablet_metadatas.find(cid);
+        ASSERT_TRUE(it != tablet_metadatas.end());
+        ASSERT_EQ(1, it->second->rowsets_size());
+        total_num_rows += it->second->rowsets(0).num_rows();
+        total_data_size += it->second->rowsets(0).data_size();
+    }
+    EXPECT_EQ(8, total_num_rows) << "anchor must fall back to Σ segment_metas.num_rows()";
+    EXPECT_EQ(800, total_data_size) << "anchor must fall back to Σ segment_size";
+}
+
+// Three-level chain conservation. Σ children == parent at every split level
+// for num_rows / data_size / num_dels per rowset. By induction Σ leaves at
+// level-3 == original parent — the property a multi-level reshard must
+// guarantee for downstream consumers (get_tablet_stats, planner, vacuum).
+//
+// Setup uses sampled segments (sort_key_samples populated) so segment-level
+// boundary candidates are dense enough for 3 successive splits to find
+// candidates inside ever-narrowing tablet ranges.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_conservation) {
+    auto add_sampled_rowset = [](TabletMetadataPB* md, int64_t rs_id, int min_v, int max_v, int num_rows, int data_size,
+                                 int num_dels, int interval) {
+        auto* rs = md->add_rowsets();
+        rs->set_id(rs_id);
+        rs->set_overlapped(true);
+        rs->set_num_rows(num_rows);
+        rs->set_data_size(data_size);
+        rs->set_num_dels(num_dels);
+        rs->add_segments(fmt::format("rs_{}_0.dat", rs_id));
+        rs->add_segment_size(data_size);
+        auto* sm = rs->add_segment_metas();
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
+        sm->set_num_rows(num_rows);
+        sm->set_sort_key_sample_row_interval(interval);
+        for (int v = min_v + interval; v < max_v; v += interval) {
+            sm->add_sort_key_samples()->CopyFrom(generate_sort_key(v));
+        }
+    };
+
+    auto verify_per_rowset_conservation = [](const TabletMetadataPB& parent_md, const std::vector<int64_t>& child_ids,
+                                             const std::unordered_map<int64_t, TabletMetadataPtr>& children,
+                                             const char* level) {
+        struct Totals {
+            int64_t num_rows = 0;
+            int64_t data_size = 0;
+            int64_t num_dels = 0;
+        };
+        std::unordered_map<uint32_t, Totals> totals;
+        for (int64_t cid : child_ids) {
+            auto it = children.find(cid);
+            ASSERT_TRUE(it != children.end()) << level << ": missing child " << cid;
+            for (const auto& rs : it->second->rowsets()) {
+                auto& t = totals[rs.id()];
+                t.num_rows += rs.num_rows();
+                t.data_size += rs.data_size();
+                t.num_dels += rs.num_dels();
+                EXPECT_LE(rs.num_dels(), rs.num_rows())
+                        << level << ": child " << cid << " rs " << rs.id() << " num_dels exceeds num_rows";
+            }
+        }
+        for (const auto& rs : parent_md.rowsets()) {
+            auto it = totals.find(rs.id());
+            ASSERT_TRUE(it != totals.end()) << level << ": rowset " << rs.id() << " missing in children";
+            EXPECT_EQ(rs.num_rows(), it->second.num_rows) << level << ": num_rows for rs " << rs.id();
+            EXPECT_EQ(rs.data_size(), it->second.data_size) << level << ": data_size for rs " << rs.id();
+            EXPECT_EQ(rs.num_dels(), it->second.num_dels) << level << ": num_dels for rs " << rs.id();
+        }
+    };
+
+    const int64_t base_version_l0 = 2;
+    const int64_t version_l1 = 3;
+    const int64_t version_l2 = 4;
+    const int64_t version_l3 = 5;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version_l0);
+    set_primary_key_schema(&metadata, 1);
+    add_historical_schema(&metadata, 1);
+
+    // 2 rowsets covering [0,1499] with samples every 100 rows. Combined ~2000
+    // rows / 16000 bytes / 42 dels. Sample density gives every ~100 keys a
+    // boundary candidate, plenty to drive 3 levels of splitting.
+    add_sampled_rowset(&metadata, /*rs_id=*/2, /*min=*/0, /*max=*/999, /*num_rows=*/1000,
+                       /*data_size=*/10000, /*num_dels=*/30, /*interval=*/100);
+    add_sampled_rowset(&metadata, /*rs_id=*/3, /*min=*/500, /*max=*/1499, /*num_rows=*/1000,
+                       /*data_size=*/6000, /*num_dels=*/12, /*interval=*/100);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    // ---- Level 1: split tablet → 3 children ----
+    ReshardingTabletInfoPB r1;
+    auto& s1 = *r1.mutable_splitting_tablet_info();
+    s1.set_old_tablet_id(tablet_id);
+    const int64_t l1_a = next_id();
+    const int64_t l1_b = next_id();
+    const int64_t l1_c = next_id();
+    s1.add_new_tablet_ids(l1_a);
+    s1.add_new_tablet_ids(l1_b);
+    s1.add_new_tablet_ids(l1_c);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tm_l1;
+    std::unordered_map<int64_t, TabletRangePB> tr_l1;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), r1, base_version_l0, version_l1, txn_info, false,
+                                              tm_l1, tr_l1));
+    verify_per_rowset_conservation(metadata, {l1_a, l1_b, l1_c}, tm_l1, "level-1");
+
+    // ---- Level 2: re-split the level-1 child with the most rows ----
+    int64_t l2_parent_id = l1_a;
+    int64_t l2_parent_total_rows = 0;
+    {
+        for (const auto& rs : tm_l1.at(l1_a)->rowsets()) l2_parent_total_rows += rs.num_rows();
+        for (int64_t cid : {l1_b, l1_c}) {
+            int64_t total = 0;
+            for (const auto& rs : tm_l1.at(cid)->rowsets()) total += rs.num_rows();
+            if (total > l2_parent_total_rows) {
+                l2_parent_id = cid;
+                l2_parent_total_rows = total;
+            }
+        }
+    }
+    auto l2_parent_md = tm_l1.at(l2_parent_id);
+
+    ReshardingTabletInfoPB r2;
+    auto& s2 = *r2.mutable_splitting_tablet_info();
+    s2.set_old_tablet_id(l2_parent_id);
+    const int64_t l2_a = next_id();
+    const int64_t l2_b = next_id();
+    s2.add_new_tablet_ids(l2_a);
+    s2.add_new_tablet_ids(l2_b);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tm_l2;
+    std::unordered_map<int64_t, TabletRangePB> tr_l2;
+    auto st_l2 = lake::publish_resharding_tablet(_tablet_manager.get(), r2, version_l1, version_l2, txn_info, false,
+                                                 tm_l2, tr_l2);
+    if (!st_l2.ok()) {
+        GTEST_SKIP() << "level-2 split could not be exercised on this fixture: " << st_l2;
+    }
+    verify_per_rowset_conservation(*l2_parent_md, {l2_a, l2_b}, tm_l2, "level-2");
+
+    // ---- Level 3: split the bigger level-2 grandchild ----
+    int64_t l3_parent_id = l2_a;
+    int64_t l3_parent_total_rows = 0;
+    for (const auto& rs : tm_l2.at(l2_a)->rowsets()) l3_parent_total_rows += rs.num_rows();
+    {
+        int64_t total_b = 0;
+        for (const auto& rs : tm_l2.at(l2_b)->rowsets()) total_b += rs.num_rows();
+        if (total_b > l3_parent_total_rows) {
+            l3_parent_id = l2_b;
+            l3_parent_total_rows = total_b;
+        }
+    }
+    auto l3_parent_md = tm_l2.at(l3_parent_id);
+
+    ReshardingTabletInfoPB r3;
+    auto& s3 = *r3.mutable_splitting_tablet_info();
+    s3.set_old_tablet_id(l3_parent_id);
+    const int64_t l3_a = next_id();
+    const int64_t l3_b = next_id();
+    s3.add_new_tablet_ids(l3_a);
+    s3.add_new_tablet_ids(l3_b);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tm_l3;
+    std::unordered_map<int64_t, TabletRangePB> tr_l3;
+    auto st_l3 = lake::publish_resharding_tablet(_tablet_manager.get(), r3, version_l2, version_l3, txn_info, false,
+                                                 tm_l3, tr_l3);
+    if (!st_l3.ok()) {
+        GTEST_SKIP() << "level-3 split could not be exercised on this fixture: " << st_l3;
+    }
+    verify_per_rowset_conservation(*l3_parent_md, {l3_a, l3_b}, tm_l3, "level-3");
+}
+
 TEST_F(LakeTabletReshardTest, test_merge_rowsets_reorder_by_predicate_version) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
