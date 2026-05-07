@@ -200,6 +200,22 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
             ordered_boundaries.insert(&sample);
         }
     }
+    // Insert tablet_range bounds so any ordered_range that previously straddled a
+    // tablet_range edge is split exactly at that edge. Without this, a shared
+    // segment whose physical key range extends past the tablet's range (a tablet
+    // that has been split before still sees the full physical extent of its
+    // shared rowsets) can leak its out-of-range data into the per-split
+    // estimates: the candidate filter only excludes ranges that don't overlap at
+    // all, so a partial-crossing range is kept whole and its full data_size /
+    // num_rows is summed into one of the new splits.
+    if (tablet_range != nullptr) {
+        if (!tablet_range->is_minimum()) {
+            ordered_boundaries.insert(&tablet_range->lower_bound());
+        }
+        if (!tablet_range->is_maximum()) {
+            ordered_boundaries.insert(&tablet_range->upper_bound());
+        }
+    }
 
     if (ordered_boundaries.size() < 2) {
         return result;
@@ -229,13 +245,57 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
 
     // Step 4: Calculate split boundaries using a greedy algorithm.
     // If tablet_range is provided, only consider ranges that overlap with it.
+    //
+    // The overlap predicate mirrors find_overlapping_ranges' last-range
+    // semantics: every ordered_range except the last is the half-open interval
+    // [min, max); the last range is the closed interval [min, max]. The check
+    // also has to honor TabletRange's lower / upper inclusion flags (a child
+    // produced by split has lower_bound_included=true and upper_bound_included
+    // =false, so e.g. a range whose r.max == tablet_range.lower_bound is
+    // entirely below the tablet — TabletRange::greater_than alone misses this
+    // case because it returns false when the lower bound is included).
+    //
+    // Precondition assumed by the production caller (split_tablet): tablet
+    // ranges follow the [lower, upper) shape — `upper_bound_excluded` is the
+    // convention written by `get_tablet_split_ranges` (lower_bound_included
+    // = true, upper_bound_included = false; see the per-split range
+    // construction below). The corner case `r.min == tablet.upper_bound` with
+    // `upper_bound_included` would represent a singleton overlap that the
+    // ordered_range model cannot allocate precisely (a non-last
+    // ordered_range covers [r.min, r.max), so it would consume more than the
+    // single key). For an inclusive upper bound we still mark such an r as
+    // overlapping (best-effort), but the caller must rely on the half-open
+    // convention to avoid silent over-counting.
+    const size_t last_range_index = ordered_ranges.size() - 1;
+    auto range_overlaps_tablet = [&](const RangeInfo& r, size_t idx) -> bool {
+        if (tablet_range == nullptr) return true;
+        if (!tablet_range->is_minimum()) {
+            const int cmp = r.max.compare(tablet_range->lower_bound());
+            if (idx == last_range_index) {
+                // r covers [r.min, r.max]: entirely below iff r.max is strictly
+                // less than the smallest key in tablet_range.
+                if (cmp < 0) return false;
+                if (cmp == 0 && tablet_range->lower_bound_excluded()) return false;
+            } else {
+                // r covers [r.min, r.max): entirely below iff r.max is at or
+                // below the smallest key in tablet_range.
+                if (cmp <= 0) return false;
+            }
+        }
+        if (!tablet_range->is_maximum()) {
+            const int cmp = r.min.compare(tablet_range->upper_bound());
+            if (cmp > 0) return false;
+            if (cmp == 0 && tablet_range->upper_bound_excluded()) return false;
+        }
+        return true;
+    };
     std::vector<const RangeInfo*> candidate_ranges;
     candidate_ranges.reserve(ordered_ranges.size());
-    for (const auto& r : ordered_ranges) {
-        if (tablet_range != nullptr && (tablet_range->less_than(r.min) || tablet_range->greater_than(r.max))) {
+    for (size_t i = 0; i < ordered_ranges.size(); ++i) {
+        if (!range_overlaps_tablet(ordered_ranges[i], i)) {
             continue;
         }
-        candidate_ranges.push_back(&r);
+        candidate_ranges.push_back(&ordered_ranges[i]);
     }
 
     int32_t actual_split_count = std::min(target_split_count, static_cast<int32_t>(candidate_ranges.size()));
@@ -368,61 +428,117 @@ struct TabletRangeInfo {
     std::unordered_map<uint32_t, Statistic> rowset_stats;
 };
 
-// Split the parent rowset's total_num_dels across the split groups proportional to
-// each group's share of the rowset's rows, using the Hare-Niemeyer (largest-remainder)
-// method. Writes the result into TabletRangeInfo.rowset_stats[source_id].num_dels.
-// Guarantees the sum of allocated values equals total_num_dels when at least one
-// group has rows for this source.
-//
-// Each split child keeps the same shared segment files and inherits the parent's
-// delvec cardinality, so without this proportional estimate get_tablet_stats would
-// subtract the full parent num_dels from each child's partial num_rows and collapse
-// the partition's live-row count (see lake_service.cpp:1166).
-void allocate_rowset_num_dels_across_splits(uint32_t source_id, int64_t total_num_dels,
-                                            std::vector<TabletRangeInfo>* split_ranges) {
-    if (total_num_dels <= 0 || split_ranges == nullptr || split_ranges->empty()) {
-        return;
-    }
+// Per-rowset anchor totals taken from the parent's recorded metadata. Used to
+// renormalize per-split-group estimates so Σ children equals parent exactly,
+// preserving stat conservation across re-splits regardless of how the
+// underlying segment-distribution model approximates straddling sub-segments.
+struct RowsetAnchor {
+    int64_t num_rows = 0;
+    int64_t data_size = 0;
+    int64_t num_dels = 0;
+};
 
-    int64_t total_rows = 0;
-    for (auto& split_range : *split_ranges) {
-        auto it = split_range.rowset_stats.find(source_id);
-        if (it != split_range.rowset_stats.end()) {
-            total_rows += it->second.num_rows;
+// Build the per-rowset anchor map from the parent tablet metadata. For PK
+// tablets without a populated num_dels field on the rowset (legacy
+// metadata), derive num_dels from the delvec — same fallback as the
+// pre-anchor code path. If a rowset reports num_dels > num_rows
+// (pathological metadata), clamp up front with a WARNING; the
+// cap-and-redistribute contract assumes parent.num_dels <= parent.num_rows.
+std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetadataPB& metadata,
+                                                               TabletManager* tablet_manager) {
+    std::unordered_map<uint32_t, RowsetAnchor> anchor;
+    anchor.reserve(metadata.rowsets_size());
+    const bool pk = is_primary_key(metadata);
+    for (const auto& rowset : metadata.rowsets()) {
+        RowsetAnchor a;
+        // Anchor totals: prefer the rowset-level fields. When legacy /
+        // incomplete metadata omits them, fall back to summing the
+        // segment-level fields. Without this fallback, anchor=0 collapses
+        // every child's stat to 0 even though segment metadata still
+        // carries real values — the pre-anchor path implicitly used the
+        // segment-derived numbers via range_source_stats, so we preserve
+        // that property explicitly here.
+        if (rowset.has_num_rows()) {
+            a.num_rows = rowset.num_rows();
+        } else {
+            for (const auto& sm : rowset.segment_metas()) {
+                a.num_rows += sm.num_rows();
+            }
         }
+        if (rowset.has_data_size()) {
+            a.data_size = rowset.data_size();
+        } else {
+            for (int i = 0; i < rowset.segment_size_size(); ++i) {
+                a.data_size += rowset.segment_size(i);
+            }
+        }
+        if (rowset.has_num_dels()) {
+            a.num_dels = rowset.num_dels();
+        } else if (pk && tablet_manager != nullptr) {
+            // Legacy fallback: derive num_dels from the delvec. Costs one
+            // delvec read per rowset, acceptable on the one-shot split path.
+            a.num_dels = static_cast<int64_t>(tablet_manager->update_mgr()->get_rowset_num_deletes(metadata, rowset));
+        }
+        if (a.num_dels > a.num_rows) {
+            LOG(WARNING) << "rowset id=" << rowset.id() << " has num_dels=" << a.num_dels
+                         << " > num_rows=" << a.num_rows << "; clamping for split allocation";
+            a.num_dels = a.num_rows;
+        }
+        anchor.emplace(rowset.id(), a);
     }
-    if (total_rows <= 0) {
-        return;
-    }
+    return anchor;
+}
 
-    std::vector<int64_t> allocated(split_ranges->size(), 0);
-    std::vector<std::pair<int64_t, size_t>> fractional_remainders;
-    fractional_remainders.reserve(split_ranges->size());
-    int64_t sum_allocated = 0;
-    for (size_t i = 0; i < split_ranges->size(); ++i) {
-        auto it = (*split_ranges)[i].rowset_stats.find(source_id);
-        if (it == (*split_ranges)[i].rowset_stats.end() || it->second.num_rows <= 0) continue;
-        // Use 128-bit intermediate: both operands can realistically reach 1e10 on very
-        // large rowsets, whose product overflows int64_t. base fits because it is
-        // bounded by total_num_dels; fractional_remainder fits because it is < total_rows.
-        __int128 numerator = static_cast<__int128>(total_num_dels) * static_cast<__int128>(it->second.num_rows);
-        int64_t base = static_cast<int64_t>(numerator / total_rows);
-        int64_t fractional_remainder = static_cast<int64_t>(numerator % total_rows);
-        allocated[i] = base;
-        sum_allocated += base;
-        fractional_remainders.emplace_back(fractional_remainder, i);
-    }
+// Anchor each split group's per-rowset stats to the parent's recorded totals
+// using the Hare-Niemeyer helper. Σ children stat == parent stat exactly for
+// num_rows, data_size, and num_dels per rowset (modulo cap-and-redistribute
+// for invalid parents — see tablet_reshard_helper.h contracts).
+//
+// Replaces the pre-anchor flow which wrote per-source weights raw into
+// rowset_stats and ran a separate num_dels Hare-Niemeyer pass after.
+void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& anchor, const RangeSplitResult& split_result,
+                         std::vector<TabletRangeInfo>* split_ranges) {
+    DCHECK(split_ranges != nullptr);
+    const int64_t num_splits = static_cast<int64_t>(split_ranges->size());
+    if (num_splits == 0) return;
 
-    std::sort(fractional_remainders.begin(), fractional_remainders.end(),
-              [](const auto& a, const auto& b) { return a.first > b.first; });
-    int64_t leftover = total_num_dels - sum_allocated;
-    for (size_t k = 0; k < fractional_remainders.size() && leftover > 0; ++k, --leftover) {
-        allocated[fractional_remainders[k].second]++;
-    }
+    for (const auto& [source_id, ra] : anchor) {
+        // Gather per-group weights for this source. Missing entries
+        // contribute weight 0; zero-weight buckets receive zero allocation
+        // (or share the uniform fallback when every weight is zero).
+        std::vector<int64_t> rows_w(num_splits, 0);
+        std::vector<int64_t> bytes_w(num_splits, 0);
+        for (int64_t g = 0; g < num_splits; ++g) {
+            if (g >= static_cast<int64_t>(split_result.range_source_stats.size())) break;
+            auto it = split_result.range_source_stats[g].find(source_id);
+            if (it != split_result.range_source_stats[g].end()) {
+                rows_w[g] = it->second.first;
+                bytes_w[g] = it->second.second;
+            }
+        }
 
-    for (size_t i = 0; i < split_ranges->size(); ++i) {
-        if (allocated[i] > 0) {
-            (*split_ranges)[i].rowset_stats[source_id].num_dels = allocated[i];
+        std::vector<int64_t> rows_alloc(num_splits, 0);
+        std::vector<int64_t> bytes_alloc(num_splits, 0);
+        std::vector<int64_t> dels_alloc(num_splits, 0);
+        tablet_reshard_helper::allocate_proportionally(ra.num_rows, rows_w, &rows_alloc);
+        tablet_reshard_helper::allocate_proportionally(ra.data_size, bytes_w, &bytes_alloc);
+        // num_dels follows the row distribution: deletes are per-row, not
+        // per-byte, so byte weights would skew the split when row and byte
+        // distributions disagree (e.g. compressed columns).
+        tablet_reshard_helper::allocate_proportionally(ra.num_dels, rows_w, &dels_alloc);
+        tablet_reshard_helper::cap_and_redistribute_dels(rows_alloc, &dels_alloc);
+
+        for (int64_t g = 0; g < num_splits; ++g) {
+            // Skip writes that would create an empty entry — keeps the
+            // rowset_stats map sparse, identical to the pre-anchor behavior
+            // for sources with no representation in the group.
+            if (rows_alloc[g] == 0 && bytes_alloc[g] == 0 && dels_alloc[g] == 0) {
+                continue;
+            }
+            auto& dst = (*split_ranges)[g].rowset_stats[source_id];
+            dst.num_rows = rows_alloc[g];
+            dst.data_size = bytes_alloc[g];
+            dst.num_dels = dels_alloc[g];
         }
     }
 }
@@ -511,14 +627,6 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                 sr.range.clear_upper_bound_included();
             }
         }
-
-        if (i < static_cast<int32_t>(split_result.range_source_stats.size())) {
-            for (const auto& [source_id, stats_pair] : split_result.range_source_stats[i]) {
-                auto& rowset_stat = sr.rowset_stats[source_id];
-                rowset_stat.num_rows = stats_pair.first;
-                rowset_stat.data_size = stats_pair.second;
-            }
-        }
     }
 
     if (split_ranges->size() != static_cast<size_t>(split_count)) {
@@ -531,22 +639,16 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                 fmt::format("Insufficient split boundaries: requested {}, produced {}", split_count, produced));
     }
 
-    // Only PK tablets maintain delete vectors; duplicate/aggregate keys never populate
-    // num_dels so there is nothing to scale.
-    if (is_primary_key(*tablet_metadata)) {
-        for (const auto& rowset : tablet_metadata->rowsets()) {
-            int64_t total_num_dels = 0;
-            if (rowset.has_num_dels()) {
-                total_num_dels = rowset.num_dels();
-            } else if (tablet_manager != nullptr) {
-                // Legacy metadata without num_dels: derive from the delvec. This costs
-                // one delvec read per rowset, acceptable on the one-shot split path.
-                total_num_dels = static_cast<int64_t>(
-                        tablet_manager->update_mgr()->get_rowset_num_deletes(*tablet_metadata, rowset));
-            }
-            allocate_rowset_num_dels_across_splits(rowset.id(), total_num_dels, split_ranges);
-        }
-    }
+    // Anchor per-split per-rowset stats to the parent's recorded totals so
+    // that Σ children stat == parent stat exactly for num_rows / data_size /
+    // num_dels. The segment-level distribution from
+    // calculate_range_split_boundaries is used as relative weights only;
+    // absolute values come from the parent metadata. This eliminates the
+    // residual drift seen across multi-level splits when the algorithm
+    // re-runs on the same physical segments under a different
+    // ordered_boundaries set.
+    auto anchor = build_rowset_anchor(*tablet_metadata, tablet_manager);
+    apply_rowset_anchor(anchor, split_result, split_ranges);
 
     return Status::OK();
 }
@@ -617,6 +719,10 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
             RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&rowset_metadata, split_ranges[i].range));
             const auto it = split_ranges[i].rowset_stats.find(rowset_metadata.id());
             if (it != split_ranges[i].rowset_stats.end()) {
+                // apply_rowset_anchor + cap_and_redistribute_dels guarantee
+                // num_dels <= num_rows for every (rowset, child). The std::min
+                // below is defense-in-depth against an upstream regression.
+                DCHECK_LE(it->second.num_dels, it->second.num_rows);
                 int64_t scaled_num_dels = std::min<int64_t>(it->second.num_dels, it->second.num_rows);
                 rowset_metadata.set_num_rows(it->second.num_rows);
                 rowset_metadata.set_data_size(it->second.data_size);
