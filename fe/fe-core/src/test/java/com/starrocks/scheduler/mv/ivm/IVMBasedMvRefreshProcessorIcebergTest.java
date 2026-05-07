@@ -1339,7 +1339,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
     @Test
     public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenNoDeltaTraits() throws Exception {
-        // listTableDeltaTraits returns empty -> snapshot lineage is unrecoverable for IVM.
         String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);
@@ -1356,8 +1355,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
     @Test
     public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenLineageBroken() throws Exception {
-        // Connector throws ancestry error -> wrapped with drop-and-recreate hint.
-        // The original StarRocksConnectorException is preserved as the cause for diagnostics.
         String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);
@@ -1390,7 +1387,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
     @Test
     public void testIncrementalRefreshSurfacesPartitionShapeChangeOnNonAppendOnly() throws Exception {
-        // Non-append-only delta (DELETE / OVERWRITE / DROP PARTITION) -> dropAndRecreate error.
         String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);
@@ -1409,9 +1405,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
     @Test
     public void testIncrementalRefreshPropagatesNonAncestryConnectorError() throws Exception {
-        // A non-ancestry connector failure (e.g. transient I/O or programmer error from the
-        // metadata implementation) must NOT be rewritten as a drop-and-recreate hint. The
-        // original message should reach the user so the real root cause stays visible.
         String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);

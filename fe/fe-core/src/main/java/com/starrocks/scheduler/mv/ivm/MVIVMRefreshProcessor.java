@@ -220,13 +220,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
                             maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
         } catch (StarRocksConnectorException e) {
-            // Only ancestry-break failures (e.g. expire_snapshots, branch reset, table replaced)
-            // are user-actionable as drop-and-recreate. Other connector failures (transient I/O,
-            // auth, programmer error like missing snapshot id) must surface unmodified so the
-            // user/operator can diagnose the real cause and not be told to recreate the MV.
             if (isAncestryBrokenError(e)) {
-                logger.warn("Snapshot ancestry broken for base table: {}.{}: {}",
-                        baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage(), e);
                 throw new SemanticException(formatPartitionShapeChangeError(
                         String.format("snapshot ancestry broken for base table %s.%s (%s)",
                                 baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
@@ -256,8 +250,6 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             if (!deltaTrait.isAppendOnly()) {
                 if (refreshMode.isIncremental()) {
-                    // DELETE / OVERWRITE / partition-shape change on the base table breaks IVM.
-                    // INCREMENTAL MVs do not fall back to PCT, so the only recovery path is recreate.
                     throw new SemanticException(formatPartitionShapeChangeError(
                             String.format("non-append-only change on base table %s.%s (delta: %s)",
                                     baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait)));
@@ -277,23 +269,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
     }
 
-    /**
-     * True only for connector failures that signal the IVM anchor snapshot is no longer reachable
-     * from the current snapshot (expire_snapshots, branch reset, table replacement). The Iceberg
-     * connector surfaces this as "Starting snapshot (exclusive) X is not a parent ancestor of end
-     * snapshot Y". Other StarRocksConnectorException reasons (e.g. transient I/O, auth, missing
-     * snapshot id) must propagate unchanged so the operator can act on the real root cause.
-     */
     private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
         String message = e.getMessage();
         return message != null && message.contains("is not a parent ancestor");
     }
 
-    /**
-     * Format an error indicating the IVM cannot recover from a partition-shape / lineage change on
-     * a base table, and instruct the user to drop and recreate the materialized view. The reason
-     * fragment should describe what was detected (e.g. "non-append-only change on base table x.y").
-     */
     private String formatPartitionShapeChangeError(String reasonFragment) {
         return String.format(
                 "Cannot incrementally refresh materialized view %s: %s. "

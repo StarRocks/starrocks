@@ -1,7 +1,4 @@
 -- name: test_ivm_with_iceberg_partition_shape_error @slow
--- INCREMENTAL MV cannot recover from partition-shape changes (DELETE / OVERWRITE /
--- DROP PARTITION / snapshot expiration / table replacement). The refresh must FAIL
--- with a deterministic error that names the drop-and-recreate recovery path.
 create external catalog mv_iceberg_${uuid0}
 properties
 (
