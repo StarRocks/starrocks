@@ -205,8 +205,10 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             return maxTvrDelta;
         }
 
-        if (maxTvrDelta.start().isEmpty() && mv.getCurrentRefreshMode() == MaterializedView.RefreshMode.AUTO) {
-            throw new SemanticException("No checkpoint found for base table: %s.%s during AUTO IVM planning",
+        if (maxTvrDelta.start().isEmpty() && mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
+            // No TVR baseline. The hybrid processor catches this and falls back to PCT to
+            // rebuild the baseline; on the pure IVM path it propagates as a hard failure.
+            throw new SemanticException("No checkpoint found for base table: %s.%s during IVM planning",
                     baseTableInfo.getDbName(), baseTableInfo.getTableName());
         }
 
