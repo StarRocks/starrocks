@@ -31,7 +31,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
