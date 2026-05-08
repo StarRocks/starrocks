@@ -17,15 +17,11 @@
 #include <chrono>
 #include <thread>
 
-<<<<<<< HEAD
+
+#include "storage/data_dir.h"
 #include "compaction_manager.h"
-=======
-#include "common/config_compaction_fwd.h"
-#include "common/thread/thread.h"
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
->>>>>>> 5b591b6191 ([Enhancement] Propagate query_id and ThreadModuleType to all worker threads (#71314))
-        #include "storage/data_dir.h"
+
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
