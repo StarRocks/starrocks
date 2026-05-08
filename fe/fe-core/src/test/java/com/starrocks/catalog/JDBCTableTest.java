@@ -195,18 +195,6 @@ public class JDBCTableTest {
         TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
         Assertions.assertEquals("jdbc:mysql://127.0.0.1:3306/db0?key=value", jdbcTable.getJdbc_url());
     }
-    public void testQueryTableToThriftKeepsOriginalJdbcUrl(@Mocked GlobalStateMgr globalStateMgr,
-                                                           @Mocked ResourceMgr resourceMgr) throws Exception {
-        String uri = "jdbc:oracle:thin:@//127.0.0.1:1521/xe";
-        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
-        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, null, "catalog0", jdbcProperties);
-        table.setPassThroughQuery("select * from system.t2");
-
-        TTableDescriptor tableDescriptor = table.toThrift(null);
-        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
-        Assertions.assertEquals(uri, jdbcTable.getJdbc_url());
-        Assertions.assertEquals("(select * from system.t2) starrocks_query", jdbcTable.getJdbc_table());
-    }
 
     @Test
     public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,
