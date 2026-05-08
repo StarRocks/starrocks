@@ -625,6 +625,42 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
+### enable_vector_adaptive_search
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：HNSW 向量索引自适应 `ef_search` 缩放的总开关。开启时，BE 会根据 segment 行数为每个 segment 调整有效 `ef_search`，从而在 compaction 合并大 segment 后无需手动调参即可保持召回率。设置为 `false` 时关闭自适应缩放，按用户指定的 `ef_search` 原值执行。
+- 引入版本：-
+
+### vector_adaptive_ef_alpha
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：自适应 `ef_search` 的增长斜率。缩放系数为 `1 + alpha * log2(segment_rows / vector_adaptive_ef_baseline_rows)`。值越大召回提升越多但 CPU 开销越高；值越小则相反。仅在 `enable_vector_adaptive_search=true` 且 `segment_rows > vector_adaptive_ef_baseline_rows` 时生效。
+- 引入版本：-
+
+### vector_adaptive_ef_baseline_rows
+
+- 默认值：300000
+- 类型：Int
+- 单位：Rows
+- 是否动态：是
+- 描述：自适应 `ef_search` 不进行缩放的 segment 行数基线。低于该阈值的 segment 使用用户指定的 `ef_search`；高于该阈值的 segment 会得到放大的有效 `ef_search`，用以补偿较大 HNSW 图的搜索深度。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
+
+### vector_adaptive_ef_cap
+
+- 默认值：8.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：自适应 `ef_search` 倍率上限。即使 segment 极大也将放大倍率限制在该上限内，避免 CPU 与延迟在极端情况下失控。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
+
 ### vector_chunk_size
 
 - 默认值：4096

@@ -339,7 +339,11 @@
         "enable_vector_index_block_cache",
         "config_vector_index_build_concurrency",
         "config_vector_index_default_build_threshold",
-        "vector_index_build_max_cpu_ratio"
+        "vector_index_build_max_cpu_ratio",
+        "enable_vector_adaptive_search",
+        "vector_adaptive_ef_alpha",
+        "vector_adaptive_ef_cap",
+        "vector_adaptive_ef_baseline_rows"
       ]
     },
     {

@@ -16,6 +16,13 @@
 
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 
+#include <algorithm>
+#include <cmath>
+
+#include "common/config_vector_index_fwd.h"
+#include "common/logging.h"
+#include "tenann/index/parameters.h"
+
 namespace starrocks {
 
 #define CHECK_AND_RETURN(STANDARD_STR, NAME, TYPE) \
@@ -118,6 +125,50 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
     }
 
     return meta;
+}
+
+int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows) {
+    int ef_base = std::max(user_ef, query_k);
+    if (ef_base <= 0) return 0;
+    int64_t baseline = config::vector_adaptive_ef_baseline_rows;
+    if (baseline <= 0 || static_cast<int64_t>(segment_num_rows) <= baseline) {
+        return ef_base;
+    }
+    double ratio = static_cast<double>(segment_num_rows) / static_cast<double>(baseline);
+    double factor = 1.0 + config::vector_adaptive_ef_alpha * std::log2(ratio);
+    factor = std::min(factor, static_cast<double>(config::vector_adaptive_ef_cap));
+    if (factor <= 1.0) return ef_base;
+    return static_cast<int>(static_cast<double>(ef_base) * factor);
+}
+
+void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, int query_k, bool user_set_ef) {
+    if (!config::enable_vector_adaptive_search) return;
+    if (user_set_ef) return;
+
+    auto& params = meta->search_params();
+    auto it = params.find(starrocks::index::vector::EF_SEARCH);
+    if (it == params.end()) return;
+
+    int user_ef = 0;
+    try {
+        if (it->is_number_integer()) {
+            user_ef = it->get<int>();
+        } else if (it->is_string()) {
+            user_ef = std::stoi(it->get<std::string>());
+        } else {
+            return;
+        }
+    } catch (...) {
+        return;
+    }
+    if (user_ef <= 0) return;
+
+    int eff_ef = compute_adaptive_ef_search(user_ef, query_k, segment_num_rows);
+    if (eff_ef != user_ef) {
+        params[starrocks::index::vector::EF_SEARCH] = eff_ef;
+        VLOG(2) << "Adaptive ef_search: user_ef=" << user_ef << " query_k=" << query_k << " rows=" << segment_num_rows
+                << " effective=" << eff_ef;
+    }
 }
 
 } // namespace starrocks

@@ -410,4 +410,125 @@ TEST_F(VectorIndexWriterTest, array_column_writer_rejects_missing_dim) {
     ASSERT_NE(st.message().find("dim"), std::string_view::npos) << st.message();
 }
 
+#ifdef WITH_TENANN
+// --------------------------------------------------------------------------
+// Adaptive ef_search
+// --------------------------------------------------------------------------
+
+class AdaptiveEfSearchTest : public testing::Test {
+protected:
+    void SetUp() override {
+        _saved_enable = config::enable_vector_adaptive_search;
+        _saved_alpha = config::vector_adaptive_ef_alpha;
+        _saved_cap = config::vector_adaptive_ef_cap;
+        _saved_baseline = config::vector_adaptive_ef_baseline_rows;
+        config::enable_vector_adaptive_search = true;
+        config::vector_adaptive_ef_alpha = 1.0;
+        config::vector_adaptive_ef_cap = 8.0;
+        config::vector_adaptive_ef_baseline_rows = 100000;
+    }
+
+    void TearDown() override {
+        config::enable_vector_adaptive_search = _saved_enable;
+        config::vector_adaptive_ef_alpha = _saved_alpha;
+        config::vector_adaptive_ef_cap = _saved_cap;
+        config::vector_adaptive_ef_baseline_rows = _saved_baseline;
+    }
+
+    bool _saved_enable = true;
+    double _saved_alpha = 1.0;
+    double _saved_cap = 8.0;
+    int64_t _saved_baseline = 100000;
+};
+
+TEST_F(AdaptiveEfSearchTest, below_baseline_not_scaled) {
+    // rows <= baseline: use max(user_ef, k) without scaling.
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 50000));
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 100000));
+    // user_ef < k: floor at k.
+    EXPECT_EQ(100, compute_adaptive_ef_search(40, 100, 50000));
+    // user_ef > k: honor user_ef as the base.
+    EXPECT_EQ(200, compute_adaptive_ef_search(200, 100, 50000));
+}
+
+TEST_F(AdaptiveEfSearchTest, log_scaling_above_baseline) {
+    // 1M rows, baseline 100K, alpha=1.0 -> factor = 1 + log2(10) = 4.32.
+    // With base max(100,100)=100, expect ef ~ 432.
+    EXPECT_EQ(432, compute_adaptive_ef_search(100, 100, 1000000));
+    // 200K rows -> factor = 1 + log2(2) = 2.0 -> ef = 200.
+    EXPECT_EQ(200, compute_adaptive_ef_search(100, 100, 200000));
+    // 500K rows -> factor = 1 + log2(5) ~ 3.32 -> ef = 332.
+    EXPECT_EQ(332, compute_adaptive_ef_search(100, 100, 500000));
+}
+
+TEST_F(AdaptiveEfSearchTest, cap_applied_on_huge_segments) {
+    // 12.8M rows: factor = 1 + log2(128) = 8.0 -> at cap, ef = 800.
+    EXPECT_EQ(800, compute_adaptive_ef_search(100, 100, 12800000));
+    // 100M rows: factor would exceed cap (= 1 + ~10), clamped to 8, ef = 800.
+    EXPECT_EQ(800, compute_adaptive_ef_search(100, 100, 100000000));
+}
+
+TEST_F(AdaptiveEfSearchTest, respects_max_ef_k_floor) {
+    // query_k greater than user_ef: scaling base is query_k.
+    // 1M rows, base=100, factor=4.32 -> ef=432 regardless of user_ef=40.
+    EXPECT_EQ(432, compute_adaptive_ef_search(40, 100, 1000000));
+    // user_ef=200, k=100 -> base=200, 1M rows -> ef=200 * 4.32 = 864.
+    EXPECT_EQ(864, compute_adaptive_ef_search(200, 100, 1000000));
+}
+
+TEST_F(AdaptiveEfSearchTest, config_overrides_alpha_and_cap) {
+    config::vector_adaptive_ef_alpha = 1.5;
+    EXPECT_EQ(598, compute_adaptive_ef_search(100, 100, 1000000)); // 1 + 1.5*3.32 = 5.98
+
+    config::vector_adaptive_ef_alpha = 1.0;
+    config::vector_adaptive_ef_cap = 4.0;
+    EXPECT_EQ(400, compute_adaptive_ef_search(100, 100, 1000000)); // capped at 4.0
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_writes_scaled_value_to_meta) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, /*rows=*/1000000, /*k=*/100, /*user_set_ef=*/false);
+
+    EXPECT_EQ(432, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_skipped_when_disabled) {
+    config::enable_vector_adaptive_search = false;
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, 1000000, 100, false);
+
+    EXPECT_EQ(100, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_skipped_when_user_set_ef) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, 1000000, 100, /*user_set_ef=*/true);
+
+    EXPECT_EQ(100, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_noop_when_no_ef_in_meta) {
+    tenann::IndexMeta meta;
+    // No efSearch key set (non-HNSW index).
+    apply_adaptive_ef_search(&meta, 1000000, 100, false);
+    EXPECT_EQ(meta.search_params().find(starrocks::index::vector::EF_SEARCH), meta.search_params().end());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_noop_when_below_baseline) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, /*rows=*/50000, 100, false);
+
+    EXPECT_EQ(100, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+#endif // WITH_TENANN
+
 } // namespace starrocks
