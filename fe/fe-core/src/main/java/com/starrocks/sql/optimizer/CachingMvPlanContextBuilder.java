@@ -305,6 +305,11 @@ public class CachingMvPlanContextBuilder {
         return MV_PLAN_CONTEXT_CACHE.asMap().containsKey(mv);
     }
 
+    @VisibleForTesting
+    public boolean isPending(MaterializedView mv) {
+        return MV_PLAN_CACHE_PENDING.containsKey(mv.getId());
+    }
+
     /**
      * Cache materialized view, this will put the mv into ast cache and load plan context asynchronously.
      * @param mv: the materialized view to cache.
@@ -328,6 +333,9 @@ public class CachingMvPlanContextBuilder {
         try {
             // invalidate mv from plan cache
             MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
+
+            // invalidate mv from pending cache
+            MV_PLAN_CACHE_PENDING.remove(mv.getId());
 
             // invalidate mv from mv level cache
             MV_GLOBAL_CONTEXT_CACHE_MAP.remove(mv);
@@ -401,7 +409,15 @@ public class CachingMvPlanContextBuilder {
         }
         long startTime = System.currentTimeMillis();
         LOG.info("Trigger loading {} pending mv plan caches", MV_PLAN_CACHE_PENDING.size());
-        MV_PLAN_CACHE_PENDING.values().forEach(this::triggerLoadMVPlanCacheAsync);
+        MV_PLAN_CACHE_PENDING.values().forEach(mv -> {
+            // Re-fetch from metastore to skip MVs that were dropped during replay.
+            MaterializedView curMV = GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mv.getMvId());
+            if (curMV == null) {
+                LOG.warn("Skip pending mv plan cache load, mv not found in metastore: {}", mv.getName());
+                return;
+            }
+            triggerLoadMVPlanCacheAsync(curMV);
+        });
         MV_PLAN_CACHE_PENDING.clear();
         LOG.info("Finish triggering pending mv plan caches, costs: {}ms",
                 System.currentTimeMillis() - startTime);
