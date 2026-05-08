@@ -573,9 +573,10 @@ shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _stat
 -- The exact source URL is environment-specific (oss://${oss_bucket}/...);
 -- assert structural shape: source_info must be JSON whose `source` key
 -- points at an oss:// URL, not the "stream-load-pipe" placeholder.
+-- source_info is JSON-typed; cast to VARCHAR before pattern-matching.
 select load_type,
-       source_info like '%oss://%' as has_oss_path,
-       source_info not like '%stream-load-pipe%' as not_placeholder
+       cast(source_info as varchar) like '%oss://%' as has_oss_path,
+       cast(source_info as varchar) not like '%stream-load-pipe%' as not_placeholder
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 1;
