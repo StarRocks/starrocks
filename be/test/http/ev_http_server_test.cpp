@@ -38,8 +38,8 @@ namespace starrocks {
 class WorkerEchoHandler : public HttpHandler {
 public:
     void handle(HttpRequest* req) override {
-        std::string body = "worker_thread_id=" + std::to_string(
-                std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::string body =
+                "worker_thread_id=" + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id()));
         HttpChannel::send_reply(req, body);
         ++served_count;
     }
@@ -54,9 +54,7 @@ public:
 // shared `_server_fd`.
 class EvHttpServerTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        _handler = std::make_unique<WorkerEchoHandler>();
-    }
+    void SetUp() override { _handler = std::make_unique<WorkerEchoHandler>(); }
 
     std::unique_ptr<EvHttpServer> make_server(int num_workers) {
         auto server = std::make_unique<EvHttpServer>(0 /* port — kernel-assigned */, num_workers);
