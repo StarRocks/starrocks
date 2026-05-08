@@ -16,16 +16,12 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Function;
-<<<<<<< HEAD
 import com.starrocks.catalog.PrimitiveType;
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TypeDef;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
@@ -127,14 +123,10 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-<<<<<<< HEAD
-    public FunctionName getFunctionName() {
-        return functionName;
-=======
-    public CreateFunctionStmt(String functionType, FunctionRef functionRef, FunctionArgsDef argsDef, Expr expr,
+    public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef, Expr expr,
                               boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
         super(pos);
-        this.functionRef = functionRef;
+        this.functionName = functionName;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
         this.isTable = functionType.equalsIgnoreCase("TABLE");
         this.argsDef = argsDef;
@@ -157,9 +149,8 @@ public class CreateFunctionStmt extends DdlStmt {
         return expr;
     }
 
-    public FunctionRef getFunctionRef() {
-        return functionRef;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
+    public FunctionName getFunctionName() {
+        return functionName;
     }
 
     public Function getFunction() {

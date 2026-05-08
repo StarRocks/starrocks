@@ -35,12 +35,9 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
-<<<<<<< HEAD
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
-=======
-import com.starrocks.catalog.SqlFunction;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateCombinator;

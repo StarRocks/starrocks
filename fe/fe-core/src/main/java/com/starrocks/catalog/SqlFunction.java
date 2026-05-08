@@ -19,9 +19,9 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.thrift.TFunction;
-import com.starrocks.type.Type;
 
 public class SqlFunction extends Function {
     @SerializedName(value = "sql")

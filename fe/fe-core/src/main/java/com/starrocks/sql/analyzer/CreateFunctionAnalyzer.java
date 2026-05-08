@@ -18,23 +18,18 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TypeDef;
-=======
-import com.google.common.collect.Maps;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
-<<<<<<< HEAD
 import com.starrocks.catalog.ScalarType;
-=======
 import com.starrocks.catalog.SqlFunction;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -51,11 +46,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.HdfsURI;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TypeDef;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang.StringUtils;
@@ -92,15 +82,6 @@ public class CreateFunctionAnalyzer {
         loadFunctionProperties(stmt);
         analyzeCommon(stmt, context);
 
-<<<<<<< HEAD
-        if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
-            String checksum = computeMd5(stmt);
-            analyzeJavaUDFClass(stmt, checksum);
-        } else if (CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(langType)) {
-            analyzePython(stmt);
-        } else {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown lang type");
-=======
         if (stmt.isBuildFunctionMode()) {
             // build function
             analyzeExpression(stmt, context);
@@ -109,13 +90,12 @@ public class CreateFunctionAnalyzer {
 
             if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
                 String checksum = computeMd5(stmt);
-                analyzeJavaUDFClass(stmt, checksum, context);
+                analyzeJavaUDFClass(stmt, checksum);
             } else if (CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(langType)) {
-                analyzePython(stmt, context);
+                analyzePython(stmt);
             } else {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown lang type");
             }
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
         }
     }
 
@@ -139,10 +119,7 @@ public class CreateFunctionAnalyzer {
             slotRef.setType(argsMap.get(slotRef.getColName()));
         });
 
-        FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(
-                stmt.getFunctionRef(),
-                stmt.getFunctionRef().isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB
-                        : context.getDatabase());
+        FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
 
         String viewSql = AstToSQLBuilder.toSQLWithCredential(expr);
@@ -162,11 +139,12 @@ public class CreateFunctionAnalyzer {
         FunctionName functionName = stmt.getFunctionName();
         functionName.analyze(context.getDatabase());
         FunctionArgsDef argsDef = stmt.getArgsDef();
-<<<<<<< HEAD
         TypeDef returnType = stmt.getReturnType();
         // check argument
         argsDef.analyze();
-        returnType.analyze();
+        if (returnType != null) {
+            returnType.analyze();
+        }
     }
 
     private CloudConfiguration setupCredential(Map<String, String> properties) {
@@ -176,16 +154,6 @@ public class CreateFunctionAnalyzer {
             return cloudConfiguration;
         }
         return null;
-=======
-        String defaultDb = functionRef.isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB : context.getDatabase();
-        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, defaultDb);
-        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
-
-        TypeDef returnType = stmt.getReturnType();
-        if (returnType != null) {
-            TypeDefAnalyzer.analyze(returnType);
-        }
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
     }
 
     public String computeMd5(CreateFunctionStmt stmt) {

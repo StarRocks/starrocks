@@ -18,11 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
 import com.starrocks.common.Config;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,13 +33,7 @@ import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TFunctionBinaryType;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.Type;
-import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

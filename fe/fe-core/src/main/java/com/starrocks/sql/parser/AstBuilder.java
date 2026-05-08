@@ -6472,11 +6472,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-<<<<<<< HEAD
-    public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
-=======
-    public ParseNode visitCreateUdfFunctionStmt(com.starrocks.sql.parser.StarRocksParser.CreateUdfFunctionStmtContext context) {
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
+    public ParseNode visitCreateUdfFunctionStmt(StarRocksParser.CreateUdfFunctionStmtContext context) {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
@@ -6486,6 +6482,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        String functionName = qualifiedName.toString();
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
 
@@ -6524,21 +6521,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitCreateInternalFunctionStmt(
-            com.starrocks.sql.parser.StarRocksParser.CreateInternalFunctionStmtContext context) {
+    public ParseNode visitCreateInternalFunctionStmt(StarRocksParser.CreateInternalFunctionStmtContext context) {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
         boolean createIfNotExists = context.ifNotExists() != null && context.ifNotExists().EXISTS() != null;
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        String functionName = qualifiedName.toString();
 
         if (isGlobal && qualifiedName.getParts().size() > 1) {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(functionName), qualifiedName.getPos());
         }
         Expr expr = (Expr) visit(context.expression());
-        FunctionRef functionRef = new FunctionRef(qualifiedName, null, qualifiedName.getPos(), isGlobal);
-        return new CreateFunctionStmt(functionType, functionRef, getFunctionArgsDef(context.functionArgsList()),
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (isGlobal) {
+            fnName.setAsGlobalFunction();
+        }
+        return new CreateFunctionStmt(functionType, fnName, getFunctionArgsDef(context.functionArgsList()),
                 expr, replaceIfExists, createIfNotExists, createPos(context));
     }
 

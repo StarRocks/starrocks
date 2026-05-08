@@ -60,8 +60,6 @@ public class FunctionArgsDef {
     public void setArgTypes(Type[] argTypes) {
         this.argTypes = argTypes;
     }
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/FunctionArgsDef.java
-=======
 
     public List<TypeDef> getArgTypeDefs() {
         return argTypeDefs;
@@ -70,5 +68,4 @@ public class FunctionArgsDef {
     public List<String> getArgNames() {
         return argNames;
     }
->>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/FunctionArgsDef.java
 }
