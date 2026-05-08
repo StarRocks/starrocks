@@ -44,6 +44,7 @@ set(RUNTIME_CORE_FILES
     memory/tracked_allocator.cpp
     memory/mem_chunk_allocator.cpp
     memory/memory_allocator.cpp
+    exception_stack.cpp
     prof/heap_prof.cpp
 )
 
@@ -70,7 +71,6 @@ set(RUNTIME_FILES
     sender_queue.cpp
     descriptors_ext.cpp
     exec_env.cpp
-    exception_stack.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp
     plan_fragment_executor.cpp

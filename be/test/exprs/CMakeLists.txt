@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
 set(EXPR_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     arithmetic_expr_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
