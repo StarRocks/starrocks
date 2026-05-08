@@ -1586,6 +1586,15 @@ public class StmtExecutor {
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
+        SessionVariable sv = context.getSessionVariable();
+        if (plan != null && sv != null && sv.isEnableProfileExplain()) {
+            try {
+                RuntimeProfile summaryProfile = profile.getChild(ProfileKeyDictionary.SUMMARY);
+                summaryProfile.addInfoString(ProfileKeyDictionary.EXPLAIN_PLAN, plan.getExplainString(TExplainLevel.COSTS));
+            } catch (Exception e) {
+                LOG.warn("Failed to embed explain plan in profile", e);
+            }
+        }
         // Capture the session timezone now so that the async profile task uses the same zone
         // as START_TIME (the context may change before the async task runs).
         java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
