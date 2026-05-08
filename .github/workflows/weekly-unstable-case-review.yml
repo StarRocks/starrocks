@@ -288,7 +288,7 @@ jobs:
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
 
       - name: Commit updated unstable_case.json
-        if: steps.gen.outputs.JSON_UPDATED == 'true'
+        if: false  # temporarily disabled: verify report correctness before enabling auto-update
         run: |
           cd ci-tool
           git config user.name  "wanpengfei-git"
