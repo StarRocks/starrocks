@@ -16,12 +16,10 @@
 
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_task_queue.h"
-<<<<<<< HEAD
+
 #include "util/starrocks_metrics.h"
-=======
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
->>>>>>> 5b591b6191 ([Enhancement] Propagate query_id and ThreadModuleType to all worker threads (#71314))
+
 
         namespace starrocks::workgroup {
 
