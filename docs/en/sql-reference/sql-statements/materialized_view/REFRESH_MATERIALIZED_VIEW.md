@@ -34,7 +34,6 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 > **CAUTION**
 >
 > When refreshing materialized views created based on the external catalogs, StarRocks refreshes all partitions in the materialized views.
-> Materialized views with `refresh_mode = AUTO` do not support specifying partitions in `REFRESH MATERIALIZED VIEW`. Refresh the whole materialized view instead.
 
 ## Monitoring
 

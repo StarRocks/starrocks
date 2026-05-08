@@ -37,12 +37,15 @@ void TabletWriter::try_enable_pk_index_eager_build() {
             return;
         }
     }
-    // For primary key table with single key column and the type is not VARCHAR/CHAR,
-    // we can't enable eager PK index build. The reason is that, in the current implementation,
-    // when encoding a single-key column of a non-binary type, big-endian encoding is not used,
+    // V2 encoding guarantees correct ordering for all column types after encoding,
+    // so eager PK index build is always safe.
+    if (_schema->has_valid_primary_key_encoding_type() &&
+        _schema->primary_key_encoding_type() == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        _enable_pk_index_eager_build = true;
+        return;
+    }
+    // For V1 encoding, single-key column of non-VARCHAR/CHAR type does not use big-endian encoding,
     // which may result in incorrect ordering between sst and segment files.
-    // This is a legacy bug, but for compatibility reasons, it will not be supported in the first phase.
-    // Will fix it later.
     if (_schema->num_key_columns() > 1 || _schema->column(0).type() == LogicalType::TYPE_VARCHAR ||
         _schema->column(0).type() == LogicalType::TYPE_CHAR) {
         _enable_pk_index_eager_build = true;

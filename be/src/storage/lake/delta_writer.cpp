@@ -108,7 +108,8 @@ public:
                              int64_t schema_id, const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
-                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn)
+                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
+                             std::shared_ptr<const TabletSchema> tablet_schema)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -119,6 +120,7 @@ public:
               _mem_tracker(mem_tracker),
               _slots(slots),
               _max_buffer_size(max_buffer_size > 0 ? max_buffer_size : config::write_buffer_size),
+              _tablet_schema(std::move(tablet_schema)),
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
@@ -802,8 +804,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
         }
         auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
         segment_meta->set_segment_idx(segment_idx);
     }
@@ -824,11 +825,18 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
 
-    // We can support partial update with row mode to be used with condition update at the same time.
+    // Column-mode PCU combined with condition update requires the condition column to be part of
+    // the partial update column set: the handler compares old vs new values from the partial chunk
+    // itself and cannot read the new value otherwise.
     if (is_partial_update() && !_merge_condition.empty() &&
         (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
          _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
-        return Status::NotSupported("partial update with column mode and condition update at the same time");
+        if (_write_schema->field_index(_merge_condition) == static_cast<size_t>(-1)) {
+            return Status::NotSupported(fmt::format(
+                    "partial update with column mode requires merge_condition column '{}' to be included in the "
+                    "partial update column set",
+                    _merge_condition));
+        }
     }
 
     // handle partial update
@@ -1277,11 +1285,15 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_schema_id == 0)) {
         return Status::InvalidArgument("schema_id not set");
     }
-    auto impl =
-            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size, _mem_tracker,
-                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
+    if (UNLIKELY(_tablet_schema != nullptr && _tablet_schema->id() != _schema_id)) {
+        return Status::InvalidArgument(
+                fmt::format("tablet_schema id {} mismatches schema_id {}", _tablet_schema->id(), _schema_id));
+    }
+    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                    _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size,
+                                    _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
+                                    _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
+                                    _global_dicts, _is_multi_statements_txn, _tablet_schema);
     return std::make_unique<DeltaWriter>(impl);
 }
 

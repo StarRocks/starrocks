@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
 #include "agent/task_signatures_manager.h"
@@ -29,6 +31,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/task/engine_clone_task.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/uuid_generator.h"
 
 namespace starrocks {
@@ -253,6 +256,40 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     Status st = task.execute();
     ASSERT_TRUE(st.is_corruption());
     tablet->set_is_dropping(false);
+}
+
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
+
+    constexpr int new_parallelism = 4;
+    const int expected_max_threads =
+            std::max(static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * new_parallelism, 2);
+
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, new_parallelism);
+
+    ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
+}
+
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_skips_missing_pool) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_max_threads = thread_pool->max_threads();
+
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, 4);
+
+    ASSERT_EQ(original_max_threads, thread_pool->max_threads());
 }
 
 TEST_F(AgentTaskTest, create_tablet_task_timeout) {

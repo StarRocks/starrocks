@@ -644,6 +644,65 @@ class StarrocksSQLApiLib(object):
     def use_database(self, db_name):
         return self.execute_sql("use %s" % db_name)
 
+    def create_iceberg_catalog(self, catalog_name, catalog_type):
+        """
+        Create an iceberg external catalog for SQL tests, dispatching to a
+        builder per backend type. Each builder reads its own sr.conf vars
+        and does whatever pre-setup that type needs (e.g. mkdir the
+        hadoop-file warehouse root).
+
+        :param catalog_name: catalog name (already ${uuid0}-resolved)
+        :param catalog_type: one of {"hive", "hadoop"}
+        """
+        builders = {
+            "hive": self._create_iceberg_catalog_hive,
+            "hadoop": self._create_iceberg_catalog_hadoop,
+        }
+        builder = builders.get(catalog_type)
+        tools.assert_is_not_none(builder, "unknown iceberg catalog type: %s" % catalog_type)
+        return builder(catalog_name)
+
+    def _create_iceberg_catalog_hive(self, catalog_name):
+        """
+        Hive-metastore-backed iceberg catalog over OSS S3. Consumes:
+          ${iceberg_catalog_hive_metastore_uris}, ${oss_ak}, ${oss_sk},
+          ${oss_endpoint} — all shipped in [env] of the stock sr.conf.
+        """
+        sql = (
+            'create external catalog %s properties ('
+            '"type" = "iceberg", '
+            '"iceberg.catalog.type" = "hive", '
+            '"iceberg.catalog.hive.metastore.uris" = "%s", '
+            '"aws.s3.access_key" = "%s", '
+            '"aws.s3.secret_key" = "%s", '
+            '"aws.s3.endpoint" = "%s")'
+        ) % (catalog_name, self.iceberg_catalog_hive_metastore_uris,
+             self.oss_ak, self.oss_sk, self.oss_endpoint)
+        res = self.execute_sql(sql)
+        tools.assert_true(res["status"], "create hive iceberg catalog failed: %s" % res.get("msg"))
+
+    def _create_iceberg_catalog_hadoop(self, catalog_name):
+        """
+        Local-disk hadoop iceberg catalog. Consumes:
+          ${iceberg_local_warehouse_root} + ${uuid0}.
+        ${iceberg_local_warehouse_root} is NOT shipped in sr.conf; local devs
+        wanting to run against hadoop-on-file add it to their [replace]:
+          iceberg_local_warehouse_root = /tmp/starrocks-sql-test/iceberg
+        The warehouse sub-directory is mkdir'd before FE initializes the
+        catalog, since Iceberg HadoopCatalog's FE-side validation expects the
+        warehouse path to exist.
+        """
+        warehouse = "%s/sql_test/%s" % (self.iceberg_local_warehouse_root, self.uuid0)
+        os.makedirs(warehouse, exist_ok=True)
+        sql = (
+            'create external catalog %s properties ('
+            '"type" = "iceberg", '
+            '"iceberg.catalog.type" = "hadoop", '
+            '"iceberg.catalog.warehouse" = "file://%s")'
+        ) % (catalog_name, warehouse)
+        res = self.execute_sql(sql)
+        tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
+
     def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
                                   tolerate_exist=False):
         """
@@ -1094,7 +1153,7 @@ class StarrocksSQLApiLib(object):
 
             old_this_res_len = len(this_res)
             actual_res, actual_res_log, var, order = self.execute_single_statement(
-                _each_cmd, _cmd_id_str, record_mode, this_res, var_key=exec_id, conn=conn
+                _each_cmd, _cmd_id_str, record_mode and not uncheck, this_res, var_key=exec_id, conn=conn
             )
 
             if record_mode:
@@ -1336,17 +1395,17 @@ class StarrocksSQLApiLib(object):
                 log.info("[%s.check] only check with no Error" % sql_id)
                 tools.assert_equal(0, act[0], "shell %s error: %s" % (sql, act))
             elif not sql.startswith(FUNCTION_FLAG):
-                # Function, without error msg
-                log.info("[%s.check] only check with no Error" % sql_id)
+                # Explicit empty result block: verify no error and result is empty
+                log.info("[%s.check] check no Error and empty result" % sql_id)
                 tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
+                if not any(re.search(c, sql) for c in skip.skip_res_cmd):
+                    tools.assert_equal("", act, "sql result not match: expected empty but got (%s)" % str(act))
             else:
-                # SQL, with empty result
+                # function call with empty result
                 exp = []
             return
 
-        if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
-            condition in sql for condition in skip.skip_res_cmd
-        ):
+        if any(re.search(condition, sql) for condition in skip.skip_res_cmd):
             log.info("[%s.check] skip check" % sql_id)
             return
 

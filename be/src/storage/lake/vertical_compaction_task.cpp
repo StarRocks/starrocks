@@ -246,8 +246,11 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             source_masks->clear();
         }
 
-        _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                                  column_group_size);
+        if (_total_num_rows > 0 && column_group_size > 0) {
+            _context->progress.update(
+                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
+                    column_group_size);
+        }
         CompactionTaskStats temp_stats;
         temp_stats.collect(reader.stats());
         CompactionTaskStats diff_stats = temp_stats - prev_stats;

@@ -45,12 +45,14 @@ import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.MetaUtils;
@@ -370,6 +372,14 @@ public class InsertOverwriteJobRunner {
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
+        // Before re-plan, clear cached LambdaArgument.transformedOp from the first plan.
+        // The first plan() creates ColumnRefOperators via ColumnRefFactory and caches them in
+        // LambdaArgument.transformedOp. The re-plan creates a NEW ColumnRefFactory, but the AST
+        // nodes (including LambdaArgument) are reused. If transformedOp is not cleared, the stale
+        // ColumnRefOperator (from the old ColumnRefFactory) will be returned by
+        // SqlToScalarOperatorTranslator.visitLambdaArguments(), causing ID collisions and
+        // "expr_type does not match slot_type" errors, especially with UNION ALL + lambda expressions.
+        clearLambdaArgumentTransformedOps(insertStmt);
         try (var guard = context.bindScope()) {
             // For dynamic overwrite, set the txnId to insertStmt so that StatementPlanner.beginTransaction()
             // will skip creating a new transaction and reuse the one we created in prepare().
@@ -393,6 +403,29 @@ public class InsertOverwriteJobRunner {
             LOG.warn("insert overwrite failed. error message:{}", context.getState().getErrorMessage());
             throw new DmlException(context.getState().getErrorMessage());
         }
+    }
+
+    /**
+     * Clear all cached LambdaArgument.transformedOp in the AST tree of the InsertStmt.
+     * This is necessary before re-planning because:
+     * 1. The first plan() caches ColumnRefOperator in LambdaArgument.transformedOp
+     * 2. Re-plan creates a new ColumnRefFactory with fresh ID allocation
+     * 3. Stale cached ColumnRefOperators reference IDs from the old ColumnRefFactory
+     * 4. This causes type mismatches when the new ColumnRefFactory assigns the same ID
+     *    to a different column with a different type
+     *
+     * Uses AstTraverser to ensure complete coverage of all AST paths, including
+     * CTE relations, ORDER BY, aggregate, ViewRelation, JoinRelation.onPredicate,
+     * and Expr-level Subquery nodes.
+     */
+    public void clearLambdaArgumentTransformedOps(InsertStmt stmt) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitLambdaArguments(LambdaArgument node, Void context) {
+                node.setTransformed(null);
+                return null;
+            }
+        }.visit(stmt);
     }
 
     private void createTempPartitions() throws DdlException {

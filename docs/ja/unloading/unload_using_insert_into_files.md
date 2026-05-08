@@ -210,10 +210,25 @@ SELECT * FROM sales_records;
 ```SQL
 -- CSV ファイルへのデータのアンロード。
 INSERT INTO FILES(
-  'path' = 'file:///home/ubuntu/csvfile/', 
-  'format' = 'csv', 
-  'csv.column_separator' = ',', 
+  'path' = 'file:///home/ubuntu/csvfile/',
+  'format' = 'csv',
+  'csv.column_separator' = ',',
   'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- フィールド囲み (RFC 4180 スタイル) で CSV ファイルにアンロード。
+-- カンマや引用符を含むフィールド値は enclose 文字で囲まれ、内部の
+-- 引用符は重複によってエスケープされます (csv.escape と csv.enclose が
+-- 同じため)。NULL 値は囲まずに \N として出力されます。
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/csvfile_enclosed/',
+  'format' = 'csv',
+  'csv.column_separator' = ',',
+  'csv.row_delimiter' = '\n',
+  'csv.enclose' = '"',
+  'csv.escape' = '"',
+  'csv.include_header' = 'true'
 )
 SELECT * FROM sales_records;
 
@@ -225,6 +240,26 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 ```
+
+:::note
+
+`csv.enclose` が設定されると、すべての非 NULL フィールド値は enclose 文字で囲まれ、
+フィールド値内に現れる enclose 文字 (および `csv.escape` が異なる場合は escape 文字
+自身) は `csv.escape` 文字でエスケープされます。NULL 値は囲まずに `\N` として出力
+されます。
+
+RFC 4180 形式の二重引用符出力 (`csv.escape` が `csv.enclose` と等しい) を StarRocks
+に再インポートする場合、読み取り側では `csv.enclose` のみを設定し、`csv.escape` は
+設定しないでください。StarRocks の CSV reader は ENCLOSE 状態を通じて二重引用符を
+ネイティブに処理します。
+
+また、NULL 値が正しく roundtrip するのは `csv.escape` がバックスラッシュ (`\`) で
+ない場合に限られます。NULL マーカーは `\N` に固定されており、`csv.escape = '\\'` の
+場合、読み取り側の ESCAPE 状態が先頭のバックスラッシュを取り除くため、`\N` は NULL
+ではなく文字リテラル `N` として解釈されます。NULL の roundtrip が必要なデータセット
+では `csv.escape = '"'` (RFC 4180 の二重引用符) を使用してください。
+
+:::
 
 ## 参照
 

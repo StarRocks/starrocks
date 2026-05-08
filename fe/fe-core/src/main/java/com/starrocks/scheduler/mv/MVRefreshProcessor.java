@@ -37,6 +37,7 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -78,6 +79,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -89,7 +91,7 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view refresh processor.
  */
-public abstract class BaseMVRefreshProcessor {
+public abstract class MVRefreshProcessor {
     // session.enable_spill
     protected static final String MV_SESSION_ENABLE_SPILL =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.ENABLE_SPILL;
@@ -136,11 +138,11 @@ public abstract class BaseMVRefreshProcessor {
                                   InsertStmt insertStmt) {
     }
 
-    public BaseMVRefreshProcessor(Database db, MaterializedView mv,
-                                  MvTaskRunContext mvContext,
-                                  IMaterializedViewMetricsEntity mvEntity,
-                                  MaterializedView.RefreshMode refreshMode,
-                                  Class<?> clazz) {
+    public MVRefreshProcessor(Database db, MaterializedView mv,
+                              MvTaskRunContext mvContext,
+                              IMaterializedViewMetricsEntity mvEntity,
+                              MaterializedView.RefreshMode refreshMode,
+                              Class<?> clazz) {
         this.db = db;
         this.mv = mv;
         this.mvContext = mvContext;
@@ -251,6 +253,59 @@ public abstract class BaseMVRefreshProcessor {
 
     protected void setSnapshotBaseTables(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         refreshRuntimeState.replaceSnapshotBaseTables(snapshotBaseTables);
+    }
+
+    // Current task run's START_TASK_RUN_ID (null when status is uninitialized, e.g. in tests).
+    protected String getStartTaskRunId() {
+        return mvContext.getStatus() != null ? mvContext.getStatus().getStartTaskRunId() : null;
+    }
+
+    // True when this task run owns the persistent pinning record — the fallback first batch right
+    // after afterSyncHook installs us, and every subsequent batch of the same job.
+    protected boolean isPinnedMode() {
+        String owner = mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId();
+        return owner != null && owner.equals(getStartTaskRunId());
+    }
+
+    // Hydrate pinnedTvrMap and each PCTTableSnapshotInfo.pinnedRange from the persistent temp
+    // TVR map. Must run after syncAndCheckPCTPartitions (snapshotBaseTables ready) and after
+    // afterSyncHook (owner installed, if any). No-op for non-pinned runs.
+    protected void setupPinnedRangesIfNeeded() {
+        if (!isPinnedMode()) {
+            return;
+        }
+        final Map<BaseTableInfo, TvrVersionRange> frozen =
+                mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
+        final Map<String, TvrVersionRange> pinnedMap = refreshRuntimeState.getPinnedTvrMap();
+        pinnedMap.clear();
+
+        for (BaseTableSnapshotInfo info : snapshotBaseTables.values()) {
+            final BaseTableInfo bti = info.getBaseTableInfo();
+            final TvrVersionRange tvr = frozen.get(bti);
+            if (tvr == null) {
+                // pure-PCT base table, no pinning
+                continue;
+            }
+            final TvrVersionRange pinned = TvrTableSnapshot.of(tvr.end());
+            pinnedMap.put(bti.getTableIdentifier(), pinned);
+
+            if (info instanceof PCTTableSnapshotInfo) {
+                ((PCTTableSnapshotInfo) info).setPinnedRange(pinned);
+            }
+        }
+        logger.info("setup pinned context for {} base tables, owner={}",
+                pinnedMap.size(), mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId());
+
+        // Expose snapshot ids on task run extra message for post-mortem debugging via
+        // information_schema.task_runs.EXTRA_MESSAGE.
+        if (!pinnedMap.isEmpty()) {
+            Map<String, Long> snapshotIds = new HashMap<>(pinnedMap.size());
+            for (Map.Entry<String, TvrVersionRange> e : pinnedMap.entrySet()) {
+                snapshotIds.put(e.getKey(), e.getValue().end().orElse(-1L));
+            }
+            updateTaskRunStatus(status ->
+                    status.getMvTaskRunExtraMessage().setPinnedSnapshotIdMap(snapshotIds));
+        }
     }
 
     /**
@@ -653,7 +708,7 @@ public abstract class BaseMVRefreshProcessor {
                 if (currentRefreshMode.isIncremental()) {
                     throw new SemanticException("Materialized view %s.%s refresh failed: base table %s schema " +
                             "or identity changed, cannot do incremental refresh in %s mode. " +
-                            "Please trigger a full refresh.",
+                            "Please drop and re-create the materialized view.",
                             db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr(), currentRefreshMode);
                 }
                 toRepairTables.add(Pair.create(newTable, baseTableInfo));
@@ -847,8 +902,13 @@ public abstract class BaseMVRefreshProcessor {
         while (!checked && retryNum++ < Config.max_mv_check_base_table_change_retry_times) {
             mvEntity.increaseRefreshRetryMetaCount(1L);
             try (Timer ignored = Tracers.watchScope("MVRefreshExternalTable")) {
-                // refresh external table meta cache before sync partitions
-                refreshExternalTable(baseTableCandidatePartitions);
+                // Skip in pinned mode — subsequent batches reuse the cached metadata the pinning
+                // owner already collected, keeping a consistent job-wide view across base tables.
+                if (!isPinnedMode()) {
+                    refreshExternalTable(baseTableCandidatePartitions);
+                } else {
+                    logger.info("Skip refreshExternalTable in pinned PCT mode");
+                }
             }
 
             if (shouldSyncPartitionsAfterExternalRefresh(retryNum)) {
@@ -964,7 +1024,7 @@ public abstract class BaseMVRefreshProcessor {
     public void updatePCTMeta(ExecPlan execPlan,
                               PCellSortedSet mvRefreshedPartitions,
                               Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
-                              Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
+                              Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote) {
         // check
         Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), this.mv.getId());
         if (mv == null) {
@@ -997,7 +1057,7 @@ public abstract class BaseMVRefreshProcessor {
         MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
         try {
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
-                    refBaseTableIds, refTableAndPartitionNames, tempMvTvrVersionRangeMap);
+                    refBaseTableIds, refTableAndPartitionNames, tvrDeltaToPromote);
         } catch (Exception e) {
             logger.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;

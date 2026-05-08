@@ -112,6 +112,14 @@ public:
 
     void close() override;
 
+    // Public entry point used by segment_seek_range_to_rowid_range(). The caller
+    // must ensure the segment's short-key index has already been loaded; this
+    // does not touch any other iterator state, so it is safe to invoke before
+    // do_init() / do_get_next().
+    StatusOr<std::optional<Range<>>> resolve_range_to_rowid_range(const SeekRange& range) {
+        return _seek_range_to_rowid_range(range);
+    }
+
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
@@ -3605,6 +3613,41 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
         auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
         return new_projection_iterator(schema, seg_iter);
     }
+}
+
+StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
+                                                                          const SeekRange& range,
+                                                                          const LakeIOOptions& lake_io_opts) {
+    if (segment == nullptr) {
+        return Status::InvalidArgument("segment is null");
+    }
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
+
+    // Schema is only used by the iterator's constructor; _seek_range_to_rowid_range
+    // picks the right schema from range.lower()/range.upper() on each side.
+    Schema iterator_schema;
+    if (!range.upper().empty()) {
+        iterator_schema = range.upper().schema();
+    } else if (!range.lower().empty()) {
+        iterator_schema = range.lower().schema();
+    } else {
+        // (-inf, +inf): the full segment.
+        return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
+    }
+
+    // SegmentReadOptions::stats is documented as required by ColumnIterator init
+    // (sanity_check() CHECK_NOTNULLs it). SegmentReadOptions::fs is required by
+    // _init_column_iterator_by_cid, which opens a RandomAccessFile on the
+    // segment's file. Supply both from locals — nothing downstream inspects the
+    // accumulated stats here.
+    OlapReaderStatistics local_stats;
+    ASSIGN_OR_RETURN(auto file_system, FileSystem::CreateSharedFromString(segment->file_info().path));
+    SegmentReadOptions read_options;
+    read_options.lake_io_opts = lake_io_opts;
+    read_options.stats = &local_stats;
+    read_options.fs = std::move(file_system);
+    SegmentIterator iterator(segment, iterator_schema, read_options);
+    return iterator.resolve_range_to_rowid_range(range);
 }
 
 } // namespace starrocks

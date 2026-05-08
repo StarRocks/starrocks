@@ -220,7 +220,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                                 columnName));
                     }
                 } else if (columnName != null) {
-                    selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    selectListString.add(visit(expr) + " AS " + ParseUtil.backquote(columnName));
                 } else {
                     selectListString.add(visit(expr));
                 }

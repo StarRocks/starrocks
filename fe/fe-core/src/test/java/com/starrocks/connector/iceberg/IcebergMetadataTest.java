@@ -36,8 +36,8 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorType;
@@ -360,12 +360,12 @@ public class IcebergMetadataTest extends TableTestBase {
         new MockUp<Table>() {
             @Mock
             public List<Column> getFullSchema() {
-                return ImmutableList.of(new Column("c1", IntegerType.INT), new Column("c2", STRING));
+                return ImmutableList.of(new Column("c1", IntegerType.INT, true), new Column("c2", STRING, true));
             }
 
             @Mock
             public List<Column> getFullVisibleSchema() {
-                return ImmutableList.of(new Column("c1", IntegerType.INT), new Column("c2", STRING));
+                return ImmutableList.of(new Column("c1", IntegerType.INT, true), new Column("c2", STRING, true));
             }
 
             @Mock
@@ -1325,6 +1325,35 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetRemoteFileFailsFastForEncryptedTable() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, mockedNativeTableB, Maps.newHashMap());
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.updateProperties().set(TableProperties.ENCRYPTION_TABLE_KEY, "test-key").commit();
+        mockedNativeTableB.refresh();
+
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getRemoteFiles(icebergTable,
+                        GetRemoteFilesParams.newBuilder()
+                                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                                .setPredicate(predicate)
+                                .setFieldNames(Lists.newArrayList())
+                                .setLimit(10)
+                                .build()));
+        assertTrue(ex.getMessage().contains("encryption is not supported"),
+                "Expected encryption error, got: " + ex.getMessage());
+    }
+
+    @Test
     public void testGetTableStatistics() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
@@ -1629,7 +1658,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         TvrVersionRange version = TvrTableSnapshot.of(Optional.of(
                 mockedNativeTableB.currentSnapshot().snapshotId()));
-        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
         requestContext.setTableVersionRange(version);
         List<String> partitionNames = metadata.listPartitionNames("db", "table", requestContext);
         Assertions.assertEquals(2, partitionNames.size());
@@ -3430,5 +3459,62 @@ public class IcebergMetadataTest extends TableTestBase {
 
         // Only REPLACE in range — should return empty
         Assertions.assertTrue(traits.isEmpty());
+    }
+
+    @Test
+    public void testListTableDeltaTraitsAllowsExpiredExclusiveStartSnapshot() {
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+
+        mockedNativeTableA.newAppend().appendFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+
+        mockedNativeTableA.expireSnapshots().expireSnapshotId(snap1.snapshotId()).commit();
+        mockedNativeTableA.refresh();
+
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap2.snapshotId()));
+
+        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
+        Assertions.assertEquals(1, traits.size());
+        Assertions.assertTrue(traits.get(0).isAppendOnly());
+        Assertions.assertEquals(snap2.snapshotId(), traits.get(0).getTvrDelta().start().get());
+        Assertions.assertEquals(snap2.snapshotId(), traits.get(0).getTvrDelta().end().get());
+    }
+
+    @Test
+    public void testListTableDeltaTraitsFailsWhenSnapshotLineageIsBroken() {
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+
+        mockedNativeTableA.newAppend().appendFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+
+        mockedNativeTableA.newAppend().appendFile(FILE_A_2).commit();
+        Snapshot snap3 = mockedNativeTableA.currentSnapshot();
+
+        mockedNativeTableA.expireSnapshots().expireSnapshotId(snap2.snapshotId()).commit();
+        mockedNativeTableA.refresh();
+
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap3.snapshotId()));
+
+        StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class,
+                () -> metadata.listTableDeltaTraits("db", icebergTable, from, to));
+        assertTrue(exception.getMessage().contains("Starting snapshot (exclusive)"));
+        assertTrue(exception.getMessage().contains(String.valueOf(snap1.snapshotId())));
+        assertTrue(exception.getMessage().contains(String.valueOf(snap3.snapshotId())));
     }
 }

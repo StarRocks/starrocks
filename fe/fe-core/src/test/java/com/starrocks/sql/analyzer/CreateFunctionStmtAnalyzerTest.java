@@ -97,6 +97,20 @@ public class CreateFunctionStmtAnalyzerTest {
                 createFunctionSql, 32).get(0);
     }
 
+    private CreateFunctionStmt createPyInlineStmtNoFile(String symbol) {
+        Config.enable_udf = true;
+        String createFunctionSql = String.format("CREATE FUNCTION ABC.MY_UDF_JSON_GET_NOFILE(string, string) \n"
+                + "RETURNS string \n"
+                + "type = 'Python'\n"
+                + "symbol = '%s'\n"
+                + "AS $$\n"
+                + "def a(b):\n"
+                + "   return b\n"
+                + "$$;", symbol);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+    }
+
     @Test
     public void testJUDF() {
         assertThrows(Throwable.class, () -> {
@@ -465,4 +479,36 @@ public class CreateFunctionStmtAnalyzerTest {
         });
     }
 
+    @Test
+    public void testS3UDF() {
+
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public String computeMd5(CreateFunctionStmt stmt) {
+                return "0xff";
+            }
+        };
+
+        assertThrows(Throwable.class, () -> {
+            try {
+                Config.enable_udf = true;
+                String createFunctionSql = String.format("CREATE %s FUNCTION decrypt_udf(string, string)  \n"
+                                + "RETURNS string \n"
+                                + "properties (\n"
+                                + "    \"symbol\" = \"%s\",\n"
+                                + "    \"type\" = \"StarrocksJar\",\n"
+                                + "    \"aws.s3.access_key\" = \"ak\",\n"
+                                + "    \"aws.s3.secret_key\" = \"sk\",\n"
+                                + "    \"aws.s3.region\" = \"us-east-1\",\n"
+                                + "    \"file\" = \"%s\"\n"
+                                + ");", "GLOBAL", "com.starrocks.udf.decrypt",
+                        "s3://test-bucket/starrocks/udf/test.jar");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
 }

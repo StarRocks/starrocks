@@ -1501,4 +1501,261 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
     config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
 }
 
+// Verify that remove_compacted_sst takes the shared flag from tablet metadata
+// rather than the txn log, because during tablet split the txn log value may
+// have lost the shared=true marking.
+TEST_F(MetaFileTest, test_remove_compacted_sst_shared_from_metadata) {
+    const int64_t tablet_id = 10020;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    // Pre-populate sstable_meta in tablet metadata with shared=true
+    auto* sst_in_meta = metadata->mutable_sstable_meta()->add_sstables();
+    sst_in_meta->set_filename("shared.sst");
+    sst_in_meta->set_filesize(100);
+    sst_in_meta->set_shared(true);
+
+    // Build an OpCompaction where the input_sstable has shared=false (lost during cross-publish)
+    TxnLogPB_OpCompaction op_compaction;
+    auto* input = op_compaction.add_input_sstables();
+    input->set_filename("shared.sst");
+    input->set_filesize(100);
+    input->set_shared(false); // incorrect value from txn log
+
+    auto* output = op_compaction.add_output_sstables();
+    output->set_filename("new_output.sst");
+    output->set_filesize(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // The orphan file should have shared=true from metadata, not false from txn log
+    ASSERT_EQ(metadata->orphan_files_size(), 1);
+    EXPECT_EQ(metadata->orphan_files(0).name(), "shared.sst");
+    EXPECT_TRUE(metadata->orphan_files(0).shared());
+}
+
+// Verify that remove_compacted_sst falls back to the txn log shared flag
+// when the SST is not found in tablet metadata.
+TEST_F(MetaFileTest, test_remove_compacted_sst_shared_fallback_to_txn_log) {
+    const int64_t tablet_id = 10021;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    // No matching SST in metadata sstable_meta (empty)
+
+    TxnLogPB_OpCompaction op_compaction;
+    auto* input = op_compaction.add_input_sstables();
+    input->set_filename("only_in_txnlog.sst");
+    input->set_filesize(150);
+    input->set_shared(true); // value only in txn log
+
+    auto* output = op_compaction.add_output_sstables();
+    output->set_filename("new_output.sst");
+    output->set_filesize(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // Should use the txn log value since SST not found in metadata
+    ASSERT_EQ(metadata->orphan_files_size(), 1);
+    EXPECT_EQ(metadata->orphan_files(0).name(), "only_in_txnlog.sst");
+    EXPECT_TRUE(metadata->orphan_files(0).shared());
+}
+
+// Verify apply_opwrite copies op_write.shared_dels into the per-del shared flag on
+// rowset.del_files. Regression guard for the cross-publish path where new dels in an
+// in-flight write are shared across sibling split tablets.
+TEST_F(MetaFileTest, test_apply_opwrite_preserves_shared_dels) {
+    const int64_t tablet_id = 10030;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segments("seg.dat");
+    op_write.add_dels("shared_d.del");
+    op_write.add_dels("private_d.del");
+    op_write.add_shared_dels(true);
+    op_write.add_shared_dels(false);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.del_files_size(), 2);
+    EXPECT_EQ(rowset.del_files(0).name(), "shared_d.del");
+    EXPECT_TRUE(rowset.del_files(0).shared());
+    EXPECT_EQ(rowset.del_files(1).name(), "private_d.del");
+    EXPECT_FALSE(rowset.del_files(1).shared());
+}
+
+// Verify backward compatibility: when op_write.shared_dels is empty (old txn log or
+// non-cross-publish path), apply_opwrite leaves del_files[i].shared unset (default false).
+TEST_F(MetaFileTest, test_apply_opwrite_empty_shared_dels_defaults_false) {
+    const int64_t tablet_id = 10031;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segments("seg.dat");
+    op_write.add_dels("d.del");
+    // shared_dels left empty — legacy/normal write
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.del_files_size(), 1);
+    EXPECT_FALSE(rowset.del_files(0).shared());
+}
+
+// Verify batch_apply_opwrite + set_final_rowset preserve shared_dels across multiple
+// op_writes merged into a single rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_preserves_shared_dels) {
+    const int64_t tablet_id = 10032;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // First opwrite: 1 shared del
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->add_segments("seg1.dat");
+    op_write1.add_dels("d1.del");
+    op_write1.add_shared_dels(true);
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    // Second opwrite: no shared_dels set (legacy / private)
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segments("seg2.dat");
+    op_write2.add_dels("d2.del");
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    // Third opwrite: 1 shared del
+    TxnLogPB_OpWrite op_write3;
+    op_write3.mutable_rowset()->add_segments("seg3.dat");
+    op_write3.add_dels("d3.del");
+    op_write3.add_shared_dels(true);
+    builder.batch_apply_opwrite(op_write3, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.del_files_size(), 3);
+    EXPECT_EQ(rowset.del_files(0).name(), "d1.del");
+    EXPECT_TRUE(rowset.del_files(0).shared());
+    EXPECT_EQ(rowset.del_files(1).name(), "d2.del");
+    EXPECT_FALSE(rowset.del_files(1).shared());
+    EXPECT_EQ(rowset.del_files(2).name(), "d3.del");
+    EXPECT_TRUE(rowset.del_files(2).shared());
+}
+
+// Verify that apply_opwrite clears shared_segments[i] to false for segments replaced
+// by partial-update rewrite files. The rewrite file is private to this tablet and
+// must not be routed through the shared-file GC path.
+TEST_F(MetaFileTest, test_apply_opwrite_clears_shared_segments_for_rewrite) {
+    const int64_t tablet_id = 10040;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    // Build op_write with 2 segments, both marked shared (simulating post-cross-publish).
+    TxnLogPB_OpWrite op_write;
+    auto* src_rowset = op_write.mutable_rowset();
+    src_rowset->add_segments("orig0.dat");
+    src_rowset->add_segments("orig1.dat");
+    src_rowset->add_segment_size(1000);
+    src_rowset->add_segment_size(1000);
+    src_rowset->add_shared_segments(true);
+    src_rowset->add_shared_segments(true);
+
+    // Partial update: segment 0 is rewritten into a new private file.
+    std::map<int, FileInfo> replace_segments;
+    FileInfo rewrite_info;
+    rewrite_info.path = "rewrite0.dat";
+    rewrite_info.size = 1500;
+    replace_segments[0] = rewrite_info;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.apply_opwrite(op_write, replace_segments, {});
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.segments_size(), 2);
+    ASSERT_EQ(rowset.shared_segments_size(), 2);
+    // Segment 0 was rewritten: filename updated AND shared flag cleared.
+    EXPECT_EQ(rowset.segments(0), "rewrite0.dat");
+    EXPECT_FALSE(rowset.shared_segments(0));
+    // Segment 1 was not touched: shared flag preserved.
+    EXPECT_EQ(rowset.segments(1), "orig1.dat");
+    EXPECT_TRUE(rowset.shared_segments(1));
+}
+
+// Verify the same behavior for the batched path (batch_apply_opwrite + set_final_rowset).
+TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite) {
+    const int64_t tablet_id = 10041;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    TxnLogPB_OpWrite op_write;
+    auto* src_rowset = op_write.mutable_rowset();
+    src_rowset->add_segments("orig0.dat");
+    src_rowset->add_segments("orig1.dat");
+    src_rowset->add_segment_size(1000);
+    src_rowset->add_segment_size(1000);
+    src_rowset->add_shared_segments(true);
+    src_rowset->add_shared_segments(true);
+
+    std::map<int, FileInfo> replace_segments;
+    FileInfo rewrite_info;
+    rewrite_info.path = "rewrite0.dat";
+    rewrite_info.size = 1500;
+    replace_segments[0] = rewrite_info;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.batch_apply_opwrite(op_write, replace_segments, {});
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.segments_size(), 2);
+    ASSERT_EQ(rowset.shared_segments_size(), 2);
+    EXPECT_EQ(rowset.segments(0), "rewrite0.dat");
+    EXPECT_FALSE(rowset.shared_segments(0));
+    EXPECT_EQ(rowset.segments(1), "orig1.dat");
+    EXPECT_TRUE(rowset.shared_segments(1));
+}
+
 } // namespace starrocks::lake

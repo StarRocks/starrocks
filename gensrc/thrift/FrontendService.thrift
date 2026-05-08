@@ -900,6 +900,8 @@ struct TMasterOpResult {
     9: optional i64 txn_id;
     // SQL digest computed by Leader after analyze
     10:optional string sql_digest;
+    // StarMgr max journal ID for shared-data mode follower sync
+    11:optional i64 maxStarMgrJournalId;
 }
 
 struct TIsMethodSupportedRequest {

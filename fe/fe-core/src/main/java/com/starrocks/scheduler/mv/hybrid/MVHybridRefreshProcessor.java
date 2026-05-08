@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.mv.hybrid;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -25,28 +26,28 @@ import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshParams;
-import com.starrocks.scheduler.mv.ivm.MVIVMBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 
 import java.util.Map;
 
-public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor {
-    private final MVPCTBasedRefreshProcessor pctProcessor;
-    private final MVIVMBasedRefreshProcessor ivmProcessor;
+public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
+    private final MVPCTRefreshProcessor pctProcessor;
+    private final MVIVMRefreshProcessor ivmProcessor;
 
-    public MVHybridBasedRefreshProcessor(Database db,
-                                         MaterializedView mv,
-                                         MvTaskRunContext mvContext,
-                                         IMaterializedViewMetricsEntity mvEntity,
-                                         MaterializedView.RefreshMode refreshMode) {
-        super(db, mv, mvContext, mvEntity, refreshMode, MVHybridBasedRefreshProcessor.class);
-        this.ivmProcessor = new MVIVMBasedRefreshProcessor(db, mv, mvContext, mvEntity,
+    public MVHybridRefreshProcessor(Database db,
+                                    MaterializedView mv,
+                                    MvTaskRunContext mvContext,
+                                    IMaterializedViewMetricsEntity mvEntity,
+                                    MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVHybridRefreshProcessor.class);
+        this.ivmProcessor = new MVIVMRefreshProcessor(db, mv, mvContext, mvEntity,
                 MaterializedView.RefreshMode.INCREMENTAL);
-        this.pctProcessor = new MVPCTBasedRefreshProcessor(db, mv, mvContext, mvEntity,
+        this.pctProcessor = new MVPCTRefreshProcessor(db, mv, mvContext, mvEntity,
                 MaterializedView.RefreshMode.AUTO);
     }
 
@@ -99,32 +100,32 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
 
-        // For complete refreshes (IVM fallback or force): collect TVR version ranges and write
-        // them into the persisted tempBaseTableInfoTvrDeltaMap so that subsequent batch task_runs
-        // can access the checkpoint via AsyncRefreshContext (serialized to editlog).
-        // For partial refreshes (subsequent batches): skip — the temp map was already populated
-        // by the first task_run and persisted via editlog.
+        // First-batch setup: drop stale state from any prior attempt and install the freeze hook.
+        // Subsequent batches reuse the persisted owner and do not enter this branch.
         if (mvRefreshParams.isCompleteRefresh()) {
-            MaterializedView.AsyncRefreshContext refreshContext =
-                    mv.getRefreshScheme().getAsyncRefreshContext();
-            refreshContext.clearTempBaseTableInfoTvrDeltaMap();
-            final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
-                    refreshContext.getBaseTableInfoTvrVersionRangeMap();
-            for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
-                TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(
-                        snapshotInfo, mvTvrVersionRangeMap);
-                logger.info("Base table: {}, changed version range: {}",
-                        snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
-                // persist to AsyncRefreshContext temp map (survives across task_runs via editlog)
-                refreshContext.getTempBaseTableInfoTvrDeltaMap().put(
-                        snapshotInfo.getBaseTableInfo(), changedVersionRange);
-            }
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
+            pctProcessor.setAfterSyncHook(() -> {
+                MaterializedView.AsyncRefreshContext refreshContext =
+                        mv.getRefreshScheme().getAsyncRefreshContext();
+                final Map<BaseTableInfo, TvrVersionRange> committedMap =
+                        refreshContext.getBaseTableInfoTvrVersionRangeMap();
+                final Map<BaseTableInfo, TvrVersionRange> frozen = Maps.newHashMap();
+                for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+                    TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(
+                            snapshotInfo, committedMap);
+                    logger.info("Base table: {}, changed version range: {}",
+                            snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
+                    frozen.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
+                }
+                refreshContext.replaceTempBaseTableInfoTvrDeltaMap(getStartTaskRunId(), frozen);
+            });
         }
+
         return pctProcessor.getProcessExecPlan(taskRunContext);
     }
 
     @VisibleForTesting
-    public BaseMVRefreshProcessor getCurrentProcessor() {
+    public MVRefreshProcessor getCurrentProcessor() {
         if (this.currentRefreshMode == MaterializedView.RefreshMode.AUTO) {
             return pctProcessor;
         } else {

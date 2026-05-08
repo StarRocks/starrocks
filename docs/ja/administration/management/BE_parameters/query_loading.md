@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: "クエリとロード"
+sidebar_label: "Query and Loading"
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -11,117 +11,127 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-# BE 設定 - クエリとロード
+# BE構成 - クエリとロード
 
 <BEConfigMethod />
 
 <CNConfigMethod />
 
-## BE の設定項目を表示する
+## BE構成項目を表示
 
-次のコマンドを使用して BE の設定項目を表示できます。
+以下のコマンドを使用してBE構成項目を表示できます。
 
 ```SQL
 SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
-## BE パラメータを設定する
+## BEパラメーターを設定
 
 <PostBEConfig />
 
 <StaticBEConfigNote />
 
----
+***
 
-このトピックでは、以下の種類のFE構成について紹介します：
-- [クエリ](#クエリエンジン)
-- [ロードとアンロード](#ロードとアンロード)
+このトピックでは、以下の種類のFE構成について説明します。
 
-## クエリエンジン
+- [クエリ](#query)
+- [ロードとアンロード](#loading-and-unloading)
+
+## クエリ
+
+### clear_udf_cache_when_start
+
+- デフォルト: false
+- タイプ: ブール
+- 単位: -
+- 変更可能: いいえ
+- 説明: 有効にすると、BEのUserFunctionCacheは起動時にローカルにキャッシュされたすべてのユーザー関数ライブラリをクリアします。UserFunctionCache::init中に、コードは_reset_cache_dir()を呼び出し、これにより設定されたUDFライブラリディレクトリ（kLibShardNumサブディレクトリに整理されている）からUDFファイルを削除し、Java/Python UDFサフィックス（.jar/.py）を持つファイルを削除します。無効の場合（デフォルト）、BEは既存のキャッシュされたUDFファイルを削除する代わりにロードします。これを有効にすると、再起動後の初回使用時にUDFバイナリが再ダウンロードされることになります（ネットワークトラフィックと初回使用時のレイテンシが増加します）。
+- 導入バージョン: v4.0.0
 
 ### dictionary_speculate_min_chunk_size
 
 - デフォルト: 10000
-- タイプ: Int
-- 単位: Rows
-- 変更可能: No
-- 説明: StringColumnWriter および DictColumnWriter が辞書エンコーディングの推測を開始するために使用する最小行数（チャンクサイズ）。受信カラム（または蓄積されたバッファに加えた受信行）のサイズが `dictionary_speculate_min_chunk_size` 以上であれば、ライターは即座に推測を実行してエンコーディング（DICT、PLAIN、または BIT_SHUFFLE のいずれか）を設定し、さらに行をバッファリングしません。推測では文字列カラムに対して `dictionary_encoding_ratio`、数値/非文字列カラムに対して `dictionary_encoding_ratio_for_non_string_column` を使用して辞書エンコーディングが有利かどうかを判断します。また、カラムのバイトサイズが大きく（UINT32_MAX 以上）なる場合は、`BinaryColumn<uint32_t>` のオーバーフローを避けるために即時に推測が行われます。
+- タイプ: 整数
+- 単位: 行
+- 変更可能: いいえ
+- 説明: StringColumnWriterとDictColumnWriterが辞書エンコーディングの推測をトリガーするために使用する最小行数（チャンクサイズ）。入力列（または蓄積されたバッファと入力行）のサイズが`dictionary_speculate_min_chunk_size`以上の場合、ライターはすぐに推測を実行し、より多くの行をバッファリングするのではなく、エンコーディング（DICT、PLAIN、またはBIT_SHUFFLE）を設定します。推測は、文字列列には`dictionary_encoding_ratio`を、数値/非文字列列には`dictionary_encoding_ratio_for_non_string_column`を使用して、辞書エンコーディングが有益かどうかを判断します。また、大きな列のbyte_size（UINT32_MAX以上）は、`BinaryColumn<uint32_t>`オーバーフローを避けるために即座の推測を強制します。
 - 導入バージョン: v3.2.0
 
 ### disable_storage_page_cache
 
 - デフォルト: false
-- タイプ: Boolean
+- タイプ: ブール
 - 単位: -
 - 変更可能: はい
-- 説明: PageCache を無効にするかどうかを制御するブール値。
-  - PageCache が有効な場合、StarRocks は最近スキャンされたデータをキャッシュします。
-  - PageCache は、類似のクエリが頻繁に繰り返される場合にクエリパフォーマンスを大幅に向上させることができます。
-  - `true` は PageCache を無効にすることを示します。
-  - この項目のデフォルト値は StarRocks v2.4 以降、`true` から `false` に変更されました。
+- 説明: PageCacheを無効にするかどうかを制御するブール値。
+  - PageCacheが有効な場合、StarRocksは最近スキャンされたデータをキャッシュします。
+  - PageCacheは、類似のクエリが頻繁に繰り返される場合に、クエリパフォーマンスを大幅に向上させることができます。
+  - `true`はPageCacheを無効にすることを示します。
+  - この項目のデフォルト値は、StarRocks v2.4以降、`true`から`false`に変更されました。
 - 導入バージョン: -
 
 ### enable_bitmap_index_memory_page_cache
 
-- デフォルト: true 
-- タイプ: Boolean
+- デフォルト: true
+- タイプ: ブール
 - 単位: -
 - 変更可能: はい
-- 説明: Bitmap インデックスのメモリキャッシュを有効にするかどうか。Bitmap インデックスを使用してポイントクエリを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 説明: ビットマップインデックスのメモリキャッシュを有効にするかどうか。ポイントクエリを高速化するためにビットマップインデックスを使用したい場合は、メモリキャッシュを推奨します。
 - 導入バージョン: v3.1
 
-### enable_compaction_flat_json
+### フラットJSON圧縮有効化
 
-- デフォルト: True
-- タイプ: Boolean
-- 単位: 
+- デフォルト: 真
+- 型: ブール
+- 単位:
 - 変更可能: はい
-- 説明: Flat JSON データのコンパクションを有効にするかどうか。
+- 説明: フラットJSONデータの圧縮を有効にするかどうか。
 - 導入バージョン: v3.3.3
 
-### enable_json_flat
+### JSONフラット化を有効にする
 
 - デフォルト: false
-- タイプ: Boolean
-- 単位: 
+- 型: ブール
+- 単位:
 - 変更可能: はい
-- 説明: Flat JSON 機能を有効にするかどうか。 この機能を有効にすると、新しくロードされた JSON データが自動的にフラット化され、JSON クエリパフォーマンスが向上します。
+- 説明: フラットJSON機能を有効にするかどうか。この機能が有効になると、新しく読み込まれたJSONデータは自動的にフラット化され、JSONクエリのパフォーマンスが向上します。
 - 導入バージョン: v3.3.0
 
-### enable_lazy_dynamic_flat_json
+### 遅延動的フラットJSONの有効化
 
 - デフォルト: True
-- タイプ: Boolean
-- 単位: 
+- 型: 真偽値
+- 単位:
 - 変更可能: はい
-- 説明: クエリが読み取りプロセスで Flat JSON スキーマを見逃した場合に Lazy Dynamic Flat JSON を有効にするかどうか。この項目が `true` に設定されている場合、StarRocks は Flat JSON 操作を読み取りプロセスではなく計算プロセスに延期します。
+- 説明: クエリが読み取りプロセスでFlat JSONスキーマを見逃した場合に、Lazy Dynamic Flat JSONを有効にするかどうか。この項目が`true`に設定されている場合、StarRocksはFlat JSON操作を読み取りプロセスではなく計算プロセスに延期します。
 - 導入バージョン: v3.3.3
 
-### enable_ordinal_index_memory_page_cache
+### 順序インデックスメモリページキャッシュの有効化
 
 - デフォルト: true
-- タイプ: Boolean
+- 型: 真偽値
+- 単位: -
+- 可変: はい
+- 説明: 順序インデックスのメモリキャッシュを有効にするかどうか。順序インデックスは、行IDからデータページの位置へのマッピングであり、スキャンを高速化するために使用できます。
+- 導入日: -
+
+### 文字列プレフィックスゾーンマップの有効化
+
+- デフォルト: true
+- 型: 真偽値
 - 単位: -
 - 変更可能: はい
-- 説明: オーディナルインデックスのメモリキャッシュを有効にするかどうか。オーディナルインデックスは行IDからデータページの位置へのマッピングであり、スキャンを高速化するために使用できる。
+- 説明: プレフィックスベースの最小/最大値を使用して、文字列 (CHAR/VARCHAR) 列にZoneMapを有効にするかどうか。非キー文字列列の場合、最小/最大値は`string_prefix_zonemap_prefix_len`で設定された固定プレフィックス長に切り詰められます。
 - 導入バージョン: -
 
-### enable_string_prefix_zonemap
+### ゾーンマップインデックスメモリページキャッシュの有効化
 
-- デフォルト: true
-- タイプ: Boolean
+- デフォルト：true
+- 型: ブール
 - 単位: -
 - 変更可能: はい
-- 説明: 文字列（CHAR/VARCHAR）列に対して、前置長に基づくゾーンマップを有効にするかどうか。非キー列では、最小値/最大値は `string_prefix_zonemap_prefix_len` で指定した長さに切り詰められます。
-- 導入バージョン: -
-
-### enable_zonemap_index_memory_page_cache
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: ゾーンマップインデックスのメモリーキャッシュを有効にするかどうか。ゾーンマップインデックスを使用してスキャンを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 説明: ゾーンマップインデックスのメモリキャッシュを有効にするかどうか。スキャンを高速化するためにゾーンマップインデックスを使用したい場合は、メモリキャッシュを推奨します。
 - 導入バージョン: -
 
 ### exchg_node_buffer_size_bytes
@@ -130,7 +140,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: バイト
 - 変更可能: はい
-- 説明: 各クエリの交換ノードの受信側の最大バッファサイズ。この設定項目はソフトリミットです。データが過剰な速度で受信側に送信されると、バックプレッシャーがトリガーされます。
+- 説明: 各クエリの交換ノードの受信側における最大バッファサイズ。この設定項目はソフトリミットです。データが過剰な速度で受信側に送信されると、バックプレッシャーがトリガーされます。
 - 導入バージョン: -
 
 ### exec_state_report_max_threads
@@ -139,7 +149,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: スレッド
 - 変更可能: はい
-- 説明: exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が通常優先度の実行状態レポート（フラグメント完了やエラーステータスなど）を BE から FE へ非同期で RPC 送信するために使用されます。起動時の実際のプールサイズは `max(1, exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）のプールに対して `update_max_threads` が呼び出されます。プールのタスクキューサイズは 1000 固定です。高並行クエリ実行時に実行状態レポートが遅延または消失する場合は値を増やしてください。対応する高優先度プールは `priority_exec_state_report_max_threads` で制御します。
+- 説明: exec-state-report スレッドプールの最大スレッド数。このプールは、`ExecStateReporter` によって、非優先度の実行ステータスレポート（フラグメント完了やエラー状態など）を BE から FE へ RPC 経由で非同期に送信するために使用されます。起動時の実際のプールサイズは `max(1, exec_state_report_max_threads)` です。実行時にこの設定を変更すると、すべてのエグゼキュータセット（共有および排他）のプールで `update_max_threads` がトリガーされます。このプールには固定のタスクキューサイズ 1000 があり、すべてのスレッドがビジーでキューが満杯の場合、レポートの送信はサイレントに破棄されます。高優先度プール用の `priority_exec_state_report_max_threads` と対になっています。高いクエリ同時実行下で遅延または破棄された実行状態レポートが観測された場合は、この値を増やしてください。
 - 導入バージョン: v4.1.0, v4.0.8, v3.5.15
 
 ### file_descriptor_cache_capacity
@@ -157,7 +167,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ
-- 説明: フレームグラフツールのディレクトリ。このディレクトリには、プロファイルデータからフレームグラフを生成するための pprof、stackcollapse-go.pl、flamegraph.pl スクリプトが含まれている必要があります。
+- 説明: フレームグラフツールのディレクトリ。プロファイルデータからフレームグラフを生成するための pprof、stackcollapse-go.pl、および flamegraph.pl スクリプトが含まれている必要があります。
 - 導入バージョン: -
 
 ### fragment_pool_queue_size
@@ -175,22 +185,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: クエリに使用される最大スレッド数。
+- 説明: クエリに使用されるスレッドの最大数。
 - 導入バージョン: -
 
 ### fragment_pool_thread_num_min
 
 - デフォルト: 64
-- タイプ: Int
-- 単位: 分
+- 型: Int
+- 単位: 分 -
 - 変更可能: いいえ
-- 説明: クエリに使用される最小スレッド数。
+- 説明: クエリに使用されるスレッドの最小数。
 - 導入バージョン: -
 
 ### hdfs_client_enable_hedged_read
 
 - デフォルト: false
-- タイプ: Boolean
+- 型: Boolean
 - 単位: -
 - 変更可能: いいえ
 - 説明: ヘッジドリード機能を有効にするかどうかを指定します。
@@ -199,97 +209,115 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ### hdfs_client_hedged_read_threadpool_size
 
 - デフォルト: 128
-- タイプ: Int
+- 型: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: HDFS クライアントのヘッジドリードスレッドプールのサイズを指定します。スレッドプールのサイズは、HDFS クライアントでヘッジドリードを実行するために専用されるスレッドの数を制限します。これは、HDFS クラスターの **hdfs-site.xml** ファイルの `dfs.client.hedged.read.threadpool.size` パラメータに相当します。
+- 説明: HDFS クライアント上のヘッジドリードスレッドプールのサイズを指定します。スレッドプールサイズは、HDFS クライアントでヘッジドリードの実行に割り当てるスレッドの数を制限します。これは、`dfs.client.hedged.read.threadpool.size` パラメーターに相当します。**hdfs-site.xml**HDFS クラスターのファイル。
 - 導入バージョン: v3.0
 
 ### hdfs_client_hedged_read_threshold_millis
 
 - デフォルト: 2500
-- タイプ: Int
+- 型: Int
 - 単位: ミリ秒
 - 変更可能: いいえ
-- 説明: ヘッジドリードを開始する前に待機するミリ秒数を指定します。たとえば、このパラメータを `30` に設定した場合、ブロックからの読み取りが 30 ミリ秒以内に返されない場合、HDFS クライアントはすぐに別のブロックレプリカに対して新しい読み取りを開始します。これは、HDFS クラスターの **hdfs-site.xml** ファイルの `dfs.client.hedged.read.threshold.millis` パラメータに相当します。
+- 説明: ヘッジドリードを開始する前に待機するミリ秒数を指定します。たとえば、このパラメーターを `30` に設定したとします。この状況で、ブロックからの読み取りが30ミリ秒以内に返されない場合、HDFS クライアントはすぐに別のブロックレプリカに対して新しい読み取りを開始します。これは、`dfs.client.hedged.read.threshold.millis` パラメーターに相当します。**hdfs-site.xml**HDFS クラスターのファイル。
 - 導入バージョン: v3.0
 
 ### io_coalesce_adaptive_lazy_active
 
 - デフォルト: true
-- タイプ: Boolean
+- 型: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 述語の選択性に基づいて、述語列と非述語列の I/O を結合するかどうかを適応的に決定します。
+- 説明: 述語の選択性に基づいて、述語列と非述語列のI/Oを結合するかどうかを適応的に決定します。
 - 導入バージョン: v3.2
 
 ### jit_lru_cache_size
 
 - デフォルト: 0
-- タイプ: Int
-- 単位: Bytes
+- 型: Int
+- 単位: バイト
 - 変更可能: はい
-- 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
+- 説明: JITコンパイル用のLRUキャッシュサイズ。0より大きい値に設定されている場合、キャッシュの実際のサイズを表します。0以下の値に設定されている場合、システムは`jit_lru_cache_size = min(mem_limit*0.01, 1GB)`の式を使用してキャッシュを適応的に設定します（ただし、ノードの`mem_limit`は16 GB以上である必要があります）。
 - 導入バージョン: -
 
 ### json_flat_column_max
 
 - デフォルト: 100
-- タイプ: Int
-- 単位: 
+- 型: Int
+- 単位:
 - 変更可能: はい
-- 説明: Flat JSON によって抽出できるサブフィールドの最大数。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
+- 説明: Flat JSONで抽出できるサブフィールドの最大数。このパラメータは、`enable_json_flat`が`true`に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.0
 
 ### json_flat_create_zonemap
 
 - デフォルト: true
-- タイプ: Boolean
-- 単位: 
+- 型: Boolean
+- 単位:
 - 変更可能: はい
-- 説明: フラット化された JSON のサブカラムに対してゾーンマップを作成するかどうか。`enable_json_flat` が `true` の場合にのみ有効です。
+- 説明: 書き込み時にフラット化されたJSONサブカラムのZoneMapを作成するかどうか。このパラメータは、`enable_json_flat`が`true`に設定されている場合にのみ有効です。
 - 導入バージョン: -
 
 ### json_flat_null_factor
 
 - デフォルト: 0.3
-- タイプ: Double
-- 単位: 
+- 型: Double
+- 単位:
 - 変更可能: はい
-- 説明: Flat JSON のために抽出する NULL 値の割合。NULL 値の割合がこのしきい値を超える列は抽出されません。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
+- 説明: Flat JSONで抽出するカラム内のNULL値の割合。NULL値の割合がこのしきい値より高い場合、カラムは抽出されません。このパラメータは、`enable_json_flat`が`true`に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.0
 
 ### json_flat_sparsity_factor
 
 - デフォルト: 0.3
-- タイプ: Double
-- 単位: 
+- 型: Double
+- 単位:
 - 変更可能: はい
-- 説明: Flat JSON の同じ名前を持つ列の割合。この値より低い場合、抽出は行われません。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
+- 説明: Flat JSONで同じ名前を持つカラムの割合。同じ名前を持つカラムの割合がこの値より低い場合、抽出は実行されません。このパラメータは、`enable_json_flat`が`true`に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
 - デフォルト: false
-- タイプ: Boolean
+- タイプ: ブール
 - 単位: -
-- 変更可能: Yes
-- 説明: カラム名が変更された後に論理削除によって重複キーのテーブルの tablet rowset メタデータに導入される可能性のある無効な delete predicate を無視するかどうかを制御するブール値。
+- 変更可能: はい
+- 説明: カラム名変更後に重複キーテーブルへの論理削除によって導入される可能性のある、タブレットの行セットメタデータ内の無効な削除述語を無視するかどうかを制御するブール値。
 - 導入バージョン: v4.0
+
+### late_materialization_ratio
+
+- デフォルト: 10
+- タイプ: 整数
+- 単位: -
+- 変更可能: いいえ
+- 説明: SegmentIterator (ベクトルクエリエンジン) での遅延具現化の使用を制御する [0-1000] の範囲の整数比率。`0` (または ≤ 0) の値は遅延具現化を無効にします。`1000` (または ≥ 1000) はすべての読み取りに対して遅延具現化を強制します。0 より大きく 1000 未満の値は、遅延具現化と早期具現化の両方のコンテキストが準備され、イテレータが述語フィルタ比率に基づいて動作を選択する条件付き戦略を有効にします (値が高いほど遅延具現化が優先されます)。セグメントに複雑なメトリックタイプが含まれている場合、StarRocks は代わりに `metric_late_materialization_ratio` を使用します。`lake_io_opts.cache_file_only` が設定されている場合、遅延具現化は無効になります。
+- 導入バージョン: v3.2.0
 
 ### max_hdfs_file_handle
 
 - デフォルト: 1000
-- タイプ: Int
+- タイプ: 整数
 - 単位: -
 - 変更可能: はい
-- 説明: 開くことができる HDFS ファイルディスクリプタの最大数。
+- 説明: 開くことができるHDFSファイルディスクリプタの最大数。
 - 導入バージョン: -
+
+### max_hdfs_scanner_num
+
+- デフォルト: 50
+- タイプ: 整数
+- 単位: -
+- 変更可能: いいえ
+- 説明: ConnectorScanNodeが同時に実行できるリモートスキャナー（HDFS、オブジェクトストレージなど）の最大同時実行数。この値は、起動時の推定同時実行数を制限し、実行時の保留中のスキャナーのスケジューリングも制限し、スレッド、メモリ、ファイルハンドルの負荷を制御します。
+- 導入バージョン: v3.2.0
 
 ### max_memory_sink_batch_count
 
 - デフォルト: 20
-- タイプ: Int
+- タイプ: 整数
 - 単位: -
 - 変更可能: はい
 - 説明: スキャンキャッシュバッチの最大数。
@@ -298,10 +326,10 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ### max_pushdown_conditions_per_column
 
 - デフォルト: 1024
-- タイプ: Int
+- タイプ: 整数
 - 単位: -
 - 変更可能: はい
-- 説明: 各列でプッシュダウンを許可する条件の最大数。この制限を超えると、述語はストレージレイヤーにプッシュダウンされません。
+- 説明: 各カラムでプッシュダウンを許可する条件の最大数。条件の数がこの制限を超えると、述語はストレージ層にプッシュダウンされません。
 - 導入バージョン: -
 
 ### max_scan_key_num
@@ -310,8 +338,17 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 各クエリによってセグメント化される最大スキャンキー数。
+- 説明: 各クエリによってセグメント化されるスキャンキーの最大数。
 - 導入バージョン: -
+
+### metric_late_materialization_ratio
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 複雑なメトリック列を含む読み取りに対して、遅延具体化行アクセス戦略がいつ使用されるかを制御します。有効範囲: [0-1000]。`0` は遅延具体化を無効にします。`1000` は、該当するすべての読み取りに対して遅延具体化を強制します。1～999の値は、述語/選択性に基づいて、遅延具体化と早期具体化の両方のコンテキストが準備され、実行時に選択される条件付き戦略を有効にします。複雑なメトリックタイプが存在する場合、`metric_late_materialization_ratio` は一般的な `late_materialization_ratio` をオーバーライドします。注: `cache_file_only` I/Oモードでは、この設定に関わらず遅延具体化が無効になります。
+- 導入バージョン: v3.2.0
 
 ### min_file_descriptor_number
 
@@ -319,7 +356,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: BE プロセスの最小ファイルディスクリプタ数。
+- 説明: BEプロセスにおけるファイルディスクリプタの最小数。
 - 導入バージョン: -
 
 ### object_storage_connect_timeout_ms
@@ -328,7 +365,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: いいえ
-- 説明: オブジェクトストレージとのソケット接続を確立するためのタイムアウト期間。`-1` は SDK 設定のデフォルトのタイムアウト期間を使用することを示します。
+- 説明: オブジェクトストレージとのソケット接続を確立するためのタイムアウト期間。`-1` は、SDK構成のデフォルトのタイムアウト期間を使用することを示します。
 - 導入バージョン: v3.0.9
 
 ### object_storage_request_timeout_ms
@@ -337,7 +374,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: いいえ
-- 説明: オブジェクトストレージとの HTTP 接続を確立するためのタイムアウト期間。`-1` は SDK 設定のデフォルトのタイムアウト期間を使用することを示します。
+- 説明: オブジェクトストレージとのHTTP接続を確立するためのタイムアウト期間。`-1` は、SDK構成のデフォルトのタイムアウト期間を使用することを示します。
 - 導入バージョン: v3.0.9
 
 ### parquet_late_materialization_enable
@@ -346,40 +383,40 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: いいえ
-- 説明: パフォーマンスを向上させるために Parquet リーダーの後期実体化を有効にするかどうかを制御するブール値。`true` は後期実体化を有効にすることを示し、`false` は無効にすることを示します。
+- 説明: パフォーマンスを向上させるために、Parquetリーダーの遅延具体化を有効にするかどうかを制御するブール値です。`true` は遅延具体化を有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: -
 
 ### parquet_page_index_enable
 
 - デフォルト: true
-- タイプ: Boolean
+- 型: ブール
 - 単位: -
 - 変更可能: いいえ
-- 説明: パフォーマンスを向上させるために Parquet ファイルのページインデックスを有効にするかどうかを制御するブール値。`true` はページインデックスを有効にすることを示し、`false` は無効にすることを示します。
+- 説明: パフォーマンスを向上させるために、Parquetファイルのページインデックスを有効にするかどうかを制御するブール値です。`true` はページインデックスを有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: v3.3
 
 ### parquet_reader_bloom_filter_enable
 
 - デフォルト: true
-- タイプ: Boolean
+- 型: ブール
 - 単位: -
 - 変更可能: はい
-- 説明: パフォーマンスを向上させるために Parquet ファイルのブルームフィルターを有効にするかどうかを制御するブール値。`true` はブルームフィルタを有効にすることを示し、`false` は無効にすることを示す。システム変数 `enable_parquet_reader_bloom_filter` を使用して、セッションレベルでこの動作を制御することもできます。Parquet におけるブルームフィルタは、**各行グループ内のカラムレベルで管理されます**。Parquet ファイルに特定の列に対するブルームフィルタが含まれている場合、クエリはそれらの列に対する述語を使用して行グループを効率的にスキップすることができます。
+- 説明: パフォーマンスを向上させるために、Parquetファイルのブルームフィルターを有効にするかどうかを制御するブール値です。`true` はブルームフィルターを有効にすることを示し、`false` は無効にすることを示します。この動作は、システム変数 `enable_parquet_reader_bloom_filter` を使用してセッションレベルで制御することもできます。Parquetのブルームフィルターは、**各行グループ内の列レベルで**。Parquetファイルが特定の列のブルームフィルターを含んでいる場合、クエリはそれらの列の述語を使用して行グループを効率的にスキップできます。
 - 導入バージョン: v3.5
 
 ### path_gc_check_step
 
 - デフォルト: 1000
-- タイプ: Int
+- 型: 整数
 - 単位: -
 - 変更可能: はい
-- 説明: 連続してスキャンできる最大ファイル数。
+- 説明: 毎回連続してスキャンできるファイルの最大数。
 - 導入バージョン: -
 
 ### path_gc_check_step_interval_ms
 
 - デフォルト: 10
-- タイプ: Int
+- 型: 整数
 - 単位: ミリ秒
 - 変更可能: はい
 - 説明: ファイルスキャン間の時間間隔。
@@ -388,10 +425,10 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ### path_scan_interval_second
 
 - デフォルト: 86400
-- タイプ: Int
+- 型: 整数
 - 単位: 秒
 - 変更可能: はい
-- 説明: GC が期限切れデータをクリーンアップする時間間隔。
+- 説明: GCが期限切れのデータをクリーンアップする時間間隔。
 - 導入バージョン: -
 
 ### pipeline_connector_scan_thread_num_per_cpu
@@ -400,16 +437,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: BE ノードの CPU コアごとに Pipeline Connector に割り当てられるスキャンスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
+- 説明: BEノードのCPUコアごとにPipeline Connectorに割り当てられるスキャン・スレッドの数。この設定はv3.1.7以降、動的に変更されます。
 - 導入バージョン: -
 
 ### pipeline_poller_timeout_guard_ms
 
 - デフォルト: -1
 - タイプ: Int
-- 単位: Milliseconds
+- 単位: ミリ秒
 - 変更可能: はい
-- 説明: この項目が `0` より大きい値に設定されている場合、ドライバがポーラの 1 回のディスパッチに `pipeline_poller_timeout_guard_ms` 以上の時間がかかると、ドライバとオペレータの情報が出力される。
+- 説明: この項目が`0`より大きい値に設定されている場合、ポーラーでの単一ディスパッチにドライバーが`pipeline_poller_timeout_guard_ms`より長くかかると、ドライバーとオペレーターの情報が出力されます。
 - 導入バージョン: -
 
 ### pipeline_prepare_thread_pool_queue_size
@@ -418,7 +455,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
+- 説明: パイプライン実行エンジンのPREPAREフラグメントスレッドプールの最大キュー長。
 - 導入バージョン: -
 
 ### pipeline_prepare_thread_pool_thread_num
@@ -427,16 +464,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: Pipeline 実行エンジン PREPARE Fragment スレッドプールのスレッド数。`0` はシステムの VCPU コア数と同じであることを示す。
+- 説明: パイプライン実行エンジンのPREPAREフラグメントスレッドプール内のスレッド数。`0`は、値がシステムVCPUコア数と等しいことを示します。
 - 導入バージョン: -
 
 ### pipeline_prepare_timeout_guard_ms
 
 - デフォルト: -1
 - タイプ: Int
-- 単位: Milliseconds
+- 単位: ミリ秒
 - 変更可能: はい
-- 説明: この項目が `0` より大きい値に設定されている場合、PREPARE 処理中にプランの Fragment が `pipeline_prepare_timeout_guard_ms` を超えると、プランの Fragment のスタックトレースが出力される。
+- 説明: この項目が`0`より大きい値に設定されている場合、PREPAREプロセス中にプランフラグメントが`pipeline_prepare_timeout_guard_ms`を超えると、そのプランフラグメントのスタックトレースが出力されます。
 - 導入バージョン: -
 
 ### pipeline_scan_thread_pool_queue_size
@@ -445,7 +482,25 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
+- 説明: パイプライン実行エンジンのSCANスレッドプールの最大タスクキュー長。
+- 導入バージョン: -
+
+### enable_lock_free_scan_task_queue
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: `ScanExecutor` が OLAP スキャンおよびコネクタスキャンタスクのスケジューリングに `LockFreeWorkGroupScanTaskQueue` を使用するかどうかを制御します。有効にすると、スキャンタスクはロックフリーのワークグループごとのキューとワークグループレベルのコーディネーターを介してスケジュールされ、従来のミューテックスベースの `WorkGroupScanTaskQueue` と比較して競合が減少します。トラブルシューティングまたはロールバック中に従来のスキャンタスクキュー実装に戻すには、この項目を `false` に設定します。
+- 導入バージョン: v4.1.0
+
+### pk_index_parallel_get_threadpool_size
+
+- デフォルト: 1048576
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データ (クラウドネイティブ/レイク) モードでの PK インデックス並列取得操作で使用される「cloud_native_pk_index_get」スレッドプールの最大キューサイズ (保留中のタスク数) を設定します。このプールの実際のスレッド数は `pk_index_parallel_get_threadpool_max_threads` によって制御されます。この設定は、実行を待機しているタスクの数を制限するだけです。非常に大きなデフォルト値 (2^20) は、キューを実質的に無制限にします。これを下げると、キューに入れられたタスクによる過剰なメモリ増加を防ぎますが、キューが満杯のときにタスクの送信がブロックされたり失敗したりする可能性があります。ワークロードの同時実行性とメモリ制約に基づいて `pk_index_parallel_get_threadpool_max_threads` とともに調整してください。
 - 導入バージョン: -
 
 ### priority_exec_state_report_max_threads
@@ -454,8 +509,17 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: スレッド
 - 変更可能: はい
-- 説明: 高優先度 exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が高優先度の実行状態レポート（緊急なフラグメント失敗など）を BE から FE へ非同期で RPC 送信するために使用されます。通常のプールとは異なり、このプールのタスクキューはサイズ無制限です。起動時の実際のプールサイズは `max(1, priority_exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）の優先度プールに対して `update_max_threads` が呼び出されます。通常プールは `exec_state_report_max_threads` で制御します。
+- 説明: 高優先度 exec-state-report スレッドプールの最大スレッド数。このプールは、`ExecStateReporter` によって、高優先度の実行ステータスレポート (緊急のフラグメント障害など) を BE から FE へ RPC 経由で非同期に送信するために使用されます。通常の exec-state-report プールとは異なり、このプールには無制限のタスクキューがあります。起動時の実際のプールサイズは `max(1, priority_exec_state_report_max_threads)` です。実行時にこの設定を変更すると、すべてのエグゼキュータセット (共有および排他) の優先度プールで `update_max_threads` がトリガーされます。通常のプールには `exec_state_report_max_threads` と対になっています。高優先度レポートが大量の同時クエリ負荷の下で遅延する場合、この値を増やしてください。
 - 導入バージョン: v4.1.0, v4.0.8, v3.5.15
+
+### priority_queue_remaining_tasks_increased_frequency
+
+- デフォルト: 512
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: BlockingPriorityQueue が、すべての残りのタスクの優先度を飢餓状態を避けるためにどれくらいの頻度で増加させるか (「エージング」するか) を制御します。get/pop が成功するたびに内部の `_upgrade_counter` がインクリメントされます。`_upgrade_counter` が `priority_queue_remaining_tasks_increased_frequency` を超えると、キューはすべての要素の優先度をインクリメントし、ヒープを再構築し、カウンターをリセットします。値を小さくすると、優先度エージングが頻繁に行われ (飢餓状態を減らすが、反復と再ヒープ化による CPU コストが増加する)、値を大きくすると、そのオーバーヘッドは減少しますが、優先度調整が遅延します。この値は単純な操作回数のしきい値であり、時間期間ではありません。
+- 導入バージョン: v3.2.0
 
 ### query_cache_capacity
 
@@ -463,7 +527,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: バイト
 - 変更可能: いいえ
-- 説明: BE のクエリキャッシュのサイズ。デフォルトサイズは 512 MB です。サイズは 4 MB 未満にすることはできません。BE のメモリ容量が期待するクエリキャッシュサイズを提供するのに不十分な場合、BE のメモリ容量を増やすことができます。
+- 説明: BE のクエリキャッシュのサイズ。デフォルトサイズは 512 MB です。サイズは 4 MB 未満にすることはできません。BE のメモリ容量が、期待されるクエリキャッシュサイズをプロビジョニングするのに不十分な場合は、BE のメモリ容量を増やすことができます。
 - 導入バージョン: -
 
 ### query_pool_spill_mem_limit_threshold
@@ -472,8 +536,17 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Double
 - 単位: -
 - 変更可能: いいえ
-- 説明: 自動スピリングが有効な場合、すべてのクエリのメモリ使用量が `query_pool memory limit * query_pool_spill_mem_limit_threshold` を超えると、中間結果のスピリングがトリガーされます。
+- 説明: 自動スピルが有効な場合、すべてのクエリのメモリ使用量が`query_pool memory limit * query_pool_spill_mem_limit_threshold`を超えると、中間結果のスピルがトリガーされます。
 - 導入バージョン: v3.2.7
+
+### query_scratch_dirs
+
+- デフォルト: `${STARROCKS_HOME}`
+- タイプ: string
+- 単位: -
+- 変更可能: いいえ
+- 説明: クエリ実行が中間データ（外部ソート、ハッシュ結合、その他の演算子など）をスピルするために使用する、書き込み可能なスクラッチディレクトリのコンマ区切りリスト。`;`で区切られた1つ以上のパスを指定します（例: `/mnt/ssd1/tmp;/mnt/ssd2/tmp`）。ディレクトリはBEプロセスからアクセス可能で書き込み可能であり、十分な空き容量が必要です。StarRocksはそれらの中から選択してスピルI/Oを分散します。変更を有効にするには再起動が必要です。ディレクトリが見つからない、書き込み可能でない、または満杯の場合、スピルが失敗したり、クエリパフォーマンスが低下したりする可能性があります。
+- 導入バージョン: v3.2.0
 
 ### result_buffer_cancelled_interval_time
 
@@ -481,7 +554,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい
-- 説明: BufferControlBlock がデータを解放するまでの待機時間。
+- 説明: BufferControlBlockがデータを解放するまでの待機時間。
 - 導入バージョン: -
 
 ### scan_context_gc_interval_min
@@ -499,7 +572,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 各スキャンで各スキャンスレッドが返す最大行数。
+- 説明: スキャンにおいて、各スキャンスレッドが返す最大行数。
 - 導入バージョン: -
 
 ### scanner_thread_pool_queue_size
@@ -517,7 +590,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: ストレージエンジンが同時ストレージボリュームスキャンに使用するスレッドの数。すべてのスレッドはスレッドプールで管理されます。
+- 説明: ストレージエンジンが並行ストレージボリュームスキャンに使用するスレッドの数。すべてのスレッドはスレッドプールで管理されます。
 - 導入バージョン: -
 
 ### string_prefix_zonemap_prefix_len
@@ -526,8 +599,35 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列ゾーンマップの最小値/最大値に使用する前置長。
+- 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列のZoneMapの最小/最大に使用されるプレフィックス長。
 - 導入バージョン: -
+
+### udf_thread_pool_size
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: スレッド
+- 変更可能: いいえ
+- 説明: ExecEnvで作成されるUDF呼び出しPriorityThreadPoolのサイズを設定します（ユーザー定義関数/UDF関連タスクの実行に使用されます）。この値は、スレッドプール（PriorityThreadPool("udf", thread_num, queue_size)）を構築する際、プールスレッド数およびプールキュー容量として使用されます。より多くのUDF同時実行を許可するには増やし、過剰なCPUおよびメモリ競合を避けるには小さく保ちます。
+- 導入バージョン: v3.2.0
+
+### update_memory_limit_percent
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: パーセント
+- 変更可能: いいえ
+- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `GlobalEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP設定更新ロジックは、更新マネージャーで `update_primary_index_memory_limit` を呼び出すコールバックを登録するため、設定が変更された場合、更新サブシステムに変更が適用されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
+- 導入バージョン: v3.2.0
+
+### vector_chunk_size
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: 行
+- 変更可能: いいえ
+- 説明: 実行およびストレージのコードパス全体で使用される、ベクトル化されたチャンク（バッチ）あたりの行数。この値は、ChunkおよびRuntimeStateのbatch_size作成を制御し、オペレータのスループット、オペレータあたりのメモリフットプリント、スピルおよびソートバッファのサイズ設定、I/Oヒューリスティック（例：ORCライターの自然な書き込みサイズ）に影響します。これを増やすと、広範囲/CPUバウンドのワークロードでCPUおよびI/O効率が向上する可能性がありますが、ピークメモリ使用量が増加し、結果の小さいクエリのレイテンシが増加する可能性があります。バッチサイズがボトルネックであることがプロファイリングで示された場合にのみ調整し、それ以外の場合はメモリとパフォーマンスのバランスのためにデフォルトを維持してください。
+- 導入バージョン: v3.2.0
 
 ## ロードとアンロード
 
@@ -537,99 +637,108 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: トランザクションをクリアするために使用されるスレッドの数。
+- 説明: トランザクションのクリアに使用されるスレッドの数。
 - 導入バージョン: -
 
 ### column_mode_partial_update_insert_batch_size
 
 - デフォルト: 4096
-- タイプ: Int
+- 型: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
+- 説明: 挿入された行を処理する際の、カラムモードの部分更新のバッチサイズ。この項目が`0`または負の値に設定されている場合、無限ループを避けるために`1`にクランプされます。この項目は、各バッチで処理される新規挿入行の数を制御します。値が大きいほど書き込みパフォーマンスが向上しますが、より多くのメモリを消費します。
 - 導入バージョン: v3.5.10, v4.0.2
+
+### partial_update_memory_limit_per_worker
+
+- デフォルト: 2147483648
+- 型: Int
+- 単位: バイト
+- 変更可能: はい
+- 説明: 部分更新操作におけるワーカー スレッドあたりの最大メモリ。部分更新を処理する際の個々のワーカー スレッドのメモリ使用量を制御します。
+- 導入バージョン: -
 
 ### enable_load_spill_parallel_merge
 
 - デフォルト: true
-- タイプ: Boolean
+- 型: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 単一タブレット内で並列スピルマージを有効にするかどうかを指定します。これを有効にすると、データロード中のスピルマージのパフォーマンスが向上します。
+- 説明: 単一のタブレット内で並列スピルマージを有効にするかどうかを指定します。これを有効にすると、データロード中のスピルマージのパフォーマンスが向上する可能性があります。
 - 導入バージョン: -
 
 ### enable_parallel_memtable_finalize
 
 - デフォルト: true
-- タイプ: Boolean
+- 型: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: Lake テーブル（ストレージとコンピューティングの分離モード）へのデータロード時に並列 MemTable Finalize を有効にするかどうかを指定します。有効にすると、MemTable の Finalize 操作（ソート/集計）が書き込みスレッドからフラッシュスレッドに移動され、前の MemTable が並列で Finalize およびフラッシュされている間、書き込みスレッドは新しい MemTable へのデータ挿入を継続できます。これにより、CPU 集約型の Finalize 操作と I/O 集約型のフラッシュ操作をオーバーラップさせることで、ロードスループットを大幅に向上させることができます。注意: 自動インクリメント列を埋める必要がある場合、自動インクリメント ID の割り当ては MemTable がフラッシュに送信される前に完了する必要があるため、この最適化は自動的に無効になります。
+- 説明: レイクテーブル (共有データモード) にデータをロードする際に、並列メンテーブルファイナライズを有効にするかどうかを指定します。有効にすると、メンテーブルファイナライズ操作 (ソート/集計) が書き込みスレッドからフラッシュスレッドに移動され、前のメンテーブルが並行してファイナライズおよびフラッシュされている間に、書き込みスレッドが新しいメンテーブルへのデータ挿入を続行できるようになります。これにより、CPU負荷の高いファイナライズ操作とI/Oバウンドのフラッシュ操作をオーバーラップさせることで、ロードスループットを大幅に向上させることができます。この最適化は、自動インクリメント列を埋める必要がある場合には自動的に無効になることに注意してください。これは、自動インクリメントIDの割り当てがメンテーブルがフラッシュのために送信される前に発生する必要があるためです。
 - 導入バージョン: -
 
 ### allow_list_object_for_random_bucketing_on_cache_miss
 
 - デフォルト: true
-- タイプ: Boolean
+- 型: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: random bucketing のサイズ判定で Lake metadata がキャッシュミスした際に、object-storage LIST フォールバックを許可するかを制御します。`true` の場合は metadata ファイル LIST にフォールバックして base size を計算します（従来動作、推定がより正確）。`false` の場合は LIST をスキップして `base_size = 0` を使用し、LIST object リクエストを削減しますが、推定精度低下により immutable 判定がやや遅れる可能性があります。
-- 導入バージョン: 4.1.0, 4.0.7, 3.5.15 
+- 説明: ランダムバケットサイズチェック中にレイクメタデータキャッシュがミスした場合に、オブジェクトストレージのLISTフォールバックを許可するかどうかを制御します。`true`は、ベースサイズを計算するためにLISTメタデータファイルにフォールバックすることを意味します（従来の動作で、より正確なサイズ見積もり）。`false`はLISTをスキップし、`base_size = 0`を使用することを意味します。これにより、LISTオブジェクトのリクエストは減少しますが、サイズ見積もりの精度が低いため、不変マーキングが遅れる可能性があります。
+- 導入バージョン: 4.1.0, 4.0.7, 3.5.15
 
 ### enable_stream_load_verbose_log
 
 - デフォルト: false
-- タイプ: Boolean
+- 型: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: Stream Load ジョブの HTTP リクエストとレスポンスをログに記録するかどうかを指定します。
+- 説明: Stream LoadジョブのHTTPリクエストとレスポンスをログに記録するかどうかを指定します。
 - 導入バージョン: v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
 ### flush_thread_num_per_store
 
 - デフォルト: 2
-- タイプ: Int
+- 型: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 各ストアで MemTable をフラッシュするために使用されるスレッドの数。
+- 説明: 各ストアでMemTableをフラッシュするために使用されるスレッドの数。
 - 導入バージョン: -
 
 ### lake_flush_thread_num_per_store
 
 - デフォルト: 0
-- タイプ: Int
+- 型: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データモードで各ストアで MemTable をフラッシュするために使用されるスレッドの数。
-  この値が `0` に設定されている場合、システムは CPU コア数の 2 倍を値として使用します。
-  この値が `0` 未満に設定されている場合、システムはその絶対値と CPU コア数の積を値として使用します。
-- 導入バージョン: 3.1.12, 3.2.7
+- 説明: 共有データクラスターの各ストアでMemTableをフラッシュするために使用されるスレッドの数。
+この値が`0`に設定されている場合、システムはCPUコア数の2倍の値を設定します。
+この値が`0`未満に設定されている場合、システムはその絶対値とCPUコア数の積を値として使用します。
+- 導入バージョン: v3.1.12, 3.2.7
 
 ### load_data_reserve_hours
 
 - デフォルト: 4
-- タイプ: Int
+- 型: Int
 - 単位: 時間
 - 変更可能: いいえ
-- 説明: 小規模ロードによって生成されたファイルの予約時間。
+- 説明: 小規模なロードによって生成されたファイルの予約時間。
 - 導入バージョン: -
 
 ### load_error_log_reserve_hours
 
 - デフォルト: 48
-- タイプ: Int
+- 型: Int
 - 単位: 時間
 - 変更可能: はい
-- 説明: データロードログが保持される時間。
+- 説明: データロードログが予約される時間。
 - 導入バージョン: -
 
 ### load_process_max_memory_limit_bytes
 
 - デフォルト: 107374182400
-- タイプ: Int
+- 型: Int
 - 単位: バイト
 - 変更可能: いいえ
-- 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースの最大サイズ制限。
+- 説明: BEノード上のすべてのロードプロセスが占有できるメモリリソースの最大サイズ制限。
 - 導入バージョン: -
 
 ### load_spill_memory_usage_per_merge
@@ -638,7 +747,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: バイト
 - 変更可能: はい
-- 説明: スピルマージ中のマージ操作ごとの最大メモリ使用量。デフォルトは 1 GB (1073741824 バイト) です。このパラメータは、データロードのスピルマージ中に個々のマージタスクのメモリ消費を制御し、過度のメモリ使用を防ぎます。
+- 説明: スピルマージ中のマージ操作あたりの最大メモリ使用量。デフォルトは1 GB (1073741824バイト) です。このパラメータは、データロードのスピルマージ中の個々のマージタスクのメモリ消費を制御し、過剰なメモリ使用を防ぎます。
 - 導入バージョン: -
 
 ### max_consumer_num_per_group
@@ -647,7 +756,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: Routine Load のコンシューマーグループ内の最大コンシューマー数。
+- 説明: ルーチンロードのコンシューマーグループにおけるコンシューマーの最大数。
 - 導入バージョン: -
 
 ### max_runnings_transactions_per_txn_map
@@ -665,7 +774,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: インポート用の tablet writer のスレッド数，Stream Load、Broker Load、Insert などに使用されます。パラメータが 0 以下に設定されている場合、システムは CPU コア数の半分（最小で 16）を使用します。パラメータが 0 より大きい値に設定されている場合、システムはその値を使用します。この設定は v3.1.7 以降、動的に変更されました。
+- 説明: Stream Load、Broker Load、Insertなどの取り込みで使用されるタブレットライタースレッドの数。パラメータが0以下に設定されている場合、システムはCPUコア数の半分を使用し、最小値は16です。パラメータが0より大きい値に設定されている場合、システムはその値を使用します。この設定はv3.1.7以降、動的に変更されました。
 - 導入バージョン: -
 
 ### push_worker_count_high_priority
@@ -674,7 +783,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: HIGH 優先度のロードタスクを処理するために使用されるスレッドの数。
+- 説明: HIGH優先度のロードタスクを処理するために使用されるスレッドの数。
 - 導入バージョン: -
 
 ### push_worker_count_normal_priority
@@ -683,7 +792,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: NORMAL 優先度のロードタスクを処理するために使用されるスレッドの数。
+- 説明: NORMAL優先度のロードタスクを処理するために使用されるスレッドの数。
 - 導入バージョン: -
 
 ### streaming_load_max_batch_size_mb
@@ -692,7 +801,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: MB
 - 変更可能: はい
-- 説明: StarRocks にストリーミングできる JSON ファイルの最大サイズ。
+- 説明: StarRocksにストリーミングできるJSONファイルの最大サイズ。
 - 導入バージョン: -
 
 ### streaming_load_max_mb
@@ -701,7 +810,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: MB
 - 変更可能: はい
-- 説明: StarRocks にストリーミングできるファイルの最大サイズ。v3.0 以降、デフォルト値は `10240` から `102400` に変更されました。
+- 説明: StarRocksにストリーミングできるファイルの最大サイズ。v3.0以降、デフォルト値は`10240`から`102400`に変更されました。
 - 導入バージョン: -
 
 ### streaming_load_rpc_max_alive_time_sec
@@ -710,7 +819,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: 秒
 - 変更可能: いいえ
-- 説明: Stream Load の RPC タイムアウト。
+- 説明: ストリームロードのRPCタイムアウト。
+- 導入バージョン: -
+
+### transaction_publish_version_thread_pool_num_min
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: スレッド
+- 変更可能: はい
+- 説明: パブリッシュバージョン・スレッドプール内の最小スレッド数。アイドル時にプールはこの値まで縮小できます。`0`は固定の下限がないことを意味します。
 - 導入バージョン: -
 
 ### transaction_publish_version_thread_pool_idle_time_ms
@@ -719,7 +837,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: いいえ
-- 説明: スレッドが Publish Version スレッドプールによって再利用されるまでの Idle 時間。
+- 説明: パブリッシュバージョン・スレッドプールによってスレッドが再利用されるまでのアイドル時間。
 - 導入バージョン: -
 
 ### transaction_publish_version_worker_count
@@ -728,43 +846,61 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: バージョンを公開するために使用される最大スレッド数。この値が `0` 以下に設定されている場合、システムは CPU コア数を値として使用し、インポートの同時実行が高いが固定スレッド数しか使用されない場合にスレッドリソースが不足するのを回避します。v2.5 以降、デフォルト値は `8` から `0` に変更されました。
+- 説明: バージョンを公開するために使用されるスレッドの最大数。この値が`0`以下に設定されている場合、システムはCPUコア数を値として使用します。これにより、インポートの同時実行性が高いにもかかわらず固定数のスレッドしか使用されない場合に、スレッドリソースの不足を回避します。v2.5以降、デフォルト値は`8`から`0`に変更されました。
 - 導入バージョン: -
+
+### use_mmap_allocate_chunk
+
+- デフォルト: false
+- タイプ: ブール
+- 単位: -
+- 変更可能: いいえ
+- 説明: チャンク割り当てに匿名mmap (`MAP_ANONYMOUS | MAP_PRIVATE`) を使用するかどうか。有効にすると、多くのVMマッピングが作成されます。`vm.max_map_count` (例: `echo 262144 > /proc/sys/vm/max_map_count`) を増やし、大きな`chunk_reserved_bytes_limit`を設定する必要があります。そうしないと、頻繁なマップ/アンマップ操作により深刻なパフォーマンス低下が発生します。
+- 導入バージョン: v3.2.0
 
 ### write_buffer_size
 
 - デフォルト: 104857600
-- タイプ: Int
+- タイプ: 整数
 - 単位: バイト
 - 変更可能: はい
-- 説明: メモリ内の MemTable のバッファサイズ。この設定項目はフラッシュをトリガーするしきい値です。
+- 説明: メモリ内のMemTableのバッファサイズ。この設定項目は、フラッシュをトリガーするしきい値です。
 - 導入バージョン: -
 
 ### broker_write_timeout_seconds
 
 - デフォルト: 30
-- タイプ: int
-- 単位: Seconds
-- 変更可能: No
-- 説明: バックエンドの broker 操作で書き込み/IO RPC に使用されるタイムアウト（秒）。この値は 1000 を掛けられてミリ秒タイムアウトとなり、BrokerFileSystem および BrokerServiceConnection インスタンス（例：ファイルエクスポートやスナップショットのアップロード/ダウンロード）にデフォルトの timeout_ms として渡されます。broker やネットワークが遅い場合、または大きなファイルを転送する場合は早期タイムアウトを避けるために増やしてください；減らすと broker RPC が早期に失敗する可能性があります。この値は common/config に定義され、プロセス起動時に適用されます（動的リロード不可）。
+- タイプ: 整数
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: バックエンドブローカー操作が書き込み/IO RPCに使用するタイムアウト（秒単位）。この値は1000倍されてミリ秒単位のタイムアウトとなり、BrokerFileSystemおよびBrokerServiceConnectionインスタンス（例: ファイルのエクスポート、スナップショットのアップロード/ダウンロード）にデフォルトのtimeout_msとして渡されます。ブローカーまたはネットワークが遅い場合、または大きなファイルを転送する際に、時期尚早なタイムアウトを避けるためにこの値を増やしてください。値を減らすと、ブローカーRPCがより早く失敗する可能性があります。この値はcommon/configで定義されており、プロセス開始時に適用されます（動的にリロード可能ではありません）。
 - 導入バージョン: v3.2.0
 
 ### enable_load_channel_rpc_async
 
 - デフォルト: true
-- タイプ: Boolean
+- タイプ: ブール
 - 単位: -
 - 変更可能: はい
-- 説明: 有効にすると、load-channel の open RPC（例: PTabletWriterOpen）の処理が BRPC ワーカーから専用のスレッドプールへオフロードされます。リクエストハンドラは ChannelOpenTask を生成して内部 `_async_rpc_pool` に投入し、`LoadChannelMgr::_open` をインラインで実行しません。これにより BRPC スレッド内の作業量とブロッキングが減少し、`load_channel_rpc_thread_pool_num` と `load_channel_rpc_thread_pool_queue_size` で同時実行性を調整できるようになります。スレッドプールへの投入が失敗する（プールが満杯またはシャットダウン済み）と、リクエストはキャンセルされエラー状態が返されます。プールは `LoadChannelMgr::close()` でシャットダウンされるため、有効化する際は容量とライフサイクルを考慮し、リクエストの拒否や処理遅延を避けるようにしてください。
+- 説明: 有効にすると、ロードチャネルオープンRPC（例: `PTabletWriterOpen`）の処理がBRPCワーカーから専用のスレッドプールにオフロードされます。リクエストハンドラは`ChannelOpenTask`を作成し、`LoadChannelMgr::_open`をインラインで実行する代わりに、内部の`_async_rpc_pool`に送信します。これにより、BRPCスレッド内の作業とブロッキングが減少し、`load_channel_rpc_thread_pool_num`と`load_channel_rpc_thread_pool_queue_size`を介して同時実行性を調整できます。スレッドプールの送信が失敗した場合（プールが満杯またはシャットダウンされている場合）、リクエストはキャンセルされ、エラー状態が返されます。プールは`LoadChannelMgr::close()`でシャットダウンされるため、この機能を有効にする場合は、リクエストの拒否や処理の遅延を避けるために、容量とライフサイクルを考慮してください。
+- 導入バージョン: v3.5.0
+
+### enable_load_diagnose
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 変更可能: はい
+- 説明: 有効にすると、StarRocksは「[E1008]Reached timeout」に一致するbrpcタイムアウトの後、BE OlapTableSink/NodeChannelから自動ロード診断を試行します。コードは`PLoadDiagnoseRequest`を作成し、リモートのLoadChannelにRPCを送信してプロファイルやスタックトレースを収集します（`load_diagnose_rpc_timeout_profile_threshold_ms`と`load_diagnose_rpc_timeout_stack_trace_threshold_ms`で制御）。診断RPCは`load_diagnose_send_rpc_timeout_ms`をタイムアウトとして使用します。診断リクエストがすでに進行中の場合、診断はスキップされます。これを有効にすると、ターゲットノードで追加のRPCとプロファイリング作業が発生します。追加のオーバーヘッドを避けるため、機密性の高い本番ワークロードでは無効にしてください。
 - 導入バージョン: v3.5.0
 
 ### enable_load_segment_parallel
 
 - デフォルト: false
-- タイプ: Boolean
+- タイプ: ブール
 - 単位: -
-- 変更可能: No
-- 説明: 有効にすると、rowset セグメントの読み込みと rowset レベルの読み取りが StarRocks のバックグラウンドスレッドプール（ExecEnv::load_segment_thread_pool と ExecEnv::load_rowset_thread_pool）を使って並行して実行されます。Rowset::load_segments および TabletReader::get_segment_iterators は各セグメントまたは各 rowset のタスクをこれらのプールにサブミットし、サブミッションに失敗した場合は直列読み込みにフォールバックして警告をログに出します。大きな rowset に対する読み取り／ロードレイテンシを削減できますが、CPU/IO の並列度とメモリプレッシャーが増加します。注意: 並列ロードはセグメントの読み込み完了順序を変える可能性があり、そのため部分コンパクションを防ぎます（コードは `_parallel_load` をチェックし、有効時は部分コンパクションを無効化します）。セグメント順序に依存する操作への影響を考慮してください。
+- 変更可能: いいえ
+- Description: 有効にすると、StarRocksのバックグラウンドスレッドプール（ExecEnv::load_segment_thread_poolとExecEnv::load_rowset_thread_pool）を使用して、rowsetセグメントのロードとrowsetレベルの読み取りが並行して実行されます。Rowset::load_segmentsとTabletReader::get_segment_iteratorsは、セグメントごとまたはrowsetごとのタスクをこれらのプールに送信し、送信が失敗した場合はシリアルロードにフォールバックして警告をログに記録します。これを有効にすると、CPU/IOの並行性とメモリ負荷が増加する代わりに、大規模なrowsetの読み取り/ロードレイテンシを削減できます。注：並行ロードはセグメントのロード完了順序を変更する可能性があり、部分的なコンパクションを妨げます（コードは`_parallel_load`をチェックし、有効な場合は部分的なコンパクションを無効にします）。セグメントの順序に依存する操作への影響を考慮してください。
 - 導入バージョン: v3.3.0, v3.4.0, v3.5.0
 
 ### enable_streaming_load_thread_pool
@@ -772,96 +908,177 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 変更可能: Yes
-- 説明: ストリーミングロード用のスキャナを専用の streaming load スレッドプールに送るかどうかを制御します。有効で、かつクエリが `TLoadJobType::STREAM_LOAD` の LOAD の場合、ConnectorScanNode はスキャナタスクを `streaming_load_thread_pool`（INT32_MAX スレッドおよびキューサイズで構成され、事実上無制限）に送信します。無効にすると、スキャナは一般的な `thread_pool` とその `PriorityThreadPool` 提出ロジック（優先度計算、try_offer/offer の振る舞い）を使用します。有効にすると通常のクエリ実行からストリーミングロードの作業を分離して干渉を減らせますが、専用プールは事実上無制限であるため、トラフィックが多いと同時スレッド数やリソース使用量が増える可能性があります。このオプションはデフォルトでオンになっており、通常は変更を必要としません。
+- 変更可能: はい
+- Description: ストリーミングロードスキャナーが専用のストリーミングロードスレッドプールに送信されるかどうかを制御します。有効で、クエリが`TLoadJobType::STREAM_LOAD`を持つLOADである場合、ConnectorScanNodeはスキャナータスクを`streaming_load_thread_pool`（INT32_MAXスレッドとキューサイズ、つまり実質的に無制限に設定されています）に送信します。無効の場合、スキャナーは一般的な`thread_pool`とその`PriorityThreadPool`の送信ロジック（優先度計算、try_offer/offer動作）を使用します。有効にすると、ストリーミングロードの作業が通常のクエリ実行から分離され、干渉が減少します。ただし、専用プールは実質的に無制限であるため、有効にすると、大量のストリーミングロードトラフィック下で同時実行スレッドとリソース使用量が増加する可能性があります。このオプションはデフォルトでオンになっており、通常は変更する必要はありません。
 - 導入バージョン: v3.2.0
 
 ### es_http_timeout_ms
 
 - デフォルト: 5000
 - タイプ: Int
-- 単位: Milliseconds
-- 変更可能: No
-- 説明: Elasticsearch の scroll リクエストに対して ESScanReader 内の ES ネットワーククライアントが使用する HTTP 接続タイムアウト（ミリ秒）。この値は次の scroll POST を送信する前に `network_client.set_timeout_ms()` を介して適用され、スクロール処理中にクライアントが ES の応答を待つ時間を制御します。ネットワークが遅い場合や大きなクエリで早期タイムアウトを回避するためにこの値を増やし、応答しない ES ノードに対しては早めに失敗させたい場合は値を小さくしてください。この設定はスクロールコンテキストのキープアライブ期間を制御する `es_scroll_keepalive` を補完します。
+- 単位: ミリ秒
+- 変更可能: いいえ
+- Description: ESScanReaderのESネットワーククライアントがElasticsearchのスクロールリクエストに使用するHTTP接続タイムアウト（ミリ秒単位）です。この値は、後続のスクロールPOSTを送信する前にnetwork_client.set_timeout_ms()を介して適用され、スクロール中にクライアントがES応答を待つ時間を制御します。遅いネットワークや大規模なクエリの場合、早すぎるタイムアウトを避けるためにこの値を増やしてください。応答しないESノードでより早く失敗させるには減らしてください。この設定は、スクロールコンテキストのキープアライブ期間を制御する`es_scroll_keepalive`を補完します。
 - 導入バージョン: v3.2.0
 
 ### es_index_max_result_window
 
 - デフォルト: 10000
 - タイプ: Int
-- 単位: Documents
-- 変更可能: No
-- 説明: StarRocks が単一バッチで Elasticsearch に要求する最大ドキュメント数を制限します。ES リーダーの `KEY_BATCH_SIZE` を構築する際、StarRocks は ES リクエストバッチサイズを min(`es_index_max_result_window`, `chunk_size`) に設定します。ES リクエストが Elasticsearch のインデックス設定 `index.max_result_window` を超えると、Elasticsearch は HTTP 400 (Bad Request) を返します。大きなインデックスをスキャンする場合はこの値を調整するか、Elasticsearch 側で `index.max_result_window` を増やしてより大きな単一リクエストを許可してください。
+- 単位: -
+- 変更可能: いいえ
+- Description: StarRocksがElasticsearchから単一バッチでリクエストするドキュメントの最大数を制限します。StarRocksは、ESリーダーの`KEY_BATCH_SIZE`を構築する際に、ESリクエストバッチサイズをmin(`es_index_max_result_window`, `chunk_size`)に設定します。ESリクエストがElasticsearchインデックス設定`index.max_result_window`を超えると、ElasticsearchはHTTP 400 (Bad Request) を返します。大規模なインデックスをスキャンする場合、この値を調整するか、Elasticsearch側でES `index.max_result_window`を増やして、より大きな単一リクエストを許可してください。
 - 導入バージョン: v3.2.0
+
+### ignore_load_tablet_failure
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- Description: この項目が`false`に設定されている場合、システムはタブレットヘッダーのロード失敗（NotFoundおよびAlreadyExist以外のエラー）を致命的と見なします。コードはエラーをログに記録し、LOG(FATAL)を呼び出してBEプロセスを停止します。`true`に設定されている場合、BEは個々のタブレットのロードエラーにもかかわらず起動を続行します。失敗したタブレットIDは記録されスキップされますが、成功したタブレットは引き続きロードされます。このパラメータは、RocksDBメタスキャン自体からの致命的なエラーを抑制するものではないことに注意してください。RocksDBメタスキャンからの致命的なエラーは常にプロセスを終了させます。
+- 導入バージョン: v3.2.0
+
+### load_channel_abort_clean_up_delay_seconds
+
+- デフォルト: 600
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- Description: システムが中止されたロードチャネルのロードIDを`_aborted_load_channels`から削除するまでの期間（秒単位）を制御します。ロードジョブがキャンセルまたは失敗した場合、ロードIDは記録されたままになり、遅れて到着するロードRPCをすぐに拒否できます。遅延期間が経過すると、定期的なバックグラウンドスイープ中にエントリがクリーンアップされます（最小スイープ間隔は60秒）。遅延を短くしすぎると、中止後に迷子のRPCを受け入れるリスクがあり、長すぎると、必要以上に状態を保持し、リソースを消費する可能性があります。遅延リクエスト拒否の正確性と、中止されたロードのリソース保持のバランスを取るために、これを調整してください。
+- 導入バージョン: v3.5.11, v4.0.4
 
 ### load_channel_rpc_thread_pool_num
 
 - デフォルト: -1
 - タイプ: Int
-- 単位: Threads
+- 単位: スレッド
 - 変更可能: はい
-- 説明: load-channel 非同期 RPC スレッドプールの最大スレッド数。`<= 0`（デフォルト `-1`）に設定するとプールサイズは自動的に CPU コア数（CpuInfo::num_cores()）に設定されます。設定された値は ThreadPoolBuilder の max threads として使われ、プールの最小スレッド数は min(5, max_threads) に設定されます。プールのキューサイズは `load_channel_rpc_thread_pool_queue_size` によって別途制御されます。この設定は、load RPC の処理を同期から非同期に切り替えた後も動作が互換となるように、async RPC プールサイズを brpc ワーカーのデフォルト（`brpc_num_threads`）に合わせるために導入されました。ランタイムでこの設定を変更すると ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(...) がトリガーされます。
+- 説明: ロードチャネル非同期RPCスレッドプール用の最大スレッド数。0以下（デフォルト `-1`）に設定すると、プールサイズはCPUコア数（`CpuInfo::num_cores()`）に自動設定されます。設定された値はThreadPoolBuilderの最大スレッドとして使用され、プールの最小スレッドはmin(5, max_threads)に設定されます。プールキューサイズは `load_channel_rpc_thread_pool_queue_size` によって個別に制御されます。この設定は、非同期RPCプールサイズをbrpcワーカーのデフォルト（`brpc_num_threads`）に合わせるために導入され、ロードRPC処理を同期から非同期に切り替えた後も動作の互換性を維持します。実行時にこの設定を変更すると `ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(...)` がトリガーされます。
 - 導入バージョン: v3.5.0
 
 ### load_channel_rpc_thread_pool_queue_size
 
 - デフォルト: 1024000
 - タイプ: int
-- 単位: Count
+- 単位: 数
 - 変更可能: いいえ
-- 説明: LoadChannelMgr によって作成される Load チャネル RPC スレッドプールの保留タスク最大キューサイズを設定します。このスレッドプールは `enable_load_channel_rpc_async` が有効なときに非同期の `open` リクエストを実行し、プールサイズは `load_channel_rpc_thread_pool_num` と組になっています。大きなデフォルト値（1024000）は、同期処理から非同期処理への切り替え後も動作が保たれるように brpc ワーカーのデフォルトに合わせたものです。キューが満杯になると ThreadPool::submit() は失敗し、到着した open RPC はエラーでキャンセルされ、呼び出し元は拒否を受け取ります。大量の同時 `open` リクエストをバッファしたい場合はこの値を増やしてください；逆に小さくするとバックプレッシャーが強まり、負荷時に拒否が増える可能性があります。
+- 説明: LoadChannelMgrによって作成されるロードチャネルRPCスレッドプールの、保留中のタスクキューの最大サイズを設定します。このスレッドプールは、`enable_load_channel_rpc_async` が有効な場合に非同期 `open` リクエストを実行します。プールサイズは `load_channel_rpc_thread_pool_num` と対になっています。大きなデフォルト値（1024000）は、同期から非同期処理への切り替え後も動作を維持するために、brpcワーカーのデフォルトと一致しています。キューが満杯の場合、ThreadPool::submit() は失敗し、受信したオープンRPCはエラーでキャンセルされ、呼び出し元は拒否を受け取ります。この値を増やすと、より大きな同時 `open` リクエストのバーストをバッファリングできます。値を減らすとバックプレッシャーが厳しくなりますが、負荷がかかったときに拒否が増える可能性があります。
 - 導入バージョン: v3.5.0
 
 ### load_diagnose_rpc_timeout_profile_threshold_ms
 
 - デフォルト: 60000
 - タイプ: Int
-- 単位: Milliseconds
-- 変更可能: Yes
-- 説明: ロード RPC がタイムアウトしたとき（エラーに "[E1008]Reached timeout" が含まれる）かつ `enable_load_diagnose` が true の場合、フルプロファイリング診断を要求するかどうかを制御する閾値です。リクエスト単位の RPC タイムアウト `_rpc_timeout_ms` が `load_diagnose_rpc_timeout_profile_threshold_ms` より大きい場合、その診断でプロファイリングが有効になります。より小さい `_rpc_timeout_ms` の場合、リアルタイム／短タイムアウトのロードで頻繁な重い診断が発生しないよう、20 回のタイムアウトにつき 1 回だけプロファイリングをサンプリングします。この値は送信される `PLoadDiagnoseRequest` の `profile` フラグに影響します。スタックトレースの振る舞いは `load_diagnose_rpc_timeout_stack_trace_threshold_ms`、送信タイムアウトは `load_diagnose_send_rpc_timeout_ms` によって別途制御されます。
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: ロードRPCがタイムアウトし（エラーに「[E1008]Reached timeout」が含まれる）、`enable_load_diagnose` がtrueの場合、このしきい値は完全なプロファイリング診断が要求されるかどうかを制御します。リクエストレベルのRPCタイムアウト `_rpc_timeout_ms` が `load_diagnose_rpc_timeout_profile_threshold_ms` より大きい場合、その診断に対してプロファイリングが有効になります。`_rpc_timeout_ms` の値が小さい場合、リアルタイム/短時間タイムアウトの負荷に対する頻繁な重い診断を避けるため、プロファイリングは20回のタイムアウトごとに1回サンプリングされます。この値は、送信される `PLoadDiagnoseRequest` 内の `profile` フラグに影響します。スタックトレースの動作は `load_diagnose_rpc_timeout_stack_trace_threshold_ms` によって、送信タイムアウトは `load_diagnose_send_rpc_timeout_ms` によって個別に制御されます。
 - 導入バージョン: v3.5.0
 
 ### load_diagnose_rpc_timeout_stack_trace_threshold_ms
 
 - デフォルト: 600000
 - タイプ: Int
-- 単位: Milliseconds
-- 変更可能: Yes
-- 説明: 長時間実行されている load RPC に対してリモートのスタックトレースを要求するかどうかを決定する閾値（ミリ秒）。load RPC がタイムアウトエラーでタイムアウトし、有効な RPC タイムアウト（_rpc_timeout_ms）がこの値を超える場合、`OlapTableSink`/`NodeChannel` はターゲット BE への `load_diagnose` RPC に `stack_trace=true` を含め、BE がデバッグ用のスタックトレースを返せるようにします。`LocalTabletsChannel::SecondaryReplicasWaiter` は、セカンダリレプリカの待機がこの間隔を超えた場合に、プライマリからベストエフォートのスタックトレース診断をトリガーします。この動作は `enable_load_diagnose` を必要とし、診断 RPC のタイムアウトには `load_diagnose_send_rpc_timeout_ms` を使用します；プロファイリングは `load_diagnose_rpc_timeout_profile_threshold_ms` によって別途制御されます。この値を下げると、スタックトレース要求がより積極的になります。
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: 長時間実行されるロードRPCのリモートスタックトレースをいつ要求するかを決定するために使用されるしきい値（ミリ秒単位）。ロードRPCがタイムアウトエラーでタイムアウトし、実効RPCタイムアウト（_rpc_timeout_ms）がこの値を超えると、`OlapTableSink`/`NodeChannel` は、ターゲットBEへの `load_diagnose` RPCに `stack_trace=true` を含め、BEがデバッグ用のスタックトレースを返せるようにします。`LocalTabletsChannel::SecondaryReplicasWaiter` は、セカンダリレプリカの待機がこの間隔を超えた場合、プライマリからのベストエフォートのスタックトレース診断もトリガーします。この動作には `enable_load_diagnose` が必要で、診断RPCタイムアウトには `load_diagnose_send_rpc_timeout_ms` を使用します。プロファイリングは `load_diagnose_rpc_timeout_profile_threshold_ms` によって個別に制御されます。この値を下げると、スタックトレースが要求される頻度が高まります。
+- 導入バージョン: v3.5.0
+
+### load_diagnose_send_rpc_timeout_ms
+
+- デフォルト: 2000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: BEロードパスによって開始される診断関連のbrpc呼び出しに適用されるタイムアウト（ミリ秒単位）。これは、`load_diagnose` RPC（LoadChannel brpc呼び出しがタイムアウトしたときにNodeChannel/OlapTableSinkによって送信される）およびレプリカステータスクエリ（プライマリレプリカの状態を確認するときにSecondaryReplicasWaiter / LocalTabletsChannelによって使用される）のコントローラタイムアウトを設定するために使用されます。リモート側がプロファイルまたはスタックトレースデータで応答できる十分な高さの値を選択しますが、障害処理が遅延するほど高くしないようにします。このパラメータは、診断情報がいつ、どのようなものが要求されるかを制御する `enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、および `load_diagnose_rpc_timeout_stack_trace_threshold_ms` と連携して機能します。
 - 導入バージョン: v3.5.0
 
 ### load_fp_brpc_timeout_ms
 
 - デフォルト: -1
 - タイプ: Int
-- 単位: Milliseconds
-- 変更可能: Yes
-- 説明: `node_channel_set_brpc_timeout` の fail point がトリガーされたときに OlapTableSink が使用するチャネルごとの brpc RPC タイムアウトを上書きします。正の値に設定すると、NodeChannel は内部の `_rpc_timeout_ms` をこの値（ミリ秒）に設定し、open/add-chunk/cancel RPC が短いタイムアウトを使うようになり、"[E1008]Reached timeout" エラーを発生させる brpc タイムアウトのシミュレーションが可能になります。デフォルト（`-1`）は上書きを無効にします。この値の変更はテストとフォールトインジェクションを目的としており、小さい値は偽のタイムアウトを発生させてロード診断をトリガーする可能性があります（`enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、`load_diagnose_rpc_timeout_stack_trace_threshold_ms`、`load_diagnose_send_rpc_timeout_ms` を参照）。
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: `node_channel_set_brpc_timeout` 障害点がトリガーされたときにOlapTableSinkが使用するチャネルごとのbrpc RPCタイムアウトを上書きします。正の値に設定すると、NodeChannelはその内部 `_rpc_timeout_ms` をこの値（ミリ秒単位）に設定し、open/add-chunk/cancel RPCがより短いタイムアウトを使用するようにし、「[E1008]Reached timeout」エラーを生成するbrpcタイムアウトのシミュレーションを可能にします。デフォルト（`-1`）では上書きが無効になります。この値の変更はテストおよび障害注入を目的としています。小さい値は誤ったタイムアウトを生成し、ロード診断をトリガーする可能性があります（`enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、`load_diagnose_rpc_timeout_stack_trace_threshold_ms`、および `load_diagnose_send_rpc_timeout_ms` を参照）。
 - 導入バージョン: v3.5.0
 
 ### load_fp_tablets_channel_add_chunk_block_ms
 
 - デフォルト: -1
 - タイプ: Int
-- 単位: Milliseconds
-- 変更可能: Yes
-- 説明: 有効にすると（正のミリ秒値に設定すると）このフェイルポイント設定は load 処理中に TabletsChannel::add_chunk を指定した時間だけスリープさせます。BRPC のタイムアウトエラー（例: "[E1008]Reached timeout"）をシミュレートしたり、add_chunk の高コスト操作によるロード遅延を模擬するために使用されます。値が `<= 0`（デフォルト `-1`）の場合、注入は無効になります。フォールトハンドリング、タイムアウト、レプリカ同期挙動のテストを目的としており、書き込み完了を遅延させ上流のタイムアウトやレプリカの中止を引き起こす可能性があるため、通常の本番ワークロードでは有効にしないでください。
+- 単位: ミリ秒
+- 変更可能: はい
+- Description: 有効にすると（正のミリ秒値に設定すると）、このフェイルポイント設定により、ロード処理中にTabletsChannel::add_chunkが指定された時間スリープします。これは、BRPCタイムアウトエラー（例：「[E1008]Reached timeout」）をシミュレートし、ロードレイテンシを増加させる高コストなadd_chunk操作をエミュレートするために使用されます。0以下の値（デフォルト `-1`）はインジェクションを無効にします。障害処理、タイムアウト、レプリカ同期動作のテストを目的としています。書き込み完了を遅延させ、アップストリームのタイムアウトやレプリカの中止を引き起こす可能性があるため、通常のプロダクションワークロードでは有効にしないでください。
 - 導入バージョン: v3.5.0
+
+### load_segment_thread_pool_num_max
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- Description: BEのロード関連スレッドプールの最大ワーカー数を設定します。この値はThreadPoolBuilderによって、exec_env.cpp内の`load_rowset_pool`と`load_segment_pool`の両方のスレッドを制限するために使用され、ストリーミングおよびバッチロード中のロードされたrowsetとセグメントの処理（例：デコード、インデックス作成、書き込み）の並行性を制御します。この値を増やすと並列性が向上し、ロードスループットが改善される可能性がありますが、CPU、メモリ使用量、および潜在的な競合も増加します。減らすと、同時ロード処理が制限され、スループットが低下する可能性があります。`load_segment_thread_pool_queue_size`および`streaming_load_thread_pool_idle_time_ms`と合わせて調整してください。変更にはBEの再起動が必要です。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
+
+### load_segment_thread_pool_queue_size
+
+- デフォルト: 10240
+- タイプ: Int
+- 単位: タスク
+- 変更可能: いいえ
+- Description: 「load_rowset_pool」および「load_segment_pool」として作成されたロード関連スレッドプールの最大キュー長（保留中のタスク数）を設定します。これらのプールは最大スレッド数に`load_segment_thread_pool_num_max`を使用し、この設定は、ThreadPoolのオーバーフローポリシーが適用される前に、いくつのロードセグメント/rowsetタスクをバッファリングできるかを制御します（ThreadPoolの実装に応じて、それ以上の送信は拒否またはブロックされる場合があります）。保留中のロード作業を増やすには値を増やします（メモリ使用量が増え、レイテンシが上昇する可能性があります）。バッファリングされたロードの並行性を制限し、メモリ使用量を減らすには値を減らします。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
+
+### max_pulsar_consumer_num_per_group
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- Description: BE上のルーチンロードのために、単一のデータコンシューマグループで作成できるPulsarコンシューマの最大数を制御します。複数トピックのサブスクリプションでは累積確認応答がサポートされていないため、各コンシューマは正確に1つのトピック/パーティションをサブスクライブします。`pulsar_info->partitions`内のパーティション数がこの値を超えると、グループ作成は失敗し、BE上で`max_pulsar_consumer_num_per_group`を増やすか、BEを追加するよう促すエラーが表示されます。この制限はPulsarDataConsumerGroupを構築する際に適用され、BEが1つのルーチンロードグループに対してこれ以上の数のコンシューマをホストすることを防ぎます。Kafkaルーチンロードの場合、代わりに`max_consumer_num_per_group`が使用されます。
+- 導入バージョン: v3.2.0
+
+### pull_load_task_dir
+
+- デフォルト: `${STARROCKS_HOME}/var/pull_load`
+- タイプ: string
+- 単位: -
+- 変更可能: いいえ
+- Description: BEが「プルロード」タスク（ダウンロードされたソースファイル、タスク状態、一時出力など）のデータと作業ファイルを保存するファイルシステムパス。このディレクトリはBEプロセスによって書き込み可能であり、受信するロードのために十分なディスクスペースが必要です。デフォルトはSTARROCKS_HOMEからの相対パスです。テストはこのディレクトリが作成され、存在することを期待します（テスト設定を参照）。
+- 導入バージョン: v3.2.0
+
+### routine_load_kafka_timeout_second
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: Kafka関連のルーチンロード操作に使用されるタイムアウト（秒）。クライアントリクエストがタイムアウトを指定しない場合、`get_info`のデフォルトRPCタイムアウトとして`routine_load_kafka_timeout_second`が使用されます（ミリ秒に変換）。また、librdkafkaコンシューマの呼び出しごとのコンシュームポーリングタイムアウトとしても使用されます（ミリ秒に変換され、残りの実行時間で上限が設定されます）。注: 内部の`get_info`パスは、FE側のタイムアウト競合を避けるため、librdkafkaに渡す前にこの値を80%に減らします。この値を、タイムリーな障害報告とネットワーク/ブローカー応答に十分な時間のバランスが取れるように設定してください。この設定は変更できないため、変更には再起動が必要です。
+- 導入バージョン: v3.2.0
+
+### routine_load_pulsar_timeout_second
+
+- デフォルト: 10
+- 型: Int
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: リクエストが明示的なタイムアウトを提供しない場合に、BEがPulsar関連のルーチンロード操作に使用するデフォルトのタイムアウト（秒）。具体的には、`PInternalServiceImplBase::get_pulsar_info`はこの値を1000倍して、Pulsarパーティションメタデータとバックログを取得するルーチンロードタスクエグゼキュータメソッドに渡されるミリ秒単位のタイムアウトを形成します。Pulsarの応答が遅いことを許容する代わりに障害検出が長くなる場合は値を増やし、遅いブローカーでより早く失敗させる場合は値を減らしてください。Kafkaに使用される`routine_load_kafka_timeout_second`に類似しています。
+- 導入バージョン: v3.2.0
 
 ### streaming_load_thread_pool_idle_time_ms
 
 - デフォルト: 2000
-- タイプ: Int
-- 単位: Milliseconds
-- 変更可能: No
-- 説明: streaming-load 関連のスレッドプールに対するスレッドのアイドルタイムアウト（ミリ秒）を設定します。この値は `stream_load_io` プールに対して ThreadPoolBuilder に渡されるアイドルタイムアウトとして使用され、`load_rowset_pool` と `load_segment_pool` にも適用されます。これらのプール内のスレッドはこの期間アイドル状態が続くと回収されます；値を小さくするとアイドル時のリソース使用は減りますがスレッド生成のオーバーヘッドが増え、値を大きくするとスレッドが長く生存します。`stream_load_io` プールは `enable_streaming_load_thread_pool` が有効な場合に使用されます。
+- 型: Int
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: ストリーミングロード関連のスレッドプールに対するスレッドアイドルタイムアウト（ミリ秒）を設定します。この値は、`stream_load_io`プール、`load_rowset_pool`、および`load_segment_pool`のThreadPoolBuilderに渡されるアイドルタイムアウトとして使用されます。これらのプール内のスレッドは、この期間アイドル状態になると解放されます。値が低いとアイドルリソースの使用量が減りますが、スレッド作成のオーバーヘッドが増加し、値が高いとスレッドがより長くアクティブな状態を保ちます。`enable_streaming_load_thread_pool`が有効な場合、`stream_load_io`プールが使用されます。
 - 導入バージョン: v3.2.0
 
 ### streaming_load_thread_pool_num_min
 
 - デフォルト: 0
-- タイプ: Int
+- 型: Int
 - 単位: -
-- 変更可能: No
-- 説明: ExecEnv 初期化時に作成される streaming load IO スレッドプール ("stream_load_io") の最小スレッド数。プールは `set_max_threads(INT32_MAX)` と `set_max_queue_size(INT32_MAX)` で構築され、事実上デッドロック回避のために無制限にされます。値が 0 の場合、プールはスレッドを持たずに需要に応じて拡張します；正の値を設定すると起動時にその数のスレッドを確保します。このプールは `enable_streaming_load_thread_pool` が true のときに使用され、アイドルタイムアウトは `streaming_load_thread_pool_idle_time_ms` で制御されます。全体の並行度は依然として `fragment_pool_thread_num_max` と `webserver_num_workers` によって制約されるため、この値を変更する必要は稀であり、高すぎるとリソース使用量が増える可能性があります。
+- 変更可能: いいえ
+- 説明: ExecEnv初期化中に作成されるストリーミングロードIOスレッドプール（"stream_load_io"）の最小スレッド数。このプールは`set_max_threads(INT32_MAX)`と`set_max_queue_size(INT32_MAX)`で構築されるため、同時ストリーミングロードでのデッドロックを避けるために実質的に無制限です。値が0の場合、プールはスレッドなしで開始し、オンデマンドで増加します。正の値を設定すると、起動時にその数のスレッドが予約されます。このプールは`enable_streaming_load_thread_pool`がtrueの場合に使用され、そのアイドルタイムアウトは`streaming_load_thread_pool_idle_time_ms`によって制御されます。全体的な並行性は依然として`fragment_pool_thread_num_max`と`webserver_num_workers`によって制約されます。この値を変更する必要があることはめったになく、高すぎるとリソース使用量が増加する可能性があります。
 - 導入バージョン: v3.2.0

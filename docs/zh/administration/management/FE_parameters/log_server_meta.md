@@ -1536,7 +1536,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 逗号分隔的事务延迟指标组列表，用于报告。加载类型被归类为逻辑组以进行监控。当启用某个组时，其名称将作为“类型”标签添加到事务指标中。有效值：`stream_load`、`routine_load`、`broker_load`、`insert` 和 `compaction`（仅适用于共享数据集群）。示例：`"stream_load,routine_load"`。
+- 描述: 逗号分隔的事务延迟指标组列表，用于报告。加载类型被归类为逻辑组以进行监控。当启用某个组时，其名称将作为“类型”标签添加到事务指标中。有效值：`stream_load`、`routine_load`、`broker_load`、`insert` 和 `compaction`（仅适用于存算分离集群）。示例：`"stream_load,routine_load"`。
 - 引入版本: v4.0
 
 ### `txn_rollback_limit`
