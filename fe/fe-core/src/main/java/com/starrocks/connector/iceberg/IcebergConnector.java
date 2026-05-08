@@ -92,6 +92,16 @@ public class IcebergConnector implements Connector {
         IcebergCatalogType nativeCatalogType = icebergCatalogProperties.getCatalogType();
         Configuration conf = hdfsEnvironment.getConfiguration();
 
+        // Apply catalog properties to Hadoop Configuration so that per-catalog
+        // overrides (e.g. hive.metastore.kerberos.principal, hive.metastore.uris,
+        // hadoop.kerberos.principal/keytab) take precedence over the globally
+        // baked hive-site.xml / hdfs-site.xml. This mirrors what
+        // HiveMetaClient.createHiveMetaClient does for the Hive connector
+        // (HiveMetaClient.java: `properties.forEach(conf::set);`) and is required
+        // when a single FE serves multiple HMS endpoints with different
+        // service principals.
+        properties.forEach(conf::set);
+
         if (Config.enable_iceberg_custom_worker_thread) {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
             Properties props = System.getProperties();
