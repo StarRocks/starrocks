@@ -423,6 +423,8 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             long built = tablet.getVectorIndexBuiltVersion();
             if (built >= p.latestVersion) {
                 it.remove();
+                preferredNodes.remove(tabletId);
+                cooldownUntil.remove(tabletId);
                 continue;
             }
 
