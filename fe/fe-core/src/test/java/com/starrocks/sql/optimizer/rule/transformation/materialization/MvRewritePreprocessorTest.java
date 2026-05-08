@@ -24,6 +24,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -1664,6 +1665,39 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     long id2 = mv2.getId();
                     int expectedOrder = Long.compare(id1, id2);
                     Assertions.assertEquals(expectedOrder, compareResult);
+                });
+    }
+
+    @Test
+    public void testRewriteRejectedForIncrementalMv() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_rewrite_imv distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_rewrite_imv");
+                    // IVMAnalyzer rejects INCREMENTAL on non-Iceberg, so set the property directly.
+                    mv.getTableProperty().setMvRefreshMode("incremental");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertTrue(result.getReason().contains("refresh_mode=INCREMENTAL"),
+                            "expected reason to mention INCREMENTAL, got: " + result.getReason());
+                });
+    }
+
+    @Test
+    public void testRewriteRejectedForAutoMv() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_rewrite_auto distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_rewrite_auto");
+                    mv.getTableProperty().setMvRefreshMode("auto");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertTrue(result.getReason().contains("refresh_mode=AUTO"),
+                            "expected reason to mention AUTO, got: " + result.getReason());
                 });
     }
 

@@ -56,7 +56,7 @@ AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -76,7 +76,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -93,7 +93,7 @@ None	5	2023-12-03
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -117,7 +117,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -159,7 +159,7 @@ AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int > 3;
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -179,7 +179,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -196,7 +196,7 @@ None	30	2023-12-01
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -220,7 +220,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -237,7 +237,7 @@ None	30	2023-12-01
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
