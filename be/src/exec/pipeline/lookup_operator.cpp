@@ -33,12 +33,12 @@
 #include "exec/sorting/sorting.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
-<<<<<<< HEAD
+
 #include "exec/workgroup/work_group.h"
 #include "gutil/integral_types.h"
-=======
+
 #include "runtime/current_thread.h"
->>>>>>> 5b591b6191 ([Enhancement] Propagate query_id and ThreadModuleType to all worker threads (#71314))
+
         #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/types_fwd_decl.h"
