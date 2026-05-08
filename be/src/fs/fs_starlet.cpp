@@ -29,6 +29,7 @@
 
 #include "base/concurrency/stopwatch.hpp"
 #include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
@@ -635,7 +636,10 @@ private:
         if (_shard_fs != nullptr) {
             return _shard_fs;
         }
-        return g_worker->get_shard_filesystem(shard_id, _conf);
+        int64_t t_start = butil::gettimeofday_us();
+        auto fs_st = g_worker->get_shard_filesystem(shard_id, _conf);
+        TRACE_COUNTER_INCREMENT("get_shard_filesystem_us", butil::gettimeofday_us() - t_start);
+        return fs_st;
     }
 
 private:

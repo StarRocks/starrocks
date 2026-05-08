@@ -26,6 +26,7 @@
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
+#include "storage/olap_common.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/storage_metrics.h"
 
@@ -164,6 +165,10 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
     // will always meet the condition.
+    // Capture IO stats before MultiGet to compute delta
+    auto* stat_file = rf ? rf.get() : _rf.get();
+    auto pre_stats = stat_file->get_numeric_statistics();
+
     auto start_ts = butil::gettimeofday_us();
     auto multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:error", &multiget_st);
@@ -184,6 +189,27 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
     TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
     TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", stat.block_cnt_from_file);
+    // Compute datacache vs remote IO delta from file-level statistics
+    auto post_stats = stat_file->get_numeric_statistics();
+    if (pre_stats.ok() && pre_stats.value() && post_stats.ok() && post_stats.value()) {
+        auto get_val = [](const io::NumericStatistics& s, const char* key) -> int64_t {
+            for (int64_t i = 0; i < s.size(); i++) {
+                if (s.name(i) == key) return s.value(i);
+            }
+            return 0;
+        };
+        auto get_delta = [&](const char* key) -> int64_t {
+            return get_val(*post_stats.value(), key) - get_val(*pre_stats.value(), key);
+        };
+        TRACE_COUNTER_INCREMENT("sst_io_count_local_disk", get_delta(kIOCountLocalDisk));
+        TRACE_COUNTER_INCREMENT("sst_io_count_remote", get_delta(kIOCountRemote));
+        TRACE_COUNTER_INCREMENT("sst_io_ns_read_local_disk", get_delta(kIONsReadLocalDisk));
+        TRACE_COUNTER_INCREMENT("sst_io_ns_read_remote", get_delta(kIONsReadRemote));
+        TRACE_COUNTER_INCREMENT("sst_io_ns_write_local_disk", get_delta(kIONsWriteLocalDisk));
+        TRACE_COUNTER_INCREMENT("sst_prefetch_hit_count", get_delta(kPrefetchHitCount));
+        TRACE_COUNTER_INCREMENT("sst_prefetch_wait_finish_ns", get_delta(kPrefetchWaitFinishNs));
+        TRACE_COUNTER_INCREMENT("sst_prefetch_pending_ns", get_delta(kPrefetchPendingNs));
+    }
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.

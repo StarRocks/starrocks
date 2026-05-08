@@ -113,6 +113,13 @@ struct ReadIOStat {
 
     // Read block cnt from page cache
     uint32_t block_cnt_from_cache = 0;
+
+    // BlockReader internal timing (us)
+    int64_t block_cache_lookup_us = 0;
+    int64_t block_read_io_us = 0;
+    int64_t block_cache_insert_us = 0;
+    int64_t block_alloc_us = 0;
+    int64_t block_read_max_io_us = 0; // single slowest ReadBlock
 };
 
 // Options that control read operations

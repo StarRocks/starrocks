@@ -217,33 +217,57 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
             encode_fixed64_le(reinterpret_cast<uint8_t*>(cache_key_buffer), table->rep_->cache_id);
             encode_fixed64_le(reinterpret_cast<uint8_t*>(cache_key_buffer + 8), handle.offset());
             CacheKey key(cache_key_buffer, sizeof(cache_key_buffer));
+            int64_t t_lookup = butil::gettimeofday_us();
             cache_handle = block_cache->lookup(key);
+            int64_t t_after_lookup = butil::gettimeofday_us();
+            if (options.stat != nullptr) {
+                options.stat->block_cache_lookup_us += t_after_lookup - t_lookup;
+            }
             if (cache_handle != nullptr) {
                 block = reinterpret_cast<Block*>(block_cache->value(cache_handle));
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_cache++;
                 }
             } else {
+                int64_t t_io = butil::gettimeofday_us();
                 s = ReadBlock(table->rep_->file, options, handle, &contents);
+                int64_t t_after_io = butil::gettimeofday_us();
+                int64_t io_latency = t_after_io - t_io;
                 if (s.ok()) {
                     block = new Block(contents);
+                    int64_t t_after_alloc = butil::gettimeofday_us();
                     if (contents.cachable && options.fill_cache) {
                         size_t block_size = block->size();
                         cache_handle = block_cache->insert(key, block, block_size, &DeleteCachedBlock);
                     }
+                    int64_t t_after_insert = butil::gettimeofday_us();
+                    if (options.stat != nullptr) {
+                        options.stat->block_alloc_us += t_after_alloc - t_after_io;
+                        options.stat->block_cache_insert_us += t_after_insert - t_after_alloc;
+                    }
                 }
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_file++;
+                    options.stat->block_read_io_us += io_latency;
+                    if (io_latency > options.stat->block_read_max_io_us) {
+                        options.stat->block_read_max_io_us = io_latency;
+                    }
                 }
             }
         } else {
             BlockContents contents;
+            int64_t t_io = butil::gettimeofday_us();
             s = ReadBlock(table->rep_->file, options, handle, &contents);
+            int64_t io_latency = butil::gettimeofday_us() - t_io;
             if (s.ok()) {
                 block = new Block(contents);
             }
             if (options.stat != nullptr) {
                 options.stat->block_cnt_from_file++;
+                options.stat->block_read_io_us += io_latency;
+                if (io_latency > options.stat->block_read_max_io_us) {
+                    options.stat->block_read_max_io_us = io_latency;
+                }
             }
         }
     }
@@ -292,6 +316,8 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     int64_t multiget_t1_us = 0;
     int64_t multiget_t2_us = 0;
     int64_t multiget_t3_us = 0;
+    int64_t multiget_t3_block_reader_us = 0;
+    int64_t multiget_t3_search_us = 0;
     size_t i = 0;
     bool founded = false;
     for (auto it = begin; it != end; ++it, ++i) {
@@ -319,8 +345,13 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 // Not found
                 sst_bloom_filter_rows++;
             } else {
+                int64_t t_br = butil::gettimeofday_us();
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
+                int64_t t_after_br = butil::gettimeofday_us();
                 ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
+                int64_t t_after_search = butil::gettimeofday_us();
+                multiget_t3_block_reader_us += t_after_br - t_br;
+                multiget_t3_search_us += t_after_search - t_after_br;
             }
         }
         int64_t t3 = butil::gettimeofday_us();
@@ -337,6 +368,15 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
     TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
     TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
+    TRACE_COUNTER_INCREMENT("multiget_t3_block_reader_us", multiget_t3_block_reader_us);
+    TRACE_COUNTER_INCREMENT("multiget_t3_search_us", multiget_t3_search_us);
+    if (options.stat != nullptr) {
+        TRACE_COUNTER_INCREMENT("block_cache_lookup_us", options.stat->block_cache_lookup_us);
+        TRACE_COUNTER_INCREMENT("block_read_io_us", options.stat->block_read_io_us);
+        TRACE_COUNTER_INCREMENT("block_cache_insert_us", options.stat->block_cache_insert_us);
+        TRACE_COUNTER_INCREMENT("block_alloc_us", options.stat->block_alloc_us);
+        TRACE_COUNTER_INCREMENT("block_read_max_io_us", options.stat->block_read_max_io_us);
+    }
     return s;
 }
 
