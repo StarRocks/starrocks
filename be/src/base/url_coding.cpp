@@ -23,6 +23,8 @@
 #include <memory>
 #include <sstream>
 
+#include "base/utility/defer_op.h"
+
 namespace starrocks {
 static void encode_base64_internal(const std::string& in, std::string* out, const unsigned char* basis, bool padding) {
     size_t len = in.size();
@@ -143,35 +145,35 @@ static inline int64_t base64_decode(const char* data, size_t length, char* decod
 }
 
 bool base64_decode(const std::string& in, std::string* out) {
-    char* tmp = new char[in.length()];
-
-    int64_t len = base64_decode(in.c_str(), in.length(), tmp);
+    out->resize(in.length());
+    int64_t len = base64_decode(in.c_str(), in.length(), out->data());
     if (len < 0) {
-        delete[] tmp;
+        out->clear();
         return false;
     }
-    out->assign(tmp, len);
-    delete[] tmp;
+    out->resize(len);
     return true;
 }
 
 // refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
-std::string url_encode(const std::string& decoded) {
-    const auto encoded_value = curl_easy_escape(nullptr, decoded.c_str(), static_cast<int>(decoded.length()));
-    std::string result(encoded_value);
-    curl_free(encoded_value);
-    return result;
+StatusOr<std::string> url_encode(const std::string& decoded) {
+    char* encoded_value = curl_easy_escape(nullptr, decoded.c_str(), static_cast<int>(decoded.length()));
+    if (encoded_value == nullptr) {
+        return Status::InternalError("curl_easy_escape returned NULL (libcurl out of memory)");
+    }
+    DeferOp guard([&] { curl_free(encoded_value); });
+    return std::string(encoded_value);
 }
 
 StatusOr<std::string> url_decode(const std::string& in) {
     int decoded_length = 0;
-    const auto decoded_value = curl_easy_unescape(nullptr, in.c_str(), static_cast<int>(in.length()), &decoded_length);
+    char* decoded_value = curl_easy_unescape(nullptr, in.c_str(), static_cast<int>(in.length()), &decoded_length);
     if (decoded_value == nullptr) {
         return Status::InvalidArgument("invalid encoding in URL");
     }
-    std::string result(decoded_value);
-    curl_free(decoded_value);
-    return result;
+    DeferOp guard([&] { curl_free(decoded_value); });
+    // Use the explicit length so embedded NULs in the decoded payload are preserved.
+    return std::string(decoded_value, decoded_length);
 }
 
 } // namespace starrocks
