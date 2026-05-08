@@ -864,6 +864,34 @@ public class StarRocksClient
     }
 
     @Override
+    public Optional<PreparedQuery> implementJoin(
+            ConnectorSession session,
+            JoinType joinType,
+            PreparedQuery leftSource,
+            Map<JdbcColumnHandle, String> leftProjections,
+            PreparedQuery rightSource,
+            Map<JdbcColumnHandle, String> rightProjections,
+            List<ParameterizedExpression> joinConditions,
+            JoinStatistics statistics)
+    {
+        // Trino 479's DefaultJdbcMetadata.applyJoin() takes the complex-expression path
+        // (this method) whenever `complex_join_pushdown_enabled` is true, which is the
+        // shipped default. Without this override the superclass path would skip the
+        // StarRocks-specific guards below, so we mirror the legacy override's behavior
+        // here and keep them aligned.
+        if (joinType == JoinType.FULL_OUTER) {
+            return Optional.empty();
+        }
+        return implementJoinCostAware(
+                session,
+                joinType,
+                leftSource,
+                rightSource,
+                statistics,
+                () -> super.implementJoin(session, joinType, leftSource, leftProjections, rightSource, rightProjections, joinConditions, statistics));
+    }
+
+    @Override
     public Optional<PreparedQuery> legacyImplementJoin(
             ConnectorSession session,
             JoinType joinType,
@@ -1243,6 +1271,12 @@ public class StarRocksClient
                     continue;
                 }
                 int dataType = dataTypeOpt.get();
+                // Same defensive normalization for DECIMAL_DIGITS: drop negative scales here
+                // since downstream arithmetic already handles missing scale via orElse(0) and
+                // explicitly compensates for legitimately-negative Oracle-style scales only
+                // when both precision and scale are present.
+                Optional<Integer> decimalDigits = getInteger(resultSet, "DECIMAL_DIGITS")
+                        .filter(digits -> digits >= 0);
                 // StarRocks may report null or non-positive COLUMN_SIZE for certain types
                 // (STRING, JSON, LARGEINT, unbounded VARCHAR, etc.). Treat any non-positive
                 // value the same as absent to avoid "Invalid VARCHAR length -1" /
@@ -1254,8 +1288,17 @@ public class StarRocksClient
                 if (columnSize.isEmpty()) {
                     columnSize = switch (dataType) {
                         case Types.CHAR -> Optional.of(255);
-                        case Types.TIME -> Optional.of(ZERO_PRECISION_TIME_COLUMN_SIZE);
-                        case Types.TIMESTAMP -> Optional.of(ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE);
+                        // TIME/TIMESTAMP: reconstruct COLUMN_SIZE from DECIMAL_DIGITS when
+                        // available so getTime/TimestampPrecision() can recover subsecond
+                        // precision. MySQL-protocol convention:
+                        //   COLUMN_SIZE = ZERO_PRECISION + (p > 0 ? p + 1 : 0)   // +1 = decimal point
+                        // Without this, TIME(3)/DATETIME(6) with null COLUMN_SIZE and
+                        // DECIMAL_DIGITS=p would fall back to the zero-precision width and
+                        // silently drop subsecond data through the read function.
+                        case Types.TIME -> Optional.of(ZERO_PRECISION_TIME_COLUMN_SIZE
+                                + decimalDigits.filter(d -> d > 0).map(d -> d + 1).orElse(0));
+                        case Types.TIMESTAMP -> Optional.of(ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE
+                                + decimalDigits.filter(d -> d > 0).map(d -> d + 1).orElse(0));
                         // DECIMAL/NUMERIC: leave unknown and let the Types.DECIMAL branch in
                         // toColumnMapping() apply its own precision fallback (orElse(38)).
                         // Substituting Integer.MAX_VALUE here would force that branch to reject
@@ -1266,12 +1309,6 @@ public class StarRocksClient
                         default -> Optional.of(Integer.MAX_VALUE);
                     };
                 }
-                // Same defensive normalization for DECIMAL_DIGITS: drop negative scales here
-                // since downstream arithmetic already handles missing scale via orElse(0) and
-                // explicitly compensates for legitimately-negative Oracle-style scales only
-                // when both precision and scale are present.
-                Optional<Integer> decimalDigits = getInteger(resultSet, "DECIMAL_DIGITS")
-                        .filter(digits -> digits >= 0);
                 JdbcTypeHandle typeHandle = new JdbcTypeHandle(
                         dataType,
                         Optional.ofNullable(resultSet.getString("TYPE_NAME")),
