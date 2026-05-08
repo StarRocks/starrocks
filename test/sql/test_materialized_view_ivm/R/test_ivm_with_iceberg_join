@@ -121,7 +121,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -153,7 +153,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -189,7 +189,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -217,7 +217,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -265,7 +265,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -301,7 +301,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -337,7 +337,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -365,7 +365,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:

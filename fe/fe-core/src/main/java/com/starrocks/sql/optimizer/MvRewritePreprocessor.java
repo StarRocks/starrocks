@@ -522,6 +522,11 @@ public class MvRewritePreprocessor {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
             return MVPlanValidationResult.invalid("MV is not active");
         }
+        if (mv.getRefreshMode().isIncrementalOrAuto()) {
+            String message = "query rewrite is not supported for refresh_mode=" + mv.getRefreshMode().name();
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
+            return MVPlanValidationResult.invalid(message);
+        }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();

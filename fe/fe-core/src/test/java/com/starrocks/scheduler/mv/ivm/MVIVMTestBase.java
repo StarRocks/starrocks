@@ -98,11 +98,11 @@ public abstract class MVIVMTestBase extends MVTestBase {
             Assertions.assertTrue(execPlan != null);
             run1.check(execPlan);
         }
-        // test mv rewrite
         {
             String plan = getFragmentPlan(mvQuery);
             if (isCheckRewrite) {
-                Assertions.assertTrue(plan.contains("test_mv1"));
+                Assertions.assertFalse(plan.contains("test_mv1"),
+                        "rewrite should not pick the MV, got plan: " + plan);
             }
         }
         // 2th run
