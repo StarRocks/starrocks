@@ -85,8 +85,9 @@ Status FileResultWriter::_create_fs() {
                                                      _file_opts->broker_properties,
                                                      config::broker_write_timeout_seconds * 1000);
         } else {
-            ASSIGN_OR_RETURN(_fs,
-                             FileSystemFactory::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
+            ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateUniqueFromString(
+                                          _file_opts->file_path,
+                                          FSOptions(&_file_opts->hdfs_properties, _file_opts->write_buffer_size_kb)));
         }
     }
     if (_fs == nullptr) {
