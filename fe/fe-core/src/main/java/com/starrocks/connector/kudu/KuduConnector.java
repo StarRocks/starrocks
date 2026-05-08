@@ -44,13 +44,22 @@ public class KuduConnector implements Connector {
     public static final String KUDU_CATALOG_TYPE = "kudu.catalog.type";
     public static final String KUDU_SCHEMA_EMULATION_ENABLED = "kudu.schema-emulation.enabled";
     public static final String KUDU_SCHEMA_EMULATION_PREFIX = "kudu.schema-emulation.prefix";
+    public static final String KUDU_CLIENT_DEFAULT_OPERATION_TIMEOUT_MS =
+            "kudu.client.default-operation-timeout-ms";
+    public static final String KUDU_CLIENT_DEFAULT_ADMIN_OPERATION_TIMEOUT_MS =
+            "kudu.client.default-admin-operation-timeout-ms";
     public static final String DEFAULT_KUDU_MASTER = "localhost:7051";
+    // Matches AsyncKuduClient.DEFAULT_OPERATION_TIMEOUT_MS in kudu-client 1.17.1.
+    public static final long DEFAULT_KUDU_CLIENT_OPERATION_TIMEOUT_MS = 30_000L;
+    public static final long DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS = 30_000L;
     private final String catalogName;
     private final String kuduMaster;
     private final String catalogType;
     private final String metastoreUris;
     private final Boolean schemaEmulationEnabled;
     private final String schemaEmulationPrefix;
+    private final long defaultOperationTimeoutMs;
+    private final long defaultAdminOperationTimeoutMs;
     private final HdfsEnvironment hdfsEnvironment;
     private final Map<String, String> properties;
     private final Optional<IHiveMetastore> hiveMetastoreClient;
@@ -65,6 +74,10 @@ public class KuduConnector implements Connector {
         this.metastoreUris = properties.get(HIVE_METASTORE_URIS);
         this.schemaEmulationEnabled = Boolean.parseBoolean(properties.get(KUDU_SCHEMA_EMULATION_ENABLED));
         this.schemaEmulationPrefix = properties.getOrDefault(KUDU_SCHEMA_EMULATION_PREFIX, StringUtils.EMPTY);
+        this.defaultOperationTimeoutMs = parsePositiveLongProperty(KUDU_CLIENT_DEFAULT_OPERATION_TIMEOUT_MS,
+                DEFAULT_KUDU_CLIENT_OPERATION_TIMEOUT_MS);
+        this.defaultAdminOperationTimeoutMs = parsePositiveLongProperty(KUDU_CLIENT_DEFAULT_ADMIN_OPERATION_TIMEOUT_MS,
+                DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS);
 
         validateCatalogType(catalogType);
         validateMetastoreUrisIfNecessary(catalogType, metastoreUris);
@@ -86,6 +99,25 @@ public class KuduConnector implements Connector {
         return propertyValue;
     }
 
+    private long parsePositiveLongProperty(String propertyName, long defaultValue) {
+        String raw = properties.get(propertyName);
+        if (Strings.isNullOrEmpty(raw)) {
+            return defaultValue;
+        }
+        long value;
+        try {
+            value = Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            throw new StarRocksConnectorException(
+                    "The property %s must be a long integer, got: %s", propertyName, raw);
+        }
+        if (value <= 0) {
+            throw new StarRocksConnectorException(
+                    "The property %s must be positive, got: %d", propertyName, value);
+        }
+        return value;
+    }
+
     private void validateCatalogType(String catalogType) {
         if (!SUPPORTED_METASTORE_TYPE.contains(catalogType)) {
             throw new StarRocksConnectorException("kudu catalog type [%s] is not supported", catalogType);
@@ -102,6 +134,6 @@ public class KuduConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new KuduMetadata(catalogName, hdfsEnvironment, kuduMaster, schemaEmulationEnabled, schemaEmulationPrefix,
-                hiveMetastoreClient);
+                hiveMetastoreClient, defaultOperationTimeoutMs, defaultAdminOperationTimeoutMs);
     }
 }
