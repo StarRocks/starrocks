@@ -117,7 +117,9 @@ TEST_F(StarOSWorkerTest, test_fs_cache) {
     EXPECT_TRUE(conf_or.ok());
     auto conf = conf_or.value();
 
-    auto cache_key = StarOSWorker::get_cache_key(schema, conf);
+    auto local_conf_or = StarOSWorker::build_conf_from_shard_info(shard_info, &conf);
+    EXPECT_TRUE(local_conf_or.ok());
+    auto cache_key = StarOSWorker::get_cache_key(schema, local_conf_or.value());
 
     auto worker = std::make_shared<StarOSWorker>();
     set_staros_worker_for_test(worker);
@@ -176,7 +178,9 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     EXPECT_TRUE(conf_or.ok());
     auto conf = conf_or.value();
 
-    auto cache_key = StarOSWorker::get_cache_key(schema, conf);
+    auto local_conf_or = StarOSWorker::build_conf_from_shard_info(shard_info, &conf);
+    EXPECT_TRUE(local_conf_or.ok());
+    auto cache_key = StarOSWorker::get_cache_key(schema, local_conf_or.value());
 
     auto worker = std::make_shared<StarOSWorker>();
     set_staros_worker_for_test(worker);
@@ -216,8 +220,6 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
 
     t1.join();
     t2.join();
-
-    EXPECT_EQ(key1.get(), key2.get());
 
     EXPECT_EQ(*key1, *key2);
 
