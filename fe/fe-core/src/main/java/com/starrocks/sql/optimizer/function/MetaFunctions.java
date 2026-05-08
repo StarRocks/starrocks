@@ -37,7 +37,9 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -51,6 +53,8 @@ import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,6 +80,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -606,6 +611,110 @@ public class MetaFunctions {
     @ConstantFunction(name = "get_query_dump", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator getQueryDump(ConstantOperator query) {
         return getQueryDump(query, ConstantOperator.createBoolean(false));
+    }
+
+    /**
+     * Look up a finished query by its query_id in {@link QueryDetailQueue} and produce a
+     * query dump for it. Operational requirements: {@code enable_collect_query_detail_info}
+     * must be set (default off) so detail rows are populated; the query must have run on
+     * this FE; and the cache window controlled by {@code query_detail_cache_time_nanosecond}
+     * (default 30s) must not have expired.
+     *
+     * <p>Limitations: per-FE in-memory only, lost on restart, not visible across FE nodes.
+     * Queries whose SQL was desensitized at record time
+     * ({@code enable_sql_desensitize_in_log=true}) cannot be re-dumped. Access is
+     * restricted: the caller's full {@link UserIdentity} (user + host) must match the
+     * original executor's, or hold system-level OPERATE privilege.
+     */
+    @ConstantFunction(name = "get_query_dump_from_query_id", argTypes = {VARCHAR, BOOLEAN},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDumpFromQueryId(ConstantOperator queryId, ConstantOperator enableMock) {
+        if (!Config.enable_collect_query_detail_info) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: query detail collection is disabled."
+                            + " Set FE config enable_collect_query_detail_info=true (e.g."
+                            + " ADMIN SET FRONTEND CONFIG ('enable_collect_query_detail_info' = 'true'))"
+                            + " before running queries you intend to dump.");
+        }
+        if (Config.enable_sql_desensitize_in_log) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: SQL desensitization is enabled, so recorded SQL"
+                            + " is rewritten to a digest form and cannot be re-dumped. Set FE config"
+                            + " enable_sql_desensitize_in_log=false before running queries you intend"
+                            + " to dump.");
+        }
+        String id = queryId.getVarchar();
+        QueryDetail detail = lookupQueryDetailByQueryId(id);
+        if (detail == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: query_id not found in query detail queue: " + id
+                            + ". The query may have run on a different FE, or the cache window"
+                            + " (query_detail_cache_time_nanosecond, default 30s) has expired.");
+        }
+        checkQueryDumpAccess(detail);
+        String sql = detail.getSql();
+        if (StringUtils.isEmpty(sql) || "this is a desensitized sql".equals(sql)) {
+            // Defense in depth: the row may have been recorded while desensitization was
+            // on and only flipped off afterwards.
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: original sql not retained for query_id: " + id
+                            + ". The recorded SQL was desensitized at the time the query ran.");
+        }
+        String catalog = StringUtils.isNotEmpty(detail.getCatalog()) ? detail.getCatalog() : "";
+        String database = StringUtils.isNotEmpty(detail.getDatabase()) ? detail.getDatabase() : "";
+        com.starrocks.common.Pair<HttpResponseStatus, String> statusAndRes =
+                QueryDumper.dumpQuery(catalog, database, sql, enableMock.getBoolean());
+        if (statusAndRes.first != HttpResponseStatus.OK) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: " + statusAndRes.second);
+        }
+        return ConstantOperator.createVarchar(statusAndRes.second);
+    }
+
+    @ConstantFunction(name = "get_query_dump_from_query_id", argTypes = {VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDumpFromQueryId(ConstantOperator queryId) {
+        return getQueryDumpFromQueryId(queryId, ConstantOperator.createBoolean(false));
+    }
+
+    private static QueryDetail lookupQueryDetailByQueryId(String queryId) {
+        for (QueryDetail detail : QueryDetailQueue.TOTAL_QUERIES) {
+            if (queryId.equalsIgnoreCase(detail.getQueryId())) {
+                return detail;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Allow looking up a query detail by query_id only when the caller's full
+     * {@link UserIdentity} (user + host) matches the original executor's, or the caller
+     * holds system-level OPERATE privilege. Username-only match would let two distinct
+     * accounts that share a username but differ on host (e.g. {@code 'alice'@'1.1.1.1'}
+     * vs {@code 'alice'@'2.2.2.2'}) read each other's SQL and the schema / statistics
+     * that the resulting dump would expose. We therefore compare against the
+     * {@code userIdentity} field populated by {@link com.starrocks.qe.StmtExecutor};
+     * the {@code user} field is only the qualifiedUser (no host) and is unsafe for
+     * authorization.
+     */
+    private static void checkQueryDumpAccess(QueryDetail detail) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            UserIdentity currentIdentity = ctx.getCurrentUserIdentity();
+            if (currentIdentity != null && StringUtils.isNotEmpty(detail.getUserIdentity())
+                    && currentIdentity.toString().equals(detail.getUserIdentity())) {
+                return;
+            }
+        }
+        try {
+            Authorizer.checkSystemAction(ctx, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    ctx == null ? null : ctx.getCurrentUserIdentity(),
+                    ctx == null ? null : ctx.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
     }
 
     public static class LookupRecord {
