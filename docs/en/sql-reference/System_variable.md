@@ -234,6 +234,15 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1
 
+### blacklist_backup_routing
+
+* **Scope**: Session
+* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
+* **Default**: `CIRCULAR`
+* **Data type**: String
+* **Valid values**: `CIRCULAR`, `RANDOM`
+* **Introduced in**: -
+
 ### broadcast_row_limit
 
 * **Scope**: Session
@@ -983,7 +992,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
-* **Default**: true 
+* **Default**: true
 * **Introduced in**: v2.5
 
 ### enable_shared_scan
@@ -1596,7 +1605,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 100
 * **Introduced in**: v3.0
 
-### resource_group 
+### resource_group
 
         * **Description**: The specified resource group of this session
         * **Default**: ""
