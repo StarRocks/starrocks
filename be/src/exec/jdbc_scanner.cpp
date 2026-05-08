@@ -21,7 +21,7 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
