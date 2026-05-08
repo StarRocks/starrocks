@@ -252,6 +252,7 @@ set(EXEC_FILES
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/default_path_handlers_test.cpp
+        ./http/ev_http_server_test.cpp
         ./http/http_metrics_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
