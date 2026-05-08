@@ -28,9 +28,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -39,6 +43,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -87,7 +93,13 @@ public class InsertOverwriteJobRunnerTest {
                 .withTable("create table insert_overwrite_test.t4(c1 int, c2 int, c3 int) " +
                         "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
-                        + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
+                        + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
+                .withTable("create table insert_overwrite_test.t_lambda_target(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("create table insert_overwrite_test.t_lambda_src1(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("create table insert_overwrite_test.t_lambda_src2(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
     }
 
     @Test
@@ -318,5 +330,71 @@ public class InsertOverwriteJobRunnerTest {
         // No temp partitions to clean up since prepare() never completed
         runner.cancel();
         Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+    }
+
+    @Test
+    public void testClearLambdaArgumentTransformedOps() throws Exception {
+        // Test that clearLambdaArgumentTransformedOps correctly clears all LambdaArgument.transformedOp
+        // in the AST tree. This is critical for INSERT OVERWRITE re-plan correctness.
+        String sql = "insert overwrite t_lambda_target " +
+                "select k1, array_map(x -> x + 1, k2) from t_lambda_src1 " +
+                "union all " +
+                "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+        // Collect all LambdaArgument nodes from the AST
+        List<LambdaArgument> lambdaArgs = new ArrayList<>();
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitLambdaArguments(LambdaArgument node, Void context) {
+                lambdaArgs.add(node);
+                return null;
+            }
+        }.visit(insertStmt);
+
+        // Verify that lambda arguments exist in the AST
+        Assertions.assertFalse(lambdaArgs.isEmpty(),
+                "InsertStmt with array_map should contain LambdaArgument nodes");
+        // UNION ALL with two array_map calls should have at least 2 lambda arguments
+        Assertions.assertTrue(lambdaArgs.size() >= 2,
+                "Expected at least 2 LambdaArgument nodes for UNION ALL with two array_map calls, got: " + lambdaArgs.size());
+
+        // Simulate the first plan() caching ColumnRefOperators in LambdaArgument.transformedOp
+        for (LambdaArgument arg : lambdaArgs) {
+            ColumnRefOperator mockOp = new ColumnRefOperator(999, IntegerType.INT, "mock_col", true);
+            arg.setTransformed(mockOp);
+            Assertions.assertNotNull(arg.getTransformed(), "transformedOp should be set");
+        }
+
+        // Call clearLambdaArgumentTransformedOps directly
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t_lambda_target");
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob job = new InsertOverwriteJob(300L, insertStmt, database.getId(), olapTable.getId(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, connectContext, executor);
+
+        runner.clearLambdaArgumentTransformedOps(insertStmt);
+
+        // Verify all LambdaArgument.transformedOp are cleared
+        for (LambdaArgument arg : lambdaArgs) {
+            Assertions.assertNull(arg.getTransformed(),
+                    "LambdaArgument.transformedOp should be null after clearLambdaArgumentTransformedOps");
+        }
+    }
+
+    @Test
+    public void testInsertOverwriteWithUnionAllAndLambda() throws Exception {
+        // Integration test: INSERT OVERWRITE + UNION ALL + Lambda expressions
+        // This is the exact scenario that triggers the "expr_type does not match slot_type" bug
+        // if clearLambdaArgumentTransformedOps is not called before re-plan.
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "insert overwrite t_lambda_target " +
+                "select k1, array_map(x -> x + 1, k2) from t_lambda_src1 " +
+                "union all " +
+                "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
+        // This should not throw any exception (especially not "expr_type does not match slot_type")
+        cluster.runSql("insert_overwrite_test", sql);
     }
 }
