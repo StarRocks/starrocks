@@ -46,11 +46,8 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
-<<<<<<< HEAD
-=======
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
->>>>>>> 5b591b6191 ([Enhancement] Propagate query_id and ThreadModuleType to all worker threads (#71314))
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
