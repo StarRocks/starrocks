@@ -274,6 +274,7 @@ jobs:
           check_name: 'Unstable Case Review'
           fail_on_failure: false
           detailed_summary: true
+          include_passed: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload report to OSS
