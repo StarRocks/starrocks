@@ -797,7 +797,8 @@ Status DeltaWriter::commit() {
     StarRocksMetrics::instance()->delta_writer_commit_task_total.increment(1);
     StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
-    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - rowset_build_ts) / 1000);
+    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - rowset_build_ts) /
+                                                                                  1000);
     StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment((commit_txn_ts - replica_ts) / 1000);
     return Status::OK();
 }
