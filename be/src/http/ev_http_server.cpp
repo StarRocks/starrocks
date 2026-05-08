@@ -201,17 +201,18 @@ Status EvHttpServer::start() {
 
     // Resolve the bind endpoint once, on the main thread, for per-worker
     // SO_REUSEPORT listeners. _bind() has already populated _real_port (incl.
-    // the port==0 auto-assign case).
+    // the port==0 auto-assign case). On platforms without SO_REUSEPORT or
+    // when endpoint resolution fails, every worker silently falls back to
+    // the shared-fd accept path (no functional change vs the legacy
+    // behaviour).
     butil::EndPoint listen_point;
     bool reuseport_enabled = false;
 #ifdef SO_REUSEPORT
-    if (config::enable_http_server_so_reuseport) {
-        if (butil::str2endpoint(_host.c_str(), _real_port, &listen_point) == 0) {
-            reuseport_enabled = true;
-        } else {
-            LOG(WARNING) << "Failed to resolve listen endpoint " << _host << ":" << _real_port
-                         << " for SO_REUSEPORT mode; falling back to shared-fd accept";
-        }
+    if (butil::str2endpoint(_host.c_str(), _real_port, &listen_point) == 0) {
+        reuseport_enabled = true;
+    } else {
+        LOG(WARNING) << "Failed to resolve listen endpoint " << _host << ":" << _real_port
+                     << " for SO_REUSEPORT mode; falling back to shared-fd accept";
     }
 #endif
 
@@ -295,7 +296,17 @@ void EvHttpServer::stop() {
     // Per-worker SO_REUSEPORT listeners need their own shutdown, otherwise
     // their event_base_dispatch will not unblock from epoll_wait and join()
     // will hang.
-    for (int fd : _worker_fds) {
+    //
+    // Snapshot _worker_fds under the lock so we don't race with workers that
+    // are still finishing setup in start() and appending their fd. Any fd
+    // published after this snapshot belongs to a worker whose event_base has
+    // not yet entered dispatch — its own dispatch loop will see the loopbreak
+    // set above and exit immediately, so a missed shutdown there is harmless.
+    std::vector<int> worker_fds_snapshot;
+    pthread_rwlock_rdlock(&_rw_lock);
+    worker_fds_snapshot = _worker_fds;
+    pthread_rwlock_unlock(&_rw_lock);
+    for (int fd : worker_fds_snapshot) {
         ::shutdown(fd, SHUT_RDWR);
     }
 }
@@ -355,8 +366,10 @@ Status EvHttpServer::_bind() {
     // listener to the same {addr, real_port}. The kernel only permits multiple
     // listening sockets on the same address when *all* of them carry
     // SO_REUSEPORT — without setting it on the primary fd, every worker's
-    // bind() would fail with EADDRINUSE.
-    if (config::enable_http_server_so_reuseport) {
+    // bind() would fail with EADDRINUSE. setsockopt failure here is benign:
+    // workers will detect the mismatch and individually fall back to sharing
+    // _server_fd.
+    {
         int yes = 1;
         if (::setsockopt(_server_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) != 0) {
             LOG(WARNING) << "Failed to set SO_REUSEPORT on primary listener; per-worker listen sockets "
