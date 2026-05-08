@@ -33,6 +33,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -213,29 +214,45 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
 
         // check the delta traits between the max delta
-        List<TvrTableDeltaTrait> tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
-                        maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
+        List<TvrTableDeltaTrait> tableDeltaTraits;
+        try {
+            tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
+                            maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
+        } catch (StarRocksConnectorException e) {
+            if (isAncestryBrokenError(e)) {
+                throw new SemanticException(formatPartitionShapeChangeError(
+                        String.format("snapshot ancestry broken for base table %s.%s (%s)",
+                                baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
+                        e);
+            }
+            throw e;
+        }
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
                     baseTableInfo.getDbName());
-            throw new SemanticException("No tvr delta traits found for base table: %s.%s",
-                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            throw new SemanticException(formatPartitionShapeChangeError(
+                    String.format("no tvr delta traits found for base table %s.%s",
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName())));
         }
         // check whether the last delta trait is equal to the max delta
         TvrTableDeltaTrait lastTvrDeltaTrait = tableDeltaTraits.get(tableDeltaTraits.size() - 1);
         TvrTableSnapshot lastTvrDeltaSnapshot = lastTvrDeltaTrait.getTvrDelta().toSnapshot();
         if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
-            logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}, " +
-                    "use the max tvr delta instead", lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
-            throw new SemanticException("The last tvr delta snapshot: %s is not equal to the max tvr delta snapshot: %s",
+            logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}",
                     lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
+            throw new SemanticException(formatPartitionShapeChangeError(
+                    String.format("tvr delta lineage inconsistent for base table %s.%s "
+                                    + "(last delta snapshot %s != max delta snapshot %s)",
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName(),
+                            lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot())));
         }
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             if (!deltaTrait.isAppendOnly()) {
                 if (refreshMode.isIncremental()) {
-                    throw new SemanticException("TvrTableDeltaTrait is not append-only for base table: %s.%s, delta:%s",
-                            baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait);
+                    throw new SemanticException(formatPartitionShapeChangeError(
+                            String.format("non-append-only change on base table %s.%s (delta: %s)",
+                                    baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait)));
                 } else {
                     logger.info("TvrTableDeltaTrait is not append-only for base table: {}, db: {}, delta:{}, " +
                                     "use the max tvr delta instead", baseTableInfo.getTableName(),
@@ -250,6 +267,20 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     baseTableInfo.getTableName(), baseTableInfo.getDbName(), maxTvrDelta);
             return maxTvrDelta;
         }
+    }
+
+    private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
+        String message = e.getMessage();
+        return message != null && message.contains("is not a parent ancestor");
+    }
+
+    private String formatPartitionShapeChangeError(String reasonFragment) {
+        return String.format(
+                "Cannot incrementally refresh materialized view %s: %s. "
+                        + "INCREMENTAL materialized views do not support partition-shape changes "
+                        + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). "
+                        + "Drop and recreate the materialized view to recover.",
+                mv.getName(), reasonFragment);
     }
 
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,

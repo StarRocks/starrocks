@@ -1336,4 +1336,91 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
         Assertions.assertInstanceOf(MVHybridRefreshProcessor.class, mvTaskRunProcessor.getMVRefreshProcessor());
     }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenNoDeltaTraits() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of());
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("no tvr delta traits"),
+                "expected 'no tvr delta traits' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenLineageBroken() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraitsThrowsConnector(
+                "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("snapshot ancestry broken"),
+                "expected 'snapshot ancestry broken' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("is not a parent ancestor"),
+                "expected original connector reason preserved in chain, got: " + chain);
+    }
+
+    private static String collectMessages(Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        Throwable cur = t;
+        while (cur != null) {
+            sb.append(cur.getMessage()).append('\n');
+            if (cur.getCause() == cur) {
+                break;
+            }
+            cur = cur.getCause();
+        }
+        return sb.toString();
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeOnNonAppendOnly() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofRetractable(
+                        TvrTableDelta.of(0L, 1L), TvrDeltaStats.EMPTY)));
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("non-append-only"),
+                "expected 'non-append-only' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+    }
+
+    @Test
+    public void testIncrementalRefreshPropagatesNonAncestryConnectorError() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        String unrelatedConnectorMessage = "transient connector failure: io error reading manifest list";
+        mockListTableDeltaTraitsThrowsConnector(unrelatedConnectorMessage);
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains(unrelatedConnectorMessage),
+                "expected original connector message preserved in chain, got: " + chain);
+        Assertions.assertFalse(chain.contains("Drop and recreate"),
+                "drop-and-recreate hint must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains("snapshot ancestry broken"),
+                "ancestry-broken framing must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains("INCREMENTAL materialized views do not support partition-shape"),
+                "partition-shape framing must not apply to non-ancestry connector failures, got: " + chain);
+    }
 }
