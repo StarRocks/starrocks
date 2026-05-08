@@ -23,6 +23,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.load.Load;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
@@ -54,8 +55,10 @@ import java.util.Map;
  *
  * <p>Wraps the MV query plan with a {@link LogicalDeltaOperator} marker, then iteratively
  * applies delta and version rewrite rules to push the marker down through the plan tree.
- * If any unresolved markers remain after rewriting, falls back to the original plan
- * (allowing TVR rules to handle it instead).</p>
+ * If any unresolved markers remain after rewriting, throws a {@link SemanticException}
+ * — the partially-rewritten plan would still carry {@code TvrVersionRange} on the scan,
+ * so silently dropping the markers and running it would produce delta-only state without
+ * the state_union join the rules are responsible for, i.e. wrong data.</p>
  *
  * <p>This rewriter is table-type agnostic. Concrete delta/version resolution for specific
  * table types (Iceberg, OLAP, etc.) is handled by the individual scan rules registered
@@ -75,7 +78,8 @@ public class IvmRewriter {
      * <p>Flow:
      * <ol>
      *   <li>Wrap the plan root with {@link LogicalDeltaOperator} and apply delta/version rules</li>
-     *   <li>Convergence check: if unresolved markers remain, fall back to original plan</li>
+     *   <li>Convergence check: if unresolved markers remain, throw — the rewrite cannot
+     *       continue safely (see class javadoc)</li>
      *   <li>For PK target MVs, append __op column for UPSERT/DELETE semantics</li>
      * </ol>
      */
@@ -83,7 +87,10 @@ public class IvmRewriter {
                                ColumnRefSet requiredColumns) {
         OptimizerContext optimizerContext = rootTaskContext.getOptimizerContext();
 
-        // Gate: only run when IVM refresh is enabled
+        // Gate: only run when IVM refresh is enabled. The IVM session variables are
+        // scoped by MVIVMRefreshProcessor.prepareRefreshPlan via try/finally, so the
+        // hybrid IVM→PCT fallback (which reuses the same ConnectContext for the PCT
+        // retry) sees the variable cleared and skips IvmRewriter entirely.
         if (!optimizerContext.getSessionVariable().isEnableIVMRefresh()) {
             return;
         }
@@ -105,10 +112,14 @@ public class IvmRewriter {
             deriveLogicalProperty(tree);
             scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.IVM_DELTA_REWRITE_RULES);
 
-            // Phase 2: Convergence check — if any markers remain, fall back to original plan.
+            // Phase 2: Convergence check — every Delta/Version marker must have been
+            // resolved. Continuing with the partially-rewritten plan would silently
+            // produce wrong data; see class javadoc.
             if (IvmRuleUtils.containsLogicalDelta(tree.inputAt(0))
                     || IvmRuleUtils.containsLogicalVersion(tree.inputAt(0))) {
-                return;
+                throw new SemanticException(
+                        "IVM rewrite failed to fully resolve incremental markers; "
+                                + "remaining operators cannot be processed incrementally");
             }
 
             // Phase 3: For PK target MVs, append __op column for UPSERT/DELETE semantics.
