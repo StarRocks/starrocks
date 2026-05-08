@@ -24,6 +24,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -47,9 +48,14 @@ public final class ExplicitTxnStatementValidator {
         boolean isSet = statement instanceof SetStmt;
         boolean isInsert = statement instanceof InsertStmt; // insert
         boolean isSelect = statement instanceof QueryStatement;
+        boolean isShow = statement instanceof ShowStmt;
         boolean isTransactionStmt = statement instanceof BeginStmt
                 || statement instanceof CommitStmt || statement instanceof RollbackStmt;
+<<<<<<< HEAD
         if (!(isSet || isInsert || isSelect || isTransactionStmt)) {
+=======
+        if (!(isSet || isDml || isSelect || isShow || isTransactionStmt)) {
+>>>>>>> 91b49c56bb ([BugFix] Allow SHOW statements inside explicit transaction (#72954))
             ErrorReport.reportSemanticException(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
             return true;
         }
