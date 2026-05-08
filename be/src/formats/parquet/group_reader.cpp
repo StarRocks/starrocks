@@ -1418,6 +1418,8 @@ Status GroupReader::_promote_variant_virtual_columns() {
             return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
         };
         bool all_promotable = true;
+        std::unordered_set<ColumnReader*> promoted_leaf_readers;
+        std::unordered_map<SlotId, ColumnReader*> leaf_readers_by_slot;
         for (const auto& vsi : virtual_slots) {
             auto proj_it = _variant_virtual_projections.find(vsi.virtual_slot_id);
             if (proj_it == _variant_virtual_projections.end()) {
@@ -1425,10 +1427,16 @@ Status GroupReader::_promote_variant_virtual_columns() {
                 break;
             }
             const auto& parsed_path = proj_it->second.parsed_path;
-            if (vreader->scalar_typed_value_reader_for_path(parsed_path) == nullptr) {
+            ColumnReader* leaf = vreader->scalar_typed_value_reader_for_path(parsed_path);
+            if (leaf == nullptr) {
                 all_promotable = false;
                 break;
             }
+            if (!promoted_leaf_readers.insert(leaf).second) {
+                all_promotable = false;
+                break;
+            }
+            leaf_readers_by_slot.emplace(vsi.virtual_slot_id, leaf);
             if (!vreader->fallback_values_all_null_in_row_group_for_path(parsed_path, rg_num_rows)) {
                 all_promotable = false;
                 break;
@@ -1447,7 +1455,7 @@ Status GroupReader::_promote_variant_virtual_columns() {
         // Fully promote: create VariantTypedValueProxy for each virtual slot.
         for (const auto& vsi : virtual_slots) {
             auto& proj = _variant_virtual_projections.at(vsi.virtual_slot_id);
-            ColumnReader* leaf = vreader->scalar_typed_value_reader_for_path(proj.parsed_path);
+            ColumnReader* leaf = leaf_readers_by_slot.at(vsi.virtual_slot_id);
 
             auto proxy = std::make_unique<VariantTypedValueProxy>(leaf, proj.target_type);
 
