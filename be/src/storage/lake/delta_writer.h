@@ -76,8 +76,6 @@ struct DeltaWriterStat {
     std::atomic_int64_t finish_prepare_txn_log_time_ns = 0;
     // Time to put txn log
     std::atomic_int64_t finish_put_txn_log_time_ns = 0;
-    // Time to preload pk
-    std::atomic_int64_t finish_pk_preload_time_ns = 0;
 
     // ====== statistics for close()
 
