@@ -95,14 +95,16 @@ public class LoadActionInternalTokenTest {
     @Test
     public void tokenMismatchFallsThrough(@Mocked GlobalStateMgr globalStateMgr,
                                           @Mocked NodeMgr nodeMgr) throws DdlException, AccessDeniedException {
-        new Expectations() {{
-            GlobalStateMgr.getCurrentState();
-            result = globalStateMgr;
-            globalStateMgr.getNodeMgr();
-            result = nodeMgr;
-            nodeMgr.getToken();
-            result = "expected-token";
-        }};
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                nodeMgr.getToken();
+                result = "expected-token";
+            }
+        };
         BaseRequest req = stubRequest("attacker-supplied-token", "_statistics_", "rejected_records");
         assertFalse(newAction().tryInternalTokenBypass(req, null));
     }
@@ -112,14 +114,16 @@ public class LoadActionInternalTokenTest {
                                          @Mocked NodeMgr nodeMgr) throws DdlException, AccessDeniedException {
         // Defensive: pre-bootstrap clusters where NodeMgr.getToken() is
         // null/empty must never accept any inbound token as valid.
-        new Expectations() {{
-            GlobalStateMgr.getCurrentState();
-            result = globalStateMgr;
-            globalStateMgr.getNodeMgr();
-            result = nodeMgr;
-            nodeMgr.getToken();
-            result = "";
-        }};
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                nodeMgr.getToken();
+                result = "";
+            }
+        };
         BaseRequest req = stubRequest("any-token", "_statistics_", "rejected_records");
         assertFalse(newAction().tryInternalTokenBypass(req, null));
     }
