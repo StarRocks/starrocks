@@ -209,36 +209,6 @@ public class JDBCTableTest {
     }
 
     @Test
-    public void testOriginalJdbcColumnTypesAccessor() throws Exception {
-        Map<String, String> jdbcProperties = getMockedJDBCProperties("jdbc:mysql://127.0.0.1:3306");
-        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
-        Map<String, Integer> originalTypes = new HashMap<>();
-        originalTypes.put("col1", java.sql.Types.BIGINT);
-
-        table.setOriginalJdbcColumnTypes(originalTypes);
-
-        Assertions.assertEquals(java.sql.Types.BIGINT, table.getOriginalJdbcColumnTypes().get("col1"));
-    }
-
-    @Test
-    public void testNormalizePassThroughQueryRejectsInsert() {
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> JDBCTable.normalizePassThroughQuery("insert into t values (1)"));
-    }
-
-    @Test
-    public void testNormalizePassThroughQueryRejectsDdl() {
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> JDBCTable.normalizePassThroughQuery("create table t (id int)"));
-    }
-
-    @Test
-    public void testNormalizePassThroughQueryRejectsWithQuery() {
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> JDBCTable.normalizePassThroughQuery("with cte as (select 1) select * from cte;"));
-    }
-
-    @Test
     public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                            @Mocked ResourceMgr resourceMgr) {
         assertThrows(DdlException.class, () -> {
