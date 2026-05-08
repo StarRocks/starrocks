@@ -908,43 +908,35 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // them into a per-file pk column. Index mutations stay sequential below to preserve
     // erase ordering. Reads dominate cold-start cost (8 files × ~OSS_RTT each = seconds);
     // parallelising them collapses that wall-clock without changing on-disk semantics.
+    // Memory tradeoff: the legacy loop held one decoded del-file column at a time; this
+    // path holds all `num_del_files` decoded columns concurrently until Phase 2 consumes them.
     std::vector<MutableColumnPtr> pkcs(num_del_files);
     std::mutex shared_mutex;
     Status shared_status;
-    auto read_one = [&](int del_idx) {
+    auto record_err = [&](const Status& s) {
+        std::lock_guard<std::mutex> l(shared_mutex);
+        shared_status.update(s);
+    };
+    auto read_one = [&](int del_idx) -> Status {
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
         if (!del.encryption_meta().empty()) {
-            auto info_or = KeyCache::instance().unwrap_encryption_meta(del.encryption_meta());
-            if (!info_or.ok()) {
-                std::lock_guard<std::mutex> l(shared_mutex);
-                shared_status.update(info_or.status());
-                return;
-            }
-            ropts.encryption_info = std::move(info_or.value());
+            ASSIGN_OR_RETURN(ropts.encryption_info,
+                             KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
         }
-        auto rf_or = fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name()));
-        if (!rf_or.ok()) {
-            std::lock_guard<std::mutex> l(shared_mutex);
-            shared_status.update(rf_or.status());
-            return;
-        }
-        auto buf_or = (*rf_or)->read_all();
-        if (!buf_or.ok()) {
-            std::lock_guard<std::mutex> l(shared_mutex);
-            shared_status.update(buf_or.status());
-            return;
-        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
+        ASSIGN_OR_RETURN(auto buf, rf->read_all());
         auto pkc = pk_column->clone();
-        const auto* data = reinterpret_cast<const uint8_t*>(buf_or->data());
-        const auto* end = data + buf_or->size();
-        auto st = serde::ColumnArraySerde::deserialize(data, end, pkc.get());
-        if (!st.ok()) {
-            std::lock_guard<std::mutex> l(shared_mutex);
-            shared_status.update(st);
-            return;
-        }
+        const auto* data = reinterpret_cast<const uint8_t*>(buf.data());
+        RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(data, data + buf.size(), pkc.get()));
         pkcs[del_idx] = std::move(pkc);
+        return Status::OK();
+    };
+    auto run_one = [&](int del_idx) {
+        auto st = read_one(del_idx);
+        if (!st.ok()) {
+            record_err(st);
+        }
     };
 
     std::unique_ptr<ThreadPoolToken> token;
@@ -954,12 +946,12 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     }
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
         if (token) {
-            auto st = token->submit_func([&read_one, del_idx]() { read_one(del_idx); });
+            auto st = token->submit_func([&run_one, del_idx]() { run_one(del_idx); });
             if (!st.ok()) {
-                read_one(del_idx);
+                run_one(del_idx);
             }
         } else {
-            read_one(del_idx);
+            run_one(del_idx);
         }
     }
     if (token) {
