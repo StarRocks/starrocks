@@ -700,6 +700,7 @@ public class StarRocksClient
                 jdbcColumnTypes.add(column.getJdbcTypeHandle());
             }
             Boolean isPkTable = isPkTable(connection, remoteSchema, remoteTable);
+            rejectIfView(connection, remoteSchema, remoteTable, schemaTableName);
 
             if (isNonTransactionalInsert(session) || isPkTable) {
                 return new StarRocksOutputTableHandle(
@@ -1369,6 +1370,34 @@ public class StarRocksClient
             }
 
             return false;
+        }
+        catch (SQLException e) {
+            throw new TrinoException(JDBC_ERROR, e);
+        }
+    }
+
+    private void rejectIfView(Connection connection, String schemaName, String tableName, SchemaTableName schemaTableName)
+    {
+        // StarRocks's Table.getMysqlType() maps regular views, inline views, and both
+        // synchronous and asynchronous materialized views to the JDBC TABLE_TYPE "VIEW"
+        // (only plain OLAP tables report "BASE TABLE"). Without this guard the
+        // non-transactional path would stream-load into the view name and the
+        // transactional path would run CREATE TABLE ... LIKE <view>, both of which
+        // fail late at the FE with cryptic errors. Reject up front with NOT_SUPPORTED
+        // so the user sees a clear message before any work is done.
+        try (java.sql.Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery(String.format(
+                        "SELECT TABLE_TYPE FROM information_schema.tables WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'",
+                        schemaName,
+                        tableName))) {
+            if (resultSet.next()) {
+                String tableType = resultSet.getString("TABLE_TYPE");
+                if (tableType != null && !"BASE TABLE".equalsIgnoreCase(tableType)) {
+                    throw new TrinoException(
+                            NOT_SUPPORTED,
+                            "Cannot write to " + schemaTableName + ": " + tableType + " is not writable through the StarRocks connector");
+                }
+            }
         }
         catch (SQLException e) {
             throw new TrinoException(JDBC_ERROR, e);
