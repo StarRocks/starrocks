@@ -139,6 +139,11 @@ public:
         return _bloom_filter_index != nullptr && _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
     }
 
+    // Get index size in bytes for the specified index type.
+    // index_type can be: "BITMAP", "BLOOM", "ZONEMAP", "ALL"
+    // Returns 0 if the specified index does not exist.
+    int64_t get_index_size(const std::string& index_type) const;
+
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
