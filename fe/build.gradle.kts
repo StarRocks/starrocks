@@ -59,13 +59,8 @@ subprojects {
         set("hikaricp.version", "3.4.5")
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
-<<<<<<< HEAD
         set("iceberg.version", "1.9.0")
-        set("io.netty.version", "4.1.132.Final")
-=======
-        set("iceberg.version", "1.10.0")
         set("io.netty.version", "4.1.133.Final")
->>>>>>> 0136371382 ([BugFix][CVE] upgrade netty to 4.1.133.Final (#72905))
         set("jackson.version", "2.21.1")
         set("jackson-annotations.version", "2.21")
         set("jetty.version", "9.4.57.v20241219")
