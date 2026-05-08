@@ -1,0 +1,299 @@
+name: WEEKLY UNSTABLE CASE REVIEW
+
+# Runs every Monday to re-execute blacklisted unstable cases.
+# Cases that now pass are auto-removed from unstable_case.json.
+# Still-failing cases get AI analysis in an HTML report uploaded to OSS.
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'     # Every Monday 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      case_types:
+        description: >
+          Case types to review.
+          Comma-separated: FE-UT, BE-UT, SQL-Tester, TIMEOUT, or "all".
+        required: false
+        default: 'all'
+        type: string
+      branch:
+        description: 'Branch to review (default: main)'
+        required: false
+        default: 'main'
+        type: string
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  pull-requests: write
+
+env:
+  IS_INSPECTION: 'true'
+  SHARE_PATH: /var/local/env
+
+jobs:
+  # ─── Info / gate ─────────────────────────────────────────────────────────
+  prepare:
+    name: PREPARE
+    runs-on: [self-hosted, normal]
+    outputs:
+      BRANCH:          ${{ steps.info.outputs.BRANCH }}
+      COMMIT_SHA:      ${{ steps.info.outputs.COMMIT_SHA }}
+      RUN_FE_UT:       ${{ steps.info.outputs.RUN_FE_UT }}
+      RUN_BE_UT:       ${{ steps.info.outputs.RUN_BE_UT }}
+      RUN_SQL_TESTER:  ${{ steps.info.outputs.RUN_SQL_TESTER }}
+      CASE_SUMMARY:    ${{ steps.info.outputs.CASE_SUMMARY }}
+    steps:
+      - name: Setup
+        id: info
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+
+          BRANCH="${{ inputs.branch || 'main' }}"
+          CASE_TYPES="${{ inputs.case_types || 'all' }}"
+
+          COMMIT_SHA=$(gh api /repos/${REPO}/branches/${BRANCH} | jq -r .commit.sha)
+          [[ "${COMMIT_SHA}" == "null" ]] && (echo "::error::Failed to get HEAD SHA for ${BRANCH}" && exit 1)
+
+          echo "Branch: ${BRANCH}  SHA: ${COMMIT_SHA:0:8}  Types: ${CASE_TYPES}"
+          echo "BRANCH=${BRANCH}"         >> $GITHUB_OUTPUT
+          echo "COMMIT_SHA=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+
+          python3 bin/review-unstable-cases.py prepare \
+            --json files/unstable_case.json \
+            --branch "${BRANCH}" \
+            --case-types "${CASE_TYPES}"
+
+  # ─── FE-UT (includes TIMEOUT cases with #) ───────────────────────────────
+  fe-ut-review:
+    name: FE-UT REVIEW
+    needs: prepare
+    if: ${{ needs.prepare.outputs.RUN_FE_UT == 'true' }}
+    runs-on: [self-hosted, normal]
+    env:
+      BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
+      COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+    outputs:
+      oss_path: ${{ steps.run_ut.outputs.oss_path }}
+    steps:
+      - name: Run FE-UT (targeted unstable cases only)
+        id: run_ut
+        timeout-minutes: 180
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          ./bin/elastic-ut-review.sh \
+            --repository ${{ github.repository }} \
+            --branch ${BRANCH} \
+            --commit ${COMMIT_SHA} \
+            --module fe \
+            --linuxdistro ubuntu
+
+      - name: Clean ECI
+        if: always()
+        run: eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f  "${{ steps.run_ut.outputs.RES_FILE }}"  || true
+          rm -f  "${{ steps.run_ut.outputs.RES_LOG }}"   || true
+          rm -rf "${{ steps.run_ut.outputs.FE_REPORT_DIR }}" || true
+          rm -rf ${{ github.workspace }}/*
+
+  # ─── BE-UT ───────────────────────────────────────────────────────────────
+  be-ut-review:
+    name: BE-UT REVIEW
+    needs: prepare
+    if: ${{ needs.prepare.outputs.RUN_BE_UT == 'true' }}
+    runs-on: [self-hosted, normal]
+    env:
+      BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
+      COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+    outputs:
+      oss_path: ${{ steps.run_ut.outputs.oss_path }}
+    steps:
+      - name: Run BE-UT (targeted unstable cases only)
+        id: run_ut
+        timeout-minutes: 240
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          ./bin/elastic-ut-review.sh \
+            --repository ${{ github.repository }} \
+            --branch ${BRANCH} \
+            --commit ${COMMIT_SHA} \
+            --module be \
+            --linuxdistro ubuntu
+
+      - name: Clean ECI
+        if: always()
+        run: eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f  "${{ steps.run_ut.outputs.RES_FILE }}"  || true
+          rm -f  "${{ steps.run_ut.outputs.RES_LOG }}"   || true
+          rm -rf ${{ github.workspace }}/*
+
+  # ─── Deploy StarRocks cluster (for SQL-Tester) ───────────────────────────
+  deploy:
+    name: DEPLOY SR
+    needs: prepare
+    if: ${{ needs.prepare.outputs.RUN_SQL_TESTER == 'true' }}
+    runs-on: [self-hosted, normal]
+    env:
+      BRANCH:     ${{ needs.prepare.outputs.BRANCH }}
+      PR_NUMBER:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+    outputs:
+      FE_NODE:      ${{ steps.deploy.outputs.fe }}
+      BE_NODE:      ${{ steps.deploy.outputs.be }}
+      CLUSTER_NAME: ${{ steps.deploy.outputs.cluster_name }}
+    steps:
+      - name: Apply for ECS & Deploy SR
+        id: deploy
+        timeout-minutes: 30
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          ./bin/elastic-cluster.sh --template ci-admit
+          ./bin/deploy-cluster.sh -c ci-admit
+          echo "cluster_name=ci-admit" >> $GITHUB_OUTPUT
+
+      - name: Clean ENV
+        if: always()
+        run: rm -rf ${{ github.workspace }}/*
+
+  # ─── SQL-Tester ──────────────────────────────────────────────────────────
+  sql-tester-review:
+    name: SQL-TESTER REVIEW
+    needs: [prepare, deploy]
+    if: >
+      needs.prepare.outputs.RUN_SQL_TESTER == 'true' &&
+      needs.deploy.result == 'success'
+    runs-on: [self-hosted, normal]
+    env:
+      BRANCH:        ${{ needs.prepare.outputs.BRANCH }}
+      PR_NUMBER:     ${{ needs.prepare.outputs.COMMIT_SHA }}
+      FE_NODE:       ${{ needs.deploy.outputs.FE_NODE }}
+      BE_NODE:       ${{ needs.deploy.outputs.BE_NODE }}
+      CLUSTER_NAME:  ${{ needs.deploy.outputs.CLUSTER_NAME }}
+      WEEKLY_REVIEW: 'true'
+    outputs:
+      sql_oss_path: ${{ steps.run.outputs.sql_oss_path }}
+    steps:
+      - name: Run SQL-Tester (inspection mode)
+        id: run
+        timeout-minutes: 360
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+
+          # Compute the OSS path used by run-sql-tester.sh in IS_INSPECTION mode
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          BUCKET="${owner}-ci-release"
+          SQL_OSS="oss://${BUCKET}/inspection/${PR_NUMBER}/sql-tester/Release/ubuntu/native"
+          echo "sql_oss_path=${SQL_OSS}" >> $GITHUB_OUTPUT
+
+          ./bin/run-sql-tester.sh
+
+      - name: Clean ENV
+        if: always()
+        run: rm -rf ${{ github.workspace }}/*
+
+  # ─── Teardown cluster ────────────────────────────────────────────────────
+  teardown:
+    name: TEARDOWN
+    needs: [prepare, deploy, sql-tester-review]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: [self-hosted, normal]
+    env:
+      BRANCH:    ${{ needs.prepare.outputs.BRANCH }}
+      PR_NUMBER: ${{ needs.prepare.outputs.COMMIT_SHA }}
+    steps:
+      - name: Backup logs
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          ./bin/backup_log_cores.sh || true
+
+      - name: Delete ECS cluster
+        if: always()
+        run: |
+          cd ci-tool && source lib/init.sh
+          ./bin/elastic-cluster.sh --delete || true
+
+      - name: Clean ENV
+        if: always()
+        run: rm -rf ${{ github.workspace }}/*
+
+  # ─── Generate report & update JSON ───────────────────────────────────────
+  report:
+    name: REPORT
+    needs: [prepare, fe-ut-review, be-ut-review, sql-tester-review]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: [self-hosted, normal]
+    env:
+      BRANCH:              ${{ needs.prepare.outputs.BRANCH }}
+      COMMIT_SHA:          ${{ needs.prepare.outputs.COMMIT_SHA }}
+      ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Generate report & update unstable_case.json
+        id: gen
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+
+          CASE_TYPES="${{ inputs.case_types || 'all' }}"
+          FE_OSS="${{ needs.fe-ut-review.outputs.oss_path }}"
+          BE_OSS="${{ needs.be-ut-review.outputs.oss_path }}"
+          SQL_OSS="${{ needs.sql-tester-review.outputs.sql_oss_path }}"
+          WORK_DIR="/tmp/unstable-review-${GITHUB_RUN_ID}"
+
+          python3 bin/review-unstable-cases.py report \
+            --json     files/unstable_case.json \
+            --branch   "${BRANCH}" \
+            --commit   "${COMMIT_SHA}" \
+            --case-types "${CASE_TYPES}" \
+            --fe-oss-path  "${FE_OSS}"  \
+            --be-oss-path  "${BE_OSS}"  \
+            --sql-oss-path "${SQL_OSS}" \
+            --output-dir "${WORK_DIR}"
+
+          echo "WORK_DIR=${WORK_DIR}" >> $GITHUB_OUTPUT
+
+      - name: Publish test results (Checks tab)
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          report_paths: "${{ steps.gen.outputs.JUNIT_PATH }}"
+          check_name: 'Unstable Case Review'
+          fail_on_failure: false
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload report to OSS
+        id: upload
+        run: |
+          WORK_DIR="${{ steps.gen.outputs.WORK_DIR }}"
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
+          REPORT_OSS="oss://${bucket}/unstable-case-review/${BRANCH}/${COMMIT_SHA:0:8}/"
+          /var/local/env/ossutil64 --config-file /root/.ossutilconfig \
+            cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
+          echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
+
+      - name: Commit updated unstable_case.json
+        if: steps.gen.outputs.JSON_UPDATED == 'true'
+        run: |
+          cd ci-tool
+          git config user.name  "wanpengfei-git"
+          git config user.email "wanpengfei91@163.com"
+          git add files/unstable_case.json
+          git commit -m "[auto] weekly review: remove passing cases (${BRANCH} ${COMMIT_SHA:0:8})"
+          git push
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf "${{ steps.gen.outputs.WORK_DIR }}" || true
+          rm -rf ${{ github.workspace }}/*
