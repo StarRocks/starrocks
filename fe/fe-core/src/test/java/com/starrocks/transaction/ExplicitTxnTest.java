@@ -40,9 +40,12 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -153,6 +156,22 @@ public class ExplicitTxnTest {
 
         Assertions.assertTrue(context.getState().isError());
         Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
+    }
+
+    @Test
+    public void testShowStmtAllowedInExplicitTxn() {
+        // SHOW statements are read-only metadata queries and must be allowed inside an
+        // explicit transaction (regression for ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT on SHOW GRANTS / SHOW WAREHOUSES).
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(1);
+
+        ShowGrantsStmt showGrants = new ShowGrantsStmt(new UserRef("u1", "%"), NodePosition.ZERO);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(showGrants, context));
+
+        ShowWarehousesStmt showWarehouses = new ShowWarehousesStmt(null);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(showWarehouses, context));
     }
 
     @Test
