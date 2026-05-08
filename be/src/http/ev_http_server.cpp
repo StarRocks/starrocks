@@ -45,15 +45,14 @@
 #include "starrocks_macos_libevent_shims.h"
 #endif
 
-#include <memory>
-#include <sstream>
-#include <utility>
-
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <cstring>
+#include <memory>
+#include <sstream>
+#include <utility>
 
 #include "base/brpc/brpc.h"
 #include "base/system/errno.h"
