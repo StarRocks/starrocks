@@ -17,15 +17,13 @@
 #include <chrono>
 #include <thread>
 
-
-#include "storage/data_dir.h"
 #include "compaction_manager.h"
 #include "runtime/current_thread.h"
-
+#include "storage/data_dir.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
-        using namespace std::chrono_literals;
+using namespace std::chrono_literals;
 
 namespace starrocks {
 
