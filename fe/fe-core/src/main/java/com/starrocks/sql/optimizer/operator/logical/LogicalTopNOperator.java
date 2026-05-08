@@ -118,6 +118,9 @@ public class LogicalTopNOperator extends LogicalOperator {
         for (Ordering ordering : orderByElements) {
             columns.union(ordering.getColumnRef());
         }
+        if (partitionByColumns != null) {
+            partitionByColumns.forEach(columns::union);
+        }
         if (partitionPreAggCall != null && !partitionPreAggCall.isEmpty()) {
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
                 columns.union(entry.getValue().getUsedColumns());
