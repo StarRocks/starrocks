@@ -22,6 +22,7 @@ import java.util.List;
 public class FunctionArgsDef {
     private final List<TypeDef> argTypeDefs;
     private final boolean isVariadic;
+    private final List<String> argNames;
 
     // set after analyze
     private Type[] argTypes;
@@ -29,6 +30,13 @@ public class FunctionArgsDef {
     public FunctionArgsDef(List<TypeDef> argTypeDefs, boolean isVariadic) {
         this.argTypeDefs = argTypeDefs;
         this.isVariadic = isVariadic;
+        this.argNames = List.of();
+    }
+
+    public FunctionArgsDef(List<TypeDef> argTypeDefs, List<String> argNames) {
+        this.argTypeDefs = argTypeDefs;
+        this.isVariadic = false;
+        this.argNames = argNames;
     }
 
     public Type[] getArgTypes() {
@@ -45,5 +53,9 @@ public class FunctionArgsDef {
 
     public List<TypeDef> getArgTypeDefs() {
         return argTypeDefs;
+    }
+
+    public List<String> getArgNames() {
+        return argNames;
     }
 }
