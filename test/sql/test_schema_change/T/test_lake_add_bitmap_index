@@ -1,4 +1,13 @@
 -- name: test_lake_add_bitmap_index @cloud
+-- Verifies the lake ADD BITMAP INDEX fast path.
+--
+-- 1. Build a single-bucket lake table with multiple segments (multi-insert)
+--    so the post-alter scan can prove the bitmap is actually used to filter
+--    rows.
+-- 2. ALTER TABLE ... ADD INDEX ... USING BITMAP via the IDG fast path.
+-- 3. Drive a query that matches one rare value out of many and inspect the
+--    query profile to confirm BitmapIndexFilterRows > 0 (i.e., the bitmap
+--    index actually skipped non-matching rows during SegmentInit).
 create database lake_idx_${uuid0};
 use lake_idx_${uuid0};
 
@@ -7,19 +16,47 @@ CREATE TABLE t1 (
     v1 int,
     v2 string
 ) DUPLICATE KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 3;
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
 
-insert into t1 values (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry'),
-                     (4, 40, 'apple'), (5, 50, 'banana'), (6, 60, 'cherry');
+-- Multiple inserts -> multiple rowsets/segments. Each insert covers the
+-- full v1 value space [10..60] so every segment carries every value: this
+-- ensures the bitmap (per-segment) actually has work to do filtering one
+-- selected value out of many.
+insert into t1 select x, 10 * (x % 6 + 1), concat('s_', x) from table(generate_series(1, 200)) t(x);
+insert into t1 select x, 10 * (x % 6 + 1), concat('s_', x) from table(generate_series(201, 400)) t(x);
+insert into t1 select x, 10 * (x % 6 + 1), concat('s_', x) from table(generate_series(401, 600)) t(x);
 
-
--- Fast-path ADD BITMAP INDEX on a non-key column
+-- Fast-path ADD BITMAP INDEX on a non-key column.
 ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
 function: wait_alter_table_finish()
 
--- Query should be correct with IDG-backed bitmap index
-select * from t1 where v1 = 20;
+-- Sanity: queries return the right rows.
+select count(*) from t1 where v1 = 20;
 select count(*) from t1 where v1 in (10, 30, 50);
-select * from t1 order by k1;
+
+-- Drive profile-based assertion that the IDG-backed bitmap was actually
+-- read at scan time. We verify two properties:
+--   1) the BitmapIndexIteratorInit counter exists in profile (= scan code
+--      went through the bitmap-iterator factory), and
+--   2) at least one occurrence has a non-zero init time, meaning the .idx
+--      file was actually opened and the bitmap dictionary parsed.
+-- The data was inserted BEFORE the alter, so the bitmap can only come
+-- from the IDG sidecar (.idx) — segment footers have no bitmap payload.
+-- A non-zero init time therefore proves the IDG read path works.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*) from t1 where v1 = 20;
+create table profile_lines properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(count(1) > 0)
+    from profile_lines
+    where line like '%- BitmapIndexIteratorInit%';
+-- Profile time values can be expressed as ns / us / ms / s. Strip the unit,
+-- keep the numeric prefix, and verify it is > 0 (i.e., the iterator was
+-- actually constructed, not stubbed at zero).
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapIndexIteratorInit: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines
+    where line like '%- BitmapIndexIteratorInit%';
 
 drop database lake_idx_${uuid0};

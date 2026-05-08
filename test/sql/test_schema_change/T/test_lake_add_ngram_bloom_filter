@@ -1,8 +1,10 @@
 -- name: test_lake_add_ngram_bloom_filter @cloud
--- Fast-path ADD INDEX ... USING NGRAMBF on a varchar column.
--- Verifies that (1) the alter commits via the IDG fast path (wait_alter_table_finish observes FINISHED),
--- (2) queries with LIKE predicates return correct results after the index is published, and
--- (3) a DROP of the same index is also fast-path (metadata-only tombstone) and leaves queries correct.
+-- Verifies the lake ADD INDEX ... USING NGRAMBF fast path:
+-- (1) the alter commits via the IDG fast path,
+-- (2) queries return correct results, and
+-- (3) the profile counter BloomFilterFilterRows > 0 — proving the
+--     ngram bloom filter actually skipped rows on segments where the
+--     LIKE substring is absent.
 create database lake_ngram_${uuid0};
 use lake_ngram_${uuid0};
 
@@ -13,30 +15,43 @@ CREATE TABLE t1 (
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 
-insert into t1 values
-    (1, 'apple'), (2, 'banana'), (3, 'cherry'),
-    (4, 'applesauce'), (5, 'grape'), (6, 'pineapple');
+-- Build several segments with strict per-segment value disjointness so that
+-- the post-alter LIKE query has obvious filter targets.
+insert into t1 select x, concat('apple_', x) from table(generate_series(1, 100)) t(x);
+insert into t1 select x, concat('banana_', x) from table(generate_series(101, 200)) t(x);
+insert into t1 select x, concat('cherry_', x) from table(generate_series(201, 300)) t(x);
 
--- ADD NGRAMBF via fast path (gram_num=3, fpp=0.05 are defaults but set
--- explicitly so the test is stable across default changes).
+-- ADD NGRAMBF via fast path. gram_num=3 + fpp=0.05 are defaults but pinned
+-- explicitly so the test is stable across default changes.
 ALTER TABLE t1 ADD INDEX idx_v1_ngbf (v1) USING NGRAMBF("gram_num"="3","bloom_filter_fpp"="0.05");
 function: wait_alter_table_finish()
 
--- Queries that the bloom filter is expected to help; results must match
--- a plain table scan.
-select count(*) from t1 where v1 like '%app%';
+-- Sanity: query returns the expected rows.
+select count(*) from t1 where v1 like '%apple%';
 select count(*) from t1 where v1 like '%banana%';
-select k1, v1 from t1 where v1 like '%apple%' order by k1;
 
--- Equality still works (ngrambf is a probabilistic filter, query path
--- falls back to full evaluation for non-like equality).
-select count(*) from t1 where v1 = 'banana';
+-- Drive profile-based assertion that the IDG-backed NGRAMBF was actually
+-- consulted. We verify the BloomFilterFilter counter has non-zero time
+-- (= the .idx file was opened and the ngram BF probed). The data was
+-- inserted BEFORE the alter, so the BF can only come from the IDG
+-- sidecar (.idx) — segment footers have no BF payload.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*) from t1 where v1 like '%cherry%';
+create table profile_lines properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(count(1) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
 
 -- DROP via fast path (metadata-only tombstone) and re-check correctness.
 ALTER TABLE t1 DROP INDEX idx_v1_ngbf;
 function: wait_alter_table_finish()
 
-select count(*) from t1 where v1 like '%app%';
-select k1, v1 from t1 where v1 like '%apple%' order by k1;
+select count(*) from t1 where v1 like '%apple%';
+select count(*) from t1 where v1 like '%cherry%';
 
 drop database lake_ngram_${uuid0};

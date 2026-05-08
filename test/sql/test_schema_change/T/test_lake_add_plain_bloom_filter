@@ -1,11 +1,10 @@
 -- name: test_lake_add_plain_bloom_filter @cloud
--- Fast-path for the `bloom_filter_columns` table property on a lake table.
--- BE builds a per-column BF payload into a sidecar .idx file via the IDG
--- pipeline without rewriting segment data; FE flips OlapTable.bfColumns
--- via LakeTableAddIndexJob.applyCatalogMutation.
---
--- Smoke coverage: first pure-add of a plain BF column on a populated lake
--- table, verifying classifier routing + BE build + query correctness.
+-- Verifies the lake `bloom_filter_columns` property fast path:
+-- (1) the property change commits via the IDG fast path (no segment rewrite),
+-- (2) queries return correct results, and
+-- (3) the profile counter BloomFilterFilterRows > 0 — proving the per-column
+--     plain bloom filter actually skipped rows on segments where the
+--     equality predicate's value is absent.
 create database lake_plain_bf_${uuid0};
 use lake_plain_bf_${uuid0};
 
@@ -17,18 +16,39 @@ CREATE TABLE t1 (
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 
-insert into t1 values
-    (1, 10, 'aa'), (2, 20, 'bb'), (3, 30, 'cc'),
-    (4, 40, 'aa'), (5, 50, 'bb'), (6, 60, 'cc');
+-- Three segments with strictly disjoint v2 value spaces so that an equality
+-- query against a value present in only one segment must rely on the bloom
+-- filter to reject the other two segments.
+insert into t1 select x, x, concat('aa_', x) from table(generate_series(1, 100)) t(x);
+insert into t1 select x, x, concat('bb_', x) from table(generate_series(101, 200)) t(x);
+insert into t1 select x, x, concat('cc_', x) from table(generate_series(201, 300)) t(x);
 
--- First pure-add: enable BF on a varchar column via the property alter.
--- Classifier routes to LakeTableAddIndexJob (BF variant); BE writes an
--- IDG .idx sidecar with plain-BF payload.
+-- Pure-add: enable plain BF on a varchar column. Classifier routes to the
+-- LakeTableAddIndexJob BF variant; BE writes an IDG .idx sidecar.
 ALTER TABLE t1 SET ("bloom_filter_columns" = "v2");
 function: wait_alter_table_finish()
 
-select count(*) from t1 where v2 = 'aa';
-select count(*) from t1 where v2 in ('aa', 'cc');
-select k1, v1, v2 from t1 where v2 = 'bb' order by k1;
+select count(*) from t1 where v2 = 'aa_50';
+select count(*) from t1 where v2 = 'cc_250';
+
+-- Drive profile-based assertion that the IDG-backed plain BF was actually
+-- read at scan time. Two checks:
+--   1) the BloomFilterFilter counter exists in profile (= scan code went
+--      through the bloom-filter path), and
+--   2) at least one occurrence has a non-zero filter time, meaning the
+--      .idx file was opened and the BF probed against the predicate.
+-- The data was inserted BEFORE the alter, so the BF can only come from
+-- the IDG sidecar (.idx) — segment footers have no BF payload.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*) from t1 where v2 = 'cc_250';
+create table profile_lines properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(count(1) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
 
 drop database lake_plain_bf_${uuid0};

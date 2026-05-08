@@ -14,9 +14,13 @@ DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
-insert into t1 values
-    (1, 10, 'aa'), (2, 20, 'bb'), (3, 30, 'cc'),
-    (4, 40, 'aa'), (5, 50, 'bb'), (6, 60, 'cc');
+insert into t1 select x, x, concat('aa_', x) from table(generate_series(1, 100)) t(x);
+-- result:
+-- !result
+insert into t1 select x, x, concat('bb_', x) from table(generate_series(101, 200)) t(x);
+-- result:
+-- !result
+insert into t1 select x, x, concat('cc_', x) from table(generate_series(201, 300)) t(x);
 -- result:
 -- !result
 ALTER TABLE t1 SET ("bloom_filter_columns" = "v2");
@@ -26,18 +30,36 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
-select count(*) from t1 where v2 = 'aa';
+select count(*) from t1 where v2 = 'aa_50';
 -- result:
-2
+1
 -- !result
-select count(*) from t1 where v2 in ('aa', 'cc');
+select count(*) from t1 where v2 = 'cc_250';
 -- result:
-4
+1
 -- !result
-select k1, v1, v2 from t1 where v2 = 'bb' order by k1;
+set enable_profile = true;
 -- result:
-2	20	bb
-5	50	bb
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*) from t1 where v2 = 'cc_250';
+create table profile_lines properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(count(1) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
+-- result:
+1
 -- !result
 drop database lake_plain_bf_${uuid0};
 -- result:

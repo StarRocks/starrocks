@@ -10,11 +10,17 @@ CREATE TABLE t1 (
     v1 int,
     v2 string
 ) DUPLICATE KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 3;
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
-insert into t1 values (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry'),
-                     (4, 40, 'apple'), (5, 50, 'banana'), (6, 60, 'cherry');
+insert into t1 select x, 10 * (x % 6 + 1), concat('s_', x) from table(generate_series(1, 200)) t(x);
+-- result:
+-- !result
+insert into t1 select x, 10 * (x % 6 + 1), concat('s_', x) from table(generate_series(201, 400)) t(x);
+-- result:
+-- !result
+insert into t1 select x, 10 * (x % 6 + 1), concat('s_', x) from table(generate_series(401, 600)) t(x);
 -- result:
 -- !result
 ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
@@ -24,22 +30,36 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
-select * from t1 where v1 = 20;
+select count(*) from t1 where v1 = 20;
 -- result:
-2	20	banana
+100
 -- !result
 select count(*) from t1 where v1 in (10, 30, 50);
 -- result:
-3
+300
 -- !result
-select * from t1 order by k1;
+set enable_profile = true;
 -- result:
-1	10	apple
-2	20	banana
-3	30	cherry
-4	40	apple
-5	50	banana
-6	60	cherry
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*) from t1 where v1 = 20;
+create table profile_lines properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(count(1) > 0)
+    from profile_lines
+    where line like '%- BitmapIndexIteratorInit%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapIndexIteratorInit: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines
+    where line like '%- BitmapIndexIteratorInit%';
+-- result:
+1
 -- !result
 drop database lake_idx_${uuid0};
 -- result:
