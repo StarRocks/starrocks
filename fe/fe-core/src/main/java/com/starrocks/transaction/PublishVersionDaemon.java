@@ -1087,7 +1087,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
-        long brpcStartMs = System.currentTimeMillis();
+        long rpcStartMs = System.currentTimeMillis();
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
@@ -1121,14 +1121,14 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     txnId, e.getMessage());
             return false;
         } finally {
-            long brpcEndMs = System.currentTimeMillis();
-            long totalMs = brpcEndMs - submitTimeMs;
-            if (totalMs >= 500) {
+            long rpcEndMs = System.currentTimeMillis();
+            long totalMs = rpcEndMs - submitTimeMs;
+            if (totalMs >= 3000) {
                 LOG.warn("Slow publishPartition txn={} partition={} table={} total_ms={} executor_acquire_ms={} " +
-                                "lock_wait_ms={} fe_prep_ms={} brpc_ms={}",
+                                "lock_wait_ms={} fe_prep_ms={} rpc_ms={}",
                         txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
                         totalMs, lambdaEntryMs - submitTimeMs,
-                        lockAcquiredMs - lambdaEntryMs, brpcStartMs - lockAcquiredMs, brpcEndMs - brpcStartMs);
+                        lockAcquiredMs - lambdaEntryMs, rpcStartMs - lockAcquiredMs, rpcEndMs - rpcStartMs);
             }
         }
     }

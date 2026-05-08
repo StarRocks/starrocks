@@ -114,9 +114,8 @@ bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstabl
     return true;
 }
 
-Status PersistentIndexSstableFileset::multi_get(
-        const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
-        KeyIndexSet* found_key_indexes, std::unordered_set<const PersistentIndexSstable*>* touched_sstables) const {
+Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
+                                                IndexValue* values, KeyIndexSet* found_key_indexes) const {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     // 0. if single standalone sstable, directly get.
     if (_standalone_sstable != nullptr) {
@@ -125,9 +124,6 @@ Status PersistentIndexSstableFileset::multi_get(
         // Compared with `pindex_init_sst_cnt`, this lets us tell whether a lazy-SST-open
         // refactor (defer Table::Open until first touch) would actually skip work.
         TRACE_COUNTER_INCREMENT("pindex_sstables_queried_cnt", 1);
-        if (touched_sstables != nullptr) {
-            touched_sstables->insert(_standalone_sstable.get());
-        }
         return _standalone_sstable->multi_get(keys, key_indexes, version, values, found_key_indexes);
     }
     // 1. divide key_indexes into different groups according to sstables
@@ -150,9 +146,6 @@ Status PersistentIndexSstableFileset::multi_get(
     // 2. multi get from each sstable
     TRACE_COUNTER_INCREMENT("pindex_sstables_queried_cnt", sstable_key_indexes_map.size());
     for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
-        if (touched_sstables != nullptr) {
-            touched_sstables->insert(sstable);
-        }
         RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));
     }
     return Status::OK();
