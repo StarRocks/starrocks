@@ -34,16 +34,27 @@ public class TabletReshardUtils {
     //   2 * (1 - 0.5 / 1.5) > 4/5    // post-split min piece pair > merge pair threshold
     //   1                  < 1.5     // merge group cap < split threshold
     //
-    // Helpers below are overflow-safe for T <= MAX_SAFE_TARGET (~4.6 EB),
-    // far above any plausible target. calcSplitCount() guards larger targets
-    // by returning 1 (no split) so the wrap-around in splitThreshold can't
-    // produce a bogus split decision.
-    private static final long MAX_SAFE_TARGET = Long.MAX_VALUE / 2;
+    // mergePairThreshold and mergeGroupCap are overflow-safe for any positive long T.
+    // splitThreshold = T + T/2 + (T & 1) overflows when T > floor(2/3 * Long.MAX_VALUE)
+    // (~6.15 EB). calcSplitCount() detects that exact boundary algebraically and falls
+    // back to "no split" for inputs above it, so the wrap-around can't produce a
+    // bogus positive split count.
 
     @VisibleForTesting
     static long splitThreshold(long target) {
-        // ceil(1.5T) = T + ceil(T/2). Overflow-safe for T <= MAX_SAFE_TARGET.
+        // ceil(1.5T) = T + ceil(T/2). Caller must check splitThresholdOverflows(target) first.
         return target + target / 2 + (target & 1L);
+    }
+
+    /**
+     * True iff splitThreshold(target) would overflow long for the given non-negative target.
+     * Algebraically: T + T/2 + (T & 1) > Long.MAX_VALUE.
+     * Computed via the rearrangement T > Long.MAX_VALUE - T/2 - (T & 1), which never
+     * underflows because T/2 and (T & 1) are themselves non-negative and <= Long.MAX_VALUE.
+     */
+    @VisibleForTesting
+    static boolean splitThresholdOverflows(long target) {
+        return target > Long.MAX_VALUE - target / 2 - (target & 1L);
     }
 
     @VisibleForTesting
@@ -87,11 +98,10 @@ public class TabletReshardUtils {
             return (int) splitCount;
         }
 
-        if (targetSize > MAX_SAFE_TARGET) {
-            // splitThreshold(targetSize) would wrap around; no plausible long
-            // dataSize can exceed ceil(1.5T) at this magnitude. Treat as "no split"
-            // rather than risking the lower-bounded `Math.max(2, ...)` below
-            // producing a bogus positive split count for any input.
+        if (splitThresholdOverflows(targetSize)) {
+            // ceil(1.5 * targetSize) does not fit in long; no possible dataSize can
+            // satisfy the threshold so treat as "no split" instead of letting the
+            // lower-bounded Math.max(2, ...) below produce a bogus positive count.
             return 1;
         }
 

@@ -64,10 +64,36 @@ public class TabletReshardUtilsTest {
     }
 
     @Test
-    public void calcSplitCount_unsafeTargetReturnsOne() {
-        // Targets above MAX_SAFE_TARGET (Long.MAX/2) must not produce a positive split
-        // even when dataSize would bypass the size guard via integer overflow.
-        long unsafeTarget = (Long.MAX_VALUE / 2) + 1;
+    public void splitThresholdOverflows_alignsWithActualBoundary() {
+        // Anything T such that T + T/2 + (T&1) fits in long is safe.
+        assertFalse(TabletReshardUtils.splitThresholdOverflows(0L));
+        assertFalse(TabletReshardUtils.splitThresholdOverflows(1L));
+        assertFalse(TabletReshardUtils.splitThresholdOverflows(Long.MAX_VALUE / 2));
+        // Codex example: target around 5e18 still has splitThreshold 7.5e18 which fits.
+        assertFalse(TabletReshardUtils.splitThresholdOverflows(5_000_000_000_000_000_000L));
+        // Largest exact safe value: floor(2 * Long.MAX_VALUE / 3).
+        long maxSafe = (Long.MAX_VALUE - 1) / 3 * 2 + ((Long.MAX_VALUE - 1) % 3) * 2 / 3;
+        assertFalse(TabletReshardUtils.splitThresholdOverflows(maxSafe));
+        // One past the safe boundary must report overflow.
+        assertTrue(TabletReshardUtils.splitThresholdOverflows(maxSafe + 1));
+        assertTrue(TabletReshardUtils.splitThresholdOverflows(Long.MAX_VALUE));
+    }
+
+    @Test
+    public void calcSplitCount_largeButSafeTargetStillSplits() {
+        // Codex regression: target=5e18, dataSize=8e18 must still produce a valid split.
+        // splitThreshold(5e18) = 7.5e18 fits in long; dataSize 8e18 >= 7.5e18 → split=2.
+        long target = 5_000_000_000_000_000_000L;
+        long dataSize = 8_000_000_000_000_000_000L;
+        assertEquals(2, TabletReshardUtils.calcSplitCount(dataSize, target));
+    }
+
+    @Test
+    public void calcSplitCount_overflowingTargetReturnsOne() {
+        // Targets above the splitThreshold overflow boundary must not produce a positive
+        // split: splitThreshold would wrap around and the lower-bounded Math.max(2, ...)
+        // would otherwise emit a bogus count for any input.
+        long unsafeTarget = Long.MAX_VALUE; // far past the 6.15-EB overflow boundary
         assertEquals(1, TabletReshardUtils.calcSplitCount(0L, unsafeTarget));
         assertEquals(1, TabletReshardUtils.calcSplitCount(Long.MAX_VALUE, unsafeTarget));
     }
