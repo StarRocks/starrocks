@@ -63,8 +63,8 @@ jobs:
           echo "BRANCH=${BRANCH}"         >> $GITHUB_OUTPUT
           echo "COMMIT_SHA=${COMMIT_SHA}" >> $GITHUB_OUTPUT
 
-          python3 ci-tool/bin/review-unstable-cases.py prepare \
-            --json ci-tool/files/unstable_case.json \
+          python3 bin/review-unstable-cases.py prepare \
+            --json files/unstable_case.json \
             --branch "${BRANCH}" \
             --case-types "${CASE_TYPES}"
 
@@ -149,8 +149,8 @@ jobs:
       BRANCH:     ${{ needs.prepare.outputs.BRANCH }}
       PR_NUMBER:  ${{ needs.prepare.outputs.COMMIT_SHA }}
     outputs:
-      FE_NODE:      ${{ steps.deploy.outputs.FE_NODE }}
-      BE_NODE:      ${{ steps.deploy.outputs.BE_NODE }}
+      FE_NODE:      ${{ steps.deploy.outputs.fe }}
+      BE_NODE:      ${{ steps.deploy.outputs.be }}
       CLUSTER_NAME: ${{ steps.deploy.outputs.cluster_name }}
     steps:
       - name: Apply for ECS & Deploy SR
@@ -160,6 +160,7 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/elastic-cluster.sh --template ci-admit
           ./bin/deploy-cluster.sh -c ci-admit
+          echo "cluster_name=ci-admit" >> $GITHUB_OUTPUT
 
       - name: Clean ENV
         if: always()
@@ -248,8 +249,8 @@ jobs:
           SQL_OSS="${{ needs.sql-tester-review.outputs.sql_oss_path }}"
           WORK_DIR="/tmp/unstable-review-${GITHUB_RUN_ID}"
 
-          python3 ci-tool/bin/review-unstable-cases.py report \
-            --json     ci-tool/files/unstable_case.json \
+          python3 bin/review-unstable-cases.py report \
+            --json     files/unstable_case.json \
             --branch   "${BRANCH}" \
             --commit   "${COMMIT_SHA}" \
             --case-types "${CASE_TYPES}" \
