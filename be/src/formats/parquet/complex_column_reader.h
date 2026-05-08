@@ -407,6 +407,13 @@ public:
     bool fallback_values_all_null_in_row_group_for_path(const VariantPath& path, uint64_t rg_num_rows) const;
 
 private:
+    struct TopLevelSkipFlags {
+        bool skip_payload = false;
+        bool skip_metadata = false;
+    };
+
+    TopLevelSkipFlags _compute_top_level_skip_flags() const;
+
     // Fast-path read when _skip_base_payload is true.
     // Returns true if the fast path handled the read completely.
     // Returns false if fallback rows were detected; shredded fields are already populated and the
@@ -485,7 +492,7 @@ private:
 // it is owned by the ShreddedFieldNode inside the parent VariantColumnReader.
 class VariantTypedValueProxy final : public ColumnReader {
 public:
-    VariantTypedValueProxy(ColumnReader* reader, const TypeDescriptor& /*target_type*/)
+    explicit VariantTypedValueProxy(ColumnReader* reader)
             : ColumnReader(reader->get_column_parquet_field()), _reader(reader) {}
 
     // No-op: the underlying reader is already prepared by the parent VariantColumnReader.

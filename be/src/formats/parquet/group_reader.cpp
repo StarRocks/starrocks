@@ -1457,7 +1457,7 @@ Status GroupReader::_promote_variant_virtual_columns() {
             auto& proj = _variant_virtual_projections.at(vsi.virtual_slot_id);
             ColumnReader* leaf = leaf_readers_by_slot.at(vsi.virtual_slot_id);
 
-            auto proxy = std::make_unique<VariantTypedValueProxy>(leaf, proj.target_type);
+            auto proxy = std::make_unique<VariantTypedValueProxy>(leaf);
 
             if (vsi.has_conjunct) {
                 // Attempt dict filter for each conjunct; fall back to expression eval if failed.

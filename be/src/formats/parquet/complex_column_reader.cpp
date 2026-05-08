@@ -876,6 +876,9 @@ static bool _requested_scalar_fallback_values_all_null(const std::vector<Shredde
                                                        const std::vector<VariantPath>& requested_paths) {
     for (const auto& path : requested_paths) {
         const ShreddedFieldNode* node = find_shredded_field_node_for_path(nodes, path);
+        if (node == nullptr) {
+            return false;
+        }
         if (node->value_reader != nullptr && !_column_chunk_all_null(node->value_reader.get())) {
             return false;
         }
@@ -1872,16 +1875,12 @@ void VariantColumnReader::set_need_parse_levels(bool need_parse_levels) {
 
 void VariantColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                                   int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
-    const bool skip_top_level_payload =
-            _top_level.root_typed_value_reader == nullptr &&
-            _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
-            _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
-    const bool skip_metadata = skip_top_level_payload && _column_chunk_has_no_null(_top_level.metadata_reader.get());
+    const TopLevelSkipFlags skip_flags = _compute_top_level_skip_flags();
 
-    if (_top_level.metadata_reader != nullptr && !skip_metadata) {
+    if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
-    if (_top_level.value_reader != nullptr && !skip_top_level_payload) {
+    if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
     if (_top_level.root_typed_value_reader != nullptr) {
@@ -1895,16 +1894,12 @@ void VariantColumnReader::collect_column_io_range(std::vector<io::SharedBuffered
 }
 
 void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) {
-    const bool skip_top_level_payload =
-            _top_level.root_typed_value_reader == nullptr &&
-            _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
-            _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
-    const bool skip_metadata = skip_top_level_payload && _column_chunk_has_no_null(_top_level.metadata_reader.get());
+    const TopLevelSkipFlags skip_flags = _compute_top_level_skip_flags();
 
-    if (_top_level.metadata_reader != nullptr && !skip_metadata) {
+    if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->select_offset_index(range, rg_first_row);
     }
-    if (_top_level.value_reader != nullptr && !skip_top_level_payload) {
+    if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->select_offset_index(range, rg_first_row);
     }
     if (_top_level.root_typed_value_reader != nullptr) {
@@ -1915,6 +1910,15 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     for (const auto& node : _shredded_fields) {
         _select_shredded_field_offset_index(node, range, rg_first_row, requested_paths);
     }
+}
+
+VariantColumnReader::TopLevelSkipFlags VariantColumnReader::_compute_top_level_skip_flags() const {
+    TopLevelSkipFlags flags;
+    flags.skip_payload = _top_level.root_typed_value_reader == nullptr &&
+                         _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
+                         _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
+    flags.skip_metadata = flags.skip_payload && _column_chunk_has_no_null(_top_level.metadata_reader.get());
+    return flags;
 }
 
 // Fast-path read when _skip_base_payload is true.
