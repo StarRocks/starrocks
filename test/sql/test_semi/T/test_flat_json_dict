@@ -1,4 +1,4 @@
--- name: test_normal_flat_json_dict 
+-- name: test_normal_flat_json_dict @sequential
 
 update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
 set enable_profile = true;
