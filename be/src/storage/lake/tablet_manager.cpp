@@ -62,7 +62,8 @@
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/tablet_warmup_manager.h"
 #endif
 
@@ -79,14 +80,15 @@ static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_rea
 
 void TabletManager::enable_tablet_warmup_listener() {
 #ifdef USE_STAROS
-    if (g_worker == nullptr) {
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
         return;
     }
     auto* mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     if (mgr == nullptr) {
         return;
     }
-    g_worker->register_add_shard_listener(
+    worker->register_add_shard_listener(
             std::bind(&TabletWarmupManager::warmup_tablet, mgr->_tablet_warmup_manager.get(), std::placeholders::_1));
 #endif
 }
@@ -1026,8 +1028,9 @@ StatusOr<int64_t> TabletManager::get_tablet_num_rows(int64_t tablet_id, int64_t 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
     bool in_worker = true;
-    if (g_worker != nullptr) {
-        auto shard_info_or = g_worker->get_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr) {
+        auto shard_info_or = worker->get_shard_info(tablet_id);
         if (absl::IsNotFound(shard_info_or.status())) {
             in_worker = false;
         }
@@ -1055,8 +1058,9 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     // TODO: Eliminate the explicit dependency on staros worker
     // 2. leverage `indexId` to lookup the global_schema from cache and if missing from file.
-    if (g_worker != nullptr) {
-        auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr) {
+        auto shard_info_or = worker->retrieve_shard_info(tablet_id);
         if (shard_info_or.ok()) {
             const auto& shard_info = shard_info_or.value();
             const auto& properties = shard_info.properties;
@@ -1191,8 +1195,9 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<ui
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    if (g_worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
-        auto shard_info_or = g_worker->retrieve_shard_info(context->tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
+        auto shard_info_or = worker->retrieve_shard_info(context->tablet_id);
         if (shard_info_or.ok()) {
             auto id_pair = get_table_partition_id(shard_info_or.value());
             if (context->table_id == 0) {
@@ -1218,8 +1223,9 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     // Retrieve table_id and partition_id from shard info if not already set.
     // This is needed for parallel compaction which may call this overload directly.
-    if (g_worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
-        auto shard_info_or = g_worker->retrieve_shard_info(context->tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
+        auto shard_info_or = worker->retrieve_shard_info(context->tablet_id);
         if (shard_info_or.ok()) {
             auto id_pair = get_table_partition_id(shard_info_or.value());
             if (context->table_id == 0) {
@@ -1414,7 +1420,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
 StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
         int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
         const std::unordered_map<int64_t, int64_t>& partition_versions) {
-    auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    auto shard_info_or = get_staros_worker()->retrieve_shard_info(tablet_id);
     if (!shard_info_or.ok()) {
         return Status::InternalError(fmt::format("fail to get shard info of tablet: {}, err: {}", tablet_id,
                                                  shard_info_or.status().message()));
@@ -1457,7 +1463,8 @@ void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_i
                                            const std::unordered_map<int64_t, int64_t>& partition_versions,
                                            std::vector<TabletBasicInfo>& tablet_infos) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    if (g_worker == nullptr) {
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
         return;
     }
 
@@ -1473,7 +1480,7 @@ void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_i
         }
     } else {
         // iterate all shards and get the tablets belong to the given table_id and partition_id
-        auto shard_ids = g_worker->shard_ids();
+        auto shard_ids = worker->shard_ids();
         for (const auto& shard_id : shard_ids) {
             auto tablet_info_or =
                     get_tablet_basic_info(shard_id, table_id, partition_id, authorized_table_ids, partition_versions);
@@ -1502,9 +1509,10 @@ void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_i
 void TabletManager::stop() {
     _compaction_scheduler->stop();
 #ifdef USE_STAROS
-    if (g_worker != nullptr) {
+    auto worker = get_staros_worker();
+    if (worker != nullptr) {
         // clean the listener
-        g_worker->register_add_shard_listener(nullptr);
+        worker->register_add_shard_listener(nullptr);
     }
     if (_tablet_warmup_manager) {
         _tablet_warmup_manager->stop();

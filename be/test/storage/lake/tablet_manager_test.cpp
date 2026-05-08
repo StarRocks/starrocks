@@ -46,7 +46,8 @@
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
 // NOLINTNEXTLINE
 #include "script/script.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 
 namespace starrocks {
 
@@ -1359,13 +1360,13 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     shard_info.id = tablet_id;
     shard_info.properties.emplace("indexId", std::to_string(schema_id));
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
-    g_worker.reset(new MockStarOSWorker());
-    DeferOp op([origin_worker] { g_worker = origin_worker; });
+    // Preserve original worker value, and reset it to our mocked worker.
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
 
     // set mock function excepted call
-    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(g_worker.get());
+    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(get_staros_worker().get());
     EXPECT_CALL(*worker, _fetch_shard_info_from_remote(tablet_id)).WillOnce(::testing::Return(shard_info));
 
     // fire the testing
@@ -1386,10 +1387,10 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 200);
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
-    g_worker.reset(new MockStarOSWorker());
-    DeferOp op([origin_worker] { g_worker = origin_worker; });
+    // Preserve original worker value, and reset it to our mocked worker.
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
 
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
@@ -1715,7 +1716,7 @@ TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_falls_back_to_first_wh
 
 TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all_local) {
     // Without any sync-point override, is_tablet_in_worker returns true by default in
-    // unit tests (g_worker is null), so the first candidate is picked immediately.
+    // unit tests (the StarOS worker is null), so the first candidate is picked immediately.
     std::vector<int64_t> candidates{300, 301, 302};
     EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
 }

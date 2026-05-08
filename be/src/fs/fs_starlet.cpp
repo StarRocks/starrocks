@@ -45,7 +45,9 @@
 #include "io/core/seekable_input_stream.h"
 #include "io/core/throttled_output_stream.h"
 #include "io/core/throttled_seekable_input_stream.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_status.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
 
@@ -636,12 +638,13 @@ private:
         if (_shard_fs != nullptr) {
             return _shard_fs;
         }
-        auto handle_or = g_worker->get_shard_filesystem(shard_id, _conf);
+        auto worker = get_staros_worker();
+        auto handle_or = worker->get_shard_filesystem(shard_id, _conf);
         if (!handle_or.ok()) {
             return handle_or.status();
         }
         if (replication_options) {
-            *replication_options = g_worker->get_replication_options(shard_id, (*handle_or).replicas);
+            *replication_options = worker->get_replication_options(shard_id, (*handle_or).replicas);
         }
         return (*handle_or).file_system;
     }
@@ -745,10 +748,10 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) 
     absl::StatusOr<starrocks::FileSystemHandle> fs_st(absl::UnimplementedError(""));
     TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
     if (absl::IsUnimplemented(fs_st.status())) {
-        fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+        fs_st = get_staros_worker()->get_shard_filesystem(shard_id, conf);
     }
 #else
-    auto fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+    auto fs_st = get_staros_worker()->get_shard_filesystem(shard_id, conf);
 #endif
     if (!fs_st.ok()) {
         LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path

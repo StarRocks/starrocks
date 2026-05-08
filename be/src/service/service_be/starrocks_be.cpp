@@ -51,7 +51,7 @@
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
 #include "runtime/thrift_rpc_helper.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 
@@ -168,6 +168,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #else
     // On macOS, disable staros worker with starcache
     init_staros_worker(nullptr, process_metrics_registry->table_metrics_mgr());
+#endif
+#ifndef __APPLE__
+    lake::TabletManager::enable_tablet_warmup_listener();
 #endif
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif

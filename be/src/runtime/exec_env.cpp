@@ -105,7 +105,6 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thrift_rpc_helper.h"
-#include "service/staros_worker.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/remote_starlet_location_provider.h"
@@ -120,6 +119,10 @@
 #include "storage/update_manager.h"
 #include "types/hll.h"
 #include "udf/python/env.h"
+
+#ifdef USE_STAROS
+#include <fslib/configuration.h>
+#endif
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"

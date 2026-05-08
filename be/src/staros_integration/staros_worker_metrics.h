@@ -18,18 +18,18 @@
 
 namespace starrocks {
 
-class ServiceMetrics {
+class StarOSWorkerMetrics {
 public:
-    ServiceMetrics() = default;
-    explicit ServiceMetrics(MetricRegistry* registry) { install(registry); }
-    ~ServiceMetrics() = default;
+    StarOSWorkerMetrics() = default;
+    explicit StarOSWorkerMetrics(MetricRegistry* registry) { install(registry); }
+    ~StarOSWorkerMetrics() = default;
 
-    static ServiceMetrics* instance();
+    static StarOSWorkerMetrics* instance();
 
     void install(MetricRegistry* registry);
 
-    METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
 
 private:
     MetricRegistry* _registry = nullptr;

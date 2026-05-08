@@ -14,25 +14,12 @@
 
 #pragma once
 
-#include "base/metrics.h"
+#ifdef USE_STAROS
 
 namespace starrocks {
 
-class ServiceMetrics {
-public:
-    ServiceMetrics() = default;
-    explicit ServiceMetrics(MetricRegistry* registry) { install(registry); }
-    ~ServiceMetrics() = default;
-
-    static ServiceMetrics* instance();
-
-    void install(MetricRegistry* registry);
-
-    METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
-
-private:
-    MetricRegistry* _registry = nullptr;
-};
+void update_staros_starcache();
 
 } // namespace starrocks
+
+#endif // USE_STAROS

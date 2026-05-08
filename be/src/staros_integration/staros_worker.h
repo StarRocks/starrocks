@@ -18,10 +18,15 @@
 
 #include <starlet.h>
 
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -29,7 +34,6 @@
 #include "common/status.h"
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
-#include "starcache/star_cache.h"
 #include "worker.pb.h"
 
 namespace starrocks {
@@ -37,10 +41,6 @@ namespace starrocks {
 class Cache;
 class CacheKey;
 class TableMetricsManager;
-
-// TODO: find a better place to put this function
-// Convert absl::Status to starrocks::Status
-Status to_status(const absl::Status& absl_status);
 
 struct FileSystemHandle {
     std::shared_ptr<staros::starlet::fslib::FileSystem> file_system;
@@ -116,7 +116,7 @@ private:
     };
 
     // This function can be made static perfectly. The only reason to make it `virtual`
-    // is, for unit test MOCK as it is the only interface to interact with g_starlet.
+    // is, for unit test MOCK as it is the only interface to interact with the Starlet runtime.
     virtual absl::StatusOr<ShardInfo> _fetch_shard_info_from_remote(ShardId id);
 
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
@@ -161,17 +161,6 @@ private:
     add_shard_listener _add_shard_listener;
     TableMetricsManager* _table_metrics_mgr = nullptr;
 };
-
-extern std::shared_ptr<StarOSWorker> g_worker;
-extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
-void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
-                        TableMetricsManager* table_metrics_mgr = nullptr);
-void shutdown_staros_worker();
-void update_staros_starcache();
-Status batch_update_tablet_replica_info(const std::vector<uint64_t>& tablet_ids);
-Status staros_need_warmup_tablet(int64_t tablet_id);
-staros::WarmupLevel staros_worker_warmup_level();
-void set_starlet_in_shutdown();
 
 } // namespace starrocks
 #endif // USE_STAROS

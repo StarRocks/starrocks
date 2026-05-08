@@ -14,25 +14,15 @@
 
 #pragma once
 
-#include "base/metrics.h"
+#ifdef USE_STAROS
+
+#include "absl/status/status.h"
+#include "common/status.h"
 
 namespace starrocks {
 
-class ServiceMetrics {
-public:
-    ServiceMetrics() = default;
-    explicit ServiceMetrics(MetricRegistry* registry) { install(registry); }
-    ~ServiceMetrics() = default;
-
-    static ServiceMetrics* instance();
-
-    void install(MetricRegistry* registry);
-
-    METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
-
-private:
-    MetricRegistry* _registry = nullptr;
-};
+Status to_status(const absl::Status& absl_status);
 
 } // namespace starrocks
+
+#endif // USE_STAROS

@@ -31,13 +31,13 @@
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "runtime/thrift_rpc_helper.h"
+#include "staros_integration/staros_status.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
-
-// NOLINT
-#include "service/staros_worker.h"
 
 namespace {
 bvar::Adder<int64_t> g_lake_warmup_tablet_fail_count("lake_warmup_tablet_fail_count");
@@ -285,7 +285,12 @@ void TabletWarmupManager::batch_prepare_warmup() {
 
 void TabletWarmupManager::get_tablet_visible_version(const std::shared_ptr<WarmupContext>& ctx) {
     int64_t tablet_id = ctx->_tablet_id;
-    auto info_or = g_worker->get_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        abort_warmup(tablet_id, Status::ServiceUnavailable("StarOS worker is not initialized"));
+        return;
+    }
+    auto info_or = worker->get_shard_info(tablet_id);
     if (!info_or.ok()) {
         abort_warmup(tablet_id, to_status(info_or.status()));
         return;

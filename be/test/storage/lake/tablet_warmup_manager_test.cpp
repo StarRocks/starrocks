@@ -24,26 +24,22 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/scoped_updater.h"
-#include "common/config.h"
+#include "common/config_starlet_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/thread/threadpool.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/thrift_rpc_helper.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/options.h"
 #include "test_util.h"
-
-// NOLINTNEXTLINE
-#include "service/staros_worker.h"
-
-namespace starrocks {
-extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
-extern std::shared_ptr<StarOSWorker> g_worker;
-} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -74,20 +70,22 @@ public:
 
         srand(time(NULL));
         _worker_id = random();
-        // g_worker doesn't have add_shard_listner registered
-        g_worker = std::make_shared<StarOSWorker>();
-        g_worker->set_worker_id(_worker_id);
+        // _worker doesn't have add_shard_listener registered
+        _worker = std::make_shared<StarOSWorker>();
+        set_staros_worker_for_test(_worker);
+        _worker->set_worker_id(_worker_id);
         staros::WorkerGroupProperty property;
         property.set_warmup_level(staros::WarmupLevel::WARMUP_ALL);
-        g_worker->set_worker_group_property(property);
-        g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
+        _worker->set_worker_group_property(property);
+        (void)swap_starlet_for_test(std::make_unique<staros::starlet::Starlet>(_worker));
     }
 
     void TearDown() override {
         _tablet_mgr->stop();
         _tablet_mgr.reset();
-        g_starlet.reset();
-        g_worker.reset();
+        (void)swap_starlet_for_test(nullptr);
+        set_staros_worker_for_test(nullptr);
+        _worker.reset();
 
         FileSystem::Default()->delete_dir_recursive(_test_dir);
         _update_starlet_cache_config.reset();
@@ -117,6 +115,7 @@ public:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
     uint64_t _worker_id;
+    std::shared_ptr<StarOSWorker> _worker;
 
     std::unique_ptr<TabletManager> _tablet_mgr;
     TabletWarmupManager* _warmup_mgr;
@@ -211,13 +210,13 @@ TEST_F(TabletWarmupManagerTest, test_need_warmup) {
     // tablet info not exist
     EXPECT_FALSE(staros_need_warmup_tablet(tablet_id).ok());
     auto shardInfo = generateShardInfo(tablet_id, false);
-    auto st = g_worker->add_shard(shardInfo);
+    auto st = _worker->add_shard(shardInfo);
     EXPECT_TRUE(st.ok()) << st;
     // still not need warmup because of shardInfo
     EXPECT_FALSE(staros_need_warmup_tablet(tablet_id).ok());
 
     shardInfo = generateShardInfo(tablet_id, true);
-    st = g_worker->add_shard(shardInfo);
+    st = _worker->add_shard(shardInfo);
     EXPECT_TRUE(st.ok()) << st;
     // need warmup
     EXPECT_TRUE(staros_need_warmup_tablet(tablet_id).ok());
@@ -247,7 +246,7 @@ TEST_F(TabletWarmupManagerTest, test_tablet_abnormal_path) {
     {
         int64_t tablet_id = 1024;
         auto shard_info = generateShardInfo(tablet_id, true);
-        auto st = g_worker->add_shard(shard_info);
+        auto st = _worker->add_shard(shard_info);
         EXPECT_TRUE(st.ok()) << st;
 
         std::vector<std::shared_future<Status>> results;
@@ -274,7 +273,7 @@ TEST_F(TabletWarmupManagerTest, test_get_tablet_visible_version) {
         auto tablet_id = next_id();
         auto partition_id = -1;
         auto shard_info = generateShardInfo(tablet_id, true, partition_id);
-        auto st = g_worker->add_shard(shard_info);
+        auto st = _worker->add_shard(shard_info);
         EXPECT_TRUE(st.ok()) << st;
         auto future = _warmup_mgr->warmup_tablet2(tablet_id);
         auto ret = future.get();
@@ -284,7 +283,7 @@ TEST_F(TabletWarmupManagerTest, test_get_tablet_visible_version) {
         auto tablet_id = next_id();
         auto partition_id = next_id();
         auto shard_info = generateShardInfo(tablet_id, true, partition_id);
-        auto st = g_worker->add_shard(shard_info);
+        auto st = _worker->add_shard(shard_info);
         EXPECT_TRUE(st.ok()) << st;
         auto future = _warmup_mgr->warmup_tablet2(tablet_id);
         auto ret = future.get();
@@ -299,7 +298,7 @@ TEST_F(TabletWarmupManagerTest, test_get_tablet_visible_version) {
         cache->put(partition_id, 0x01);
 
         auto shard_info = generateShardInfo(tablet_id, true, partition_id);
-        auto st = g_worker->add_shard(shard_info);
+        auto st = _worker->add_shard(shard_info);
         EXPECT_TRUE(st.ok()) << st;
 
         auto future = _warmup_mgr->warmup_tablet2(tablet_id);
@@ -317,7 +316,7 @@ TEST_F(TabletWarmupManagerTest, test_batch_get_partitions_meta_from_frontend) {
     auto tablet_id = next_id();
     auto partition_id = next_id();
     auto shard_info = generateShardInfo(tablet_id, true, partition_id);
-    auto st = g_worker->add_shard(shard_info);
+    auto st = _worker->add_shard(shard_info);
     EXPECT_TRUE(st.ok()) << st;
     auto future = _warmup_mgr->warmup_tablet2(tablet_id);
     auto ret = future.get();
@@ -336,7 +335,7 @@ TEST_F(TabletWarmupManagerTest, test_do_warmup_tablet_metadata_not_found) {
     cache->put(partition_id, 0x0a);
 
     auto shard_info = generateShardInfo(tablet_id, true, partition_id);
-    auto st = g_worker->add_shard(shard_info);
+    auto st = _worker->add_shard(shard_info);
     EXPECT_TRUE(st.ok()) << st;
 
     auto future = _warmup_mgr->warmup_tablet2(tablet_id);
@@ -352,7 +351,7 @@ TEST_F(TabletWarmupManagerTest, test_do_warmup_tablet_done) {
     cache->put(ctx.partition_id, ctx.visible_version);
 
     auto shard_info = generateShardInfo(ctx.tablet_id, true, ctx.partition_id);
-    auto st = g_worker->add_shard(shard_info);
+    auto st = _worker->add_shard(shard_info);
     EXPECT_TRUE(st.ok()) << st;
 
     auto future = _warmup_mgr->warmup_tablet2(ctx.tablet_id);
@@ -383,7 +382,7 @@ TEST_F(TabletWarmupManagerTest, test_batch_report_tablet_replica_status) {
             cache->put(ctx.partition_id, ctx.visible_version);
 
             auto shard_info = generateShardInfo(tablet_id, true, partition_id);
-            auto st = g_worker->add_shard(shard_info);
+            auto st = _worker->add_shard(shard_info);
             EXPECT_TRUE(st.ok()) << st;
 
             auto future = _warmup_mgr->warmup_tablet2(tablet_id);
@@ -410,8 +409,8 @@ TEST_F(TabletWarmupManagerTest, test_batch_report_tablet_replica_status) {
 
 TEST_F(TabletWarmupManagerTest, test_chaos_concurrent) {
     // Do the following things concurrently
-    // * g_worker->add_shard()
-    // * g_worker->remove_shard()
+    // * _worker->add_shard()
+    // * _worker->remove_shard()
     // * write tablet data
     // * increase tablet version
     // * warmup tablet
@@ -446,7 +445,7 @@ TEST_F(TabletWarmupManagerTest, test_chaos_concurrent) {
                     auto pick_index = random_pick_index(gen, num_per_shard, index);
                     auto& ctx = tablet_ctxs[pick_index];
                     auto info = generateShardInfo(ctx.tablet_id, true, ctx.partition_id);
-                    auto st = g_worker->add_shard(info);
+                    auto st = _worker->add_shard(info);
                     EXPECT_TRUE(st.ok()) << st;
                 }
                 // sleep [10us, 50us) randomly
@@ -464,7 +463,7 @@ TEST_F(TabletWarmupManagerTest, test_chaos_concurrent) {
                 int op_num = gen() % num_per_shard / 2 + 1;
                 while (op_num-- > 0) {
                     auto pick_index = random_pick_index(gen, num_per_shard, index);
-                    auto st = g_worker->remove_shard(tablet_ctxs[pick_index].tablet_id);
+                    auto st = _worker->remove_shard(tablet_ctxs[pick_index].tablet_id);
                     EXPECT_TRUE(st.ok()) << st;
                 }
                 // sleep [10us, 50us) randomly

@@ -44,6 +44,7 @@
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"
 #include "service/service_metrics.h"
+#include "staros_integration/staros_worker_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
@@ -245,6 +246,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     compression::install_compression_context_pool_metrics(registry);
     HttpMetrics::instance()->install(registry);
     ServiceMetrics::instance()->install(registry);
+    StarOSWorkerMetrics::instance()->install(registry);
     auto* agent_metrics = AgentMetrics::instance();
     agent_metrics->install(registry);
     auto* runtime_metrics = RuntimeMetrics::instance();
