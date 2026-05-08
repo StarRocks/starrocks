@@ -921,8 +921,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
         if (!del.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(ropts.encryption_info,
-                             KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
+            ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
         }
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
         ASSIGN_OR_RETURN(auto buf, rf->read_all());
