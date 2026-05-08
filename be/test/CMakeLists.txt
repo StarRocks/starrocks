@@ -82,6 +82,7 @@ set(EXEC_FILES
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+        ./exec/pipeline/fragment_executor_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -269,6 +270,7 @@ set(EXEC_FILES
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
+        ./runtime/descriptors_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp

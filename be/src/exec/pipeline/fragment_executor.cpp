@@ -396,9 +396,16 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
 
 // there will be partition values used by this batch of scan ranges and maybe following scan ranges
 // so before process this batch of scan ranges, we have to put partition values into the table associated with.
-static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
-                                               const std::vector<TScanRangeParams>& scan_ranges) {
-    auto* obj_pool = runtime_state->obj_pool();
+// Exposed (non-static) so that unit tests can pin the contract that this helper allocates partition
+// descriptors from the query-level pool, not the per-fragment pool.
+Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                        const std::vector<TScanRangeParams>& scan_ranges) {
+    // HiveTableDescriptor is shared across fragment instances of the same query, so the
+    // partition descriptors it owns must outlive any single fragment. Use the query-level
+    // ObjectPool instead of runtime_state->obj_pool() (which is per fragment instance) to
+    // avoid a heap-use-after-free when one fragment finishes while another is still
+    // referencing the entry in _partition_id_to_desc_map.
+    auto* obj_pool = runtime_state->global_obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     TTableId cache_table_id = -1;
     TableDescriptor* table = nullptr;
