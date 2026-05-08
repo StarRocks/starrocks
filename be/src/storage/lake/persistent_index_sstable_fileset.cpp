@@ -114,9 +114,9 @@ bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstabl
     return true;
 }
 
-Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
-                                                IndexValue* values, KeyIndexSet* found_key_indexes,
-                                                std::unordered_set<const PersistentIndexSstable*>* touched_sstables) const {
+Status PersistentIndexSstableFileset::multi_get(
+        const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
+        KeyIndexSet* found_key_indexes, std::unordered_set<const PersistentIndexSstable*>* touched_sstables) const {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     // 0. if single standalone sstable, directly get.
     if (_standalone_sstable != nullptr) {
