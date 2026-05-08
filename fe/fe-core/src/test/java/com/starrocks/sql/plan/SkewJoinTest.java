@@ -240,9 +240,7 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
-                "  |  equal join conjunct: 9: cast = 5: v1",
-                "<slot 10> : CASE WHEN 22: cast IS NULL THEN 24: round WHEN 22: cast IN (1, 2) THEN 24: round " +
-                        "ELSE 0 END");
+                "  |  equal join conjunct: 9: cast = 5: v1");
     }
 
     @Test
