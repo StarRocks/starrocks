@@ -173,8 +173,6 @@ public class JDBCTableTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testToThriftWithTrailingSlash(@Mocked GlobalStateMgr globalStateMgr,
                                               @Mocked ResourceMgr resourceMgr) throws Exception {
         String uri = "jdbc:mysql://127.0.0.1:3306/";
@@ -241,7 +239,6 @@ public class JDBCTableTest {
     }
 
     @Test
->>>>>>> d328970f62 ([BugFix]: handle trailing slash when constructing JDBC URL (#70992))
     public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                            @Mocked ResourceMgr resourceMgr) {
         assertThrows(DdlException.class, () -> {
