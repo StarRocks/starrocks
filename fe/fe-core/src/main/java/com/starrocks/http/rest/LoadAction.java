@@ -113,7 +113,10 @@ public class LoadAction extends RestBaseAction {
     // for `_statistics_.rejected_records` and the request has been
     // dispatched as ROOT. Returning false leaves the request untouched
     // for the normal Basic-auth-and-checkPassword pipeline.
-    private boolean tryInternalTokenBypass(BaseRequest request, BaseResponse response)
+    //
+    // Package-private for testability: each fall-through branch is
+    // exercised independently in LoadActionInternalTokenTest.
+    boolean tryInternalTokenBypass(BaseRequest request, BaseResponse response)
             throws DdlException, AccessDeniedException {
         String token = request.getRequest().headers().get(INTERNAL_TOKEN_HEADER);
         if (Strings.isNullOrEmpty(token)) {
