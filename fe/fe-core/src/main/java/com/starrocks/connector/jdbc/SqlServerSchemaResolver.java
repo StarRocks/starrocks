@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
@@ -21,6 +22,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+>>>>>>> bcfe8d0d81 ([BugFix] Fix MV refresh with SQL Server table in JDBC catalog (#72962))
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -67,6 +76,11 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
         Map<String, String> newProp = new HashMap<>(properties);
         newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "[" + dbName + "]" + "." + "[" + name + "]");
         return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, newProp);
+    }
+
+    @Override
+    public List<Partition> getPartitions(Connection connection, Table table) {
+        return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
     }
 
     @Override
