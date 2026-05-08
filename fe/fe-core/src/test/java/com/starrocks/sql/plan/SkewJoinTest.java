@@ -236,7 +236,6 @@ public class SkewJoinTest extends PlanTestBase {
         sql = "select struct_tbl.c0, struct_tbl.c2.a, t0.v2 from default_catalog.test.struct_tbl " +
                 "join[skew|test.struct_tbl.c1.a(1,2)] test.t0 on t0.v1 = c1.a ";
         sqlPlan = getFragmentPlan(sql);
-<<<<<<< HEAD
         assertCContains(sqlPlan, "HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -244,13 +243,6 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 9: cast = 5: v1",
                 "<slot 10> : CASE WHEN 22: cast IS NULL THEN 24: round WHEN 22: cast IN (1, 2) THEN 24: round " +
                         "ELSE 0 END");
-=======
-        assertCContains(sqlPlan, "  14:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
-                "  |  equal join conjunct: 9: cast = 5: v1");
->>>>>>> e8a3f3414f ([BugFix] Fix incorrect shuffle distribution due to missing project node (#71075))
     }
 
     @Test
