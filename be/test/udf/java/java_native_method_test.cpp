@@ -373,8 +373,7 @@ TEST_F(JavaNativeMethodTest, get_struct_field_addrs_empty) {
     TypeDescriptor td(TYPE_STRUCT);
 
 #ifndef NDEBUG
-    ASSERT_DEATH_IF_SUPPORTED(ColumnHelper::create_column(td, /*nullable=*/true),
-                              "_field_names.size\\(\\) > 0");
+    ASSERT_DEATH_IF_SUPPORTED(ColumnHelper::create_column(td, /*nullable=*/true), "_field_names.size\\(\\) > 0");
 #else
     auto env = getJNIEnv();
     auto col = ColumnHelper::create_column(td, /*nullable=*/true);

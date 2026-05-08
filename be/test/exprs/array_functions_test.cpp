@@ -104,8 +104,7 @@ void ArrayFunctionsTest::_check_array(std::initializer_list<CppType> check_value
 
 template <typename CppType>
 void ArrayFunctionsTest::_check_array_nullable(std::initializer_list<CppType> check_values,
-                                               std::initializer_list<uint8_t> nulls,
-                                               const DatumArray& value) {
+                                               std::initializer_list<uint8_t> nulls, const DatumArray& value) {
     ASSERT_EQ(check_values.size(), value.size());
     const CppType* expected = check_values.begin();
     const uint8_t* null_values = nulls.begin();

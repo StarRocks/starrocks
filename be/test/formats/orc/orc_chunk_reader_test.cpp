@@ -631,8 +631,16 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
     }
     {
         Buffer<const char*> exp = make_buffer<const char*>({
-                "0",           "0.00000001",           "-0.00000001", "0.00000123",          "1230",
-                "-9.99999999", "-9999999999.99999999", "9.99999999",  "9999999999.99999999", "10",
+                "0",
+                "0.00000001",
+                "-0.00000001",
+                "0.00000123",
+                "1230",
+                "-9.99999999",
+                "-9999999999.99999999",
+                "9.99999999",
+                "9999999999.99999999",
+                "10",
                 "9999999990",
         });
         auto real = convert_orc_to_starrocks_decimalv2<18, 8>(_runtime_state.get(), &pool, orc_values);
@@ -708,8 +716,17 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
     }
     {
         Buffer<const char*> exp = make_buffer<const char*>({
-                "0",           "0",           "0",          "0",          "0.00000123", "-0.000000009", "-9.999999999",
-                "0.000000009", "9.999999999", "0.00000001", "9.99999999",
+                "0",
+                "0",
+                "0",
+                "0",
+                "0.00000123",
+                "-0.000000009",
+                "-9.999999999",
+                "0.000000009",
+                "9.999999999",
+                "0.00000001",
+                "9.99999999",
         });
         auto real = convert_orc_to_starrocks_decimalv2<18, 17>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
@@ -845,7 +862,17 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
     }
     {
         Buffer<const char*> exp = make_buffer<const char*>({
-                "0", "0", "0", "0", "0", "0", "-9.999999999", "0", "9.999999999", "0", "0.000000009",
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+                "-9.999999999",
+                "0",
+                "9.999999999",
+                "0",
+                "0.000000009",
         });
         auto real = convert_orc_to_starrocks_decimalv2<27, 26>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);

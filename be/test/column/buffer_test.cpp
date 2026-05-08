@@ -18,8 +18,8 @@
 
 #include <vector>
 
-#include "base/memory/jemalloc_allocator.h"
 #include "base/memory/default_allocator.h"
+#include "base/memory/jemalloc_allocator.h"
 
 namespace starrocks {
 
