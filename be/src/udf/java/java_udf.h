@@ -22,17 +22,9 @@
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "jni.h"
+#include "jvm/jvm_runtime.h"
 #include "types/logical_type.h"
 #include "udf/java/type_traits.h"
-
-// implements by libhdfs
-// hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
-// Why do we need to use this function?
-// 1. a thread can not attach to more than one virtual machine
-// 2. libhdfs depends on this function and does some initialization,
-// if the JVM has already created it, it won't create it anymore.
-// If we skip this function call will cause libhdfs to miss some initialization operations
-extern "C" JNIEnv* getJNIEnv(void);
 
 #define DEFINE_JAVA_PRIM_TYPE(TYPE) \
     jclass _class_##TYPE;           \
@@ -752,8 +744,5 @@ JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx);
 void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx);
 void clear_java_udaf_states(FunctionContext* ctx);
 void destroy_java_udaf_context(FunctionContext* ctx);
-
-// Check whether java runtime can work
-Status detect_java_runtime();
 
 } // namespace starrocks

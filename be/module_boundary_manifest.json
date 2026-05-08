@@ -37,6 +37,19 @@
       "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code."
     },
     {
+      "id": "jvm",
+      "doc_label": "Jvm",
+      "summary": "Low-level JVM runtime primitives without UDF, runtime, exec, filesystem, service, or util coupling.",
+      "owned_targets": ["Jvm"],
+      "owned_roots": ["be/src/jvm"],
+      "allowed_include_prefixes": ["jvm/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["udf/", "runtime/", "exec/", "fs/", "service/", "util/"],
+      "allowed_target_deps": ["Common", "Base", "Gutil"],
+      "allowed_test_targets": ["jvm_test"],
+      "allowed_test_link_deps": ["Jvm", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep JVM runtime helpers dependency-neutral; put UDF behavior, HDFS scan scheduling, metrics, and service integration in higher modules."
+    },
+    {
       "id": "cache",
       "doc_label": "Cache",
       "summary": "Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.",

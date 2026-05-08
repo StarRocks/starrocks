@@ -12,24 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/udf")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/jvm")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/jvm")
 
-set(UDF_FILES
-  java/utils.cpp
-  java/java_udf.cpp
-  java/java_data_converter.cpp
-  java/java_native_method.cpp
-  python/env.cpp
-  python/callstub.cpp
-  udf_call_stub.cpp
-  udf_downloader.cpp
-  udf_downloader.h
+ADD_BE_LIB(Jvm
+    jvm_runtime.cpp
 )
 
-ADD_BE_LIB(Udf ${UDF_FILES})
-target_link_libraries(Udf PUBLIC Jvm)
+target_link_libraries(Jvm PUBLIC Common Base Gutil)

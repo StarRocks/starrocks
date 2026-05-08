@@ -570,6 +570,7 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IOCore>
     StarOSIntegration
+    $<TARGET_FILE:Jvm>
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
     $<TARGET_FILE:Gutil>
@@ -951,6 +952,7 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
+add_subdirectory(${SRC_DIR}/jvm)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)

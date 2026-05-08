@@ -102,6 +102,14 @@ Core shared infrastructure above Base/Gutil and generated code only. Higher-leve
 - Core tests: `common_test`
 - Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code.
 
+### Jvm (`jvm`)
+Low-level JVM runtime primitives without UDF, runtime, exec, filesystem, service, or util coupling.
+- Targets: `Jvm`
+- Allowed internal include prefixes: `jvm/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Common`, `Base`, `Gutil`
+- Core tests: `jvm_test`
+- Remediation: Keep JVM runtime helpers dependency-neutral; put UDF behavior, HDFS scan scheduling, metrics, and service integration in higher modules.
+
 ### Cache (`cache`)
 Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
 - Targets: `Cache`

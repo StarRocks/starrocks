@@ -19,7 +19,7 @@
 #include "common/config_hdfs_fwd.h"
 #include "fs/fs_options_helper.h"
 #include "gutil/strings/substitute.h"
-#include "udf/java/java_udf.h"
+#include "jvm/jvm_runtime.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {

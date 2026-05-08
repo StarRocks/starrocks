@@ -1416,18 +1416,4 @@ jobject UDAFFunction::window_update_batch(int state, int peer_group_start, int p
     return res;
 }
 
-Status detect_java_runtime() {
-    const char* p = std::getenv("JAVA_HOME");
-    if (p == nullptr) {
-        return Status::RuntimeError("env 'JAVA_HOME' is not set");
-    }
-    auto st = call_hdfs_scan_function_in_pthread([]() {
-        if (getJNIEnv() == nullptr) {
-            return Status::RuntimeError("couldn't get JNIEnv, please check your java runtime");
-        }
-        return Status::OK();
-    });
-    return st->get_future().get();
-}
-
 } // namespace starrocks
