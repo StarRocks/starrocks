@@ -16,12 +16,8 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.ParseNode;
->>>>>>> 33ccc4ae03 ([BugFix] fix mem leak when caching mv plan context (#72300))
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
