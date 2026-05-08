@@ -126,6 +126,19 @@ public class AwsCloudConfigurationTest {
     }
 
     @Test
+    public void testWebIdentityToFileStoreInfoWithAssumeRole() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        properties.put("aws.s3.iam_role_arn", "arn:aws:iam::123456789:role/MyRole");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+        FileStoreInfo fileStoreInfo = cloudConfiguration.toFileStoreInfo();
+        Assertions.assertTrue(fileStoreInfo.getS3FsInfo().getCredential().hasAssumeRoleCredential());
+        Assertions.assertEquals("arn:aws:iam::123456789:role/MyRole",
+                fileStoreInfo.getS3FsInfo().getCredential().getAssumeRoleCredential().getIamRoleArn());
+    }
+
+    @Test
     public void testUseAwsSDKDefaultBehaviorPlusAssumeRole() {
         // Test hadoop configuration
         Map<String, String>  properties = new HashMap<>();
