@@ -93,7 +93,7 @@ jobs:
             --linuxdistro ubuntu
 
       - name: Clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID != ''
         run: eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Clean ENV
@@ -129,7 +129,7 @@ jobs:
             --linuxdistro ubuntu
 
       - name: Clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID != ''
         run: eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Clean ENV
@@ -182,7 +182,8 @@ jobs:
       CLUSTER_NAME:  ${{ needs.deploy.outputs.CLUSTER_NAME }}
       WEEKLY_REVIEW: 'true'
     outputs:
-      sql_oss_path: ${{ steps.run.outputs.sql_oss_path }}
+      sql_oss_path:   ${{ steps.run.outputs.sql_oss_path }}
+      MYSQL_ECI_ID:   ${{ steps.run.outputs.MYSQL_ECI_ID }}
     steps:
       - name: Run SQL-Tester (inspection mode)
         id: run
@@ -216,6 +217,10 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/backup_log_cores.sh || true
+
+      - name: Clean MySQL ECI
+        if: always() && needs.sql-tester-review.outputs.MYSQL_ECI_ID != ''
+        run: eci rm ${{ needs.sql-tester-review.outputs.MYSQL_ECI_ID }} || true
 
       - name: Delete ECS cluster
         if: always()
