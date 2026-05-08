@@ -719,11 +719,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     }
 
     // `io.file.buffer.size` of https://apache.github.io/hadoop/hadoop-project-dist/hadoop-common/core-default.xml
-    int hdfs_write_buffer_size = 0;
     // pass zero to hdfsOpenFile will use the default hdfs_write_buffer_size
-    if (_options.result_file_options != nullptr) {
-        hdfs_write_buffer_size = _options.result_file_options->write_buffer_size_kb;
-    }
+    int hdfs_write_buffer_size = _options.hdfs_write_buffer_size_kb;
     if (_options.export_sink != nullptr && _options.export_sink->__isset.hdfs_write_buffer_size_kb) {
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
     }

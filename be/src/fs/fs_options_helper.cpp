@@ -14,7 +14,6 @@
 
 #include "fs/fs_options_helper.h"
 
-#include "exec/data_sinks/file_result_writer.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/DataSinks_types.h"
 
@@ -25,8 +24,8 @@ const THdfsProperties* FSOptionsHelper::hdfs_properties(const FSOptions& options
         return &options.scan_range_params->hdfs_properties;
     } else if (options.export_sink != nullptr && options.export_sink->__isset.hdfs_properties) {
         return &options.export_sink->hdfs_properties;
-    } else if (options.result_file_options != nullptr) {
-        return &options.result_file_options->hdfs_properties;
+    } else if (options.hdfs_properties != nullptr) {
+        return options.hdfs_properties;
     } else if (options.upload != nullptr && options.upload->__isset.hdfs_properties) {
         return &options.upload->hdfs_properties;
     } else if (options.download != nullptr && options.download->__isset.hdfs_properties) {
