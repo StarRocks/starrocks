@@ -16,7 +16,7 @@
 
 #include <unordered_map>
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "connector/iceberg_row_delta_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"

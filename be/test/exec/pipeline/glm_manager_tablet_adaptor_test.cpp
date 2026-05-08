@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/lookup/tablet_adaptor.h"
 #include "exec/pipeline/scan/glm_manager.h"
