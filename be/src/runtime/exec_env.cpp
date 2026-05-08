@@ -117,6 +117,10 @@
 #include "types/hll.h"
 #include "udf/python/env.h"
 
+#ifdef USE_STAROS
+#include <fslib/configuration.h>
+#endif
+
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
 #endif

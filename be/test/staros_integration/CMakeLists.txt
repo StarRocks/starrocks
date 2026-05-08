@@ -22,6 +22,10 @@ set(STAROS_INTEGRATION_TEST_FILES
     staros_worker_metrics_test.cpp
 )
 
+if (NOT APPLE)
+    list(APPEND STAROS_INTEGRATION_TEST_FILES ../base/cxa_throw_wrap.cpp)
+endif()
+
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND STAROS_INTEGRATION_TEST_FILES staros_worker_test.cpp)
 endif()
