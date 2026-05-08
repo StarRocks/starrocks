@@ -82,7 +82,7 @@ jobs:
     steps:
       - name: Run FE-UT (targeted unstable cases only)
         id: run_ut
-        timeout-minutes: 90
+        timeout-minutes: 180
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/elastic-ut-review.sh \
@@ -118,7 +118,7 @@ jobs:
     steps:
       - name: Run BE-UT (targeted unstable cases only)
         id: run_ut
-        timeout-minutes: 120
+        timeout-minutes: 240
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/elastic-ut-review.sh \
@@ -186,7 +186,7 @@ jobs:
     steps:
       - name: Run SQL-Tester (inspection mode)
         id: run
-        timeout-minutes: 120
+        timeout-minutes: 360
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
 
