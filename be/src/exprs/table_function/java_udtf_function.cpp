@@ -59,6 +59,17 @@ public:
     jclass get_udtf_clazz() { return _udtf_class.clazz(); }
     jobject handle() { return _udtf_handle.handle(); }
 
+    // Per-SQL-arg / return UdfTypeDesc Java handles. Slots whose type subtree contains
+    // no STRUCT are stored as null-handle and the existing scalar/array/map paths run
+    // unchanged. The handles are owned by `_process_type_descs` (global refs).
+    jobject arg_type_desc_handle(int i) const {
+        if (i < 0 || i >= static_cast<int>(_process_type_descs.args.size())) {
+            return nullptr;
+        }
+        return _process_type_descs.args[i].handle();
+    }
+    jobject return_type_desc_handle() const { return _process_type_descs.ret.handle(); }
+
 private:
     std::string _libpath;
     std::string _symbol;
@@ -70,6 +81,7 @@ private:
     std::unique_ptr<JavaMethodDescriptor> _process;
     std::vector<TypeDescriptor> _arg_type_descs;
     TypeDescriptor _ret_type;
+    JavaUdfMethodTypeDescs _process_type_descs;
 };
 
 Status JavaUDTFState::open() {
@@ -92,9 +104,28 @@ Status JavaUDTFState::open() {
         (*res)->name = std::move(method_name);
         (*res)->signature = std::move(signature);
         (*res)->method_desc = std::move(mtdesc);
+        // The reflective Method object is needed for STRUCT-aware UdfTypeDesc construction
+        // (walks getGenericParameterTypes / getGenericReturnType). For non-STRUCT signatures
+        // it's unused but harmless.
+        ASSIGN_OR_RETURN((*res)->method, analyzer->get_method_object(clazz, name));
         return Status::OK();
     };
     RETURN_IF_ERROR(add_method("process", _udtf_class.clazz(), &_process));
+
+    // Build per-SQL-arg / return UdfTypeDesc trees for the `process` method when STRUCT
+    // appears anywhere in the signature. The same UdfTypeDesc is consulted by both
+    // cast_to_jvalue (per-row input boxing) and append_jvalue / check_type_matched
+    // (per-row output drain).
+    //
+    // UDTF's Java method returns `T[]` (an array of rows) but the SQL return type is the
+    // per-row element type, so pass `unwrap_return_array_layer=true` to drop the array
+    // layer off the reflective formal type before pairing it with `_ret_type`.
+    {
+        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+        ASSIGN_OR_RETURN(_process_type_descs,
+                         build_method_udf_type_descs(env, _process->method.handle(), _arg_type_descs, _ret_type,
+                                                     /*state_offset=*/0, /*unwrap_return_array_layer=*/true));
+    }
 
     return Status::OK();
 }
@@ -185,7 +216,8 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
         for (int j = 0; j < num_cols; ++j) {
             auto method_type = stateUDTF->method_process()->method_desc[j + 1];
-            auto val_st = cast_to_jvalue(stateUDTF->arg_type_descs()[j], method_type.is_box, cols[j].get(), i);
+            auto val_st = cast_to_jvalue(stateUDTF->arg_type_descs()[j], method_type.is_box, cols[j].get(), i,
+                                         stateUDTF->arg_type_desc_handle(j));
             if (!val_st.ok()) {
                 stateUDTF->set_status(val_st.status());
                 return {};
@@ -219,13 +251,14 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
         for (int j = 0; j < len; ++j) {
             jobject vi = env->GetObjectArrayElement((jobjectArray)rets[i], j);
             LOCAL_REF_GUARD_ENV(env, vi);
-            auto st = check_type_matched(stateUDTF->type_desc(), vi);
+            auto st = check_type_matched(stateUDTF->type_desc(), vi, stateUDTF->return_type_desc_handle());
             if (UNLIKELY(!st.ok())) {
                 state->set_status(st);
                 return {};
             }
             auto res = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi},
-                                     runtime_state != nullptr && runtime_state->error_if_overflow());
+                                     runtime_state != nullptr && runtime_state->error_if_overflow(),
+                                     stateUDTF->return_type_desc_handle());
             if (UNLIKELY(!res.ok())) {
                 state->set_status(Status::InternalError(res.to_string()));
                 return {};

@@ -282,8 +282,21 @@ void release_jvalue(bool is_box, jvalue val) {
     }
 }
 
-// Used in UDAF/convert const columns
-StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, const Column* col, int row_num) {
+// Forward declarations for helpers that read fields off a UdfTypeDesc jobject.
+// Defined later in this file, but we need them in cast_to_jvalue / append_jvalue /
+// check_type_matched for STRUCT support.
+static jobject get_type_desc_child(JVMFunctionHelper& helper, jobject type_desc, int index);
+static jclass get_type_desc_record_class(JVMFunctionHelper& helper, jobject type_desc);
+
+// Used in UDAF/UDTF per-row paths and convert const columns.
+//
+// For TYPE_STRUCT, `type_desc_obj` (a UdfTypeDesc jobject) supplies the formal Java
+// record class so we can construct a record instance via UDFHelper.createBoxedStructArray
+// (re-used for the single-row case by feeding it 1-element field arrays). For non-STRUCT
+// subtrees `type_desc_obj` may be null and the existing scalar/array/map paths run
+// unchanged.
+StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, const Column* col, int row_num,
+                                jobject type_desc_obj) {
     DCHECK(!col->is_constant());
 
     auto type = type_desc.type;
@@ -362,8 +375,13 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         ASSIGN_OR_RETURN(auto object, meta.array_list_class->newLocalInstance());
         LOCAL_REF_GUARD(object);
         JavaListStub list_stub(object);
+        jobject elem_desc = get_type_desc_child(helper, type_desc_obj, 0);
+        DeferOp drop_elem_desc([&]() {
+            if (elem_desc) helper.getEnv()->DeleteLocalRef(elem_desc);
+        });
         for (size_t i = offset; i < offset + size; ++i) {
-            ASSIGN_OR_RETURN(auto e, cast_to_jvalue(type_desc.children[0], true, spec_col->elements_column().get(), i));
+            ASSIGN_OR_RETURN(auto e, cast_to_jvalue(type_desc.children[0], true, spec_col->elements_column().get(), i,
+                                                    elem_desc));
             auto local_obj = e.l;
             LOCAL_REF_GUARD(local_obj);
             RETURN_IF_ERROR(list_stub.add(local_obj));
@@ -384,14 +402,23 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         LOCAL_REF_GUARD(val_lists);
         JavaListStub val_list_stub(val_lists);
 
+        jobject key_desc = get_type_desc_child(helper, type_desc_obj, 0);
+        DeferOp drop_key_desc([&]() {
+            if (key_desc) helper.getEnv()->DeleteLocalRef(key_desc);
+        });
+        jobject val_desc = get_type_desc_child(helper, type_desc_obj, 1);
+        DeferOp drop_val_desc([&]() {
+            if (val_desc) helper.getEnv()->DeleteLocalRef(val_desc);
+        });
         for (size_t i = offset; i < offset + size; ++i) {
-            ASSIGN_OR_RETURN(auto key, cast_to_jvalue(type_desc.children[0], true, spec_col->keys_column().get(), i));
+            ASSIGN_OR_RETURN(auto key,
+                             cast_to_jvalue(type_desc.children[0], true, spec_col->keys_column().get(), i, key_desc));
             auto key_obj = key.l;
             LOCAL_REF_GUARD(key_obj);
             RETURN_IF_ERROR(key_list_stub.add(key_obj));
 
             ASSIGN_OR_RETURN(auto value,
-                             cast_to_jvalue(type_desc.children[1], true, spec_col->values_column().get(), i));
+                             cast_to_jvalue(type_desc.children[1], true, spec_col->values_column().get(), i, val_desc));
             auto value_obj = value.l;
             LOCAL_REF_GUARD(value_obj);
             RETURN_IF_ERROR(val_list_stub.add(value_obj));
@@ -400,6 +427,69 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         ASSIGN_OR_RETURN(auto m, immutable_map_meta.newLocalInstance(key_lists, val_lists));
         auto res = jvalue{.l = m};
         return res;
+    }
+    case TYPE_STRUCT: {
+        if (type_desc_obj == nullptr) {
+            return Status::InternalError("STRUCT cast_to_jvalue requires a UdfTypeDesc with the formal record class");
+        }
+        jclass record_class = get_type_desc_record_class(helper, type_desc_obj);
+        if (record_class == nullptr) {
+            return Status::InternalError("STRUCT cast_to_jvalue: missing formal record class on UdfTypeDesc");
+        }
+        DeferOp drop_record_class([&]() { helper.getEnv()->DeleteLocalRef(record_class); });
+
+        if (!col->is_struct()) {
+            return Status::InternalError("expected StructColumn for STRUCT slot");
+        }
+        const auto* struct_col = down_cast<const StructColumn*>(col);
+        int num_fields = static_cast<int>(struct_col->fields_size());
+        if (static_cast<int>(type_desc.children.size()) != num_fields) {
+            return Status::InternalError("STRUCT cast_to_jvalue: SQL field count != column field count");
+        }
+
+        // Build a single-row Object[1] for each subfield. We re-use the existing
+        // batched helper UDFHelper.createBoxedStructArray with num_rows=1 instead of
+        // bringing up a parallel single-row record-construction path: it takes
+        // per-field Object[1] arrays and a null bitmap and returns Object[1] holding
+        // the constructed record (or null when row 0 is null).
+        JNIEnv* env = helper.getEnv();
+        jclass object_clazz = env->FindClass("java/lang/Object");
+        DeferOp drop_object_clazz([&]() { env->DeleteLocalRef(object_clazz); });
+        jobjectArray field_arrays = env->NewObjectArray(num_fields, object_clazz, nullptr);
+        if (field_arrays == nullptr) {
+            return Status::InternalError("failed to allocate field_arrays for STRUCT cast_to_jvalue");
+        }
+        DeferOp drop_field_arrays([&]() { env->DeleteLocalRef(field_arrays); });
+
+        for (int f = 0; f < num_fields; ++f) {
+            const Column* field_col = struct_col->field_column_raw_ptr(f);
+            jobject child_desc = get_type_desc_child(helper, type_desc_obj, f);
+            DeferOp drop_child_desc([&]() {
+                if (child_desc) env->DeleteLocalRef(child_desc);
+            });
+            ASSIGN_OR_RETURN(jvalue field_val,
+                             cast_to_jvalue(type_desc.children[f], true, field_col, row_num, child_desc));
+            // Wrap the single field value in a 1-element Object[].
+            jobjectArray cell = env->NewObjectArray(1, object_clazz, field_val.l);
+            release_jvalue(true, field_val);
+            if (cell == nullptr) {
+                return Status::InternalError("failed to allocate cell array for STRUCT field");
+            }
+            env->SetObjectArrayElement(field_arrays, f, cell);
+            env->DeleteLocalRef(cell);
+        }
+
+        // STRUCT cell may itself be null; the parent NullableColumn was already peeled
+        // by the prologue of cast_to_jvalue, so `col` here is the data column. No null
+        // bitmap is needed at this point — we always have a non-null struct value.
+        ASSIGN_OR_RETURN(jobject out_arr, helper.create_boxed_struct_array(record_class, /*num_rows=*/1,
+                                                                           /*null_buff=*/nullptr, field_arrays));
+        DeferOp drop_out_arr([&]() { env->DeleteLocalRef(out_arr); });
+        // out_arr is Object[1] containing the constructed record. Lift index 0 out as
+        // a fresh local ref since the array itself is dropped on scope exit.
+        jobject record = env->GetObjectArrayElement((jobjectArray)out_arr, 0);
+        v.l = record;
+        break;
     }
     default:
         DCHECK(false) << "unsupported UDF type:" << type;
@@ -534,7 +624,8 @@ Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
     return Status::OK();
 }
 
-Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val, bool error_if_overflow) {
+Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val, bool error_if_overflow,
+                     jobject type_desc_obj) {
     auto& helper = JVMFunctionHelper::getInstance();
     if (col->is_nullable() && val.l == nullptr) {
         col->append_nulls(1);
@@ -603,10 +694,14 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
             }
             auto* data_column = ColumnHelper::get_data_column(col);
             auto* array_column = down_cast<ArrayColumn*>(data_column);
+            jobject elem_desc = get_type_desc_child(helper, type_desc_obj, 0);
+            DeferOp drop_elem_desc([&]() {
+                if (elem_desc) helper.getEnv()->DeleteLocalRef(elem_desc);
+            });
             for (size_t i = 0; i < len; ++i) {
                 ASSIGN_OR_RETURN(auto element, list_stub.get(i));
                 RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, array_column->elements_column_raw_ptr(),
-                                              {.l = element}));
+                                              {.l = element}, error_if_overflow, elem_desc));
             }
             auto* offsets_col = array_column->offsets_column_raw_ptr();
             size_t last_offset = offsets_col->get_data().back();
@@ -629,19 +724,102 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
 
             ASSIGN_OR_RETURN(auto len, key_list_stub.size());
 
+            jobject key_desc = get_type_desc_child(helper, type_desc_obj, 0);
+            DeferOp drop_key_desc([&]() {
+                if (key_desc) helper.getEnv()->DeleteLocalRef(key_desc);
+            });
+            jobject val_desc = get_type_desc_child(helper, type_desc_obj, 1);
+            DeferOp drop_val_desc([&]() {
+                if (val_desc) helper.getEnv()->DeleteLocalRef(val_desc);
+            });
             for (size_t i = 0; i < len; ++i) {
                 ASSIGN_OR_RETURN(auto key_element, key_list_stub.get(i));
                 RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, map_column->keys_column_raw_ptr(),
-                                              {.l = key_element}));
+                                              {.l = key_element}, error_if_overflow, key_desc));
 
                 ASSIGN_OR_RETURN(auto val_element, val_list_stub.get(i));
                 RETURN_IF_ERROR(append_jvalue(type_desc.children[1], true, map_column->values_column_raw_ptr(),
-                                              {.l = val_element}));
+                                              {.l = val_element}, error_if_overflow, val_desc));
             }
 
             auto* offsets_col = map_column->offsets_column_raw_ptr();
             size_t last_offset = offsets_col->get_data().back();
             offsets_col->get_data().push_back(last_offset + len);
+            break;
+        }
+        case TYPE_STRUCT: {
+            // Recurse into each subfield by reading the matching record component
+            // accessor and forwarding the boxed value to the subfield column. This
+            // mirrors the per-row drain logic that writeResult does in batch on
+            // the Java side, but stays per-row to fit the existing UDTF/UDAF
+            // single-row append path.
+            if (col->is_nullable()) {
+                down_cast<NullableColumn*>(col)->null_column_data().emplace_back(0);
+            }
+            auto* data_column = ColumnHelper::get_data_column(col);
+            if (!data_column->is_struct()) {
+                return Status::InternalError("expected StructColumn for STRUCT slot in append_jvalue");
+            }
+            auto* struct_col = down_cast<StructColumn*>(data_column);
+            int num_fields = static_cast<int>(struct_col->fields_size());
+            if (static_cast<int>(type_desc.children.size()) != num_fields) {
+                return Status::InternalError("STRUCT append_jvalue: SQL field count != column field count");
+            }
+
+            // Look up record component accessors via reflection on Class<?>.
+            // The record instance's runtime class is the formal record type the FE
+            // analyzer bound to this STRUCT slot; getRecordComponents lives on Class.
+            JNIEnv* env = helper.getEnv();
+            jclass record_class = env->GetObjectClass(val.l);
+            DeferOp drop_record_class([&]() { env->DeleteLocalRef(record_class); });
+            jclass class_clazz = env->FindClass("java/lang/Class");
+            DeferOp drop_class_clazz([&]() { env->DeleteLocalRef(class_clazz); });
+            jmethodID get_components =
+                    env->GetMethodID(class_clazz, "getRecordComponents", "()[Ljava/lang/reflect/RecordComponent;");
+            if (get_components == nullptr) {
+                env->ExceptionClear();
+                return Status::InternalError("STRUCT append_jvalue requires Java records (JDK 14+)");
+            }
+            jobjectArray comps = (jobjectArray)env->CallObjectMethod(record_class, get_components);
+            if (env->ExceptionCheck() || comps == nullptr) {
+                env->ExceptionClear();
+                return Status::InternalError("getRecordComponents failed in append_jvalue");
+            }
+            DeferOp drop_comps([&]() { env->DeleteLocalRef(comps); });
+            jclass rc_clazz = env->FindClass("java/lang/reflect/RecordComponent");
+            DeferOp drop_rc_clazz([&]() { env->DeleteLocalRef(rc_clazz); });
+            jmethodID get_accessor = env->GetMethodID(rc_clazz, "getAccessor", "()Ljava/lang/reflect/Method;");
+            jclass method_clazz = env->FindClass("java/lang/reflect/Method");
+            DeferOp drop_method_clazz([&]() { env->DeleteLocalRef(method_clazz); });
+            jmethodID method_invoke = env->GetMethodID(method_clazz, "invoke",
+                                                       "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
+
+            for (int f = 0; f < num_fields; ++f) {
+                jobject comp = env->GetObjectArrayElement(comps, f);
+                DeferOp drop_comp([&]() { env->DeleteLocalRef(comp); });
+                jobject accessor = env->CallObjectMethod(comp, get_accessor);
+                DeferOp drop_accessor([&]() {
+                    if (accessor) env->DeleteLocalRef(accessor);
+                });
+                if (env->ExceptionCheck() || accessor == nullptr) {
+                    env->ExceptionClear();
+                    return Status::InternalError("RecordComponent.getAccessor returned null");
+                }
+                jobject sub = env->CallObjectMethod(accessor, method_invoke, val.l, nullptr);
+                DeferOp drop_sub([&]() {
+                    if (sub) env->DeleteLocalRef(sub);
+                });
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    return Status::InternalError("Method.invoke on record accessor threw");
+                }
+                jobject child_desc = get_type_desc_child(helper, type_desc_obj, f);
+                DeferOp drop_child_desc([&]() {
+                    if (child_desc) env->DeleteLocalRef(child_desc);
+                });
+                RETURN_IF_ERROR(append_jvalue(type_desc.children[f], true, struct_col->field_column_raw_ptr(f),
+                                              {.l = sub}, error_if_overflow, child_desc));
+            }
             break;
         }
         default:
@@ -652,7 +830,7 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
     return Status::OK();
 }
 
-Status check_type_matched(const TypeDescriptor& type_desc, jobject val) {
+Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject type_desc_obj) {
     if (val == nullptr) {
         return Status::OK();
     }
@@ -732,6 +910,26 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val) {
             LOCAL_REF_GUARD(clazz);
             return Status::InternalError(
                     fmt::format("Type not matched, expect Map, but got {}", helper.to_string(clazz)));
+        }
+        break;
+    }
+    case TYPE_STRUCT: {
+        // The FE analyzer already validates the formal record class matches the SQL
+        // STRUCT shape at CREATE FUNCTION time, so per-row class identity is enough.
+        // We accept any record subclass of the declared formal class.
+        if (type_desc_obj == nullptr) {
+            return Status::InternalError("STRUCT check_type_matched requires UdfTypeDesc with formal record class");
+        }
+        jclass record_class = get_type_desc_record_class(helper, type_desc_obj);
+        if (record_class == nullptr) {
+            return Status::InternalError("STRUCT check_type_matched: missing formal record class");
+        }
+        DeferOp drop_record_class([&]() { env->DeleteLocalRef(record_class); });
+        if (!env->IsInstanceOf(val, record_class)) {
+            auto clazz = env->GetObjectClass(val);
+            LOCAL_REF_GUARD(clazz);
+            return Status::InternalError(fmt::format("Type not matched, expect record {}, but got {}",
+                                                     helper.to_string(record_class), helper.to_string(clazz)));
         }
         break;
     }
@@ -1222,6 +1420,178 @@ static StatusOr<jobject> box_column(JVMFunctionHelper& helper, const TypeDescrip
     return conv.result();
 }
 
+// Walk the SQL type tree to determine whether a STRUCT exists anywhere in it.
+// Used to short-circuit the per-arg / return UdfTypeDesc construction when no
+// STRUCT is reachable from the slot.
+static bool type_subtree_has_struct(const TypeDescriptor& td) {
+    if (td.type == TYPE_STRUCT) return true;
+    for (const auto& c : td.children) {
+        if (type_subtree_has_struct(c)) return true;
+    }
+    return false;
+}
+
+StatusOr<JavaUdfMethodTypeDescs> build_method_udf_type_descs(JNIEnv* env, jobject method_obj,
+                                                             const std::vector<TypeDescriptor>& sql_arg_types,
+                                                             const TypeDescriptor& sql_return_type, int state_offset,
+                                                             bool unwrap_return_array_layer) {
+    JavaUdfMethodTypeDescs out;
+    int num_sql_args = static_cast<int>(sql_arg_types.size());
+    out.args.reserve(num_sql_args);
+    for (int i = 0; i < num_sql_args; ++i) {
+        out.args.emplace_back(JavaGlobalRef(nullptr));
+    }
+
+    bool any_struct = type_subtree_has_struct(sql_return_type);
+    for (int i = 0; i < num_sql_args && !any_struct; ++i) {
+        if (type_subtree_has_struct(sql_arg_types[i])) {
+            any_struct = true;
+        }
+    }
+    if (!any_struct) {
+        return out;
+    }
+
+    jclass method_class = env->FindClass("java/lang/reflect/Method");
+    DCHECK(method_class != nullptr);
+    DeferOp drop_method_class([&]() { env->DeleteLocalRef(method_class); });
+
+    jmethodID get_generic_param =
+            env->GetMethodID(method_class, "getGenericParameterTypes", "()[Ljava/lang/reflect/Type;");
+    jmethodID get_generic_return = env->GetMethodID(method_class, "getGenericReturnType", "()Ljava/lang/reflect/Type;");
+    jmethodID is_var_args_mid = env->GetMethodID(method_class, "isVarArgs", "()Z");
+    jmethodID get_param_count_mid = env->GetMethodID(method_class, "getParameterCount", "()I");
+    DCHECK(get_generic_param != nullptr && get_generic_return != nullptr);
+    DCHECK(is_var_args_mid != nullptr && get_param_count_mid != nullptr);
+
+    jobjectArray generic_params = (jobjectArray)env->CallObjectMethod(method_obj, get_generic_param);
+    if (env->ExceptionCheck() || generic_params == nullptr) {
+        env->ExceptionClear();
+        return Status::InternalError("failed to introspect UDF method generic parameter types");
+    }
+    DeferOp drop_generic_params([&]() { env->DeleteLocalRef(generic_params); });
+
+    // Java method parameter layout: [state_offset opaque slots][SQL fixed slots][optional varargs slot]
+    // Varargs slot's formal type is either Class<T[]> or GenericArrayType(T<...>[]).
+    jboolean is_varargs = env->CallBooleanMethod(method_obj, is_var_args_mid);
+    jint java_param_count = env->CallIntMethod(method_obj, get_param_count_mid);
+    int sql_fixed_count = std::max(0, java_param_count - state_offset - (is_varargs ? 1 : 0));
+
+    jobject varargs_elem_formal = nullptr;
+    DeferOp drop_varargs_elem([&]() {
+        if (varargs_elem_formal) env->DeleteLocalRef(varargs_elem_formal);
+    });
+    if (is_varargs && num_sql_args > sql_fixed_count) {
+        jobject varargs_formal = env->GetObjectArrayElement(generic_params, state_offset + sql_fixed_count);
+        if (env->ExceptionCheck() || varargs_formal == nullptr) {
+            env->ExceptionClear();
+            return Status::InternalError("failed to read UDF varargs formal type");
+        }
+        DeferOp drop_varargs_formal([&]() { env->DeleteLocalRef(varargs_formal); });
+
+        jclass gat_clazz = env->FindClass("java/lang/reflect/GenericArrayType");
+        DeferOp drop_gat_clazz([&]() {
+            if (gat_clazz) env->DeleteLocalRef(gat_clazz);
+        });
+        jclass class_clazz = env->FindClass("java/lang/Class");
+        DeferOp drop_class_clazz([&]() {
+            if (class_clazz) env->DeleteLocalRef(class_clazz);
+        });
+
+        if (gat_clazz != nullptr && env->IsInstanceOf(varargs_formal, gat_clazz)) {
+            jmethodID get_component =
+                    env->GetMethodID(gat_clazz, "getGenericComponentType", "()Ljava/lang/reflect/Type;");
+            varargs_elem_formal = env->CallObjectMethod(varargs_formal, get_component);
+        } else if (class_clazz != nullptr && env->IsInstanceOf(varargs_formal, class_clazz)) {
+            jmethodID get_component = env->GetMethodID(class_clazz, "getComponentType", "()Ljava/lang/Class;");
+            varargs_elem_formal = env->CallObjectMethod(varargs_formal, get_component);
+        } else {
+            return Status::InternalError("UDF varargs formal type is neither Class nor GenericArrayType");
+        }
+        if (env->ExceptionCheck() || varargs_elem_formal == nullptr) {
+            env->ExceptionClear();
+            return Status::InternalError("failed to unwrap UDF varargs element type");
+        }
+    }
+
+    for (int i = 0; i < num_sql_args; ++i) {
+        if (!type_subtree_has_struct(sql_arg_types[i])) {
+            continue;
+        }
+        jobject formal = nullptr;
+        DeferOp drop_formal([&]() {
+            if (formal) env->DeleteLocalRef(formal);
+        });
+        if (i < sql_fixed_count) {
+            formal = env->GetObjectArrayElement(generic_params, state_offset + i);
+            if (env->ExceptionCheck() || formal == nullptr) {
+                env->ExceptionClear();
+                return Status::InternalError(fmt::format("UDF method parameter {} formal type is null", i));
+            }
+        } else {
+            formal = env->NewLocalRef(varargs_elem_formal);
+            if (formal == nullptr) {
+                return Status::InternalError("failed to retain UDF varargs element formal type");
+            }
+        }
+        ASSIGN_OR_RETURN(jobject local_desc, build_udf_type_desc(env, sql_arg_types[i], formal));
+        out.args[i] = JavaGlobalRef(env->NewGlobalRef(local_desc));
+        env->DeleteLocalRef(local_desc);
+    }
+
+    if (type_subtree_has_struct(sql_return_type)) {
+        jobject ret_formal = env->CallObjectMethod(method_obj, get_generic_return);
+        if (env->ExceptionCheck() || ret_formal == nullptr) {
+            env->ExceptionClear();
+            return Status::InternalError("failed to introspect UDF method generic return type");
+        }
+        DeferOp drop_ret([&]() {
+            if (ret_formal) env->DeleteLocalRef(ret_formal);
+        });
+
+        if (unwrap_return_array_layer) {
+            // UDTF: SQL return type is the per-row element, but the Java method returns
+            // `T[]` (zero or more rows per call). Drop the array layer once before pairing
+            // the formal type with the SQL type — otherwise getRecordComponents() on a
+            // STRUCT-of-record return would fire on `Class<Record[]>` (an array class) and
+            // come back null, since array classes are not records.
+            jclass gat_clazz = env->FindClass("java/lang/reflect/GenericArrayType");
+            DeferOp drop_gat_clazz([&]() {
+                if (gat_clazz) env->DeleteLocalRef(gat_clazz);
+            });
+            jclass class_clazz = env->FindClass("java/lang/Class");
+            DeferOp drop_class_clazz([&]() {
+                if (class_clazz) env->DeleteLocalRef(class_clazz);
+            });
+            jobject element_formal = nullptr;
+            if (gat_clazz != nullptr && env->IsInstanceOf(ret_formal, gat_clazz)) {
+                jmethodID get_component =
+                        env->GetMethodID(gat_clazz, "getGenericComponentType", "()Ljava/lang/reflect/Type;");
+                element_formal = env->CallObjectMethod(ret_formal, get_component);
+            } else if (class_clazz != nullptr && env->IsInstanceOf(ret_formal, class_clazz)) {
+                jmethodID get_component = env->GetMethodID(class_clazz, "getComponentType", "()Ljava/lang/Class;");
+                element_formal = env->CallObjectMethod(ret_formal, get_component);
+            } else {
+                return Status::InternalError("UDTF return formal type is neither Class nor GenericArrayType");
+            }
+            if (env->ExceptionCheck() || element_formal == nullptr) {
+                env->ExceptionClear();
+                return Status::InternalError("failed to unwrap UDTF return array element type");
+            }
+            // Swap ret_formal for the unwrapped element type. Drop the original; the
+            // DeferOp above guards `ret_formal` so reassign and delete the old one explicitly.
+            env->DeleteLocalRef(ret_formal);
+            ret_formal = element_formal;
+        }
+
+        ASSIGN_OR_RETURN(jobject local_ret_desc, build_udf_type_desc(env, sql_return_type, ret_formal));
+        out.ret = JavaGlobalRef(env->NewGlobalRef(local_ret_desc));
+        env->DeleteLocalRef(local_ret_desc);
+    }
+
+    return out;
+}
+
 Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const Column** columns, int num_cols,
                                                      int num_rows, std::vector<jobject>* res,
                                                      const std::vector<jobject>* arg_type_descs) {
@@ -1239,7 +1609,7 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const
         } else if (columns[i]->is_constant()) {
             auto* data_column = down_cast<const ConstColumn*>(columns[i])->data_column_raw_ptr();
             data_column->as_mutable_raw_ptr()->resize(1);
-            ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(arg_type, true, data_column, 0));
+            ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(arg_type, true, data_column, 0, type_desc_obj));
             arg = helper.create_object_array(jval.l, num_rows);
             env->DeleteLocalRef(jval.l);
         } else {

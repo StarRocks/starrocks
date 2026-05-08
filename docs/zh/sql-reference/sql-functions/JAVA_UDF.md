@@ -545,12 +545,16 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 > **注意**
 >
-> Scalar UDF 支持嵌套的 `ARRAY` 和 `MAP` 参数/返回类型,例如
+> Scalar UDF、UDAF 和 UDTF 都支持嵌套的 `ARRAY`、`MAP` 和 `STRUCT`
+> 参数/返回类型,包括任意嵌套形式,例如
 > `ARRAY<ARRAY<INT>>`、`ARRAY<MAP<INT, STRING>>`、
-> `MAP<INT, ARRAY<STRING>>`。叶子元素类型仍须为下表列出的标量类型。
-> 由于 Java 泛型擦除,Java 方法签名只需声明原始类型
-> `java.util.List` / `java.util.Map`,StarRocks 会根据 SQL 签名
-> 驱动逐行的类型转换。
+> `MAP<INT, ARRAY<STRING>>`、`STRUCT<a INT, b ARRAY<STRING>>`,以及
+> `ARRAY<STRUCT<a INT, b STRING>>`。叶子元素类型仍须为下表列出的标量类型。
+> 由于 Java 泛型擦除,对于子树中不含 STRUCT 的 ARRAY / MAP 槽,
+> Java 方法签名只需声明原始类型 `java.util.List` / `java.util.Map`,
+> StarRocks 会根据 SQL 签名驱动逐行的类型转换。STRUCT 槽则必须绑定
+> 到一个具体的 Java `record` 类,以便分析器在 JNI 边界处保留正式的
+> record 类型(详见下文 [STRUCT 类型绑定](#struct-类型绑定))。
 
 | SQL TYPE                                       | Java TYPE             |
 | ---------------------------------------------- | --------------------- |
@@ -567,6 +571,7 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 | DATETIME                                       | java.time.LocalDateTime |
 | ARRAY                                          | java.util.List        |
 | Map                                            | java.util.Map         |
+| STRUCT                                         | UDF 作者声明的 Java `record` 类 |
 
 > **说明**
 >
@@ -576,6 +581,103 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 >
 > - `OUTPUT_NULL`（默认）：该行写入 `NULL`。
 > - `REPORT_ERROR`：查询以 `ArithmeticException` 错误终止。
+
+### STRUCT 类型绑定
+
+`STRUCT` 参数和返回类型必须绑定到 UDF 作者声明的 Java `record` 类（JDK 14+）。
+绑定按位置进行：
+
+- record 的成员数必须与 SQL `STRUCT` 字段数一致。
+- 每个成员的类型必须与对应位置的 SQL 字段类型匹配；成员名不强制
+  （Java 标识符无法表达所有合法的 SQL 字段名,且 CREATE FUNCTION
+  按位置绑定,与会话变量 `STRUCT_CAST_BY_NAME` 无关）。
+- 嵌套 `STRUCT` 在任意位置都支持：作为 record 的成员、作为 `ARRAY`
+  的元素 (`List<MyRecord>`)、或作为 `MAP` 的 key/value
+  (`Map<String, MyRecord>`)。
+
+同样的 record 类绑定规则同时适用于 scalar UDF、UDAF 和 UDTF。
+对 UDAF,record 类用于 `update(State, ...)` 的参数和 `finalize(State)`
+的返回类型。对 UDTF,record 类用于 `process(...)` 的参数和
+`TYPE[] process(...)` 的元素返回类型。
+
+#### Scalar UDF 示例
+
+```java
+public record Address(String street, Integer zip) {}
+
+public record AddressOut(String full, Integer region) {}
+
+public class AddrUdf {
+    public AddressOut evaluate(Address addr) {
+        return new AddressOut(addr.street() + " #" + addr.zip(), addr.zip() / 1000);
+    }
+}
+```
+
+```sql
+CREATE FUNCTION addr_udf(struct<street string, zip int>)
+RETURNS struct<`full` string, region int>
+PROPERTIES (
+    "symbol" = "com.example.AddrUdf",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/addr_udf.jar"
+);
+```
+
+#### UDAF 示例
+
+```java
+public record Item(String name, Integer qty) {}
+
+public record TopItem(String name, Long total) {}
+
+public class TopItemAgg {
+    public static class State {
+        // 序列化代码省略
+        public int serializeLength() { return 0; }
+    }
+    public State create() { return new State(); }
+    public void destroy(State state) {}
+    public void update(State state, Item item) { /* ... */ }
+    public void serialize(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public void merge(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public TopItem finalize(State state) { return new TopItem("a", 0L); }
+}
+```
+
+```sql
+CREATE AGGREGATE FUNCTION top_item_agg(struct<name string, qty int>)
+RETURNS struct<name string, total bigint>
+PROPERTIES (
+    "symbol" = "com.example.TopItemAgg",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/top_item_agg.jar"
+);
+```
+
+#### UDTF 示例
+
+```java
+public record Pair(String key, Integer value) {}
+
+public class ExplodePairs {
+    public Pair[] process(java.util.Map<String, Integer> m) {
+        return m.entrySet().stream()
+                .map(e -> new Pair(e.getKey(), e.getValue()))
+                .toArray(Pair[]::new);
+    }
+}
+```
+
+```sql
+CREATE TABLE FUNCTION explode_pairs(map<string, int>)
+RETURNS struct<`key` string, `value` int>
+PROPERTIES (
+    "symbol" = "com.example.ExplodePairs",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/explode_pairs.jar"
+);
+```
 
 ## 参数配置
 

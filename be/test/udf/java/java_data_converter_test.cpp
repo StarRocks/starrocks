@@ -1126,4 +1126,305 @@ TEST_F(DataConverterTest, convert_to_boxed_array_struct_input) {
     env->DeleteLocalRef(res[0]);
 }
 
+namespace {
+// Resolve a UdfTestSupport static method as a java.lang.reflect.Method object.
+// Used by the build_method_udf_type_descs tests below to drive the helper with
+// concrete UDAF / UDTF method shapes without standing up a real UDF classloader.
+jobject reflected_test_support_method(JNIEnv* env, const char* method_name, const char* signature) {
+    jclass support_cls = env->FindClass("com/starrocks/udf/UdfTestSupport");
+    EXPECT_NE(support_cls, nullptr);
+    if (support_cls == nullptr) return nullptr;
+    jmethodID mid = env->GetStaticMethodID(support_cls, method_name, signature);
+    EXPECT_NE(mid, nullptr) << method_name;
+    jobject method_obj = env->ToReflectedMethod(support_cls, mid, JNI_TRUE);
+    env->DeleteLocalRef(support_cls);
+    return method_obj;
+}
+
+// Read UdfTypeDesc.logicalType field via the cached jfieldID.
+jint read_logical_type(JVMFunctionHelper& helper, JNIEnv* env, jobject desc) {
+    return env->GetIntField(desc, env->GetFieldID(helper.udf_type_desc_class(), "logicalType", "I"));
+}
+} // namespace
+
+// build_method_udf_type_descs short-circuits when no STRUCT appears anywhere in
+// the signature: returns one null-handle entry per SQL arg and a null-handle ret.
+// Skips the JNI walk over Method.getGenericParameterTypes entirely.
+TEST_F(DataConverterTest, build_method_udf_type_descs_no_struct_short_circuit) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    // Any method handle works since we early-return before reading it.
+    jobject method = reflected_test_support_method(
+            env, "udafUpdateWithStruct",
+            "(Lcom/starrocks/udf/UdfTestSupport$State;Lcom/starrocks/udf/UdfTestStructRecord;)V");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+
+    // SQL signature: udf(INT, BIGINT) -> VARCHAR — no STRUCT anywhere.
+    std::vector<TypeDescriptor> args = {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_BIGINT)};
+    TypeDescriptor ret(TYPE_VARCHAR);
+
+    ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,
+                          build_method_udf_type_descs(env, method, args, ret, /*state_offset=*/0));
+    ASSERT_EQ(2u, descs.args.size());
+    EXPECT_EQ(nullptr, descs.args[0].handle());
+    EXPECT_EQ(nullptr, descs.args[1].handle());
+    EXPECT_EQ(nullptr, descs.ret.handle());
+}
+
+// UDAF shape: state_offset=1 makes the helper skip the leading State parameter
+// and start pairing SQL args at parameter index 1. Verifies the SQL-arg
+// UdfTypeDesc carries the correct STRUCT recordClass; return desc is suppressed
+// here by passing a TYPE_UNKNOWN sentinel (the production UDAF path uses this
+// to avoid walking update.getGenericReturnType() which is `void`).
+TEST_F(DataConverterTest, build_method_udf_type_descs_udaf_state_offset) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    // void udafUpdateWithStruct(State state, UdfTestStructRecord record)
+    jobject method = reflected_test_support_method(
+            env, "udafUpdateWithStruct",
+            "(Lcom/starrocks/udf/UdfTestSupport$State;Lcom/starrocks/udf/UdfTestStructRecord;)V");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+
+    std::vector<TypeDescriptor> args = {make_test_struct_typedesc()};
+    // Sentinel return type: TYPE_UNKNOWN — type_subtree_has_struct returns false
+    // and the helper skips the return-type pass for `update` (Java return is void).
+    TypeDescriptor ret = TypeDescriptor();
+
+    ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,
+                          build_method_udf_type_descs(env, method, args, ret, /*state_offset=*/1));
+    ASSERT_EQ(1u, descs.args.size());
+    ASSERT_NE(nullptr, descs.args[0].handle());
+    EXPECT_EQ(static_cast<jint>(TYPE_STRUCT), read_logical_type(helper, env, descs.args[0].handle()));
+    jobject record_class = env->GetObjectField(descs.args[0].handle(), helper.udf_type_desc_record_class_field());
+    LOCAL_REF_GUARD(record_class);
+    ASSERT_NE(nullptr, record_class);
+    jclass expected = test_struct_record_class(env);
+    LOCAL_REF_GUARD(expected);
+    EXPECT_TRUE(env->IsSameObject(record_class, expected));
+    // ret is TYPE_UNKNOWN — return desc must be null (no walk performed).
+    EXPECT_EQ(nullptr, descs.ret.handle());
+}
+
+// UDAF finalize variant: empty SQL args plus a real STRUCT-bearing return type.
+// Confirms the helper builds the return UdfTypeDesc by reading
+// finalize.getGenericReturnType() (List<UdfTestStructRecord>) and the resulting
+// desc carries logicalType=ARRAY with an element child carrying the record class.
+TEST_F(DataConverterTest, build_method_udf_type_descs_udaf_finalize_array_of_struct) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    jobject method = reflected_test_support_method(env, "udafFinalizeArrayOfStruct",
+                                                   "(Lcom/starrocks/udf/UdfTestSupport$State;)Ljava/util/List;");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+
+    TypeDescriptor ret = TypeDescriptor::create_array_type(make_test_struct_typedesc());
+    ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,
+                          build_method_udf_type_descs(env, method, /*sql_arg_types=*/{}, ret, /*state_offset=*/1));
+    EXPECT_TRUE(descs.args.empty());
+    ASSERT_NE(nullptr, descs.ret.handle());
+    EXPECT_EQ(static_cast<jint>(TYPE_ARRAY), read_logical_type(helper, env, descs.ret.handle()));
+
+    jobjectArray children =
+            (jobjectArray)env->GetObjectField(descs.ret.handle(), helper.udf_type_desc_children_field());
+    LOCAL_REF_GUARD(children);
+    ASSERT_NE(nullptr, children);
+    ASSERT_EQ(1, env->GetArrayLength(children));
+    jobject elem_desc = env->GetObjectArrayElement(children, 0);
+    LOCAL_REF_GUARD(elem_desc);
+    EXPECT_EQ(static_cast<jint>(TYPE_STRUCT), read_logical_type(helper, env, elem_desc));
+    jobject elem_record_class = env->GetObjectField(elem_desc, helper.udf_type_desc_record_class_field());
+    LOCAL_REF_GUARD(elem_record_class);
+    jclass expected = test_struct_record_class(env);
+    LOCAL_REF_GUARD(expected);
+    EXPECT_TRUE(env->IsSameObject(elem_record_class, expected));
+}
+
+// UDTF shape: process(...) returns `T[]` while the SQL return is the per-row
+// element type. unwrap_return_array_layer=true must drop the array layer off
+// the formal return so getRecordComponents() lands on the record class, not
+// the array class (Class<Record[]>).
+TEST_F(DataConverterTest, build_method_udf_type_descs_udtf_unwrap_return_array) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    // UdfTestStructRecord[] udtfProcessReturnsRecordArray(UdfTestStructRecord)
+    jobject method = reflected_test_support_method(
+            env, "udtfProcessReturnsRecordArray",
+            "(Lcom/starrocks/udf/UdfTestStructRecord;)[Lcom/starrocks/udf/UdfTestStructRecord;");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+
+    std::vector<TypeDescriptor> args = {make_test_struct_typedesc()};
+    // SQL return = STRUCT (per-row element). Java return = StructRecord[].
+    TypeDescriptor ret = make_test_struct_typedesc();
+
+    ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,
+                          build_method_udf_type_descs(env, method, args, ret, /*state_offset=*/0,
+                                                      /*unwrap_return_array_layer=*/true));
+    ASSERT_EQ(1u, descs.args.size());
+    ASSERT_NE(nullptr, descs.args[0].handle());
+    EXPECT_EQ(static_cast<jint>(TYPE_STRUCT), read_logical_type(helper, env, descs.args[0].handle()));
+    ASSERT_NE(nullptr, descs.ret.handle());
+    EXPECT_EQ(static_cast<jint>(TYPE_STRUCT), read_logical_type(helper, env, descs.ret.handle()));
+
+    // The unwrap must yield Class<UdfTestStructRecord>, not Class<UdfTestStructRecord[]>.
+    jobject record_class = env->GetObjectField(descs.ret.handle(), helper.udf_type_desc_record_class_field());
+    LOCAL_REF_GUARD(record_class);
+    ASSERT_NE(nullptr, record_class);
+    jclass expected = test_struct_record_class(env);
+    LOCAL_REF_GUARD(expected);
+    EXPECT_TRUE(env->IsSameObject(record_class, expected));
+}
+
+// Regression coverage for the bug fix that made build_method_udf_type_descs
+// honor the `unwrap_return_array_layer` flag: without the unwrap, the helper
+// would feed Class<Record[]> into build_udf_type_desc and then
+// getRecordComponents() returns null — the helper must propagate that as an
+// InternalError. Drives the helper with unwrap=false on the same UDTF-shaped
+// method to confirm the path is wired.
+TEST_F(DataConverterTest, build_method_udf_type_descs_struct_return_without_unwrap_fails) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    jobject method = reflected_test_support_method(
+            env, "udtfProcessReturnsRecordArray",
+            "(Lcom/starrocks/udf/UdfTestStructRecord;)[Lcom/starrocks/udf/UdfTestStructRecord;");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+
+    std::vector<TypeDescriptor> args = {make_test_struct_typedesc()};
+    TypeDescriptor ret = make_test_struct_typedesc();
+    auto status_or = build_method_udf_type_descs(env, method, args, ret, /*state_offset=*/0,
+                                                 /*unwrap_return_array_layer=*/false);
+    ASSERT_FALSE(status_or.ok())
+            << "build_method_udf_type_descs should reject Class<Record[]> for a STRUCT SQL return when unwrap=false";
+}
+
+// cast_to_jvalue STRUCT path: per-row materialization of a record from a
+// StructColumn cell, used by UDTF process(). Verifies the returned jvalue is a
+// non-null record instance whose components match the column row.
+TEST_F(DataConverterTest, cast_to_jvalue_struct_per_row) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    // Build the per-arg UdfTypeDesc from a method shape — same path UDTF uses.
+    jobject method = reflected_test_support_method(
+            env, "udtfProcessReturnsRecordArray",
+            "(Lcom/starrocks/udf/UdfTestStructRecord;)[Lcom/starrocks/udf/UdfTestStructRecord;");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+    TypeDescriptor td = make_test_struct_typedesc();
+    ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,
+                          build_method_udf_type_descs(env, method, {td}, td, /*state_offset=*/0,
+                                                      /*unwrap_return_array_layer=*/true));
+    ASSERT_NE(descs.args[0].handle(), nullptr);
+
+    // Two-row STRUCT column with a null on row 1 to also exercise the null-row branch.
+    auto col = ColumnHelper::create_column(td, /*nullable=*/true);
+    col->append_datum(DatumStruct{Datum(int32_t{42}), Datum(Slice("answer"))});
+    col->append_nulls(1);
+
+    // Row 0 — populated.
+    ASSIGN_OR_ASSERT_FAIL(jvalue v0, cast_to_jvalue(td, /*is_boxed=*/true, col.get(), 0, descs.args[0].handle()));
+    jobject v0_obj = v0.l;
+    LOCAL_REF_GUARD(v0_obj);
+    ASSERT_NE(nullptr, v0_obj);
+    jclass record_cls = test_struct_record_class(env);
+    LOCAL_REF_GUARD(record_cls);
+    EXPECT_TRUE(env->IsInstanceOf(v0_obj, record_cls));
+    jmethodID key_acc = env->GetMethodID(record_cls, "key", "()Ljava/lang/Integer;");
+    jobject key_box = env->CallObjectMethod(v0_obj, key_acc);
+    LOCAL_REF_GUARD(key_box);
+    EXPECT_EQ(42, helper.valint32_t(key_box));
+
+    // Row 1 — null. cast_to_jvalue must short-circuit to {.l = nullptr} via the
+    // NullableColumn prologue, without reading the per-row record_class.
+    ASSIGN_OR_ASSERT_FAIL(jvalue v1, cast_to_jvalue(td, /*is_boxed=*/true, col.get(), 1, descs.args[0].handle()));
+    EXPECT_EQ(nullptr, v1.l);
+}
+
+// cast_to_jvalue STRUCT requires a non-null type_desc_obj — the formal record
+// class lives there. Production callers (UDTF process) always supply it; this
+// guards the explicit error if a future caller forgets.
+TEST_F(DataConverterTest, cast_to_jvalue_struct_requires_type_desc) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    (void)helper;
+
+    TypeDescriptor td = make_test_struct_typedesc();
+    auto col = ColumnHelper::create_column(td, /*nullable=*/true);
+    col->append_datum(DatumStruct{Datum(int32_t{1}), Datum(Slice("x"))});
+    auto status_or = cast_to_jvalue(td, /*is_boxed=*/true, col.get(), 0, /*type_desc_obj=*/nullptr);
+    EXPECT_FALSE(status_or.ok());
+}
+
+// append_jvalue STRUCT path: per-row drain of a record into a StructColumn
+// (UDTF result-write hot path). Builds a record via cast_to_jvalue, then
+// round-trips it through append_jvalue and verifies the resulting column's
+// shape and values.
+TEST_F(DataConverterTest, append_jvalue_struct_per_row_roundtrip) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    jobject method = reflected_test_support_method(
+            env, "udtfProcessReturnsRecordArray",
+            "(Lcom/starrocks/udf/UdfTestStructRecord;)[Lcom/starrocks/udf/UdfTestStructRecord;");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+    TypeDescriptor td = make_test_struct_typedesc();
+    ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,
+                          build_method_udf_type_descs(env, method, {td}, td, /*state_offset=*/0,
+                                                      /*unwrap_return_array_layer=*/true));
+
+    auto src = ColumnHelper::create_column(td, /*nullable=*/true);
+    src->append_datum(DatumStruct{Datum(int32_t{7}), Datum(Slice("seven"))});
+    ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, /*is_boxed=*/true, src.get(), 0, descs.args[0].handle()));
+    jobject val_obj = val.l;
+    LOCAL_REF_GUARD(val_obj);
+    ASSERT_NE(nullptr, val_obj);
+
+    auto dst = ColumnHelper::create_column(td, /*nullable=*/true);
+    ASSERT_OK(append_jvalue(td, /*is_box=*/true, dst.get(), val,
+                            /*error_if_overflow=*/true, descs.ret.handle()));
+    ASSERT_EQ(1u, dst->size());
+    EXPECT_EQ("{key:7,value:'seven'}", dst->debug_item(0));
+}
+
+// check_type_matched STRUCT path: UDTF result-row validator. Accepts the
+// declared record class and rejects an unrelated runtime class.
+TEST_F(DataConverterTest, check_type_matched_struct) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    jobject method = reflected_test_support_method(
+            env, "udtfProcessReturnsRecordArray",
+            "(Lcom/starrocks/udf/UdfTestStructRecord;)[Lcom/starrocks/udf/UdfTestStructRecord;");
+    ASSERT_NE(method, nullptr);
+    LOCAL_REF_GUARD(method);
+    TypeDescriptor td = make_test_struct_typedesc();
+    ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,
+                          build_method_udf_type_descs(env, method, {td}, td, /*state_offset=*/0,
+                                                      /*unwrap_return_array_layer=*/true));
+
+    // Build a real record instance via cast_to_jvalue.
+    auto src = ColumnHelper::create_column(td, /*nullable=*/true);
+    src->append_datum(DatumStruct{Datum(int32_t{1}), Datum(Slice("a"))});
+    ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, /*is_boxed=*/true, src.get(), 0, descs.args[0].handle()));
+    jobject val_obj = val.l;
+    LOCAL_REF_GUARD(val_obj);
+    EXPECT_OK(check_type_matched(td, val_obj, descs.ret.handle()));
+
+    // A String is not a UdfTestStructRecord → reject.
+    jstring stranger = env->NewStringUTF("not a record");
+    LOCAL_REF_GUARD(stranger);
+    EXPECT_FALSE(check_type_matched(td, stranger, descs.ret.handle()).ok());
+
+    // Null value short-circuits to OK regardless of type_desc_obj.
+    EXPECT_OK(check_type_matched(td, /*val=*/nullptr, descs.ret.handle()));
+}
+
 } // namespace starrocks

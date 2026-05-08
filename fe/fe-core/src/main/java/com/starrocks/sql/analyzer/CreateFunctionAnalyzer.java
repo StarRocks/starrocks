@@ -513,13 +513,16 @@ public class CreateFunctionAnalyzer {
             mainClass.checkMethodNonStaticAndPublic(method);
             mainClass.checkArgumentCount(method, argsDef.getArgTypes().length, argsDef.isVariadic());
             
-            // Validate parameter types
+            // Validate parameter types — STRUCT support requires threading the Parameter's
+            // parameterized type for nested record-class binding, so use the recursive
+            // scalar-style validator.
             if (argsDef.isVariadic()) {
                 mainClass.checkVarargsParameters(method, argsDef.getArgTypes(), 0);
             } else {
                 for (int i = 0; i < method.getParameters().length; i++) {
                     Parameter p = method.getParameters()[i];
-                    mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+                    mainClass.checkScalarUdfType(method, argsDef.getArgTypes()[i], p.getType(),
+                            p.getParameterizedType(), p.getName());
                 }
             }
         }
@@ -697,48 +700,26 @@ public class CreateFunctionAnalyzer {
         }
 
         private void checkParamUdfType(Method method, Type expType, Parameter p) {
-            checkUdfType(method, expType, p.getType(), p.getName());
+            // UDAF/UDTF args go through this path; STRUCT support requires the formal
+            // generic Java type for record-class binding, so delegate to the same recursive
+            // scalar/array/map/struct validator used by scalar UDF.
+            checkScalarUdfType(method, expType, p.getType(), p.getParameterizedType(), p.getName());
         }
 
         private void checkReturnUdfType(Method method, Type expType) {
-            checkUdfType(method, expType, method.getReturnType(), CreateFunctionStmt.RETURN_FIELD_NAME);
+            // UDAF return type validation. STRUCT is supported via the same recursive
+            // checker the scalar UDF uses.
+            checkScalarUdfType(method, expType, method.getReturnType(), method.getGenericReturnType(),
+                    CreateFunctionStmt.RETURN_FIELD_NAME);
         }
 
         private void checkUdfType(Method method, Type expType, Class<?> ptype, String pname) {
-            Class<?> cls = null;
-            if (expType instanceof ScalarType) {
-                ScalarType scalarType = (ScalarType) expType;
-                cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
-            } else if (expType instanceof MapType) {
-                cls = Map.class;
-            } else if (expType instanceof ArrayType) {
-                cls = List.class;
-            } else if (expType instanceof StructType) {
-                // v1: STRUCT is supported as a scalar UDF input/return only. UDAF/UDTF
-                // paths route through checkUdfType/checkParamUdfType and need additional
-                // BE plumbing (convert_to_boxed_array does not have access to evaluate
-                // parameter classes for UDAF/UDTF), so reject explicitly.
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' parameter %s: STRUCT is currently " +
-                                        "supported for scalar UDFs only, not UDAF/UDTF",
-                                clazz.getCanonicalName(), method.getName(), pname));
-                return;
-            } else {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' does not support type '%s'",
-                                clazz.getCanonicalName(), method.getName(), expType));
-            }
-            if (cls == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' does not support type '%s'",
-                                clazz.getCanonicalName(), method.getName(), expType));
-            }
-            if (!cls.equals(ptype)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
-                                clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
-                                cls.getCanonicalName()));
-            }
+            // Legacy entry point retained for callers that hand only the raw java.lang.Class.
+            // UDTF process() routes through this and needs STRUCT support too — the FE
+            // analyzer can still validate the record-class shape against the Parameter's
+            // parameterized type at the call site (see checkParamUdfType for UDAF and the
+            // direct checkScalarUdfType call for UDTF in analyzeStarrocksJarUdtf).
+            checkScalarUdfType(method, expType, ptype, ptype, pname);
         }
 
         private void checkScalarReturnUdfType(Method method, Type expType) {
@@ -1049,12 +1030,11 @@ public class CreateFunctionAnalyzer {
 
         /**
          * Check varargs parameters for UDAFs and UDTFs.
-         * Uses checkUdfType for type validation with an offset for the first parameter.
-         * UDAF/UDTF only support flat scalar/array/map types, so genericType is unused.
+         * Uses checkScalarUdfType so STRUCT (and nested STRUCT inside ARRAY / MAP) is supported
+         * via the same recursive driver as scalar UDFs.
          */
         private void checkVarargsParameters(Method method, Type[] declaredArgTypes, int paramOffset) {
-            checkVarargsParametersGeneric(method, declaredArgTypes, paramOffset,
-                    (m, expType, ptype, gen, pname) -> checkUdfType(m, expType, ptype, pname));
+            checkVarargsParametersGeneric(method, declaredArgTypes, paramOffset, this::checkScalarUdfType);
         }
     }
 

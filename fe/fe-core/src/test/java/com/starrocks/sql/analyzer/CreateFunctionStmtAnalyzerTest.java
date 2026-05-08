@@ -1674,4 +1674,254 @@ public class CreateFunctionStmtAnalyzerTest {
             Config.enable_udf = false;
         }
     }
+
+    // ----- STRUCT support for UDAF / UDTF -----------------------------------
+    //
+    // Scalar UDF struct support shipped first; these tests cover the recursive
+    // analyzer reuse for UDAF (update + finalize) and UDTF (process), plus
+    // STRUCT-bearing types nested inside ARRAY / MAP arg / return slots.
+
+    public static class StructAggEval {
+        public static class State {
+            public int serializeLength() {
+                return 0;
+            }
+        }
+
+        public State create() {
+            return new State();
+        }
+
+        public void destroy(State state) {
+        }
+
+        public final void update(State state, Address addr) {
+        }
+
+        public void serialize(State state, java.nio.ByteBuffer buff) {
+        }
+
+        public void merge(State state, java.nio.ByteBuffer buffer) {
+        }
+
+        public AddressOut finalize(State state) {
+            return null;
+        }
+    }
+
+    private void mockUdafClazz(Class<?> mainClazz, Class<?> stateClazz) {
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public String computeMd5(CreateFunctionStmt stmt) {
+                return "0xff";
+            }
+        };
+        new MockUp<UDFInternalClassLoader>() {
+            @Mock
+            public final Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.contains("$")) {
+                    return stateClazz;
+                }
+                return mainClazz;
+            }
+        };
+    }
+
+    @Test
+    public void testStructUDAFRecord() {
+        try {
+            Config.enable_udf = true;
+            mockUdafClazz(StructAggEval.class, StructAggEval.State.class);
+            String sql = "CREATE AGGREGATE FUNCTION ABC.struct_agg(struct<street string, zip int>) \n"
+                    + "RETURNS struct<`full` string, region int> \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    public static class StructListAggEval {
+        public static class State {
+            public int serializeLength() {
+                return 0;
+            }
+        }
+
+        public State create() {
+            return new State();
+        }
+
+        public void destroy(State state) {
+        }
+
+        public final void update(State state, List<Address> addrs) {
+        }
+
+        public void serialize(State state, java.nio.ByteBuffer buff) {
+        }
+
+        public void merge(State state, java.nio.ByteBuffer buffer) {
+        }
+
+        public List<AddressOut> finalize(State state) {
+            return null;
+        }
+    }
+
+    @Test
+    public void testStructUDAFArrayOfRecord() {
+        try {
+            Config.enable_udf = true;
+            mockUdafClazz(StructListAggEval.class, StructListAggEval.State.class);
+            String sql = "CREATE AGGREGATE FUNCTION ABC.struct_list_agg(array<struct<street string, zip int>>) \n"
+                    + "RETURNS array<struct<`full` string, region int>> \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    public static class StructUdafFieldCountMismatchEval {
+        public static class State {
+            public int serializeLength() {
+                return 0;
+            }
+        }
+
+        public State create() {
+            return new State();
+        }
+
+        public void destroy(State state) {
+        }
+
+        // Address has 2 components but the SQL declares 3 fields.
+        public final void update(State state, Address addr) {
+        }
+
+        public void serialize(State state, java.nio.ByteBuffer buff) {
+        }
+
+        public void merge(State state, java.nio.ByteBuffer buffer) {
+        }
+
+        public AddressOut finalize(State state) {
+            return null;
+        }
+    }
+
+    @Test
+    public void testStructUDAFFieldCountMismatchRejected() {
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockUdafClazz(StructUdafFieldCountMismatchEval.class,
+                        StructUdafFieldCountMismatchEval.State.class);
+                String sql = "CREATE AGGREGATE FUNCTION ABC.bad(struct<a string, b int, c int>) \n"
+                        + "RETURNS struct<`full` string, region int> \n"
+                        + "properties (\n"
+                        + "    \"symbol\" = \"symbol\",\n"
+                        + "    \"type\" = \"StarrocksJar\",\n"
+                        + "    \"file\" = \"http://localhost:8080/\"\n"
+                        + ");";
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    public static class StructUDTF {
+        public AddressOut[] process(Address addr) {
+            return new AddressOut[0];
+        }
+    }
+
+    @Test
+    public void testStructUDTF() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(StructUDTF.class);
+            String sql = "CREATE TABLE FUNCTION ABC.struct_udtf(struct<street string, zip int>) \n"
+                    + "RETURNS struct<`full` string, region int> \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    public static class StructListUDTF {
+        public AddressOut[] process(List<Address> addrs) {
+            return new AddressOut[0];
+        }
+    }
+
+    @Test
+    public void testStructUDTFArrayOfRecord() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(StructListUDTF.class);
+            String sql = "CREATE TABLE FUNCTION ABC.struct_list_udtf(array<struct<street string, zip int>>) \n"
+                    + "RETURNS struct<`full` string, region int> \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    public static class StructUdtfFieldCountMismatchEval {
+        public AddressOut[] process(Address addr) {
+            return new AddressOut[0];
+        }
+    }
+
+    @Test
+    public void testStructUDTFFieldCountMismatchRejected() {
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(StructUdtfFieldCountMismatchEval.class);
+                String sql = "CREATE TABLE FUNCTION ABC.bad(struct<a string, b int, c int>) \n"
+                        + "RETURNS struct<`full` string, region int> \n"
+                        + "properties (\n"
+                        + "    \"symbol\" = \"symbol\",\n"
+                        + "    \"type\" = \"StarrocksJar\",\n"
+                        + "    \"file\" = \"http://localhost:8080/\"\n"
+                        + ");";
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
 }
