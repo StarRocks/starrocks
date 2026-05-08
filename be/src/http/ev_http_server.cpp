@@ -45,11 +45,9 @@
 #include "starrocks_macos_libevent_shims.h"
 #endif
 
-#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <cstring>
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -129,45 +127,29 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
-// Create a TCP listening socket with SO_REUSEADDR + SO_REUSEPORT, bound to
-// `point`. Returns -1 on any failure (and `errno` is set). When SO_REUSEPORT
-// is set on every listener for the same {addr, port}, the kernel load-balances
-// new connections across them — workers no longer thundering-herd on a single
+// Create a TCP listening socket with SO_REUSEPORT, bound to `point`. Returns
+// -1 on any failure (and `errno` is set). When SO_REUSEPORT is set on every
+// listener for the same {addr, port}, the kernel load-balances new
+// connections across them — workers no longer thundering-herd on a single
 // shared listen fd's accept queue lock.
+//
+// Delegates the bind+listen to `butil::tcp_listen()` (the same helper used
+// by `_bind()` for the primary `_server_fd`); we only have to set
+// `SO_REUSEPORT` on the returned fd. Calling `setsockopt(SO_REUSEPORT)` on a
+// socket that is already bound + listening is a no-op for the local kernel
+// state but is the documented way to opt this fd into the reuseport group
+// (see Linux man socket(7) and kernel `inet_reuseport_add_sock`).
 static int listen_with_reuseport(const butil::EndPoint& point) {
 #ifndef SO_REUSEPORT
     errno = ENOTSUP;
     return -1;
 #else
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    int fd = butil::tcp_listen(point);
     if (fd < 0) {
         return -1;
     }
     int yes = 1;
-    if (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0) {
-        int saved = errno;
-        ::close(fd);
-        errno = saved;
-        return -1;
-    }
     if (::setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) != 0) {
-        int saved = errno;
-        ::close(fd);
-        errno = saved;
-        return -1;
-    }
-    sockaddr_in addr;
-    std::memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(point.port);
-    addr.sin_addr = point.ip;
-    if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        int saved = errno;
-        ::close(fd);
-        errno = saved;
-        return -1;
-    }
-    if (::listen(fd, 65535) != 0) {
         int saved = errno;
         ::close(fd);
         errno = saved;
