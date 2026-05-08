@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
@@ -33,6 +34,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -83,6 +85,39 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertTrue(result.isPresent(), "aggregate MV query must produce an IVM rewrite result");
         assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
                 "aggregate MV must yield QUERY_COMPUTED: the query encodes group-by keys as __ROW_ID__");
+    }
+
+    /**
+     * Distinct aggregates must be rejected at IVM analysis time; otherwise incremental
+     * refresh would silently produce wrong data (the rewrite drops the DISTINCT flag).
+     * MIN/MAX(DISTINCT) is not covered: the analyzer normalizes their DISTINCT away
+     * earlier, so isDistinct() is already false here.
+     */
+    @Test
+    public void testRejectDistinctAggregate() throws Exception {
+        String[] ddls = {
+                "CREATE MATERIALIZED VIEW mv_count_distinct "
+                        + "REFRESH DEFERRED MANUAL "
+                        + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                        + "AS SELECT id, COUNT(DISTINCT c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "CREATE MATERIALIZED VIEW mv_sum_distinct "
+                        + "REFRESH DEFERRED MANUAL "
+                        + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                        + "AS SELECT id, SUM(DISTINCT c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+        };
+
+        for (String ddl : ddls) {
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                    "INCREMENTAL refresh must reject distinct aggregates: " + ddl);
+            assertTrue(ex.getMessage().contains("does not support distinct aggregate"),
+                    "error message must mention distinct rejection, got: " + ex.getMessage());
+        }
     }
 
     /**
