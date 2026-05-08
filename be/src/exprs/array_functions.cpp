@@ -50,7 +50,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     } else {
         const auto* arg0 = columns[0].get();
         auto col_result = Int32Column::create();
-        raw::make_room(&col_result->get_data(), num_rows);
+        col_result->get_data().resize(num_rows);
         DCHECK_EQ(col_array->size(), col_result->size());
 
         int32_t* p = col_result->get_data().data();
@@ -467,7 +467,7 @@ private:
         }
         auto& offsets = arr_col->offsets().get_data();
         size_t num_rows = offsets.size() - 1;
-        NullColumn::Container::pointer null_data = null_column ? null_column->get_data().data() : nullptr;
+        uint8_t* null_data = null_column ? null_column->get_data().data() : nullptr;
 
         if constexpr (element_nullable) {
             DCHECK(element_null_data != nullptr);
@@ -690,7 +690,7 @@ private:
         }
         if (targets->only_null() && !nullable_element) {
             auto result = ReturnType::create();
-            result->resize(array.size());
+            result->get_data().resize(array.size(), 0);
             return result;
         }
         // Expand Only-Null column.
@@ -1238,7 +1238,8 @@ void _array_slice_item(const ArrayColumn* column, size_t index, ArrayColumn* des
     auto* dest_offsets_col = dest_column->offsets_column_raw_ptr();
     auto& dest_offsets = dest_offsets_col->get_data();
     if (!offset) {
-        dest_offsets.emplace_back(dest_offsets.back());
+        const uint32_t current_offset = dest_offsets.back();
+        dest_offsets.emplace_back(current_offset);
         return;
     }
 
@@ -1270,7 +1271,8 @@ void _array_slice_item(const ArrayColumn* column, size_t index, ArrayColumn* des
 
     // Protect when length < 0.
     auto offset_delta = ((end < offset) ? 0 : end - offset);
-    dest_offsets.emplace_back(dest_offsets.back() + offset_delta);
+    const uint32_t current_offset = dest_offsets.back();
+    dest_offsets.emplace_back(current_offset + offset_delta);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Columns& columns) {
@@ -1825,7 +1827,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         auto dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
         dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column->data_column_raw_ptr());
         auto& dest_null_data = dest_nullable_column->null_column_data();
-        dest_null_data = static_cast<NullColumn*>(null_result.get())->get_data();
+        const auto& null_data = static_cast<NullColumn*>(null_result.get())->get_data();
+        dest_null_data.assign(null_data.begin(), null_data.end());
         dest_nullable_column->set_has_null(has_null);
     } else {
         dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
@@ -1843,7 +1846,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         if (n <= 0) {
             // If count is 0 or negative, return empty array
             auto& dest_offsets = dest_data_column->offsets_column_raw_ptr()->get_data();
-            dest_offsets.emplace_back(dest_offsets.back());
+            const uint32_t current_offset = dest_offsets.back();
+            dest_offsets.emplace_back(current_offset);
             continue;
         }
 
@@ -1855,7 +1859,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         if (array_size == 0) {
             // Empty input array, return empty array
             auto& dest_offsets = dest_data_column->offsets_column_raw_ptr()->get_data();
-            dest_offsets.emplace_back(dest_offsets.back());
+            const uint32_t current_offset = dest_offsets.back();
+            dest_offsets.emplace_back(current_offset);
             continue;
         }
 
@@ -1893,7 +1898,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
 
         // Update offsets
         auto& dest_offsets = dest_data_column->offsets_column_raw_ptr()->get_data();
-        dest_offsets.emplace_back(dest_offsets.back() + result_size);
+        const uint32_t current_offset = dest_offsets.back();
+        dest_offsets.emplace_back(current_offset + result_size);
     }
     return dest_column;
 }

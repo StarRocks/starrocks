@@ -88,7 +88,7 @@ static void BM_GetDictCodesWithMap(benchmark::State& state) {
         auto* dict_nullable_column = down_cast<NullableColumn*>(column.get());
         const auto* dict_value_binary_column =
                 down_cast<const BinaryColumn*>(dict_nullable_column->data_column().get());
-        auto dict_values_filtered = dict_value_binary_column->get_data();
+        const auto& dict_values_filtered = dict_value_binary_column->get_data();
         if (!has_null) {
             dict_codes.reserve(dict_values_filtered.size());
             for (size_t i = 0; i < dict_values_filtered.size(); i++) {

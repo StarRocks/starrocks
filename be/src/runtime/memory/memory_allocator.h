@@ -14,10 +14,4 @@
 
 #pragma once
 
-#include "base/memory/memory_allocator.h"
-
-namespace starrocks::memory {
-
-Allocator* get_default_allocator();
-
-} // namespace starrocks::memory
+#include "base/memory/default_allocator.h"

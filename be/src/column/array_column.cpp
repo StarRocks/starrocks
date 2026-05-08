@@ -67,8 +67,10 @@ void ArrayColumn::reserve(size_t n) {
 }
 
 void ArrayColumn::resize(size_t n) {
-    _offsets->get_data().resize(n + 1, _offsets->get_data().back());
-    size_t array_size = _offsets->get_data().back();
+    auto& offsets = _offsets->get_data();
+    const size_t fill_offset = offsets.back();
+    offsets.resize(n + 1, fill_offset);
+    const size_t array_size = offsets.back();
     _elements->resize(array_size);
 }
 
@@ -148,7 +150,8 @@ bool ArrayColumn::append_nulls(size_t count) {
 
 // append an empty array []
 void ArrayColumn::append_default() {
-    _offsets->append(_offsets->get_data().back());
+    const size_t offset = _offsets->get_data().back();
+    _offsets->append(offset);
 }
 
 void ArrayColumn::append_default(size_t count) {

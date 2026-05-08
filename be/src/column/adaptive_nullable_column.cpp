@@ -123,7 +123,7 @@ bool AdaptiveNullableColumn::append_nulls(size_t count) {
     }
     case State::kMaterialized: {
         _data_column->append_default(count);
-        null_column_data().insert(null_column_data().end(), count, 1);
+        null_column_data().append(count, 1);
         DCHECK_EQ(_null_column->size(), _data_column->size());
         _has_null = true;
         break;
@@ -131,7 +131,7 @@ bool AdaptiveNullableColumn::append_nulls(size_t count) {
     default: {
         materialized_nullable();
         _data_column->append_default(count);
-        null_column_data().insert(null_column_data().end(), count, 1);
+        null_column_data().append(count, 1);
         DCHECK_EQ(_null_column->size(), _data_column->size());
         _has_null = true;
         break;
@@ -214,7 +214,7 @@ size_t AdaptiveNullableColumn::append_numbers(const void* buff, size_t length) {
     materialized_nullable();
     size_t n;
     if ((n = _data_column->append_numbers(buff, length)) > 0) {
-        null_column_data().insert(null_column_data().end(), n, 0);
+        null_column_data().append(n, 0);
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return n;
@@ -223,7 +223,7 @@ size_t AdaptiveNullableColumn::append_numbers(const void* buff, size_t length) {
 void AdaptiveNullableColumn::append_value_multiple_times(const void* value, size_t count) {
     materialized_nullable();
     _data_column->append_value_multiple_times(value, count);
-    null_column_data().insert(null_column_data().end(), count, 0);
+    null_column_data().append(count, 0);
 }
 
 void AdaptiveNullableColumn::fill_null_with_default() {

@@ -70,7 +70,8 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithFilter) {
     Range<uint64_t> range(200, 205);
 
     // Create a filter that selects only positions 201 and 203
-    Filter filter = {false, true, false, true, false}; // Size 5, positions 1 and 3 (0-indexed)
+    Filter filter;
+    filter.assign({false, true, false, true, false}); // Size 5, positions 1 and 3 (0-indexed)
 
     // Create a column to store the results
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
@@ -145,7 +146,8 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithNoSelectedRows) {
     Range<uint64_t> range(300, 303);
 
     // Create a filter that selects no rows
-    Filter filter = {false, false, false}; // Size 3, no selected rows
+    Filter filter;
+    filter.assign({false, false, false}); // Size 3, no selected rows
 
     // Create a column to store the results
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
@@ -169,7 +171,8 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithAllRowsSelected) {
     Range<uint64_t> range(400, 404);
 
     // Create a filter that selects all rows
-    Filter filter = {true, true, true, true}; // Size 4, all selected
+    Filter filter;
+    filter.assign({true, true, true, true}); // Size 4, all selected
 
     // Create a column to store the results
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);

@@ -33,10 +33,15 @@ public:
     JsonParserTest() = default;
     ~JsonParserTest() override = default;
 
-    void SetUp() override {}
+    void SetUp() override { _old_json_parse_many_batch_size = config::json_parse_many_batch_size; }
+
+    void TearDown() override { config::json_parse_many_batch_size = _old_json_parse_many_batch_size; }
 
     void test_parse_error_msg_base(JsonParser* parser, std::string& data, const std::string& operation,
                                    const std::string& custom_msg);
+
+private:
+    int32_t _old_json_parse_many_batch_size = 0;
 };
 
 TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_1) {
@@ -320,17 +325,24 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
 class JsonDocumentStreamParserTest : public ::testing::Test {
 public:
     void SetUp() override;
+    void TearDown() override;
 
 protected:
     void _check_row(simdjson::ondemand::object& row, const std::string& key, int64_t value);
 
+    int32_t _old_json_parse_many_batch_size = 0;
     simdjson::ondemand::parser _simdjson_parser;
     std::unique_ptr<JsonDocumentStreamParser> _parser;
     faststring _buf;
 };
 
 void JsonDocumentStreamParserTest::SetUp() {
+    _old_json_parse_many_batch_size = config::json_parse_many_batch_size;
     _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+}
+
+void JsonDocumentStreamParserTest::TearDown() {
+    config::json_parse_many_batch_size = _old_json_parse_many_batch_size;
 }
 
 void JsonDocumentStreamParserTest::_check_row(simdjson::ondemand::object& row, const std::string& key, int64_t value) {

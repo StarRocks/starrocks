@@ -184,11 +184,11 @@ protected:
         auto reader = std::move(res).value();
 
         {
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path));
+            OlapReaderStatistics stats;
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path));
 
             ColumnIteratorOptions iter_opts;
-            OlapReaderStatistics stats;
             iter_opts.stats = &stats;
             iter_opts.read_file = read_file.get();
             ASSERT_TRUE(iter->init(iter_opts).ok());

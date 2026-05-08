@@ -39,6 +39,15 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_compaction_policy";
 
     void SetUp() override {
+        _tablet_max_versions = config::tablet_max_versions;
+        _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _max_cumulative_compaction_num_singleton_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _min_base_compaction_num_singleton_deltas = config::min_base_compaction_num_singleton_deltas;
+        _size_tiered_min_level_size = config::size_tiered_min_level_size;
+        _size_tiered_level_multiple = config::size_tiered_level_multiple;
+        _size_tiered_level_num = config::size_tiered_level_num;
+        _enable_size_tiered_compaction_strategy = config::enable_size_tiered_compaction_strategy;
+
         config::tablet_max_versions = 1000;
         config::min_cumulative_compaction_num_singleton_deltas = 3;
         config::max_cumulative_compaction_num_singleton_deltas = 10;
@@ -51,7 +60,17 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        config::tablet_max_versions = _tablet_max_versions;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _max_cumulative_compaction_num_singleton_deltas;
+        config::min_base_compaction_num_singleton_deltas = _min_base_compaction_num_singleton_deltas;
+        config::size_tiered_min_level_size = _size_tiered_min_level_size;
+        config::size_tiered_level_multiple = _size_tiered_level_multiple;
+        config::size_tiered_level_num = _size_tiered_level_num;
+        config::enable_size_tiered_compaction_strategy = _enable_size_tiered_compaction_strategy;
+        remove_test_dir_ignore_error();
+    }
 
     void add_data_rowset(uint32 id, bool overlap, int64_t level) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
@@ -81,6 +100,14 @@ protected:
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
+    int32_t _tablet_max_versions = 0;
+    int64_t _min_cumulative_compaction_num_singleton_deltas = 0;
+    int64_t _max_cumulative_compaction_num_singleton_deltas = 0;
+    int64_t _min_base_compaction_num_singleton_deltas = 0;
+    int64_t _size_tiered_min_level_size = 0;
+    int64_t _size_tiered_level_multiple = 0;
+    int64_t _size_tiered_level_num = 0;
+    bool _enable_size_tiered_compaction_strategy = false;
 };
 
 // ------ BaseAndCumulativeCompactionPolicy ------

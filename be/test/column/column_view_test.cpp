@@ -39,7 +39,7 @@ static ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t
     auto array_column = ArrayColumn::create(std::move(elements), std::move(offsets));
     if (is_nullable) {
         auto null_column = NullColumn::create();
-        null_column->resize(values.size());
+        null_column->get_data().resize(values.size(), 0);
         return NullableColumn::create(std::move(array_column), std::move(null_column));
     } else {
         return array_column;

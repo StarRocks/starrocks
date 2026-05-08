@@ -15,6 +15,7 @@
 #include "runtime/local_tablets_channel.h"
 
 #include <fmt/format.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "base/brpc/reusable_closure.h"
@@ -552,8 +553,13 @@ void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_t
         EXPECT_EQ(request->txn_id(), _txn_id);
         EXPECT_EQ(1, request->tablet_ids().size());
         EXPECT_EQ(tablet->tablet_id(), request->tablet_ids().Get(0));
-        EXPECT_EQ(request->reason(),
-                  is_empty_tablet ? "" : "primary replica on host [] failed to sync data to secondary replica");
+        if (is_empty_tablet) {
+            EXPECT_EQ(request->reason(), "");
+        } else {
+            EXPECT_THAT(request->reason(),
+                        testing::AllOf(testing::StartsWith("primary replica on host ["),
+                                       testing::EndsWith("] failed to sync data to secondary replica")));
+        }
         google::protobuf::Closure* closure = std::get<1>(*rpc_tuple);
         closure->Run();
         num_cancel += 1;

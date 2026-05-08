@@ -57,7 +57,8 @@ TEST_F(AggregateTraitsTest, ObjectFamily_append_values_bitmap) {
 TEST_F(AggregateTraitsTest, StringOrBinary_append_values_varchar) {
     using Traits = AggDataTypeTraits<TYPE_VARCHAR>;
     auto col = BinaryColumn::create();
-    Traits::ValueType value{'h', 'e', 'l', 'l', 'o'};
+    Traits::ValueType value;
+    value.assign({'h', 'e', 'l', 'l', 'o'});
     Traits::append_values(col.get(), value, 4);
     EXPECT_EQ(col->debug_string(), "['hello', 'hello', 'hello', 'hello']");
 }
@@ -65,7 +66,8 @@ TEST_F(AggregateTraitsTest, StringOrBinary_append_values_varchar) {
 TEST_F(AggregateTraitsTest, StringOrBinary_append_values_large_binary) {
     using Traits = AggDataTypeTraits<TYPE_VARCHAR>;
     auto col = LargeBinaryColumn::create();
-    Traits::ValueType value{'f', 'o', 'o'};
+    Traits::ValueType value;
+    value.assign({'f', 'o', 'o'});
     Traits::append_values(col.get(), value, 3);
     EXPECT_EQ(col->debug_string(), "['foo', 'foo', 'foo']");
 }

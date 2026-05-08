@@ -280,11 +280,11 @@ TEST_F(OlapScanTabletAdaptorTest, GetIteratorMissingRowset) {
 }
 
 TEST(PositionDesctiporTest, test) {
-    auto pool = new ObjectPool();
+    ObjectPool pool;
     {
         TRowPositionDescriptor tdesc;
         tdesc.row_position_type = TRowPositionType::LAKE_ROW_POSITION;
-        RowPositionDescriptor::from_thrift(tdesc, pool);
+        RowPositionDescriptor::from_thrift(tdesc, &pool);
     }
 }
 

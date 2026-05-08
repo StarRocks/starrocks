@@ -101,7 +101,7 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
         const uint64_t offset = _buf.size();
         std::string delvec_str;
         delvec->save_to(&delvec_str);
-        _buf.insert(_buf.end(), delvec_str.begin(), delvec_str.end());
+        _buf.append(delvec_str.begin(), delvec_str.end());
         const uint64_t size = _buf.size() - offset;
         _delvecs[segment_id].set_offset(offset);
         _delvecs[segment_id].set_size(size);

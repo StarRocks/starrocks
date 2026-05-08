@@ -121,18 +121,21 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
+        k1.__set_col_unique_id(0);
         request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
+        k2.__set_col_unique_id(1);
         request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
+        k3.__set_col_unique_id(2);
         request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();

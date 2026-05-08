@@ -201,7 +201,7 @@ public:
             NullColumn* null_column = down_cast<NullableColumn*>(dst)->null_column_raw_ptr();
             auto& null_data = null_column->get_data();
             size_t prev_num_rows = null_data.size();
-            raw::stl_vector_resize_uninitialized(&null_data, count + prev_num_rows);
+            null_data.resize(count + prev_num_rows);
             uint8_t* __restrict__ dst_nulls = null_data.data() + prev_num_rows;
             memcpy(dst_nulls, is_nulls, count);
             down_cast<NullableColumn*>(dst)->set_has_null(null_cnt > 0);
@@ -233,7 +233,7 @@ public:
             auto& offsets = binary_column->get_offset();
             auto& bytes = binary_column->get_bytes();
             size_t prev_offsets = offsets.size();
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
+            offsets.resize(count + prev_offsets);
             size_t offset = bytes.size();
             size_t cnt = 0;
             for (size_t i = 0; i < count; ++i) {
@@ -557,7 +557,7 @@ public:
         }
         auto& offsets = binary_column->get_offset();
         size_t prev_offsets = offsets.size();
-        raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
+        offsets.resize(count + prev_offsets);
         {
             // fill offset columns
             for (size_t i = 0; i < count; ++i) {

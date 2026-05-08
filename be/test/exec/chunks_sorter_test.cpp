@@ -1361,14 +1361,16 @@ TEST_F(ChunksSorterTest, test_compare_column) {
     nullable_column->append_datum(Datum(2));
     nullable_column->append_nulls(2);
 
-    cmp_vector.resize(nullable_column->size());
+    cmp_vector.resize(nullable_column->size(), 0);
 
     auto desc_null_last = SortDescs();
     desc_null_last.descs.emplace_back(false, false);
     compare_columns(Columns{nullable_column}, cmp_vector, rhs_values, desc_null_last);
 
-    CompareVector expected = {0, -1, 1, 1};
-    EXPECT_EQ(cmp_vector, expected);
+    CompareVector expected;
+    expected.assign({0, -1, 1, 1});
+    ASSERT_EQ(cmp_vector.size(), expected.size());
+    EXPECT_TRUE(std::equal(cmp_vector.begin(), cmp_vector.end(), expected.begin()));
 
     // test asc null last
     // get filter array x > 1
@@ -1378,8 +1380,9 @@ TEST_F(ChunksSorterTest, test_compare_column) {
     cmp_vector.assign(4, 0);
     compare_columns(Columns{nullable_column}, cmp_vector, rhs_values, asc_null_last);
 
-    expected = {0, 1, -1, -1};
-    EXPECT_EQ(cmp_vector, expected);
+    expected.assign({0, 1, -1, -1});
+    ASSERT_EQ(cmp_vector.size(), expected.size());
+    EXPECT_TRUE(std::equal(cmp_vector.begin(), cmp_vector.end(), expected.begin()));
 }
 
 TEST_F(ChunksSorterTest, test_tie) {

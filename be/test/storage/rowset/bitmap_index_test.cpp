@@ -411,7 +411,8 @@ TEST_F(BitmapIndexTest, test_read_union_variants) {
         // Test read_union_bitmap(Buffer<rowid_t>)
         {
             Roaring result;
-            Buffer<rowid_t> rowids = {1, 3, 5};
+            Buffer<rowid_t> rowids;
+            rowids.assign({1, 3, 5});
             ASSERT_OK(iter->read_union_bitmap(rowids, &result));
             ASSERT_EQ(3, result.cardinality());
             ASSERT_TRUE(result.contains(1));
@@ -465,7 +466,7 @@ TEST_F(BitmapIndexTest, test_seek_dictionary_by_predicate) {
         Slice from("");
         auto res = iter->seek_dictionary_by_predicate(predicate, from, values.size());
         ASSERT_TRUE(res.ok());
-        auto hit_rowids = res.value();
+        auto hit_rowids = std::move(res).value();
         // "apple", "banana", "date" contain 'a'. Indices 0, 1, 3.
         ASSERT_EQ(3, hit_rowids.size());
         ASSERT_EQ(0, hit_rowids[0]);

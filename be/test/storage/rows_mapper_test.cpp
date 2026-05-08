@@ -15,6 +15,7 @@
 #include "storage/rows_mapper.h"
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -257,6 +258,7 @@ TEST_F(RowsMapperTest, test_crm_file_deleted_on_iterator_destruction) {
 
 TEST_F(RowsMapperTest, test_crm_file_gc) {
     DataDir* dir = get_stores();
+    DeferOp restore_tmp_path([&]() { (void)fs::create_directories(dir->get_tmp_path()); });
     {
         // generate several crm files.
         ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/aaa.crm"));
@@ -291,6 +293,11 @@ TEST_F(RowsMapperTest, test_crm_file_gc) {
         ASSERT_OK(fs::remove(dir->get_tmp_path()));
         // collect files
         dir->perform_tmp_path_scan();
+
+        RowsMapperBuilder builder(dir->get_tmp_path() + "/recreated.crm");
+        ASSERT_OK(builder.append(std::vector<uint64_t>{0}));
+        ASSERT_OK(builder.finalize());
+        ASSERT_TRUE(fs::path_exist(dir->get_tmp_path()));
     }
 }
 

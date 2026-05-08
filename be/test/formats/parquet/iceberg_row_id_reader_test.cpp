@@ -107,7 +107,8 @@ TEST_F(IcebergRowIdReaderTest, TestReadRangeIgnoresFilter) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 5);
-    Filter filter = {true, false, true, false, true};
+    Filter filter;
+    filter.assign({true, false, true, false, true});
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
 
@@ -511,7 +512,8 @@ TEST_F(IcebergRowIdReaderTest, TestSequenceNumberReaderWithFilter) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 4);
-    Filter filter = {true, false, true, false};
+    Filter filter;
+    filter.assign({true, false, true, false});
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
 

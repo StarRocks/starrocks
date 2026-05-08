@@ -95,6 +95,8 @@ auto ProbeKeyConstructorForOneKey<LT>::get_key_data(const HashTableProbeState& p
 template <LogicalType LT>
 void BuildKeyConstructorForSerializedFixedSize<LT>::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
     table_items->build_key_column = ColumnType::create(table_items->row_count + 1);
+    auto* column = ColumnHelper::as_raw_column<ColumnType>(table_items->build_key_column);
+    column->get_data()[0] = CppType{};
 }
 
 template <LogicalType LT>

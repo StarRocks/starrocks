@@ -48,53 +48,54 @@ protected:
 
 protected:
     template <typename CppType>
-    void _check_array(const Buffer<CppType>& check_values, const DatumArray& value);
+    void _check_array(std::initializer_list<CppType> check_values, const DatumArray& value);
 
     template <typename CppType>
-    void _check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
+    void _check_array_nullable(std::initializer_list<CppType> check_values, std::initializer_list<uint8_t> nulls,
                                const DatumArray& value);
 
     FunctionContext _ctx;
 };
 
 template <typename CppType>
-void ArrayFunctionsTest::_check_array(const Buffer<CppType>& check_values, const DatumArray& value) {
+void ArrayFunctionsTest::_check_array(std::initializer_list<CppType> check_values, const DatumArray& value) {
     ASSERT_EQ(check_values.size(), value.size());
+    const CppType* expected = check_values.begin();
     if constexpr (std::is_same_v<CppType, uint8_t>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_uint8());
+            ASSERT_EQ(expected[i], value[i].get_uint8());
         }
     } else if constexpr (std::is_same_v<CppType, int8_t>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_int8());
+            ASSERT_EQ(expected[i], value[i].get_int8());
         }
     } else if constexpr (std::is_same_v<CppType, int16_t>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_int16());
+            ASSERT_EQ(expected[i], value[i].get_int16());
         }
     } else if constexpr (std::is_same_v<CppType, int32_t>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_int32());
+            ASSERT_EQ(expected[i], value[i].get_int32());
         }
     } else if constexpr (std::is_same_v<CppType, int64_t>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_int64());
+            ASSERT_EQ(expected[i], value[i].get_int64());
         }
     } else if constexpr (std::is_same_v<CppType, int128_t>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_int128());
+            ASSERT_EQ(expected[i], value[i].get_int128());
         }
     } else if constexpr (std::is_same_v<CppType, float>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_float());
+            ASSERT_EQ(expected[i], value[i].get_float());
         }
     } else if constexpr (std::is_same_v<CppType, double>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_double());
+            ASSERT_EQ(expected[i], value[i].get_double());
         }
     } else if constexpr (std::is_same_v<CppType, Slice>) {
         for (size_t i = 0; i < value.size(); i++) {
-            ASSERT_EQ(check_values[i], value[i].get_slice());
+            ASSERT_EQ(expected[i], value[i].get_slice());
         }
     } else {
         ASSERT_TRUE(false);
@@ -102,25 +103,28 @@ void ArrayFunctionsTest::_check_array(const Buffer<CppType>& check_values, const
 }
 
 template <typename CppType>
-void ArrayFunctionsTest::_check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
+void ArrayFunctionsTest::_check_array_nullable(std::initializer_list<CppType> check_values,
+                                               std::initializer_list<uint8_t> nulls,
                                                const DatumArray& value) {
     ASSERT_EQ(check_values.size(), value.size());
+    const CppType* expected = check_values.begin();
+    const uint8_t* null_values = nulls.begin();
     if constexpr (std::is_same_v<CppType, int32_t>) {
         for (size_t i = 0; i < value.size(); i++) {
-            if (nulls[i]) {
+            if (null_values[i]) {
                 ASSERT_TRUE(value[i].is_null());
             } else {
                 ASSERT_FALSE(value[i].is_null());
-                ASSERT_EQ(check_values[i], value[i].get_int32());
+                ASSERT_EQ(expected[i], value[i].get_int32());
             }
         }
     } else if constexpr (std::is_same_v<CppType, Slice>) {
         for (size_t i = 0; i < value.size(); i++) {
-            if (nulls[i]) {
+            if (null_values[i]) {
                 ASSERT_TRUE(value[i].is_null());
             } else {
                 ASSERT_FALSE(value[i].is_null());
-                ASSERT_EQ(check_values[i], value[i].get_slice());
+                ASSERT_EQ(expected[i], value[i].get_slice());
             }
         }
     } else {

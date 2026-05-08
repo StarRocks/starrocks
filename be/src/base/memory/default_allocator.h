@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/memory/memory_allocator.h"
+#pragma once
 
-#include "runtime/memory/tracked_allocator.h"
+#include "base/memory/jemalloc_allocator.h"
+#include "base/memory/malloc_allocator.h"
+#include "base/memory/memory_allocator.h"
 
 namespace starrocks::memory {
 
+inline Allocator* get_default_allocator() {
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
-TrackedAllocator<JemallocAllocator<false>> kDefaultAllocator;
+    static JemallocAllocator<false> default_allocator;
 #else
-TrackedAllocator<MallocAllocator<false>> kDefaultAllocator;
+    static MallocAllocator<false> default_allocator;
 #endif
+    return &default_allocator;
+}
 
 } // namespace starrocks::memory

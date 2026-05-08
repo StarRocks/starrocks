@@ -104,7 +104,8 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
         // either null input results into null to keep consistent with split()
         if ((nulls != nullptr && nulls->get_data()[i]) || delimiter_viewer.is_null(i)) {
             res_null->get_data()[i] = 1;
-            res_offsets->append(res_offsets->get_data().back());
+            const size_t offset = res_offsets->get_data().back();
+            res_offsets->append(offset);
             continue;
         }
         res_null->get_data()[i] = 0;

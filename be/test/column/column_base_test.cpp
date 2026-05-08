@@ -311,8 +311,10 @@ TEST(ColumnBaseTest, EmptyNullInComplexColumnRejectsScalarColumn) {
     TestIntColumn col;
     col.append_value(1);
 
-    Buffer<uint8_t> null_data{0};
-    Buffer<uint32_t> offsets{0, 1};
+    Buffer<uint8_t> null_data;
+    null_data.assign({0});
+    Buffer<uint32_t> offsets;
+    offsets.assign({0, 1});
     EXPECT_THROW(col.empty_null_in_complex_column(null_data, offsets), std::runtime_error);
 }
 

@@ -285,11 +285,7 @@ struct HashTableProbeState {
     std::set<std::coroutine_handle<ProbeCoroutine::ProbePromise>> handles;
 
     HashTableProbeState(const HashTableProbeState& rhs)
-            : is_nulls(rhs.is_nulls),
-              buckets(rhs.buckets),
-              next(rhs.next),
-              probe_slice(rhs.probe_slice),
-              null_array(rhs.null_array),
+            : null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
               key_columns(rhs.key_columns),
               build_index_column(rhs.build_index_column == nullptr
@@ -300,9 +296,6 @@ struct HashTableProbeState {
                                          : rhs.probe_index_column->clone()),
               build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
               probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
-              build_match_index(rhs.build_match_index),
-              probe_match_index(rhs.probe_match_index),
-              probe_match_filter(rhs.probe_match_filter),
               count(rhs.count),
               probe_row_count(rhs.probe_row_count),
               match_flag(rhs.match_flag),
@@ -313,7 +306,15 @@ struct HashTableProbeState {
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
               output_probe_column_timer(rhs.output_probe_column_timer),
-              probe_counter(rhs.probe_counter) {}
+              probe_counter(rhs.probe_counter) {
+        is_nulls.assign(rhs.is_nulls.begin(), rhs.is_nulls.end());
+        buckets.assign(rhs.buckets.begin(), rhs.buckets.end());
+        next.assign(rhs.next.begin(), rhs.next.end());
+        probe_slice.assign(rhs.probe_slice.begin(), rhs.probe_slice.end());
+        build_match_index.assign(rhs.build_match_index.begin(), rhs.build_match_index.end());
+        probe_match_index.assign(rhs.probe_match_index.begin(), rhs.probe_match_index.end());
+        probe_match_filter.assign(rhs.probe_match_filter.begin(), rhs.probe_match_filter.end());
+    }
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;

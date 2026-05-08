@@ -131,7 +131,7 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_fixed_length(FixedLengthCol
 
     auto& data = column->get_data();
     size_t orig_size = data.size();
-    raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
+    data.resize(orig_size + selected);
     auto* __restrict dest = data.data() + orig_size;
     const T* __restrict src_data = reinterpret_cast<const T*>(src_column->raw_data());
 

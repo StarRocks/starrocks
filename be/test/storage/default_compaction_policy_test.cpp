@@ -240,6 +240,11 @@ public:
     }
 
     void SetUp() override {
+        _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _max_cumulative_compaction_num_singleton_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _max_compaction_concurrency = config::max_compaction_concurrency;
+        _min_base_compaction_num_singleton_deltas = config::min_base_compaction_num_singleton_deltas;
+
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_cumulative_compaction_num_singleton_deltas = 5;
         config::max_compaction_concurrency = 1;
@@ -281,6 +286,10 @@ public:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         config::storage_root_path = _default_storage_root_path;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _max_cumulative_compaction_num_singleton_deltas;
+        config::max_compaction_concurrency = _max_compaction_concurrency;
+        config::min_base_compaction_num_singleton_deltas = _min_base_compaction_num_singleton_deltas;
     }
 
 protected:
@@ -294,6 +303,11 @@ protected:
 
     int64_t _rowset_id;
     int64_t _version;
+
+    int64_t _min_cumulative_compaction_num_singleton_deltas = 0;
+    int64_t _max_cumulative_compaction_num_singleton_deltas = 0;
+    int32_t _max_compaction_concurrency = 0;
+    int64_t _min_base_compaction_num_singleton_deltas = 0;
 };
 
 TEST_F(DefaultCompactionPolicyTest, test_init_succeeded) {

@@ -447,6 +447,7 @@ TEST_F(TabletUpdatesTest, test_pk_index_write_amp_score) {
         keys4.emplace_back(i + N * 3);
     }
     const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    DeferOp restore_l0_max_mem_usage([&] { config::l0_max_mem_usage = old_l0_max_mem_usage; });
     // make sure generate l1
     config::l0_max_mem_usage = 10;
     auto rs0 = create_rowset(_tablet, keys);
@@ -471,7 +472,6 @@ TEST_F(TabletUpdatesTest, test_pk_index_write_amp_score) {
     ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() > 0);
     ASSERT_TRUE(_tablet->updates()->pk_index_major_compaction().ok());
     ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() == 0);
-    config::l0_max_mem_usage = old_l0_max_mem_usage;
 }
 
 TEST_F(TabletUpdatesTest, test_pk_index_major_compaction_reload_fail) {
@@ -491,6 +491,7 @@ TEST_F(TabletUpdatesTest, test_pk_index_major_compaction_reload_fail) {
         keys4.push_back(i + N * 3);
     }
     const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    DeferOp restore_l0_max_mem_usage([&] { config::l0_max_mem_usage = old_l0_max_mem_usage; });
     // make sure generate l1
     config::l0_max_mem_usage = 10;
     auto rs0 = create_rowset(_tablet, keys);
@@ -518,11 +519,12 @@ TEST_F(TabletUpdatesTest, test_pk_index_major_compaction_reload_fail) {
     TEST_ENABLE_ERROR_POINT("persistent_index_major_compaction_reload_fail",
                             Status::InternalError("injected major compaction reload failure"));
     SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp reset_failpoint([&] {
+        TEST_DISABLE_ERROR_POINT("persistent_index_major_compaction_reload_fail");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
     auto st = _tablet->updates()->pk_index_major_compaction();
     ASSERT_FALSE(st.ok());
-    TEST_DISABLE_ERROR_POINT("persistent_index_major_compaction_reload_fail");
-    SyncPoint::GetInstance()->DisableProcessing();
-    config::l0_max_mem_usage = old_l0_max_mem_usage;
 
     // verify primary index is marked need_rebuild
     auto manager = StorageEngine::instance()->update_manager();
@@ -1040,6 +1042,7 @@ TEST_F(TabletUpdatesTest, apply_with_merge_condition_pindex) {
 TEST_F(TabletUpdatesTest, apply_with_pk_dump) {
     const int N = 10000;
     int64_t old_config = config::l0_max_mem_usage;
+    DeferOp restore_l0_max_mem_usage([&] { config::l0_max_mem_usage = old_config; });
     config::l0_max_mem_usage = 1000;
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(true);
@@ -1068,7 +1071,6 @@ TEST_F(TabletUpdatesTest, apply_with_pk_dump) {
 
     // Ensure the persistent meta is correct.
     test_pk_dump(rowsets.size());
-    config::l0_max_mem_usage = old_config;
 }
 
 void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index) {
@@ -1291,9 +1293,6 @@ void TabletUpdatesTest::test_compaction_score_not_enough(bool enable_persistent_
     }
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet, nullptr);
     // the compaction score is not enough due to the enough rows and lacking deletion.
     EXPECT_LT(_tablet->updates()->get_compaction_score(), 0);
 }
@@ -1322,9 +1321,6 @@ void TabletUpdatesTest::test_compaction_score_enough_duplicate(bool enable_persi
     // but currently underlying implementation still support this, so we test this case anyway
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys, &deletes)).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_NE(best_tablet, nullptr);
     // the compaction score is enough due to the enough deletion.
     EXPECT_GT(_tablet->updates()->get_compaction_score(), 0);
 }
@@ -1351,9 +1347,6 @@ void TabletUpdatesTest::test_compaction_score_enough_normal(bool enable_persiste
     deletes.append_numbers(keys.data(), sizeof(int64_t) * 86);
     ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_NE(best_tablet, nullptr);
     // the compaction score is enough due to the enough deletion.
     EXPECT_GT(_tablet->updates()->get_compaction_score(), 0);
 }
@@ -1385,9 +1378,7 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index,
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
     ASSERT_EQ(N, read_tablet(_tablet, 4));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    const auto& best_tablet = _tablet;
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1430,13 +1421,20 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
     ASSERT_EQ(N, read_tablet(_tablet, 4));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    const auto& best_tablet = _tablet;
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
     std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    DeferOp join_compaction_thread([&] {
+        if (th.joinable()) {
+            th.join();
+        }
+    });
+    DeferOp restart_apply([&] {
+        best_tablet->updates()->stop_apply(false);
+        best_tablet->updates()->check_for_apply();
+    });
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
     while (output_rs == nullptr && retry_cnt <= 10) {
@@ -1468,7 +1466,9 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     best_tablet->updates()->check_for_apply();
 
     // check final result
-    th.join();
+    if (th.joinable()) {
+        th.join();
+    }
     EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
@@ -1482,9 +1482,10 @@ TEST_F(TabletUpdatesTest, horizontal_compaction) {
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_old_compact_stragety) {
+    auto old_config = config::enable_light_pk_compaction_publish;
     config::enable_light_pk_compaction_publish = false;
+    DeferOp restore_config([&] { config::enable_light_pk_compaction_publish = old_config; });
     test_horizontal_compaction(false);
-    config::enable_light_pk_compaction_publish = true;
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
@@ -1492,9 +1493,10 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_old_compact_stragety) {
+    auto old_config = config::enable_light_pk_compaction_publish;
     config::enable_light_pk_compaction_publish = false;
+    DeferOp restore_config([&] { config::enable_light_pk_compaction_publish = old_config; });
     test_horizontal_compaction(true);
-    config::enable_light_pk_compaction_publish = true;
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_rows_mapper) {
@@ -1506,9 +1508,10 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_with_rows_
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_random_pick) {
+    auto old_config = config::chaos_test_enable_random_compaction_strategy;
     config::chaos_test_enable_random_compaction_strategy = true;
+    DeferOp restore_config([&] { config::chaos_test_enable_random_compaction_strategy = old_config; });
     test_horizontal_compaction(true, false, true);
-    config::chaos_test_enable_random_compaction_strategy = false;
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
@@ -1536,9 +1539,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     ASSERT_EQ(N * loop, read_tablet(_tablet, loop + 1));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    const auto& best_tablet = _tablet;
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1585,9 +1586,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key_error_encode_case)
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_EQ(_tablet->updates()->version_history_count(), 3);
     ASSERT_EQ(10, read_tablet(_tablet, 3));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    const auto& best_tablet = _tablet;
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1624,9 +1623,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_nullable_sort_key) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         ASSERT_EQ(_tablet->updates()->version_history_count(), 3);
         ASSERT_EQ(12, read_tablet(_tablet, 3));
-        const auto& best_tablet = StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(
-                _tablet->data_dir());
-        EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+        const auto& best_tablet = _tablet;
         EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
         ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1666,9 +1663,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_nullable_sort_key) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         ASSERT_EQ(_tablet->updates()->version_history_count(), 3);
         ASSERT_EQ(12, read_tablet(_tablet, 3));
-        const auto& best_tablet = StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(
-                _tablet->data_dir());
-        EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+        const auto& best_tablet = _tablet;
         EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
         ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1706,9 +1701,7 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
     ASSERT_EQ(N, read_tablet(_tablet, 4));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    const auto& best_tablet = _tablet;
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1770,13 +1763,20 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
     ASSERT_EQ(N, read_tablet(_tablet, 4));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    const auto& best_tablet = _tablet;
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
     std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    DeferOp join_compaction_thread([&] {
+        if (th.joinable()) {
+            th.join();
+        }
+    });
+    DeferOp restart_apply([&] {
+        best_tablet->updates()->stop_apply(false);
+        best_tablet->updates()->check_for_apply();
+    });
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
     while (output_rs == nullptr && retry_cnt <= 10) {
@@ -1808,7 +1808,9 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     best_tablet->updates()->check_for_apply();
 
     // check final result
-    th.join();
+    if (th.joinable()) {
+        th.join();
+    }
     EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
@@ -1822,9 +1824,10 @@ TEST_F(TabletUpdatesTest, vertical_compaction) {
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_old_compact_stragety) {
+    auto old_config = config::enable_light_pk_compaction_publish;
     config::enable_light_pk_compaction_publish = false;
+    DeferOp restore_config([&] { config::enable_light_pk_compaction_publish = old_config; });
     test_vertical_compaction(false);
-    config::enable_light_pk_compaction_publish = true;
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index) {
@@ -1832,9 +1835,10 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index) {
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index_old_compact_stragety) {
+    auto old_config = config::enable_light_pk_compaction_publish;
     config::enable_light_pk_compaction_publish = false;
+    DeferOp restore_config([&] { config::enable_light_pk_compaction_publish = old_config; });
     test_vertical_compaction(true);
-    config::enable_light_pk_compaction_publish = true;
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_rows_mapper) {
@@ -1871,9 +1875,7 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     }
 
     ASSERT_EQ(N * loop, read_tablet(_tablet, loop + 1));
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
-    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    const auto& best_tablet = _tablet;
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -3576,6 +3578,7 @@ void TabletUpdatesTest::test_recover_rowset_sorter() {
     ASSERT_EQ(N * 2, read_tablet(_tablet, rowsets.size() + 1));
     int64_t old_config = config::max_update_compaction_num_singleton_deltas;
     config::max_update_compaction_num_singleton_deltas = 3;
+    DeferOp restore_config([&] { config::max_update_compaction_num_singleton_deltas = old_config; });
     ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::random_device rd;
     std::default_random_engine rng(rd());
@@ -3591,13 +3594,13 @@ void TabletUpdatesTest::test_recover_rowset_sorter() {
     ASSERT_TRUE(latest_rowsets[0]->rowset_meta()->has_max_compact_input_rowset_id());
     ASSERT_TRUE(latest_rowsets[0]->rowset_meta()->max_compact_input_rowset_id() <
                 latest_rowsets[1]->rowset_meta()->get_rowset_seg_id());
-    config::max_update_compaction_num_singleton_deltas = old_config;
 }
 
 TEST_F(TabletUpdatesTest, test_recover_rowset_sorter_old_stragety) {
+    auto old_config = config::enable_light_pk_compaction_publish;
     config::enable_light_pk_compaction_publish = false;
+    DeferOp restore_config([&] { config::enable_light_pk_compaction_publish = old_config; });
     test_recover_rowset_sorter();
-    config::enable_light_pk_compaction_publish = true;
 }
 
 TEST_F(TabletUpdatesTest, test_recover_rowset_sorter_new_stragety) {
@@ -3663,6 +3666,23 @@ TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
 }
 
 TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
+    const auto old_enable_pk_size_tiered_compaction_strategy = config::enable_pk_size_tiered_compaction_strategy;
+    const auto old_size_tiered_level_multiple = config::size_tiered_level_multiple;
+    const auto old_size_tiered_level_num = config::size_tiered_level_num;
+    const auto old_size_tiered_min_level_size = config::size_tiered_min_level_size;
+    const auto old_update_compaction_size_threshold = config::update_compaction_size_threshold;
+    const auto old_update_compaction_per_tablet_min_interval_seconds =
+            config::update_compaction_per_tablet_min_interval_seconds;
+    DeferOp restore_config([&] {
+        config::enable_pk_size_tiered_compaction_strategy = old_enable_pk_size_tiered_compaction_strategy;
+        config::size_tiered_level_multiple = old_size_tiered_level_multiple;
+        config::size_tiered_level_num = old_size_tiered_level_num;
+        config::size_tiered_min_level_size = old_size_tiered_min_level_size;
+        config::update_compaction_size_threshold = old_update_compaction_size_threshold;
+        config::update_compaction_per_tablet_min_interval_seconds =
+                old_update_compaction_per_tablet_min_interval_seconds;
+    });
+
     config::enable_pk_size_tiered_compaction_strategy = true;
     config::size_tiered_level_multiple = 2;
     config::size_tiered_level_num = 7;

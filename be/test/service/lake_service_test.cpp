@@ -31,7 +31,9 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_lake_fwd.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
@@ -90,7 +92,12 @@ public:
         ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
     }
 
-    void SetUp() override { create_tablet(); }
+    void SetUp() override {
+#ifndef __APPLE__
+        LakeServiceBrpcStubCache::initialize(ExecEnv::GetInstance()->pipeline_timer());
+#endif
+        create_tablet();
+    }
 
     void TearDown() override {}
 

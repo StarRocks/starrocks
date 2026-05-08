@@ -37,6 +37,13 @@
 
 namespace starrocks {
 
+template <typename T>
+Buffer<T> make_buffer(std::initializer_list<T> values) {
+    Buffer<T> result;
+    result.assign(values);
+    return result;
+}
+
 class OrcChunkReaderTest : public testing::Test {
 public:
     void SetUp() override { _create_runtime_state(); }
@@ -576,14 +583,14 @@ Buffer<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, O
     auto nullable = NullableColumn::static_pointer_cast(chunk->get_column_by_index(0));
     CHECK(!nullable->has_null());
     auto decimal_col = DecimalColumn::static_pointer_cast(nullable->data_column());
-    const auto span = decimal_col->get_data();
+    const auto& span = decimal_col->get_data();
     Buffer<DecimalV2Value> result;
     result.assign(span.begin(), span.end());
     return result;
 }
 
 TEST_F(OrcChunkReaderTest, TestDecimal64) {
-    const Buffer<int64_t> orc_values = {
+    const Buffer<int64_t> orc_values = make_buffer<int64_t>({
             0,
             1,
             -1,
@@ -595,7 +602,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
             999'999'999'999'999'999,
             1'000'000'000,
             999'999'999'000'000'000,
-    };
+    });
 
     auto check_results = [](const Buffer<const char*>& exp, const Buffer<DecimalV2Value>& real) {
         ASSERT_EQ(exp.size(), real.size());
@@ -606,7 +613,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
 
     ObjectPool pool;
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0.000000001",
                 "-0.000000001",
@@ -618,21 +625,21 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
                 "999999999.999999999",
                 "1",
                 "999999999",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<18, 9>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",           "0.00000001",           "-0.00000001", "0.00000123",          "1230",
                 "-9.99999999", "-9999999999.99999999", "9.99999999",  "9999999999.99999999", "10",
                 "9999999990",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<18, 8>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0.0000001",
                 "-0.0000001",
@@ -644,12 +651,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
                 "99999999999.9999999",
                 "100",
                 "99999999900",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<18, 7>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "1",
                 "-1",
@@ -661,12 +668,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
                 "999999999999999999",
                 "1000000000",
                 "999999999000000000",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<18, 0>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0",
                 "0",
@@ -678,12 +685,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
                 "99999999.999999999",
                 "0.1",
                 "99999999.9",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<18, 10>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0",
                 "0",
@@ -695,22 +702,22 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
                 "9999999.999999999",
                 "0.01",
                 "9999999.99",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<18, 11>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",           "0",           "0",          "0",          "0.00000123", "-0.000000009", "-9.999999999",
                 "0.000000009", "9.999999999", "0.00000001", "9.99999999",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<18, 17>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
 }
 
 TEST_F(OrcChunkReaderTest, TestDecimal128) {
-    const Buffer<int128_t> orc_values = {
+    const Buffer<int128_t> orc_values = make_buffer<int128_t>({
             (int128_t)0,
             (int128_t)1,
             (int128_t)-1,
@@ -724,7 +731,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
             (int128_t)999'999'999'999'999'999 * (int128_t)1'000'000'000 + (int128_t)999'999'999,
             (int128_t)1'000'000'000,
             (int128_t)999'999'999'000'000'000,
-    };
+    });
 
     auto check_results = [](const Buffer<const char*>& exp, const Buffer<DecimalV2Value>& real) {
         ASSERT_EQ(exp.size(), real.size());
@@ -735,7 +742,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
 
     ObjectPool pool;
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0.000000001",
                 "-0.000000001",
@@ -747,12 +754,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
                 "999999999999999999.999999999",
                 "1",
                 "999999999",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<27, 9>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0.00000001",
                 "-0.00000001",
@@ -764,12 +771,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
                 "9999999999999999999.99999999",
                 "10",
                 "9999999990",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<27, 8>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0.0000001",
                 "-0.0000001",
@@ -781,12 +788,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
                 "99999999999999999999.9999999",
                 "100",
                 "99999999900",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<27, 7>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "1",
                 "-1",
@@ -798,12 +805,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
                 "999999999999999999999999999",
                 "1000000000",
                 "999999999000000000",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<27, 0>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0",
                 "0",
@@ -815,12 +822,12 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
                 "99999999999999999.999999999",
                 "0.1",
                 "99999999.9",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<27, 10>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0",
                 "0",
                 "0",
@@ -832,14 +839,14 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
                 "9999999999999999.999999999",
                 "0.01",
                 "9999999.99",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<27, 11>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
-        Buffer<const char*> exp = {
+        Buffer<const char*> exp = make_buffer<const char*>({
                 "0", "0", "0", "0", "0", "0", "-9.999999999", "0", "9.999999999", "0", "0.000000009",
-        };
+        });
         auto real = convert_orc_to_starrocks_decimalv2<27, 26>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
@@ -914,7 +921,7 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
     auto nullable = NullableColumn::static_pointer_cast(chunk->get_column_by_index(0));
     CHECK(!nullable->has_null());
     auto ts_col = TimestampColumn::static_pointer_cast(nullable->data_column());
-    const auto span = ts_col->get_data();
+    const auto& span = ts_col->get_data();
     Buffer<TimestampValue> result;
     result.assign(span.begin(), span.end());
     return result;
@@ -922,7 +929,7 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
 
 TEST_F(OrcChunkReaderTest, TestTimestamp) {
     // clang-format off
-    const Buffer<int64_t> orc_values = {
+    const Buffer<int64_t> orc_values = make_buffer<int64_t>({
             // 2021.5.25 1:18:40 GMT
             // 2021.5.25 9:18:40 Asia/Shanghai
             1621905520,
@@ -936,15 +943,15 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
             // 1702-06-01 04:01:35
             // before unix epoch, time conversion is totoally a mess.
             -8444232248
-    };
+    });
     // clang-format on
     {
         // Instant Timestamp
-        const Buffer<std::string> exp_values = {
+        const Buffer<std::string> exp_values = make_buffer<std::string>({
                 "2021-05-25 09:18:40",
                 "1970-01-01 08:00:00",
                 "1702-06-01 04:01:35",
-        };
+        });
         ObjectPool pool;
         auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
                                                       true);
@@ -957,11 +964,11 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
     {
         // Timestamp
         // Instant Timestamp
-        const Buffer<std::string> exp_values = {
+        const Buffer<std::string> exp_values = make_buffer<std::string>({
                 "2021-05-25 01:18:40",
                 "1970-01-01 00:00:00",
                 "1702-05-31 19:55:52",
-        };
+        });
         ObjectPool pool;
         auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
                                                       false);

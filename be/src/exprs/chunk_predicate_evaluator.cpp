@@ -184,7 +184,7 @@ void ChunkPredicateEvaluator::eval_filter_null_values(Chunk* chunk,
     if (before_size == 0) return;
 
     // lazy allocation.
-    Buffer<uint8_t> selection(0);
+    Buffer<uint8_t> selection;
 
     for (SlotId slot_id : filter_null_value_columns) {
         const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);

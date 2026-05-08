@@ -107,9 +107,6 @@ public class UDFHelper {
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    // TODO: Use the time zone set by session variables?
-    private static final TimeZone timeZone = TimeZone.getDefault();
-
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
         byte[] nulls = new byte[numRows];
         byte[] dataArr = new byte[numRows];
@@ -258,7 +255,7 @@ public class UDFHelper {
             } else {
                 // Note: add the timezone offset back because Time#getTime() returns the GMT timestamp
                 long v = boxedArr[i].getTime();
-                double secondOfDay = (v + timeZone.getOffset(v)) / 1000.0;
+                double secondOfDay = (v + TimeZone.getDefault().getOffset(v)) / 1000.0;
                 secondOfDay %= 24 * 3600;
                 if (secondOfDay < 0) {
                     secondOfDay += 24 * 3600;

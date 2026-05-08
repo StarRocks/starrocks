@@ -366,10 +366,17 @@ TEST_F(JavaNativeMethodTest, get_struct_field_addrs) {
     env->DeleteLocalRef(jarr);
 }
 
-// Empty STRUCT (zero fields) returns a long[0] without throwing.
+// Empty STRUCT is not a valid StructColumn in debug builds: StructColumn
+// methods assume at least one child field. Release keeps the native helper's
+// defensive zero-field behavior covered because DCHECKs are compiled out.
 TEST_F(JavaNativeMethodTest, get_struct_field_addrs_empty) {
-    auto env = getJNIEnv();
     TypeDescriptor td(TYPE_STRUCT);
+
+#ifndef NDEBUG
+    ASSERT_DEATH_IF_SUPPORTED(ColumnHelper::create_column(td, /*nullable=*/true),
+                              "_field_names.size\\(\\) > 0");
+#else
+    auto env = getJNIEnv();
     auto col = ColumnHelper::create_column(td, /*nullable=*/true);
 
     jlongArray jarr = JavaNativeMethods::getStructFieldAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
@@ -377,6 +384,7 @@ TEST_F(JavaNativeMethodTest, get_struct_field_addrs_empty) {
     ASSERT_FALSE(env->ExceptionCheck());
     EXPECT_EQ(0, env->GetArrayLength(jarr));
     env->DeleteLocalRef(jarr);
+#endif
 }
 
 // Non-nullable STRUCT column rejects with IllegalArgumentException — STRUCT

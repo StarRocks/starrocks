@@ -189,7 +189,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 
     void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
-        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
+        column->get_data().append(keys.begin(), keys.begin() + chunk_size);
     }
 
     static constexpr bool has_single_null_key = false;
@@ -293,8 +293,8 @@ struct AggHashSetOfOneNullableNumberKey
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<ColumnType*>(nullable_column->data_column_raw_ptr());
-        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
-        nullable_column->null_column_data().resize(chunk_size);
+        column->get_data().append(keys.begin(), keys.begin() + chunk_size);
+        nullable_column->null_column_data().resize(chunk_size, 0);
     }
 
     static constexpr bool has_single_null_key = true;
@@ -498,7 +498,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         auto* column = down_cast<BinaryColumn*>(nullable_column->data_column_raw_ptr());
         keys.resize(chunk_size);
         column->append_strings(keys.data(), keys.size());
-        nullable_column->null_column_data().resize(chunk_size);
+        nullable_column->null_column_data().resize(chunk_size, 0);
     }
 
     static constexpr bool has_single_null_key = true;

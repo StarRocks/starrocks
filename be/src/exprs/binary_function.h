@@ -259,7 +259,7 @@ public:
                 null_flags = NullColumn::static_pointer_cast(Column::mutate(nullable_column->null_column()));
             } else {
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
-                null_flags->resize(data->size());
+                null_flags->get_data().resize(data->size(), 0);
             }
             const auto& real_data =
                     ColumnHelper::cast_to_raw<ResultType>(FunctionHelper::get_data_column_of_nullable(data).get());

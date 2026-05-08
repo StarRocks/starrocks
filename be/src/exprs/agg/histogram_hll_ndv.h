@@ -61,8 +61,8 @@ public:
             return;
         }
 
-        state.buckets = buckets;
-        state.hlls = std::vector<HyperLogLog>(buckets.size());
+        state.buckets = std::move(buckets);
+        state.hlls = std::vector<HyperLogLog>(state.buckets.size());
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {

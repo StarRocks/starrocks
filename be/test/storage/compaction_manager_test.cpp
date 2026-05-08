@@ -50,6 +50,14 @@ public:
     }
 
     void SetUp() override {
+        _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _max_compaction_concurrency = config::max_compaction_concurrency;
+        _enable_event_based_compaction_framework = config::enable_event_based_compaction_framework;
+        _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+        _max_compaction_candidate_num = config::max_compaction_candidate_num;
+        _cumulative_compaction_num_threads_per_disk = config::cumulative_compaction_num_threads_per_disk;
+        _base_compaction_num_threads_per_disk = config::base_compaction_num_threads_per_disk;
+
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         //config::max_cumulative_compaction_num_singleton_deltas = 5;
         config::max_compaction_concurrency = 10;
@@ -86,11 +94,13 @@ public:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         config::storage_root_path = _default_storage_root_path;
-        config::max_compaction_concurrency = -1;
-        config::enable_event_based_compaction_framework = true;
-        config::max_compaction_candidate_num = 40960;
-        config::cumulative_compaction_num_threads_per_disk = 1;
-        config::base_compaction_num_threads_per_disk = 1;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
+        config::max_compaction_concurrency = _max_compaction_concurrency;
+        config::enable_event_based_compaction_framework = _enable_event_based_compaction_framework;
+        config::vertical_compaction_max_columns_per_group = _vertical_compaction_max_columns_per_group;
+        config::max_compaction_candidate_num = _max_compaction_candidate_num;
+        config::cumulative_compaction_num_threads_per_disk = _cumulative_compaction_num_threads_per_disk;
+        config::base_compaction_num_threads_per_disk = _base_compaction_num_threads_per_disk;
     }
 
 protected:
@@ -101,6 +111,14 @@ protected:
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
     std::string _default_storage_root_path;
+
+    int64_t _min_cumulative_compaction_num_singleton_deltas = 0;
+    int32_t _max_compaction_concurrency = 0;
+    bool _enable_event_based_compaction_framework = false;
+    int32_t _vertical_compaction_max_columns_per_group = 0;
+    int32_t _max_compaction_candidate_num = 0;
+    int32_t _cumulative_compaction_num_threads_per_disk = 0;
+    int32_t _base_compaction_num_threads_per_disk = 0;
 };
 
 TEST_F(CompactionManagerTest, test_candidates) {

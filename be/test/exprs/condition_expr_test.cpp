@@ -376,7 +376,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         expr3->set_type(TypeDescriptor(TYPE_TINYINT));
         RandomValueExpr<TYPE_TINYINT> col7(expr_node, chunk_size, e);
         MockConstVectorizedExpr<TYPE_TINYINT> col8(expr_node, 123);
-        auto copyed_data = select_col.get_data();
+        const auto& copyed_data = select_col.get_data();
         expr3->_children.push_back(&select_col);
         expr3->_children.push_back(&col7);
         expr3->_children.push_back(&col8);
@@ -393,7 +393,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
             expr3->set_type(TypeDescriptor(TYPE_TINYINT));
             MockNullVectorizedExpr<TYPE_TINYINT> col7(expr_node, chunk_size, 1, true);
             MockConstVectorizedExpr<TYPE_TINYINT> col8(expr_node, 123);
-            auto copyed_data = select_col.get_data();
+            const auto& copyed_data = select_col.get_data();
             expr3->_children.push_back(&select_col);
             expr3->_children.push_back(&col7);
             expr3->_children.push_back(&col8);
@@ -414,7 +414,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         expr4->set_type(TypeDescriptor(TYPE_TINYINT));
         MockConstVectorizedExpr<TYPE_TINYINT> col9(expr_node, 123);
         RandomValueExpr<TYPE_TINYINT> col10(expr_node, chunk_size, e);
-        copyed_data = select_col.get_data();
+        const auto& copyed_data_const_var = select_col.get_data();
         expr4->_children.push_back(&select_col);
         expr4->_children.push_back(&col9);
         expr4->_children.push_back(&col10);
@@ -422,7 +422,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         ptr = expr4->evaluate(nullptr, nullptr);
         const auto* res_col4 = down_cast<const Int8Column*>(ColumnHelper::get_data_column(ptr.get()));
         for (int i = 0; i < res_col4->size(); ++i) {
-            auto result = copyed_data[i] ? 123 : col10.get_data()[i];
+            auto result = copyed_data_const_var[i] ? 123 : col10.get_data()[i];
             ASSERT_EQ(result, res_col4->get_data()[i]);
         }
 

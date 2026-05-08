@@ -191,7 +191,7 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
         size_t num_rows = partial_sort_chunk->num_rows();
         auto ordinal_column = OrdinalColumn<T>::create();
         auto& ordinal_data = down_cast<OrdinalColumn<T>*>(ordinal_column.get())->get_data();
-        raw::make_room(&ordinal_data, num_rows);
+        ordinal_data.resize(num_rows);
         for (T offset = 0; offset < num_rows; ++offset) {
             ordinal_data[offset] = static_cast<T>((chunk_idx << _offset_in_chunk_bits) | offset);
         }

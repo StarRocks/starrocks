@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/memory/default_allocator.h"
 #include "column/raw_buffer.h"
 
 namespace starrocks::util {
@@ -23,8 +24,8 @@ namespace starrocks::util {
 /// Intended as the default Column Buffer implementation when a fixed allocator is available.
 ///
 /// Differences from std::vector:
-/// - No default constructor: must be constructed with Buffer(allocator) or
-///   Buffer(allocator, count[, value]).
+/// - Default constructors bind to memory::get_default_allocator(); allocator-specific
+///   constructors are also available as Buffer(allocator) or Buffer(allocator, count[, value]).
 /// - allocator() returns the bound allocator; all allocations use it.
 /// - Copy is disabled (move-only). swap() also swaps the allocator.
 /// - Otherwise API matches vector (reserve, resize, push_back, assign, append, etc.)
@@ -36,11 +37,13 @@ public:
     using const_iterator = typename RawBuffer<T, padding>::const_iterator;
     using value_type = typename RawBuffer<T, padding>::value_type;
 
-    Buffer() = delete;
+    Buffer() : _allocator(memory::get_default_allocator()) {}
+    explicit Buffer(size_t count) : Buffer(memory::get_default_allocator(), count) {}
+    Buffer(size_t count, const T& value) : Buffer(memory::get_default_allocator(), count, value) {}
     explicit Buffer(memory::Allocator* allocator) : _allocator(allocator) {}
     Buffer(memory::Allocator* allocator, size_t count) : _allocator(allocator) {
         try {
-            this->resize(count);
+            this->resize(count, T{});
         } catch (...) {
             RawBuffer<T, padding>::release(this->_allocator);
             throw;
@@ -62,6 +65,7 @@ public:
     void release();
     void reserve(size_t new_cap);
     void shrink_to_fit();
+    void clear();
     void resize(size_t count);
     void resize(size_t count, const T& value);
     void assign(size_t count, const T& value);
@@ -124,6 +128,11 @@ void Buffer<T, padding>::reserve(size_t new_cap) {
 template <class T, size_t padding>
 void Buffer<T, padding>::shrink_to_fit() {
     RawBuffer<T, padding>::shrink_to_fit(this->_allocator);
+}
+
+template <class T, size_t padding>
+void Buffer<T, padding>::clear() {
+    RawBuffer<T, padding>::resize(this->_allocator, 0);
 }
 
 template <class T, size_t padding>

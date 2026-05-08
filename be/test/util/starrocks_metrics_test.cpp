@@ -162,181 +162,65 @@ TEST_F(BackendMetricsTest, Normal) {
     auto storage_metrics = StorageMetrics::instance();
     auto metrics = backend_metrics_registry_for_test();
     metrics->collect(&visitor);
+
+    auto assert_increment = [&](auto& counter, int64_t delta, const std::string& name,
+                                const MetricLabels& labels = MetricLabels()) {
+        auto metric = metrics->get_metric(name, labels);
+        ASSERT_TRUE(metric != nullptr);
+        const auto old_value = std::stoll(metric->to_string());
+        counter.increment(delta);
+        ASSERT_EQ(std::to_string(old_value + delta), metric->to_string());
+    };
+
     // check metric
-    {
-        runtime_metrics->fragment_requests_total.increment(12);
-        auto metric = metrics->get_metric("fragment_requests_total");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("12", metric->to_string().c_str());
-    }
-    {
-        runtime_metrics->fragment_request_duration_us.increment(101);
-        auto metric = metrics->get_metric("fragment_request_duration_us");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("101", metric->to_string().c_str());
-    }
-    {
-        runtime_metrics->lake_txn_log_collect_legacy_total.increment(1);
-        auto metric = metrics->get_metric("lake_txn_log_collect_legacy_total");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("1", metric->to_string().c_str());
-    }
-    {
-        http_metrics->http_requests_total.increment(102);
-        auto metric = metrics->get_metric("http_requests_total");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("102", metric->to_string().c_str());
-    }
-    {
-        http_metrics->http_request_send_bytes.increment(104);
-        auto metric = metrics->get_metric("http_request_send_bytes");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("104", metric->to_string().c_str());
-    }
-    {
-        service_metrics->short_circuit_request_total.increment(1);
-        auto metric = metrics->get_metric("short_circuit_request_total");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("1", metric->to_string().c_str());
-    }
-    {
-        query_scan_metrics->query_scan_bytes.increment(104);
-        auto metric = metrics->get_metric("query_scan_bytes");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("104", metric->to_string().c_str());
-    }
-    {
-        query_scan_metrics->query_scan_rows.increment(105);
-        auto metric = metrics->get_metric("query_scan_rows");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("105", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->push_requests_success_total.increment(106);
-        auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("106", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->push_requests_fail_total.increment(107);
-        auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "FAIL"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("107", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->push_request_duration_us.increment(108);
-        auto metric = metrics->get_metric("push_request_duration_us");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("108", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->push_request_write_bytes.increment(109);
-        auto metric = metrics->get_metric("push_request_write_bytes");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("109", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->push_request_write_rows.increment(110);
-        auto metric = metrics->get_metric("push_request_write_rows");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("110", metric->to_string().c_str());
-    }
+    assert_increment(runtime_metrics->fragment_requests_total, 12, "fragment_requests_total");
+    assert_increment(runtime_metrics->fragment_request_duration_us, 101, "fragment_request_duration_us");
+    assert_increment(runtime_metrics->lake_txn_log_collect_legacy_total, 1, "lake_txn_log_collect_legacy_total");
+    assert_increment(http_metrics->http_requests_total, 102, "http_requests_total");
+    assert_increment(http_metrics->http_request_send_bytes, 104, "http_request_send_bytes");
+    assert_increment(service_metrics->short_circuit_request_total, 1, "short_circuit_request_total");
+    assert_increment(query_scan_metrics->query_scan_bytes, 104, "query_scan_bytes");
+    assert_increment(query_scan_metrics->query_scan_rows, 105, "query_scan_rows");
+    assert_increment(storage_metrics->push_requests_success_total, 106, "push_requests_total",
+                     MetricLabels().add("status", "SUCCESS"));
+    assert_increment(storage_metrics->push_requests_fail_total, 107, "push_requests_total",
+                     MetricLabels().add("status", "FAIL"));
+    assert_increment(storage_metrics->push_request_duration_us, 108, "push_request_duration_us");
+    assert_increment(storage_metrics->push_request_write_bytes, 109, "push_request_write_bytes");
+    assert_increment(storage_metrics->push_request_write_rows, 110, "push_request_write_rows");
+
     // engine request
-    {
-        agent_metrics->create_tablet_requests_total.increment(15);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "create_tablet").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("15", metric->to_string().c_str());
-    }
-    {
-        agent_metrics->drop_tablet_requests_total.increment(16);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "drop_tablet").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("16", metric->to_string().c_str());
-    }
-    {
-        agent_metrics->report_all_tablets_requests_total.increment(17);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "report_all_tablets").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("17", metric->to_string().c_str());
-    }
-    {
-        agent_metrics->report_tablet_requests_total.increment(18);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "report_tablet").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("18", metric->to_string().c_str());
-    }
-    {
-        agent_metrics->schema_change_requests_total.increment(19);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "schema_change").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("19", metric->to_string().c_str());
-    }
-    {
-        agent_metrics->create_rollup_requests_total.increment(20);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "create_rollup").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("20", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->storage_migrate_requests_total.increment(21);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "storage_migrate").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("21", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->delete_requests_total.increment(22);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "delete").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("22", metric->to_string().c_str());
-    }
-    {
-        agent_metrics->clone_requests_total.increment(23);
-        auto metric = metrics->get_metric("engine_requests_total",
-                                          MetricLabels().add("type", "clone").add("status", "total"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("23", metric->to_string().c_str());
-    }
-    //  comapction
-    {
-        storage_metrics->base_compaction_deltas_total.increment(30);
-        auto metric = metrics->get_metric("compaction_deltas_total", MetricLabels().add("type", "base"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("30", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->cumulative_compaction_deltas_total.increment(31);
-        auto metric = metrics->get_metric("compaction_deltas_total", MetricLabels().add("type", "cumulative"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("31", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->base_compaction_bytes_total.increment(32);
-        auto metric = metrics->get_metric("compaction_bytes_total", MetricLabels().add("type", "base"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("32", metric->to_string().c_str());
-    }
-    {
-        storage_metrics->cumulative_compaction_bytes_total.increment(33);
-        auto metric = metrics->get_metric("compaction_bytes_total", MetricLabels().add("type", "cumulative"));
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("33", metric->to_string().c_str());
-    }
+    assert_increment(agent_metrics->create_tablet_requests_total, 15, "engine_requests_total",
+                     MetricLabels().add("type", "create_tablet").add("status", "total"));
+    assert_increment(agent_metrics->drop_tablet_requests_total, 16, "engine_requests_total",
+                     MetricLabels().add("type", "drop_tablet").add("status", "total"));
+    assert_increment(agent_metrics->report_all_tablets_requests_total, 17, "engine_requests_total",
+                     MetricLabels().add("type", "report_all_tablets").add("status", "total"));
+    assert_increment(agent_metrics->report_tablet_requests_total, 18, "engine_requests_total",
+                     MetricLabels().add("type", "report_tablet").add("status", "total"));
+    assert_increment(agent_metrics->schema_change_requests_total, 19, "engine_requests_total",
+                     MetricLabels().add("type", "schema_change").add("status", "total"));
+    assert_increment(agent_metrics->create_rollup_requests_total, 20, "engine_requests_total",
+                     MetricLabels().add("type", "create_rollup").add("status", "total"));
+    assert_increment(storage_metrics->storage_migrate_requests_total, 21, "engine_requests_total",
+                     MetricLabels().add("type", "storage_migrate").add("status", "total"));
+    assert_increment(storage_metrics->delete_requests_total, 22, "engine_requests_total",
+                     MetricLabels().add("type", "delete").add("status", "total"));
+    assert_increment(agent_metrics->clone_requests_total, 23, "engine_requests_total",
+                     MetricLabels().add("type", "clone").add("status", "total"));
+
+    // compaction
+    assert_increment(storage_metrics->base_compaction_deltas_total, 30, "compaction_deltas_total",
+                     MetricLabels().add("type", "base"));
+    assert_increment(storage_metrics->cumulative_compaction_deltas_total, 31, "compaction_deltas_total",
+                     MetricLabels().add("type", "cumulative"));
+    assert_increment(storage_metrics->base_compaction_bytes_total, 32, "compaction_bytes_total",
+                     MetricLabels().add("type", "base"));
+    assert_increment(storage_metrics->cumulative_compaction_bytes_total, 33, "compaction_bytes_total",
+                     MetricLabels().add("type", "cumulative"));
+
     // Gauge
-    {
-        runtime_metrics->memory_pool_bytes_total.increment(40);
-        auto metric = metrics->get_metric("memory_pool_bytes_total");
-        ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("40", metric->to_string().c_str());
-    }
+    assert_increment(runtime_metrics->memory_pool_bytes_total, 40, "memory_pool_bytes_total");
 }
 
 TEST_F(BackendMetricsTest, PageCacheMetrics) {

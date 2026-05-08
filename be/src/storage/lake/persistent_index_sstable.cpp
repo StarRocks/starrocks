@@ -48,7 +48,9 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
     LOG(INFO) << "clear corrupted cache for " << path << ", error:" << drop_status;
     return drop_status;
 #else
-    return Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+    auto drop_status = Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::drop_corrupted_cache", &drop_status);
+    return drop_status;
 #endif
 }
 
@@ -63,7 +65,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         options.filter_policy = _filter_policy.get();
     }
     options.block_cache = cache;
-    sstable::Table* table;
+    sstable::Table* table = nullptr;
     auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
     if (open_st.is_corruption()) {
@@ -85,6 +87,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         }
     }
     if (!open_st.ok()) {
+        delete table;
         StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
         LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
         return open_st;

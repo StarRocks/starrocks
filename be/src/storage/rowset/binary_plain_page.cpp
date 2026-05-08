@@ -408,8 +408,8 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
             } else {
                 // The page has no null flags (all values are not-null), but destination can still be nullable.
                 // Keep its null column in sync with selected rows.
-                nullable_column->null_column_raw_ptr()->resize(nullable_column->null_column_raw_ptr()->size() +
-                                                               selected_count);
+                auto& null_data = nullable_column->null_column_data();
+                null_data.resize(null_data.size() + selected_count, 0);
             }
         }
 

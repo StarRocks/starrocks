@@ -42,6 +42,7 @@
 #include <string>
 #include <thread>
 
+#include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
@@ -168,10 +169,18 @@ TEST_F(KVStoreTest, calc_rocksdb_write_buffer_size_test) {
 
     // case2: two paths
     std::string old_val2 = config::storage_root_path;
-    config::storage_root_path = "/storage;/storage2";
+    std::string root_path_1 = std::filesystem::absolute("kv_store_calc_buffer_size_1").string();
+    std::string root_path_2 = std::filesystem::absolute("kv_store_calc_buffer_size_2").string();
+    DeferOp defer([&]() {
+        config::storage_root_path = old_val2;
+        (void)fs::remove_all(root_path_1);
+        (void)fs::remove_all(root_path_2);
+    });
+    ASSERT_TRUE(fs::create_directories(root_path_1).ok());
+    ASSERT_TRUE(fs::create_directories(root_path_2).ok());
+    config::storage_root_path = root_path_1 + ";" + root_path_2;
     auto size2 = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
     ASSERT_EQ(size2, 67108864L);
-    config::storage_root_path = old_val2;
 }
 
 TEST_F(KVStoreTest, iterate_with_compact_on_timeout_test) {

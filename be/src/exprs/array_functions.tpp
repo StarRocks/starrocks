@@ -578,7 +578,7 @@ private:
         std::vector<const ArrayColumn*> src_columns;
         src_columns.reserve(columns.size());
         NullColumn::MutablePtr null_result = NullColumn::create();
-        null_result->resize(chunk_size);
+        null_result->get_data().resize(chunk_size, 0);
 
         for (int i = 0; i < columns.size(); ++i) {
             if (columns[i]->is_nullable()) {
@@ -603,14 +603,22 @@ private:
             dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column.data_column_raw_ptr());
             auto& dest_null_data = dest_nullable_column.null_column_data();
 
-            dest_null_data = null_result->get_data();
+            const auto& null_data = null_result->get_data();
+            dest_null_data.assign(null_data.begin(), null_data.end());
             dest_nullable_column.set_has_null(has_null);
         } else {
             dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
         }
 
+        const auto& result_null_data = null_result->get_data();
         HashSet hash_set;
         for (size_t i = 0; i < chunk_size; i++) {
+            if (is_nullable && result_null_data[i]) {
+                auto& dest_offsets = dest_data_column->offsets_column_raw_ptr()->get_data();
+                const uint32_t current_offset = dest_offsets.back();
+                dest_offsets.emplace_back(current_offset);
+                continue;
+            }
             _array_intersect_item<HashSet>(src_columns, i, &hash_set, dest_data_column);
             hash_set.clear();
         }
@@ -671,7 +679,8 @@ private:
             dest_data_column->append_nulls(1);
         }
 
-        dest_offsets.emplace_back(dest_offsets.back() + result_size + has_null);
+        const uint32_t current_offset = dest_offsets.back();
+        dest_offsets.emplace_back(current_offset + result_size + has_null);
     }
 };
 
@@ -1233,12 +1242,15 @@ private:
                             valid_elements_num++;
                         }
                     }
-                    dest_offsets.emplace_back(dest_offsets.back() + valid_elements_num);
+                    const uint32_t current_offset = dest_offsets.back();
+                    dest_offsets.emplace_back(current_offset + valid_elements_num);
                 } else {
-                    dest_offsets.emplace_back(dest_offsets.back());
+                    const uint32_t current_offset = dest_offsets.back();
+                    dest_offsets.emplace_back(current_offset);
                 }
             } else {
-                dest_offsets.emplace_back(dest_offsets.back());
+                const uint32_t current_offset = dest_offsets.back();
+                dest_offsets.emplace_back(current_offset);
             }
         }
         dest_column->elements_column_raw_ptr()->append_selective(src_column->elements(), indexes);

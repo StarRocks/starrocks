@@ -54,7 +54,7 @@ public:
         }
 
         auto nulls = RunTimeColumnType<TYPE_NULL>::create();
-        nulls->resize(v1->size());
+        nulls->get_data().resize(v1->size(), 0);
         auto* ns = nulls->get_data().data();
 
         if constexpr (!std::is_same<INPUT_NULL_OP, NopCheck>::value) {

@@ -239,7 +239,7 @@ public:
         uint32_t size = 0;
         ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &size));
         auto& data = column->get_data();
-        raw::make_room(&data, size / sizeof(T));
+        data.resize(size / sizeof(T));
         if (is_integer_encoding_enabled(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             constexpr bool is_sorted_i32 = sizeof(T) == 4 && sorted;
             ASSIGN_OR_RETURN(buff, decode_integers<is_sorted_i32>(buff, end, data.data(), size));
@@ -335,7 +335,7 @@ public:
         } else {
             ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &offset_bytes_size));
         }
-        raw::make_room(&column->get_offset(), offset_bytes_size / sizeof(typename BinaryColumnBase<T>::Offset));
+        column->get_offset().resize(offset_bytes_size / sizeof(typename BinaryColumnBase<T>::Offset));
 
         if (is_integer_encoding_enabled(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
             constexpr bool is_i32 = sizeof(T) == 4;

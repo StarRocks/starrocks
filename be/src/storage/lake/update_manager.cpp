@@ -2231,9 +2231,9 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
                 .container = rssid_fileinfo_container,
         };
         state.init(params);
-        auto st = Status::OK();
-        for (uint32_t segment_id = 0; segment_id < segments_size && !_update_state_mem_tracker->any_limit_exceeded();
-             segment_id++) {
+        auto st = state.prepare(params);
+        for (uint32_t segment_id = 0;
+             st.ok() && segment_id < segments_size && !_update_state_mem_tracker->any_limit_exceeded(); segment_id++) {
             st = state.load_segment(segment_id, params, metadata_ptr->version(), false /* resolve conflict*/,
                                     true /* need lock */);
             _update_state_cache.update_object_size(state_entry, state.memory_usage());

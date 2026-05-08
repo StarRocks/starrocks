@@ -69,6 +69,16 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+        _old_vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+        _old_lake_pk_compaction_min_input_segments = config::lake_pk_compaction_min_input_segments;
+        _old_lake_pk_compaction_max_input_rowsets = config::lake_pk_compaction_max_input_rowsets;
+        _old_size_tiered_min_level_size = config::size_tiered_min_level_size;
+        _old_size_tiered_level_multiple = config::size_tiered_level_multiple;
+        _old_size_tiered_level_num = config::size_tiered_level_num;
+        _old_size_tiered_max_compaction_level = config::size_tiered_max_compaction_level;
+        _old_enable_pk_size_tiered_compaction_strategy = config::enable_pk_size_tiered_compaction_strategy;
+        _old_update_compaction_ratio_threshold = config::update_compaction_ratio_threshold;
+        _old_update_compaction_delvec_file_io_amp_ratio = config::update_compaction_delvec_file_io_amp_ratio;
         config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
         (void)fs::remove_all(kTestDirectory);
         CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kSegmentDirectoryName)));
@@ -81,7 +91,16 @@ protected:
     }
 
     void TearDown() override {
-        config::lake_pk_compaction_min_input_segments = 5;
+        config::vertical_compaction_max_columns_per_group = _old_vertical_compaction_max_columns_per_group;
+        config::lake_pk_compaction_min_input_segments = _old_lake_pk_compaction_min_input_segments;
+        config::lake_pk_compaction_max_input_rowsets = _old_lake_pk_compaction_max_input_rowsets;
+        config::size_tiered_min_level_size = _old_size_tiered_min_level_size;
+        config::size_tiered_level_multiple = _old_size_tiered_level_multiple;
+        config::size_tiered_level_num = _old_size_tiered_level_num;
+        config::size_tiered_max_compaction_level = _old_size_tiered_max_compaction_level;
+        config::enable_pk_size_tiered_compaction_strategy = _old_enable_pk_size_tiered_compaction_strategy;
+        config::update_compaction_ratio_threshold = _old_update_compaction_ratio_threshold;
+        config::update_compaction_delvec_file_io_amp_ratio = _old_update_compaction_delvec_file_io_amp_ratio;
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
@@ -179,6 +198,16 @@ protected:
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id;
     RuntimeProfile _dummy_runtime_profile{"dummy"};
+    int64_t _old_vertical_compaction_max_columns_per_group = 0;
+    int64_t _old_lake_pk_compaction_min_input_segments = 0;
+    int64_t _old_lake_pk_compaction_max_input_rowsets = 0;
+    int64_t _old_size_tiered_min_level_size = 0;
+    int64_t _old_size_tiered_level_multiple = 0;
+    int64_t _old_size_tiered_level_num = 0;
+    int32_t _old_size_tiered_max_compaction_level = 0;
+    bool _old_enable_pk_size_tiered_compaction_strategy = false;
+    double _old_update_compaction_ratio_threshold = 0;
+    int32_t _old_update_compaction_delvec_file_io_amp_ratio = 0;
 };
 
 // each time overwrite last rows
@@ -1202,8 +1231,11 @@ static void generate_test_rowsets(std::vector<int64_t> bytes, std::vector<Rowset
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
-    const bool old_val = config::enable_pk_size_tiered_compaction_strategy;
     config::enable_pk_size_tiered_compaction_strategy = true;
+    config::size_tiered_min_level_size = 131072;
+    config::size_tiered_level_multiple = 5;
+    config::size_tiered_level_num = 7;
+    config::size_tiered_max_compaction_level = 3;
     // Case-1
     // 1000MB, 200MB, 40MB, 8MB, 1MB, 200KB, 10KB
     std::vector<RowsetMetadataPB> rowset_metas;
@@ -1303,7 +1335,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     pick_level_ptr->rowsets.pop();
     rowset_metas.clear();
     rowset_vec.clear();
-    config::enable_pk_size_tiered_compaction_strategy = old_val;
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {

@@ -384,7 +384,10 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
             for (int null_first : std::vector<int>{1, -1}) {
                 fmt::print("Column::compare_row rhs={} sort_order={} null_first={}\n", datum_str, sort_order,
                            null_first);
-                EXPECT_EQ(correct(datum, sort_order, null_first), execute(datum, sort_order, null_first));
+                auto expected = correct(datum, sort_order, null_first);
+                auto actual = execute(datum, sort_order, null_first);
+                ASSERT_EQ(expected.size(), actual.size());
+                EXPECT_TRUE(std::equal(expected.begin(), expected.end(), actual.begin()));
             }
         }
     }

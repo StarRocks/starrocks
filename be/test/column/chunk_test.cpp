@@ -382,7 +382,8 @@ TEST_F(ChunkTest, test_filter_with_extra_data) {
     auto chunk1 = std::make_unique<Chunk>(make_columns(2, 4), make_schema(2), extra_data1);
     ASSERT_EQ(4, chunk1->num_rows());
 
-    Buffer<uint8_t> selection{0, 1, 0, 1};
+    Buffer<uint8_t> selection;
+    selection.assign({0, 1, 0, 1});
     auto filtered = chunk1->filter(selection);
     ASSERT_EQ(2, filtered);
     chunk1->check_or_die();
@@ -1046,7 +1047,8 @@ TEST_F(ChunkTest, test_mutable_chunk_filter) {
     auto schema = make_schema(2);
     auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
 
-    Buffer<uint8_t> selection{0, 1, 0, 1};
+    Buffer<uint8_t> selection;
+    selection.assign({0, 1, 0, 1});
     size_t filtered = mutable_chunk->filter(selection);
     ASSERT_EQ(2, filtered);
     ASSERT_EQ(2, mutable_chunk->num_rows());
@@ -1059,7 +1061,8 @@ TEST_F(ChunkTest, test_mutable_chunk_filter_range) {
     auto schema = make_schema(2);
     auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
 
-    Buffer<uint8_t> selection{0, 1, 0, 1, 0, 1};
+    Buffer<uint8_t> selection;
+    selection.assign({0, 1, 0, 1, 0, 1});
     size_t filtered = mutable_chunk->filter_range(selection, 1, 4);
     ASSERT_EQ(3, filtered);
     ASSERT_EQ(3, mutable_chunk->num_rows());

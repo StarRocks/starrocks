@@ -438,7 +438,7 @@ public:
         }
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        return track_tablet(tablet_id);
     }
 
     TabletSharedPtr create_tablet_with_sort_key(int64_t tablet_id, int32_t schema_hash,
@@ -471,7 +471,7 @@ public:
         request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        return track_tablet(tablet_id);
     }
 
     TabletSharedPtr create_tablet_with_nullable_sort_key(int64_t tablet_id, int32_t schema_hash,
@@ -506,7 +506,7 @@ public:
         request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        return track_tablet(tablet_id);
     }
 
     TabletSharedPtr create_tablet_column_with_row(int64_t tablet_id, int32_t schema_hash,
@@ -571,7 +571,7 @@ public:
 
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        return track_tablet(tablet_id);
     }
 
     TabletSharedPtr create_tablet2(int64_t tablet_id, int32_t schema_hash) {
@@ -610,7 +610,7 @@ public:
         request.tablet_schema.columns.emplace_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        return track_tablet(tablet_id);
     }
 
     TabletSharedPtr create_tablet_to_schema_change(int64_t tablet_id, int32_t schema_hash) {
@@ -644,7 +644,7 @@ public:
 
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        return track_tablet(tablet_id);
     }
 
     TabletSharedPtr create_tablet_to_add_generated_column(int64_t tablet_id, int32_t schema_hash) {
@@ -683,7 +683,7 @@ public:
         request.tablet_schema.columns.emplace_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        return track_tablet(tablet_id);
     }
 
     void SetUp() override {
@@ -692,15 +692,19 @@ public:
     }
 
     void TearDown() override {
-        if (_tablet2) {
-            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id());
-            _tablet2.reset();
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        for (auto it = _created_tablet_ids.rbegin(); it != _created_tablet_ids.rend(); ++it) {
+            (void)tablet_mgr->drop_tablet(*it);
         }
-        if (_tablet) {
-            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
-            _tablet.reset();
-        }
+        _tablet2.reset();
+        _tablet.reset();
+        _created_tablet_ids.clear();
         config::enable_pk_size_tiered_compaction_strategy = true;
+    }
+
+    TabletSharedPtr track_tablet(int64_t tablet_id) {
+        _created_tablet_ids.emplace_back(tablet_id);
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
     static Status full_clone(const TabletSharedPtr& source_tablet, int clone_version,
@@ -861,6 +865,7 @@ protected:
     TabletSharedPtr _tablet;
     TabletSharedPtr _tablet2;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
+    std::vector<int64_t> _created_tablet_ids;
 };
 
 ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, int64_t version,

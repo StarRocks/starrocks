@@ -293,7 +293,7 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     const int cursor_rid = top_cursor.row_id();
     const int column_sz = top_cursor.data_segment()->order_by_columns.size();
 
-    Filter filter(row_sz);
+    Filter filter(row_sz, 0);
 
     // For single column special optimization
     if (_do_filter_data) {

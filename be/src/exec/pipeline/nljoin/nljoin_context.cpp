@@ -211,10 +211,12 @@ bool NLJoinContext::finish_probe(int32_t driver_seq, const Filter& build_match_f
     return is_last;
 }
 
-const Filter NLJoinContext::get_shared_build_match_flag() const {
+Filter NLJoinContext::get_shared_build_match_flag() const {
     DCHECK_EQ(_num_post_probers, _num_left_probers) << "all probers should share their states";
     std::lock_guard guard(_join_stage_mutex);
-    return _shared_build_match_flag;
+    Filter copy;
+    copy.assign(_shared_build_match_flag.begin(), _shared_build_match_flag.end());
+    return copy;
 }
 
 Status NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {

@@ -133,7 +133,7 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     const size_t num_rows = arg0->size();
     const auto* col_map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
     auto col_result = Int32Column::create();
-    raw::make_room(&col_result->get_data(), num_rows);
+    col_result->get_data().resize(num_rows);
     DCHECK_EQ(num_rows, col_result->size());
 
     const uint32_t* offsets = col_map->offsets().immutable_data().data();
@@ -314,12 +314,15 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
                         ++elem_size;
                     }
                 }
-                dest_offsets.emplace_back(dest_offsets.back() + elem_size);
+                const uint32_t offset = dest_offsets.back();
+                dest_offsets.emplace_back(offset + elem_size);
             } else { // filter_null_map[i] is null, empty the map by design[, alternatively keep all elements]
-                dest_offsets.emplace_back(dest_offsets.back());
+                const uint32_t offset = dest_offsets.back();
+                dest_offsets.emplace_back(offset);
             }
         } else { // dest_null_map[i] is null
-            dest_offsets.emplace_back(dest_offsets.back());
+            const uint32_t offset = dest_offsets.back();
+            dest_offsets.emplace_back(offset);
         }
     }
     dest_column->keys_column_raw_ptr()->append_selective(src_column->keys(), indexes);

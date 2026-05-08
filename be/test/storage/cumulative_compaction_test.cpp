@@ -275,6 +275,12 @@ public:
     }
 
     void SetUp() override {
+        _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _max_cumulative_compaction_num_singleton_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _max_compaction_concurrency = config::max_compaction_concurrency;
+        _enable_event_based_compaction_framework = config::enable_event_based_compaction_framework;
+        _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_cumulative_compaction_num_singleton_deltas = 5;
         config::max_compaction_concurrency = 1;
@@ -313,6 +319,11 @@ public:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         config::storage_root_path = _default_storage_root_path;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _max_cumulative_compaction_num_singleton_deltas;
+        config::max_compaction_concurrency = _max_compaction_concurrency;
+        config::enable_event_based_compaction_framework = _enable_event_based_compaction_framework;
+        config::vertical_compaction_max_columns_per_group = _vertical_compaction_max_columns_per_group;
     }
 
 protected:
@@ -326,6 +337,12 @@ protected:
 
     int64_t _rowset_id;
     int64_t _version;
+
+    int64_t _min_cumulative_compaction_num_singleton_deltas = 0;
+    int64_t _max_cumulative_compaction_num_singleton_deltas = 0;
+    int32_t _max_compaction_concurrency = 0;
+    bool _enable_event_based_compaction_framework = false;
+    int32_t _vertical_compaction_max_columns_per_group = 0;
 };
 
 TEST_F(CumulativeCompactionTest, test_init_succeeded) {

@@ -175,7 +175,8 @@ public:
     }
 
     void resize(size_t n) override {
-        _offsets.resize(n + 1, _offsets.back());
+        const auto fill_offset = _offsets.back();
+        _offsets.resize(n + 1, fill_offset);
         _bytes.resize(_offsets.back());
     }
 
@@ -219,7 +220,7 @@ public:
     void append_default() override { _offsets.emplace_back(_bytes.size()); }
 
     void append_default(size_t count) override {
-        _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
+        _offsets.append(count, static_cast<uint32_t>(_bytes.size()));
     }
 
     StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;

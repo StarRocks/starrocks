@@ -292,7 +292,11 @@ WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_c
           _metrics(metrics),
           _shared_mem_tracker_manager(metrics) {}
 
-WorkGroupManager::~WorkGroupManager() = default;
+WorkGroupManager::~WorkGroupManager() {
+    if (_metrics != nullptr && _metrics_hook_registered) {
+        _metrics->deregister_hook("work_group_metrics_hook");
+    }
+}
 
 void WorkGroupManager::destroy() {
     std::unique_lock write_lock(_mutex);
@@ -318,8 +322,9 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
     if (_metrics == nullptr) {
         return;
     }
-    std::call_once(init_metrics_once_flag,
-                   [this] { _metrics->register_hook("work_group_metrics_hook", [this] { update_metrics(); }); });
+    std::call_once(init_metrics_once_flag, [this] {
+        _metrics_hook_registered = _metrics->register_hook("work_group_metrics_hook", [this] { update_metrics(); });
+    });
 
     if (_wg_metrics.count(wg->name()) == 0) {
         // Unlock when register_metric to avoid deadlock, since update_metric would take the MetricRegistry::mutex then WorkGroupManager::mutex

@@ -56,7 +56,7 @@ struct DecimalDecimalCast {
 
         if constexpr (check_overflow<overflow_mode>) {
             null_column = NullColumn::create();
-            null_column->resize(num_rows);
+            null_column->get_data().resize(num_rows, 0);
             nulls = &null_column->get_data().front();
         }
 
@@ -160,7 +160,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
         bool has_null = false;
         if constexpr (check_overflow<overflow_mode>) {
             null_column = NullColumn::create();
-            null_column->resize(num_rows);
+            null_column->get_data().resize(num_rows, 0);
             nulls = &null_column->get_data().front();
         }
 
@@ -259,7 +259,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
         bool has_null = false;
         if constexpr (check_overflow<overflow_mode>) {
             null_column = NullColumn::create();
-            null_column->resize(num_rows);
+            null_column->get_data().resize(num_rows, 0);
             nulls = &null_column->get_data().front();
         }
 
@@ -371,7 +371,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
         auto has_null = false;
         if constexpr (check_overflow<overflow_mode>) {
             null_column = NullColumn::create();
-            null_column->resize(num_rows);
+            null_column->get_data().resize(num_rows, 0);
             nulls = &null_column->get_data().front();
         }
         const auto binary_data = ColumnHelper::cast_to_raw<StringType>(column);
@@ -404,7 +404,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
         auto result = BinaryColumn::create();
         auto& bytes = result->get_bytes();
         auto& offsets = result->get_offset();
-        raw::make_room(&offsets, num_rows + 1);
+        offsets.resize(num_rows + 1);
         offsets[0] = 0;
         size_t max_length = decimal_precision_limit<DecimalCppType> + 4;
         bytes.resize(num_rows * max_length);
@@ -564,7 +564,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
         auto has_null = false;
         if constexpr (check_overflow<overflow_mode>) {
             null_column = NullColumn::create();
-            null_column->resize(num_rows);
+            null_column->get_data().resize(num_rows, 0);
             nulls = &null_column->get_data().front();
         }
 

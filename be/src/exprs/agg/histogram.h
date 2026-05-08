@@ -190,8 +190,7 @@ private:
                 continue;
             }
             if (buckets.empty()) {
-                Bucket<LT> bucket(v, v, 1, 1);
-                buckets.emplace_back(bucket);
+                buckets.emplace_back(v, v, 1, 1);
             } else {
                 Bucket<LT>* last_bucket = &buckets.back();
 
@@ -201,8 +200,7 @@ private:
                     last_bucket->upper_repeats++;
                 } else {
                     if (last_bucket->count_in_bucket >= bucket_size) {
-                        Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
-                        buckets.emplace_back(bucket);
+                        buckets.emplace_back(v, v, last_bucket->count + 1, 1);
                     } else {
                         last_bucket->update_upper(v);
                         last_bucket->count++;
@@ -259,8 +257,7 @@ private:
                 continue;
             }
             if (buckets.empty()) {
-                Bucket<LT> bucket(v, v, 1, 1);
-                buckets.emplace_back(bucket);
+                buckets.emplace_back(v, v, 1, 1);
                 sample_distinct = 1;
                 count_once = 1;
                 new_upper = true;
@@ -281,8 +278,7 @@ private:
                         int64_t last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct,
                                                                    count_once, sample_ratio);
                         last_bucket->distinct_count = last_ndv;
-                        Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
-                        buckets.emplace_back(bucket);
+                        buckets.emplace_back(v, v, last_bucket->count + 1, 1);
                         sample_distinct = 1;
                         count_once = 1;
                     } else {

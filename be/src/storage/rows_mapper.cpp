@@ -19,6 +19,7 @@
 #include "base/coding.h"
 #include "base/container/raw_container.h"
 #include "base/hash/crc32c.h"
+#include "base/path/path_util.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -31,6 +32,12 @@ namespace starrocks {
 
 Status RowsMapperBuilder::_init() {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_filename));
+    if (fs->type() == FileSystem::POSIX) {
+        const auto dir = path_util::dir_name(_filename);
+        if (dir != "." && !dir.empty()) {
+            RETURN_IF_ERROR(fs->create_dir_recursive(dir));
+        }
+    }
     WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_wfile, fs->new_writable_file(wblock_opts, _filename));
     return Status::OK();

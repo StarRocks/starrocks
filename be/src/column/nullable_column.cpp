@@ -73,7 +73,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
         const auto null_data = src_column._null_column->immutable_data();
 
         if (!src_column.has_null()) {
-            _null_column->resize(_null_column->size() + count);
+            null_column_data().resize(_null_column->size() + count, 0);
             _data_column->append(*src_column._data_column, offset, count);
         } else {
             _null_column->append(*src_column._null_column, offset, count);
@@ -81,7 +81,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
             _has_null = _has_null || SIMD::contain_nonzero(null_data, offset, count);
         }
     } else {
-        _null_column->resize(_null_column->size() + count);
+        null_column_data().resize(_null_column->size() + count, 0);
         _data_column->append(src, offset, count);
     }
 
@@ -102,7 +102,7 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
         DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
 
         if (!src_column.has_null()) {
-            _null_column->resize(orig_size + size);
+            null_column_data().resize(orig_size + size, 0);
             _data_column->append_selective(*src_column._data_column, indexes, from, size);
         } else {
             _null_column->append_selective(*src_column._null_column, indexes, from, size);
@@ -110,7 +110,7 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
             _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
         }
     } else {
-        _null_column->resize(orig_size + size);
+        null_column_data().resize(orig_size + size, 0);
         _data_column->append_selective(src, indexes, from, size);
     }
 
@@ -130,7 +130,7 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
         _data_column->append_value_multiple_times(*src_column._data_column, index, size);
         _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
     } else {
-        _null_column->resize(orig_size + size);
+        null_column_data().resize(orig_size + size, 0);
         _data_column->append_value_multiple_times(src, index, size);
     }
 
@@ -149,8 +149,8 @@ bool NullableColumn::append_nulls(size_t count) {
     if (count == 0) {
         return true;
     }
-    _data_column->resize_uninitialized(_data_column->size() + count);
-    null_column_data().insert(null_column_data().end(), count, 1);
+    _data_column->append_default(count);
+    null_column_data().append(count, 1);
     DCHECK_EQ(_null_column->size(), _data_column->size());
     _has_null = true;
     return true;
@@ -195,7 +195,7 @@ bool NullableColumn::append_continuous_fixed_length_strings(const char* data, si
 size_t NullableColumn::append_numbers(const void* buff, size_t length) {
     size_t n;
     if ((n = _data_column->append_numbers(buff, length)) > 0) {
-        null_column_data().insert(null_column_data().end(), n, 0);
+        null_column_data().append(n, 0);
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return n;
@@ -203,7 +203,7 @@ size_t NullableColumn::append_numbers(const void* buff, size_t length) {
 
 void NullableColumn::append_value_multiple_times(const void* value, size_t count) {
     _data_column->append_value_multiple_times(value, count);
-    null_column_data().insert(null_column_data().end(), count, 0);
+    null_column_data().append(count, 0);
 }
 
 void NullableColumn::fill_null_with_default() {
@@ -228,7 +228,7 @@ void NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
         update_has_null();
     } else {
         auto new_null_column = NullColumn::create();
-        new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
+        new_null_column->get_data().append(replace_num, 0);
         _null_column->update_rows(*new_null_column.get(), indexes);
         _data_column->update_rows(src, indexes);
     }
@@ -237,7 +237,7 @@ void NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
 size_t NullableColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     auto s1 = _data_column->filter_range(filter, from, to);
     if (!_has_null) {
-        _null_column->resize(s1);
+        null_column_data().resize(s1, 0);
     } else {
         auto s2 = _null_column->filter_range(filter, from, to);
         DCHECK_EQ(s1, s2);

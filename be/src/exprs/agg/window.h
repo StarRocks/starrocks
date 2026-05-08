@@ -646,6 +646,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                             AggDataTypeTraits<LT>::assign_value(
                                     this->data(state).value,
                                     AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                        } else if constexpr (lt_is_string_or_binary<LT>) {
+                            AggDataTypeTraits<LT>::assign_value(
+                                    this->data(state).value,
+                                    AggDataTypeTraits<LT>::get_ref(this->data(state).default_value));
                         } else {
                             this->data(state).value = this->data(state).default_value;
                         }
@@ -684,6 +688,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                             AggDataTypeTraits<LT>::assign_value(
                                     this->data(state).value,
                                     AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                        } else if constexpr (lt_is_string_or_binary<LT>) {
+                            AggDataTypeTraits<LT>::assign_value(
+                                    this->data(state).value,
+                                    AggDataTypeTraits<LT>::get_ref(this->data(state).default_value));
                         } else {
                             this->data(state).value = this->data(state).default_value;
                         }

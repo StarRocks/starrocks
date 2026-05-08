@@ -173,7 +173,8 @@ PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
         // replicate
         auto array_view_column =
                 ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(Column::mutate(array_column)));
-        Buffer<uint32_t> offsets{0, 2, 3, 6};
+        Buffer<uint32_t> offsets;
+        offsets.assign({0, 2, 3, 6});
         auto column = array_view_column->replicate(offsets).value();
         ASSERT_TRUE(column->is_array_view());
         auto result = ArrayViewColumn::dynamic_pointer_cast(column);

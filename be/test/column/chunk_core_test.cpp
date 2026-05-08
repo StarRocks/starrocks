@@ -86,7 +86,8 @@ TEST_F(ChunkCoreTest, CloneAppendFilter) {
     ASSERT_EQ(11, dst->get_column_by_index(0)->get(0).get_int32());
     ASSERT_EQ(14, dst->get_column_by_index(0)->get(3).get_int32());
 
-    Filter selection = {1, 0, 1, 0};
+    Filter selection;
+    selection.assign({1, 0, 1, 0});
     dst->filter(selection, true);
     ASSERT_EQ(2, dst->num_rows());
     ASSERT_EQ(11, dst->get_column_by_index(0)->get(0).get_int32());

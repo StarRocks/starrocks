@@ -3870,8 +3870,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->txn_id = txn_id;
     state->version = version;
     state->total_subtasks_created = 2;
-    state->large_rowset_split_groups[0] = {0, 1};
-    state->expected_large_rowset_split_counts[0] = 2;
+    state->is_range_split = true;
+    state->expected_range_split_count = 2;
 
     SubtaskInfo info0, info1;
     info0.subtask_id = 0;
@@ -3947,8 +3947,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->txn_id = txn_id;
     state->version = version;
     state->total_subtasks_created = 2;
-    state->large_rowset_split_groups[0] = {0, 1};
-    state->expected_large_rowset_split_counts[0] = 2;
+    state->is_range_split = true;
+    state->expected_range_split_count = 2;
 
     auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
     ctx0->subtask_id = 0;
@@ -4936,6 +4936,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split_
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
         op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
+        op->mutable_output_rowset()->add_segment_size(500);
+        op->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
 
         auto* lcrm = op->mutable_lcrm_file();
         lcrm->set_name(fmt::format("lcrm_{}", i));
@@ -5563,6 +5565,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
             output->add_segments(fmt::format("seg_{}.dat", i));
             output->add_segment_size(500);
             output->add_segment_encryption_metas(fmt::format("enc_{}", i));
+            output->add_segment_metas()->set_segment_idx(0);
 
             auto* sst = op->add_ssts();
             sst->set_name(fmt::format("sst_{}.sst", i));
@@ -5824,6 +5827,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     out0->add_segments("range_seg_0.dat");
     out0->add_segment_size(500);
     out0->add_segment_encryption_metas("enc_meta_0");
+    out0->add_segment_metas()->set_segment_idx(0);
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -5841,6 +5845,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     out1->add_segments("range_seg_1.dat");
     out1->add_segment_size(1000);
     out1->add_segment_encryption_metas("enc_meta_1");
+    out1->add_segment_metas()->set_segment_idx(0);
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -5858,6 +5863,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     out2->add_segments("range_seg_2.dat");
     out2->add_segment_size(1500);
     out2->add_segment_encryption_metas("enc_meta_2");
+    out2->add_segment_metas()->set_segment_idx(0);
 
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -6476,6 +6482,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     out0->set_num_rows(100);
     out0->set_data_size(1000);
     out0->add_segments("range_seg_0.dat");
+    out0->add_segment_metas()->set_segment_idx(0);
     // Add SST
     auto* sst0 = op0->add_ssts();
     sst0->set_name("sst_0.sst");
@@ -6502,6 +6509,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     out1->set_num_rows(200);
     out1->set_data_size(2000);
     out1->add_segments("range_seg_1.dat");
+    out1->add_segment_metas()->set_segment_idx(0);
     // Add SST
     auto* sst1 = op1->add_ssts();
     sst1->set_name("sst_1.sst");
@@ -6523,6 +6531,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     const auto& merged = op_parallel.subtask_compactions(0);
     EXPECT_EQ(2, merged.ssts_size());
     EXPECT_EQ(1, merged.sst_ranges_size());
+    ASSERT_EQ(2, merged.output_rowset().segment_metas_size());
+    EXPECT_EQ(0, merged.output_rowset().segment_metas(0).segment_idx());
+    EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
 
     // Verify LCRM orphan files are tracked
     EXPECT_EQ(2, op_parallel.orphan_lcrm_files_size());
@@ -6756,6 +6767,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_vlog_paths) {
             op->mutable_output_rowset()->set_num_rows(100);
             op->mutable_output_rowset()->set_data_size(1000);
             op->mutable_output_rowset()->add_segments(fmt::format("range_seg_{}.dat", i));
+            op->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
             _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
         }
 

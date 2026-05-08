@@ -377,6 +377,13 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
 
     //Array Offset
     int offset = 0;
+    auto append_bitmap_values = [&](const BitmapValue& bitmap) {
+        std::vector<int64_t> values;
+        values.reserve(bitmap.cardinality());
+        bitmap.to_array(&values);
+        array_bigint_column->get_data().append(values.begin(), values.end());
+        offset += values.size();
+    };
     if (columns[0]->has_null()) {
         for (int row = 0; row < size; ++row) {
             array_offsets->append(offset);
@@ -385,15 +392,13 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
             }
 
             auto& bitmap = *lhs.value(row);
-            bitmap.to_array(&array_bigint_column->get_data());
-            offset += bitmap.cardinality();
+            append_bitmap_values(bitmap);
         }
     } else {
         for (int row = 0; row < size; ++row) {
             array_offsets->append(offset);
             auto& bitmap = *lhs.value(row);
-            bitmap.to_array(&array_bigint_column->get_data());
-            offset += bitmap.cardinality();
+            append_bitmap_values(bitmap);
         }
     }
     array_offsets->append(offset);

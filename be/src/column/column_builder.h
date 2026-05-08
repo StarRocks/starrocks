@@ -149,15 +149,15 @@ public:
     // and null_column are deterministic, so proper memory
     // room can be allocated, but bytes' size is non-deterministic,
     // so just reserve moderate memory room. offsets need no
-    // initialization(raw::make_room), because it is overwritten
+    // initialization, because it is overwritten
     // fully. null_columns should be zero-out(resize), just
     // slot corresponding to null elements is marked to 1.
     void resize(size_t num_rows, size_t bytes_size) {
         _column->get_bytes().reserve(bytes_size);
         auto& offsets = _column->get_offset();
-        raw::make_room(&offsets, num_rows + 1);
+        offsets.resize(num_rows + 1);
         offsets[0] = 0;
-        _null_column->get_data().resize(num_rows);
+        _null_column->get_data().resize(num_rows, 0);
     }
 
     // mark i-th resulting element is null

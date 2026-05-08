@@ -207,7 +207,7 @@ NullColumn::MutablePtr FunctionHelper::union_null_column(const NullColumnPtr& v1
     NullColumn::MutablePtr null_result = NullColumn::create();
 
     auto& result_data = null_result->get_data();
-    raw::make_room(&result_data, row_num);
+    result_data.resize(row_num);
     auto result_begin = (uint8_t*)result_data.data();
     const size_t bytes_size = sizeof(NullColumn::ValueType) * row_num;
 

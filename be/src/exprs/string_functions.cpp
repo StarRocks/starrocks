@@ -451,7 +451,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
         bytes.reserve(reserved);
     }
 
-    raw::make_room(&offsets, size + 1);
+    offsets.resize(size + 1);
     offsets[0] = 0;
 
     auto src_bytes = src->get_immutable_bytes();
@@ -487,7 +487,7 @@ ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, 
     const size_t size = src->size();
 
     if (len <= 0) {
-        offsets.resize(size + 1);
+        offsets.resize(size + 1, 0);
         return result;
     }
 
@@ -499,7 +499,7 @@ ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, 
     }
 
     bytes.reserve(reserved);
-    raw::make_room(&offsets, size + 1);
+    offsets.resize(size + 1);
     offsets[0] = 0;
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
@@ -799,9 +799,9 @@ public:
         auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
         auto& nulls = builder.get_null_data();
 
-        raw::make_room(&dst_offsets, num_rows + 1);
+        dst_offsets.resize(num_rows + 1);
         dst_offsets[0] = 0;
-        nulls.resize(num_rows);
+        nulls.resize(num_rows, 0);
         bool has_null = false;
         size_t dst_off = 0;
         for (auto i = 0; i < num_rows; ++i) {
@@ -891,14 +891,14 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
 
-    dst_nulls.resize(num_rows);
+    dst_nulls.resize(num_rows, 0);
     bool has_null = false;
 
     if (times <= 0) {
-        dst_offsets.resize(num_rows + 1);
+        dst_offsets.resize(num_rows + 1, 0);
         return builder.build(ColumnHelper::is_all_const(columns));
     } else {
-        raw::make_room(&dst_offsets, num_rows + 1);
+        dst_offsets.resize(num_rows + 1);
         dst_offsets[0] = 0;
         size_t reserved = static_cast<size_t>(times) * src_offsets.back();
         if (reserved > get_olap_string_max_length() * num_rows) {
@@ -954,8 +954,8 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
     auto& dst_nulls = builder.get_null_data();
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
-    dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_nulls.resize(num_rows, 0);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
     bool has_null = false;
@@ -1209,7 +1209,7 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
 
     const int num_src_bytes = src_offsets.back();
     dst_bytes.resize(num_src_bytes);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
     uint8_t* dst_begin = dst_bytes.data();
@@ -1262,9 +1262,9 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
     // `src_bytes` corresponds to a one-byte UTF-8 character, while each dst_bytes is replaced by a four-byte
     // UTF-8 character.
     dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
-    dst_nulls.resize(num_rows);
+    dst_nulls.resize(num_rows, 0);
 
     bool has_null = false;
     size_t dst_offset = 0;
@@ -1328,9 +1328,9 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
     const auto& src_offsets = src_viewer.column()->get_offset();
     const int num_src_bytes = src_offsets.back();
     dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
-    dst_nulls.resize(num_rows);
+    dst_nulls.resize(num_rows, 0);
 
     bool has_null = false;
     size_t dst_offset = 0;
@@ -1456,7 +1456,7 @@ static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, const Bina
     auto& dst_bytes = result->get_bytes();
 
     dst_bytes.resize(num_rows * len);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
     uint8_t* dst_begin = dst_bytes.data();
@@ -1509,7 +1509,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_nulls = builder.get_null_data();
 
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
     Bytes dst_bytes;
@@ -2378,7 +2378,7 @@ struct AdaptiveTrimFunction {
         auto& dst_bytes = dst->get_bytes();
 
         const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
+        dst_offsets.resize(num_rows + 1);
         dst_offsets[0] = 0;
         dst_bytes.reserve(src->get_immutable_bytes().size());
 
@@ -2902,9 +2902,9 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, const Bina
     auto is_null = false;
 
     const auto num_rows = src->size();
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
-    nulls.resize(num_rows);
+    nulls.resize(num_rows, 0);
 
     auto& tail = state->tail;
     const auto tail_begin = (uint8_t*)tail.data();
@@ -2954,8 +2954,8 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
     auto& dst_nulls = builder.get_null_data();
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
-    dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_nulls.resize(num_rows, 0);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
     dst_bytes.resize(dst_bytes_max_size);
 
@@ -3081,8 +3081,8 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
     auto& dst_nulls = builder.get_null_data();
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
-    dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_nulls.resize(num_rows, 0);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
     dst_bytes.resize(dst_bytes_max_size);
     auto* dst_begin = (uint8_t*)dst_bytes.data();
@@ -3928,7 +3928,7 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     auto& dst_offsets = dst->get_offset();
     auto& dst_bytes = dst->get_bytes();
 
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_bytes.reserve(data_count());
 
     // copy data row by row with replacements applied

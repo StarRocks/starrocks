@@ -523,7 +523,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
 
     auto& vo = values->get_offset();
     // We can resize directly
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    vo.resize(vo.size() + size);
 
     size_t write_pos = vb.size();
     if (cvb->hasNulls) {
@@ -669,7 +669,7 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
 
     // vb is using RawVectorPad16, resize will not initialize vector
     vb.resize(vb.size() + len);
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    vo.resize(vo.size() + size);
 
     if (cvb->hasNulls) {
         for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
@@ -789,7 +789,7 @@ Status ArrayColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, siz
         if (!orc_list->hasNulls) {
             auto* data_col = col_nullable->data_column_raw_ptr();
             RETURN_IF_ERROR(_fill_array_column(orc_list, data_col, from, size));
-            col_nullable->null_column_raw_ptr()->resize(col_array->size());
+            col_nullable->null_column_data().resize(col_array->size(), 0);
             return Status::OK();
         }
         // else
@@ -806,7 +806,7 @@ Status ArrayColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, siz
             if (j > i) {
                 auto* data_col = col_nullable->data_column_raw_ptr();
                 RETURN_IF_ERROR(_fill_array_column(orc_list, data_col, i, j - i));
-                col_nullable->null_column_raw_ptr()->resize(col_array->size());
+                col_nullable->null_column_data().resize(col_array->size(), 0);
             }
 
             if (j == end) {
@@ -850,7 +850,7 @@ Status MapColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, size_
         if (!orc_map->hasNulls) {
             auto* data_col = col_nullable->data_column_raw_ptr();
             RETURN_IF_ERROR(_fill_map_column(orc_map, data_col, from, size));
-            col_nullable->null_column_raw_ptr()->resize(col_map->size());
+            col_nullable->null_column_data().resize(col_map->size(), 0);
             return Status::OK();
         }
         // else
@@ -867,7 +867,7 @@ Status MapColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, size_
             if (j > i) {
                 auto* data_col = col_nullable->data_column_raw_ptr();
                 RETURN_IF_ERROR(_fill_map_column(orc_map, data_col, i, j - i));
-                col_nullable->null_column_raw_ptr()->resize(col_map->size());
+                col_nullable->null_column_data().resize(col_map->size(), 0);
             }
 
             if (j == end) {
@@ -923,7 +923,7 @@ Status StructColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
         if (!orc_struct->hasNulls) {
             auto* data_col = col_nullable->data_column_raw_ptr();
             RETURN_IF_ERROR(_fill_struct_column(cvb, data_col, from, size));
-            col_nullable->null_column_raw_ptr()->resize(col_struct->size());
+            col_nullable->null_column_data().resize(col_struct->size(), 0);
         } else {
             const int end = from + size;
             int i = from;
@@ -937,7 +937,7 @@ Status StructColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                 if (j > i) {
                     auto* data_col = col_nullable->data_column_raw_ptr();
                     RETURN_IF_ERROR(_fill_struct_column(orc_struct, data_col, i, j - i));
-                    col_nullable->null_column_raw_ptr()->resize(col_struct->size());
+                    col_nullable->null_column_data().resize(col_struct->size(), 0);
                 }
 
                 if (j == end) {

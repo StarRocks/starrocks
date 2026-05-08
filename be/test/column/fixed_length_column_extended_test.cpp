@@ -593,7 +593,7 @@ TEST(FixedLengthColumnTest, test_compare_row) {
         mutable_column->append(i);
     }
 
-    CompareVector cmp_vector(mutable_column->size());
+    CompareVector cmp_vector(mutable_column->size(), 0);
 
     // ascending
     ColumnPtr column = std::move(mutable_column);
@@ -675,7 +675,8 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     ASSERT_EQ(values.size(), c1->size());
 
     std::vector<int64_t> ids{0, 0, 0};
-    Filter filter{1, 0, 1, 0, 1};
+    Filter filter;
+    filter.assign({1, 0, 1, 0, 1});
     ASSERT_TRUE(c1->fill_range(ids, filter).ok());
 
     const auto& p = c1->immutable_data();

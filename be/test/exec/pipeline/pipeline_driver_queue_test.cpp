@@ -42,9 +42,19 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
 };
 
+class MockEmptyOperatorFactory final : public SourceOperatorFactory {
+public:
+    MockEmptyOperatorFactory() : SourceOperatorFactory(1, "mock_empty_operator", 1) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<MockEmptyOperator>(this, _id, _plan_node_id, driver_sequence);
+    }
+};
+
 Operators _gen_operators() {
+    static MockEmptyOperatorFactory factory;
     Operators operators;
-    operators.emplace_back(std::make_shared<MockEmptyOperator>(nullptr, 1, 1, 0));
+    operators.emplace_back(factory.create(1, 0));
     return operators;
 }
 

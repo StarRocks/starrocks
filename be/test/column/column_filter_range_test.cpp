@@ -24,7 +24,8 @@ namespace starrocks {
 
 PARALLEL_TEST(ColumnFilterRangeTest, in_place_filter_int32) {
     std::vector<int32_t> values = {10, 11, 12, 13, 14, 15};
-    Filter filter = {1, 0, 1, 0, 1, 0};
+    Filter filter;
+    filter.assign({1, 0, 1, 0, 1, 0});
 
     size_t size = column_filter_range::filter_range<int32_t>(filter, values.data(), 0, values.size());
     ASSERT_EQ(3, size);
@@ -36,7 +37,8 @@ PARALLEL_TEST(ColumnFilterRangeTest, in_place_filter_int32) {
 PARALLEL_TEST(ColumnFilterRangeTest, filter_int32_to_separate_buffer) {
     const std::vector<int32_t> src = {1, 2, 3, 4, 5, 6};
     std::vector<int32_t> dst(src.size(), -1);
-    Filter filter = {0, 1, 1, 0, 1, 0};
+    Filter filter;
+    filter.assign({0, 1, 1, 0, 1, 0});
 
     size_t size = column_filter_range::filter_range<int32_t>(filter, dst.data(), src.data(), 0, src.size());
     ASSERT_EQ(3, size);
@@ -47,7 +49,8 @@ PARALLEL_TEST(ColumnFilterRangeTest, filter_int32_to_separate_buffer) {
 
 PARALLEL_TEST(ColumnFilterRangeTest, range_filter_double) {
     std::vector<double> values = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
-    Filter filter = {1, 0, 1, 1, 0, 1};
+    Filter filter;
+    filter.assign({1, 0, 1, 1, 0, 1});
 
     size_t size = column_filter_range::filter_range<double>(filter, values.data(), 1, 5);
     ASSERT_EQ(3, size);

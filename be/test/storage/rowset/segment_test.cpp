@@ -58,6 +58,7 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "base/utility/defer_op.h"
 
 namespace starrocks {
 
@@ -584,6 +585,11 @@ TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {
     // enable hook_publish_primary_key_tablet
     auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("ingest_duplicate_column_unique_id");
     fp->setMode(trigger_mode);
+    DeferOp reset_fp([&]() {
+        PFailPointTriggerMode disable_mode;
+        disable_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(disable_mode);
+    });
 
     static int seg_id = 0;
     std::string filename = strings::Substitute("$0/seg_$1.dat", kSegmentDir, seg_id++);

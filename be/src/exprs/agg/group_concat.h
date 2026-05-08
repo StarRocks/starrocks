@@ -491,7 +491,8 @@ public:
                     *ColumnHelper::unpack_and_duplicate_const_column(elem_size, (*state_impl.data_columns)[i]), 0,
                     elem_size);
             auto& offsets = array_col->offsets_column_raw_ptr()->get_data();
-            offsets.push_back(offsets.back() + elem_size);
+            const auto next_offset = offsets.back() + elem_size;
+            offsets.push_back(next_offset);
             (*state_impl.data_columns)[i].reset(); // early release memory
         }
         state_impl.data_columns->clear();
@@ -561,13 +562,15 @@ public:
             if (null_data[i]) {
                 for (auto j = 0; j < columns_size; ++j) {
                     (*array_nulls[j])[i + old_size] = 1;
-                    array_offsets[j]->push_back(array_offsets[j]->back());
+                    const auto next_offset = array_offsets[j]->back();
+                    array_offsets[j]->push_back(next_offset);
                 }
             } else {
                 for (auto j = 0; j < columns_size; ++j) {
                     (*array_nulls[j])[i + old_size] = 0;
                     array_elements[j]->append_datum(src[j]->get(i));
-                    array_offsets[j]->push_back(array_offsets[j]->back() + 1);
+                    const auto next_offset = array_offsets[j]->back() + 1;
+                    array_offsets[j]->push_back(next_offset);
                 }
             }
         }

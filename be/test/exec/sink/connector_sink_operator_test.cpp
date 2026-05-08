@@ -107,6 +107,14 @@ private:
     bool _finished = true;
 };
 
+class TestConnectorSinkOperatorFactory final : public OperatorFactory {
+public:
+    TestConnectorSinkOperatorFactory()
+            : OperatorFactory(0, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override { return nullptr; }
+};
+
 class TestPartitionChunkWriter final : public connector::PartitionChunkWriter {
 public:
     TestPartitionChunkWriter(RuntimeState* state, int64_t flushable_bytes)
@@ -209,8 +217,9 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_OK(op_mem_mgr->init(&writers, &poller, [](const CommitResult&) {}));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    TestConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(
-            nullptr, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
+            &factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
             std::make_unique<connector::AsyncFlushStreamPoller>(), sink_mem_mgr, op_mem_mgr, _fragment_context);
 
     {
@@ -249,7 +258,8 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
     chunk_sink->set_finished(true);
-    auto op = std::make_shared<ConnectorSinkOperator>(nullptr, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
+    TestConnectorSinkOperatorFactory factory;
+    auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
                                                       std::move(chunk_sink), std::move(io_poller), sink_mem_mgr,
                                                       op_mem_mgr, _fragment_context);
     ASSERT_OK(op->set_finishing(_runtime_state));

@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "base/memory/jemalloc_allocator.h"
+#include "base/memory/default_allocator.h"
 
 namespace starrocks {
 
@@ -64,20 +65,24 @@ struct CountingType {
 struct RelocatableCopyAwareType {
     using is_relocatable = std::true_type;
 
+    static inline int ctor_count = 0;
     static inline int copy_count = 0;
 
     int value = 0;
     bool copied = false;
 
-    RelocatableCopyAwareType() = default;
-    explicit RelocatableCopyAwareType(int v) : value(v) {}
+    RelocatableCopyAwareType() { ++ctor_count; }
+    explicit RelocatableCopyAwareType(int v) : value(v) { ++ctor_count; }
     RelocatableCopyAwareType(const RelocatableCopyAwareType& other) : value(other.value), copied(true) { ++copy_count; }
     RelocatableCopyAwareType(RelocatableCopyAwareType&& other) noexcept : value(other.value), copied(other.copied) {}
     RelocatableCopyAwareType& operator=(const RelocatableCopyAwareType&) = default;
     RelocatableCopyAwareType& operator=(RelocatableCopyAwareType&&) = default;
     ~RelocatableCopyAwareType() = default;
 
-    static void reset() { copy_count = 0; }
+    static void reset() {
+        ctor_count = 0;
+        copy_count = 0;
+    }
 };
 
 struct ThrowOnCopyType {
@@ -587,6 +592,9 @@ TEST_F(BufferTest, BufferCountConstructor) {
     Buffer<int, 16> buf1(&_allocator, 5);
     ASSERT_EQ(5, buf1.size());
     ASSERT_GE(buf1.capacity(), 5);
+    for (size_t i = 0; i < buf1.size(); ++i) {
+        ASSERT_EQ(0, buf1[i]);
+    }
 
     Buffer<int, 16> buf2(&_allocator, 5, 42);
     ASSERT_EQ(5, buf2.size());
@@ -598,6 +606,54 @@ TEST_F(BufferTest, BufferCountConstructor) {
     Buffer<int, 16> buf3(&_allocator, 0);
     ASSERT_EQ(0, buf3.size());
     ASSERT_TRUE(buf3.empty());
+}
+
+// Test Buffer no-allocator constructors use the process default allocator
+TEST_F(BufferTest, BufferDefaultAllocatorConstructors) {
+    Buffer<int, 16> empty;
+    ASSERT_EQ(0, empty.size());
+    ASSERT_EQ(0, empty.capacity());
+    ASSERT_EQ(memory::get_default_allocator(), empty.allocator());
+
+    Buffer<int, 16> ints(5);
+    ASSERT_EQ(5, ints.size());
+    ASSERT_EQ(memory::get_default_allocator(), ints.allocator());
+    for (size_t i = 0; i < ints.size(); ++i) {
+        ASSERT_EQ(0, ints[i]);
+    }
+
+    RelocatableCopyAwareType::reset();
+    Buffer<RelocatableCopyAwareType, 16> values(3);
+    ASSERT_EQ(3, values.size());
+    ASSERT_EQ(memory::get_default_allocator(), values.allocator());
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(0, values[i].value);
+    }
+
+    Buffer<int, 16> filled(4, 7);
+    ASSERT_EQ(4, filled.size());
+    ASSERT_EQ(memory::get_default_allocator(), filled.allocator());
+    for (size_t i = 0; i < filled.size(); ++i) {
+        ASSERT_EQ(7, filled[i]);
+    }
+}
+
+// Test no-allocator constructed buffers remain move-only and movable
+TEST_F(BufferTest, BufferDefaultAllocatorMove) {
+    Buffer<int, 16> src(3, 9);
+    ASSERT_EQ(memory::get_default_allocator(), src.allocator());
+
+    Buffer<int, 16> moved(std::move(src));
+    ASSERT_EQ(3, moved.size());
+    ASSERT_EQ(9, moved[0]);
+    ASSERT_EQ(memory::get_default_allocator(), moved.allocator());
+    ASSERT_EQ(nullptr, src.allocator());
+
+    Buffer<int, 16> assigned;
+    assigned = std::move(moved);
+    ASSERT_EQ(3, assigned.size());
+    ASSERT_EQ(9, assigned[2]);
+    ASSERT_EQ(memory::get_default_allocator(), assigned.allocator());
 }
 
 // Test resize(count, value) for trivial types

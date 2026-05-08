@@ -26,6 +26,18 @@ public:
     ~PInternalService_RecoverableStubTest() override = default;
 };
 
+template <typename Result, typename Callback>
+void invoke_and_release_closure(Callback&& callback) {
+    auto* closure = new starrocks::RefCountClosure<Result>();
+    closure->ref();
+    closure->ref();
+    callback(closure);
+    closure->join();
+    if (closure->unref()) {
+        delete closure;
+    }
+}
+
 TEST_F(PInternalService_RecoverableStubTest, execute_command) {
     std::shared_ptr<starrocks::PInternalService_RecoverableStub> stub;
 
@@ -38,9 +50,9 @@ TEST_F(PInternalService_RecoverableStubTest, execute_command) {
     auto st = stub->reset_channel();
     ASSERT_TRUE(st.ok());
 
-    auto* closure = new starrocks::RefCountClosure<starrocks::ExecuteCommandResultPB>();
     ExecuteCommandRequestPB request;
-    stub->execute_command(&closure->cntl, &request, &closure->result, closure);
+    invoke_and_release_closure<starrocks::ExecuteCommandResultPB>(
+            [&](auto* closure) { stub->execute_command(&closure->cntl, &request, &closure->result, closure); });
 }
 
 TEST_F(PInternalService_RecoverableStubTest, tablet_writer_add_chunks_via_http) {
@@ -55,14 +67,16 @@ TEST_F(PInternalService_RecoverableStubTest, tablet_writer_add_chunks_via_http) 
     auto st = stub->reset_channel();
     ASSERT_TRUE(st.ok());
 
-    auto* closure = new starrocks::RefCountClosure<starrocks::PTabletWriterAddBatchResult>();
-    stub->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
+    invoke_and_release_closure<starrocks::PTabletWriterAddBatchResult>([&](auto* closure) {
+        stub->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
+    });
 
-    auto* closure1 = new starrocks::RefCountClosure<starrocks::PTabletWriterAddBatchResult>();
-    stub->tablet_writer_add_chunk_via_http(&closure1->cntl, nullptr, &closure1->result, closure1);
+    invoke_and_release_closure<starrocks::PTabletWriterAddBatchResult>([&](auto* closure) {
+        stub->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
+    });
 
-    auto* closure2 = new starrocks::RefCountClosure<starrocks::PTabletWriterAddBatchResult>();
-    stub->tablet_writer_add_chunk(&closure2->cntl, nullptr, &closure2->result, closure2);
+    invoke_and_release_closure<starrocks::PTabletWriterAddBatchResult>(
+            [&](auto* closure) { stub->tablet_writer_add_chunk(&closure->cntl, nullptr, &closure->result, closure); });
 }
 
 TEST_F(PInternalService_RecoverableStubTest, test_load_diagnose) {
@@ -78,8 +92,8 @@ TEST_F(PInternalService_RecoverableStubTest, test_load_diagnose) {
     ASSERT_TRUE(st.ok());
 
     PLoadDiagnoseRequest request;
-    auto* closure = new starrocks::RefCountClosure<starrocks::PLoadDiagnoseResult>();
-    stub->load_diagnose(&closure->cntl, &request, &closure->result, closure);
+    invoke_and_release_closure<starrocks::PLoadDiagnoseResult>(
+            [&](auto* closure) { stub->load_diagnose(&closure->cntl, &request, &closure->result, closure); });
 }
 
 TEST_F(PInternalService_RecoverableStubTest, test_get_load_replica_status) {
@@ -95,6 +109,6 @@ TEST_F(PInternalService_RecoverableStubTest, test_get_load_replica_status) {
     ASSERT_TRUE(st.ok());
 
     PLoadReplicaStatusRequest request;
-    auto* closure = new starrocks::RefCountClosure<starrocks::PLoadReplicaStatusResult>();
-    stub->get_load_replica_status(&closure->cntl, &request, &closure->result, closure);
+    invoke_and_release_closure<starrocks::PLoadReplicaStatusResult>(
+            [&](auto* closure) { stub->get_load_replica_status(&closure->cntl, &request, &closure->result, closure); });
 }

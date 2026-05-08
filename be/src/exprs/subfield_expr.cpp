@@ -73,7 +73,12 @@ public:
 
         // We need to clone a new subfield column
         if (_copy_flag) {
-            return NullableColumn::create(Column::mutate(std::move(col)), std::move(union_null_column));
+            MutableColumnPtr result = Column::mutate(std::move(col));
+            Filter null_filter;
+            const auto null_data = union_null_column->immutable_data();
+            null_filter.assign(null_data.begin(), null_data.end());
+            result->fill_default(null_filter);
+            return NullableColumn::create(std::move(result), std::move(union_null_column));
         } else {
             return NullableColumn::create(col, std::move(union_null_column));
         }

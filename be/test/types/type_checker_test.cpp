@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <optional>
 
 #include "types/type_checker_manager.h"
 
@@ -509,6 +510,8 @@ namespace starrocks {
 class TypeCheckerManagerConfigTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        old_type_checker_config_ = capture_env("STARROCKS_TYPE_CHECKER_CONFIG");
+        old_starrocks_home_ = capture_env("STARROCKS_HOME");
         // Create test directory
         test_dir_ = "/tmp/type_checker_manager_test";
         std::filesystem::create_directories(test_dir_);
@@ -517,11 +520,29 @@ protected:
     void TearDown() override {
         // Clean up
         std::filesystem::remove_all(test_dir_);
-        unsetenv("STARROCKS_TYPE_CHECKER_CONFIG");
-        unsetenv("STARROCKS_HOME");
+        restore_env("STARROCKS_TYPE_CHECKER_CONFIG", old_type_checker_config_);
+        restore_env("STARROCKS_HOME", old_starrocks_home_);
+    }
+
+    std::optional<std::string> capture_env(const char* name) {
+        const char* value = getenv(name);
+        if (value == nullptr) {
+            return std::nullopt;
+        }
+        return std::string(value);
+    }
+
+    void restore_env(const char* name, const std::optional<std::string>& value) {
+        if (value.has_value()) {
+            setenv(name, value->c_str(), 1);
+        } else {
+            unsetenv(name);
+        }
     }
 
     std::string test_dir_;
+    std::optional<std::string> old_type_checker_config_;
+    std::optional<std::string> old_starrocks_home_;
 };
 
 // Test that TypeCheckerManager uses hardcoded config by default

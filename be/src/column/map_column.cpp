@@ -95,8 +95,10 @@ void MapColumn::reserve(size_t n) {
 }
 
 void MapColumn::resize(size_t n) {
-    _offsets->get_data().resize(n + 1, _offsets->get_data().back());
-    size_t array_size = _offsets->get_data().back();
+    auto& offsets = _offsets->get_data();
+    const size_t fill_offset = offsets.back();
+    offsets.resize(n + 1, fill_offset);
+    const size_t array_size = offsets.back();
     _keys->resize(array_size);
     _values->resize(array_size);
 }
@@ -152,7 +154,8 @@ void MapColumn::append(const Column& src, size_t offset, size_t count) {
     auto& offsets_data = _offsets->get_data();
     for (size_t i = offset; i < offset + count; i++) {
         uint32_t l = src_offsets_data[i + 1] - src_offsets_data[i];
-        offsets_data.emplace_back(offsets_data.back() + l);
+        const auto next_offset = offsets_data.back() + l;
+        offsets_data.emplace_back(next_offset);
     }
 }
 
@@ -183,13 +186,15 @@ void MapColumn::append_value_multiple_times(const void* value, size_t count) {
 
 bool MapColumn::append_nulls(size_t count) {
     for (int i = 0; i < count; i++) {
-        _offsets->append(_offsets->get_data().back());
+        const size_t offset = _offsets->get_data().back();
+        _offsets->append(offset);
     }
     return true;
 }
 
 void MapColumn::append_default() {
-    _offsets->append(_offsets->get_data().back());
+    const size_t offset = _offsets->get_data().back();
+    _offsets->append(offset);
 }
 
 void MapColumn::append_default(size_t count) {

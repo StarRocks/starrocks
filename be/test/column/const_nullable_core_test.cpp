@@ -34,7 +34,8 @@ TEST(ConstNullableCoreTest, ConstColumnSelectiveAndFilter) {
     EXPECT_EQ(7, dst->get(1).get_int32());
     EXPECT_EQ(7, dst->get(2).get_int32());
 
-    Filter keep = {1, 0, 1, 0};
+    Filter keep;
+    keep.assign({1, 0, 1, 0});
     col->filter(keep);
     ASSERT_EQ(2, col->size());
     EXPECT_EQ(7, col->get(0).get_int32());

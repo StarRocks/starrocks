@@ -292,7 +292,7 @@ void append_fixed_length(const Slice* data, size_t data_size, Bytes* bytes,
 
     size_t rows = data_size;
     size_t length = offsets->size();
-    raw::stl_vector_resize_uninitialized(offsets, offsets->size() + rows);
+    offsets->resize(offsets->size() + rows);
 
     for (size_t i = 0; i < rows; ++i) {
         memcpy(&(*bytes)[offset], data[i].get_data(), copy_length);
@@ -363,8 +363,7 @@ bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* dat
     bytes.insert(bytes.end(), p, q);
 
     // copy offsets
-    starrocks::raw::stl_vector_resize_uninitialized(&_offsets, _offsets.size() + size);
-    // _offsets.resize(_offsets.size() + size);
+    _offsets.resize(_offsets.size() + size);
     T* off_data = _offsets.data() + _offsets.size() - size;
 
     int i = 0;

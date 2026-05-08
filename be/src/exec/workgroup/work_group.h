@@ -346,6 +346,7 @@ private:
 
     std::atomic<size_t> _sum_cpu_weight = 0;
     MetricRegistry* _metrics = nullptr;
+    bool _metrics_hook_registered = false;
     MemTrackerManager _shared_mem_tracker_manager;
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;

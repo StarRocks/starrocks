@@ -744,7 +744,11 @@ TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
         sst->set_filename("nonexistent.sst");
         sst->set_filesize(100);
 
+#ifdef USE_STAROS
         ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+#else
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+#endif
     }
 
     // Case 8: SST with invalid encryption_meta → should return error
@@ -760,7 +764,11 @@ TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
         sst->set_filesize(1024);
         sst->set_encryption_meta("invalid_encryption_meta");
 
+#ifdef USE_STAROS
         ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+#else
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+#endif
     }
 }
 

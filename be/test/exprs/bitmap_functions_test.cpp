@@ -2076,16 +2076,28 @@ TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
         return ArrayColumn::create(std::move(nullable_column), std::move(offset_column));
     };
 
-    Columns columns = {builder(Buffer<int64_t>{1, 2, 3, 4})};
+    auto make_values = [](std::initializer_list<int64_t> values) {
+        Buffer<int64_t> result;
+        result.assign(values);
+        return result;
+    };
+    auto make_null_indexes = [](std::initializer_list<int32_t> values) {
+        Buffer<int32_t> result;
+        result.assign(values);
+        return result;
+    };
+
+    auto values = make_values({1, 2, 3, 4});
+    Columns columns = {builder(values)};
     auto res = BitmapFunctions::array_to_bitmap(nullptr, columns).value();
     ASSERT_EQ(res->debug_item(0), "1,2,3,4");
     columns = {ColumnHelper::create_const_null_column(1)};
     res = BitmapFunctions::array_to_bitmap(nullptr, columns).value();
     ASSERT_EQ(res->debug_item(0), "CONST: NULL");
-    columns = {nullable_builder(Buffer<int64_t>{1, 2, 3, 4}, {0})};
+    columns = {nullable_builder(values, make_null_indexes({0}))};
     res = BitmapFunctions::array_to_bitmap(nullptr, columns).value();
     ASSERT_EQ(res->debug_item(0), "2,3,4");
-    columns = {nullable_builder(Buffer<int64_t>{1, 2, 3, 4}, {0, 1, 2, 3})};
+    columns = {nullable_builder(values, make_null_indexes({0, 1, 2, 3}))};
     res = BitmapFunctions::array_to_bitmap(nullptr, columns).value();
     ASSERT_EQ(res->debug_item(0), "");
 }

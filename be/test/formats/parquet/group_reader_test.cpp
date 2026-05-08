@@ -3393,7 +3393,8 @@ TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterReturnsErrorWhenRo
     projected_col->append_datum(Datum(int64_t{99}));
     projected_chunk->append_column(projected_col, SlotId(2));
 
-    Filter filter = {1, 0};
+    Filter filter;
+    filter.assign({1, 0});
     auto st = group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2);
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_internal_error());
@@ -3420,7 +3421,8 @@ TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterAppliesFilterForPr
     projected_col->append_datum(Datum(int64_t{22}));
     projected_chunk->append_column(projected_col, SlotId(2));
 
-    Filter filter = {1, 0};
+    Filter filter;
+    filter.assign({1, 0});
     ASSERT_OK(group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2));
     ASSERT_EQ(1u, projected_chunk->num_rows());
     EXPECT_EQ(11, projected_chunk->get_column_by_slot_id(SlotId(2))->get(0).get_int64());

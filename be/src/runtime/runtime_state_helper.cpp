@@ -66,6 +66,8 @@ Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
                                                                                 &state->_error_log_file_path));
     std::string error_log_absolute_path =
             state->_exec_env->load_path_mgr()->get_load_error_absolute_path(state->_error_log_file_path);
+    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(error_log_absolute_path).parent_path()));
+
     state->_error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
     if (!state->_error_log_file->is_open()) {
         std::stringstream error_msg;

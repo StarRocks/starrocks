@@ -137,7 +137,7 @@ struct DecimalBinaryFunction {
 
         if constexpr (check_overflow<overflow_mode>) {
             null_column = NullColumn::create();
-            null_column->resize(num_rows);
+            null_column->get_data().resize(num_rows, 0);
             nulls = &null_column->get_data().front();
         }
 

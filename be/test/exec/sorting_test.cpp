@@ -730,7 +730,7 @@ TEST(SortingTest, compare) {
         column->append_default();
         auto rhs_col = column->clone();
         Datum rhs_value = rhs_col->get(0);
-        CompareVector vector(1);
+        CompareVector vector(1, 0);
         EXPECT_EQ(1, compare_column(column, vector, rhs_value, SortDesc(1, 1)));
     }
 }

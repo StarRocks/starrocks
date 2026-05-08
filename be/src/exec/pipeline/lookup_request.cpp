@@ -238,7 +238,8 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
             cur_scan_range_id = scan_range_id;
             cur_range = Range<int64_t>(row_id, row_id + 1);
         }
-        replicated_offsets->emplace_back(replicated_offsets->back() + 1);
+        const auto next_offset = replicated_offsets->back() + 1;
+        replicated_offsets->emplace_back(next_offset);
     }
     // Add the last range
     auto [iter, _] = row_id_ranges->try_emplace(cur_scan_range_id, std::make_shared<SparseRange<int64_t>>());
@@ -804,7 +805,8 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
         if (same_locator) {
             current_group_size++;
         } else {
-            replicated->push_back(replicated->back() + current_group_size);
+            const auto next_offset = replicated->back() + current_group_size;
+            replicated->push_back(next_offset);
             current_group_size = 1;
         }
 
@@ -838,7 +840,8 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
     // flush the last range
     ranges.add(cur_range);
     locators.emplace_back(cur_tablet, cur_rss_id, std::move(ranges));
-    replicated->push_back(replicated->back() + current_group_size);
+    const auto next_offset = replicated->back() + current_group_size;
+    replicated->push_back(next_offset);
 
     return locators;
 }

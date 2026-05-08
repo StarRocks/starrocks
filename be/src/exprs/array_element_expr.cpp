@@ -76,7 +76,7 @@ public:
         }
 
         NullData null_flags;
-        raw::make_room(&null_flags, num_rows);
+        null_flags.resize(num_rows);
 
         // Construct null flags.
         uint32_t prev = offsets[0];

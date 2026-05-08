@@ -662,8 +662,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         if (has_filter) {
             post_filter_range = r.filter(&chunk_filter);
             DCHECK(post_filter_range.span_size() > 0);
-            post_filter = {chunk_filter.begin() + post_filter_range.begin() - r.begin(),
-                           chunk_filter.begin() + post_filter_range.end() - r.begin()};
+            post_filter.assign(chunk_filter.begin() + post_filter_range.begin() - r.begin(),
+                               chunk_filter.begin() + post_filter_range.end() - r.begin());
         }
 
         // ── Phase 5: lazy physical columns ────────────────────────────────────

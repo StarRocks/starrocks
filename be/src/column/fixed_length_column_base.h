@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "types/datum.h"
+#include "types/value_generator.h"
 namespace starrocks {
 
 template <typename T>
@@ -54,7 +55,7 @@ public:
 
     FixedLengthColumnBase() = default;
 
-    explicit FixedLengthColumnBase(const size_t n) : _data(n) {}
+    explicit FixedLengthColumnBase(const size_t n) : _data(n, DefaultValueGenerator<ValueType>::next_value()) {}
 
     FixedLengthColumnBase(const size_t n, const ValueType x) : _data(n, x) {}
 
@@ -105,7 +106,7 @@ public:
 
     void resize_uninitialized(size_t n) override {
         auto& data = get_data();
-        raw::stl_vector_resize_uninitialized(&data, n);
+        data.resize(n);
     }
 
     void assign(size_t n, size_t idx) override {
@@ -124,12 +125,12 @@ public:
 
     void append(const Buffer<T>& values) {
         auto& datas = get_data();
-        datas.insert(datas.end(), values.begin(), values.end());
+        datas.append(values.begin(), values.end());
     }
 
     void append(const ImmBuffer<T> values) {
         auto& datas = get_data();
-        datas.insert(datas.end(), values.begin(), values.end());
+        datas.append(values.begin(), values.end());
     }
 
     void append_datum(const Datum& datum) override {
@@ -163,7 +164,7 @@ public:
         const size_t count = length / sizeof(ValueType);
         auto& datas = this->get_data();
         size_t dst_offset = datas.size();
-        raw::stl_vector_resize_uninitialized(&datas, datas.size() + count);
+        datas.resize(datas.size() + count);
         T* dst = datas.data() + dst_offset;
         memcpy(dst, buff, length);
         return count;
@@ -173,7 +174,7 @@ public:
 
     void append_value_multiple_times(const void* value, size_t count) override {
         auto& datas = get_data();
-        datas.insert(datas.end(), count, *reinterpret_cast<const T*>(value));
+        datas.append(count, *reinterpret_cast<const T*>(value));
     }
 
     void append_default() override;

@@ -129,7 +129,7 @@ public:
 
     void resize(size_t n) override {
         _data_column->resize(n);
-        _null_column->resize(n);
+        null_column_data().resize(n, 0);
     }
 
     void resize_uninitialized(size_t n) override {
@@ -293,7 +293,7 @@ public:
     void swap_by_data_column(ColumnPtr& src) {
         reset_column();
         _data_column = std::move(src);
-        null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
+        null_column_data().append(_data_column->size(), 0);
         update_has_null();
     }
 

@@ -124,7 +124,7 @@ public:
         if (map_column->keys_column()->is_nullable()) {
             // Key could not be NULL.
             auto* nullable_column = down_cast<NullableColumn*>(map_column->keys_column_raw_ptr());
-            nullable_column->null_column_data().resize(nullable_column->null_column_data().size() + elem_size);
+            nullable_column->null_column_data().resize(nullable_column->null_column_data().size() + elem_size, 0);
         }
 
         auto* offsets_col = map_column->offsets_column_raw_ptr();
@@ -151,7 +151,7 @@ public:
             offsets_col->append(offsets_col->immutable_data().back() + 1);
         }
         if (dst->is_nullable()) {
-            down_cast<NullableColumn*>(dst.get())->null_column_data().resize(column->size());
+            down_cast<NullableColumn*>(dst.get())->null_column_data().resize(column->size(), 0);
         }
     }
 

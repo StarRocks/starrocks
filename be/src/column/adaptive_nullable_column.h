@@ -212,7 +212,7 @@ public:
         }
         case State::kMaterialized: {
             _data_column->resize(n);
-            _null_column->resize(n);
+            null_column_data().resize(n, 0);
             _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
             break;
         }
@@ -549,17 +549,17 @@ public:
             switch (_state) {
             case State::kNull: {
                 _data_column->as_mutable_raw_ptr()->append_default(_size);
-                null_column_data().insert(null_column_data().end(), _size, 1);
+                null_column_data().append(_size, 1);
                 _has_null = true;
                 break;
             }
             case State::kConstant: {
                 _data_column->as_mutable_raw_ptr()->append_default(_size);
-                null_column_data().insert(null_column_data().end(), _size, 0);
+                null_column_data().append(_size, 0);
                 break;
             }
             case State::kNotConstant: {
-                null_column_data().insert(null_column_data().end(), _size, 0);
+                null_column_data().append(_size, 0);
                 break;
             }
             default: {

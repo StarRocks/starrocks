@@ -549,7 +549,7 @@ private:
             auto& offsets = binary_column->get_offset();
             size_t prev_offsets = offsets.size();
             size_t cnt = 0;
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
+            offsets.resize(count + prev_offsets);
             for (size_t i = 0; i < count; ++i) {
                 offset += is_nulls[i] ? 0 : lengths[cnt++];
                 offsets[prev_offsets + i] = offset;
