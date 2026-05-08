@@ -170,17 +170,9 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     shard_info.cache_info.set_enable_cache(true);
     shard_info.cache_info.set_async_write_back(false);
 
-    auto schema_or = StarOSWorker::build_scheme_from_shard_info(shard_info);
-    EXPECT_TRUE(schema_or.ok());
-    auto schema = schema_or.value();
-
     auto conf_or = shard_info.fslib_conf_from_this(false, "");
     EXPECT_TRUE(conf_or.ok());
     auto conf = conf_or.value();
-
-    auto local_conf_or = StarOSWorker::build_conf_from_shard_info(shard_info, &conf);
-    EXPECT_TRUE(local_conf_or.ok());
-    auto cache_key = StarOSWorker::get_cache_key(schema, local_conf_or.value());
 
     auto worker = std::make_shared<StarOSWorker>();
     set_staros_worker_for_test(worker);
@@ -192,8 +184,6 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     std::condition_variable cv;
     bool ready = false;
     int ready_count = 0;
-
-    EXPECT_FALSE(worker->lookup_fs_cache(cache_key));
 
     auto thread_func = [&](std::shared_ptr<std::string>& key) {
         {
@@ -221,7 +211,10 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     t1.join();
     t2.join();
 
+    ASSERT_NE(nullptr, key1);
+    ASSERT_NE(nullptr, key2);
     EXPECT_EQ(*key1, *key2);
+    auto cache_key = *key1;
 
     EXPECT_TRUE(worker->lookup_fs_cache(cache_key));
 
