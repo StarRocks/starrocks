@@ -308,7 +308,11 @@ SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}'
 -- result:
 FAILED
 -- !result
-SELECT ERROR_MESSAGE REGEXP '(not append-only|not a parent ancestor)' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%snapshot ancestry broken%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+1
+-- !result
+SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
 -- result:
 1
 -- !result
