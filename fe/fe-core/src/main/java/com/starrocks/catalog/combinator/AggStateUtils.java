@@ -83,10 +83,6 @@ public class AggStateUtils {
             return false;
         }
         String fnName = aggFunc.functionName();
-        // count only support count(col)
-        if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && aggFunc.getArgs().length == 0 && !isAggIf) {
-            return false;
-        }
         if (ONLY_NUMERIC_ARGUMENT_FUNCTIONS_L1.contains(fnName) &&
                 Stream.of(aggFunc.getArgs()).anyMatch(t -> !t.canApplyToNumeric())) {
             return false;
