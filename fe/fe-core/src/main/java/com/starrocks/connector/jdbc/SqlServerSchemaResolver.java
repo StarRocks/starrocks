@@ -22,14 +22,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
->>>>>>> bcfe8d0d81 ([BugFix] Fix MV refresh with SQL Server table in JDBC catalog (#72962))
 
 import java.sql.Connection;
 import java.sql.ResultSet;
