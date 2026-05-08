@@ -288,7 +288,6 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         if (job.getJobState() != JobState.PENDING) {
             job.setJobState(JobState.PENDING);
         }
-
         OnlineOptimizeJobV2 spy = Mockito.spy(job);
         Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
         return spy;
