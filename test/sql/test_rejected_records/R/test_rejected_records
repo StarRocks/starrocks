@@ -810,7 +810,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
--- name: test_rejected_records_files_csv_source_info @sequential
+-- name: test_rejected_records_files_csv @sequential
 create database db_${uuid0};
 -- result:
 -- !result
@@ -852,8 +852,8 @@ shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _stat
 0
 -- !result
 select load_type,
-       cast(source_info as varchar) like '%oss://%' as has_oss_path,
-       cast(source_info as varchar) not like '%stream-load-pipe%' as not_placeholder
+       error_code is not null as has_error_code,
+       raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 1;

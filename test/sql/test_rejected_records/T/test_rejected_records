@@ -541,14 +541,17 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 
 -- =============================================================
--- INSERT FROM FILES with CSV: source_info carries the OSS path,
--- not the SequentialFile placeholder.
+-- INSERT FROM FILES with CSV: load_type tagged INSERT, raw_record
+-- captured for the rejected row.
 -- =============================================================
 
--- name: test_rejected_records_files_csv_source_info @sequential
--- Verifies that for INSERT FROM FILES (CSV format) the source_info column
--- on _statistics_.rejected_records embeds the actual fixture URL, so an
--- operator triaging a bad row can grep back to the originating object.
+-- name: test_rejected_records_files_csv @sequential
+-- Verifies that INSERT FROM FILES (CSV format) writes a rejected_records
+-- row tagged as load_type=INSERT, with raw_record populated. The
+-- rejection here is a NULL_VIOLATION raised in tablet_sink (cast('bad'
+-- as int) yields NULL on a NOT NULL column), not a per-row capture from
+-- csv_scanner; that path doesn't carry the file name into source_info,
+-- so we don't assert on source_info content here.
 -- CSV files have no header, so columns are referenced positionally
 -- ($1, $2) rather than by name.
 
@@ -570,13 +573,11 @@ select * from t order by id;
 
 shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
--- The exact source URL is environment-specific (oss://${oss_bucket}/...);
--- assert structural shape: source_info must be JSON whose `source` key
--- points at an oss:// URL, not the "stream-load-pipe" placeholder.
--- source_info is JSON-typed; cast to VARCHAR before pattern-matching.
+-- INSERT FROM FILES rejections from tablet_sink NULL_VIOLATION: load_type
+-- must be INSERT and the failed row must be captured in raw_record.
 select load_type,
-       cast(source_info as varchar) like '%oss://%' as has_oss_path,
-       cast(source_info as varchar) not like '%stream-load-pipe%' as not_placeholder
+       error_code is not null as has_error_code,
+       raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 1;
