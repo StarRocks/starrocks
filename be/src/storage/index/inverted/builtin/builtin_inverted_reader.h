@@ -53,7 +53,8 @@ public:
         return Status::InternalError("Unreachable");
     }
 
-    Status query_null(OlapReaderStatistics* stats, const std::string_view column_name, roaring::Roaring* bit_map) override {
+    Status query_null(OlapReaderStatistics* stats, const std::string_view column_name,
+                      roaring::Roaring* bit_map) override {
         return Status::InternalError("Unreachable");
     }
 
