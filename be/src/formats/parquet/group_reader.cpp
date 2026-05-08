@@ -1402,7 +1402,21 @@ Status GroupReader::_promote_variant_virtual_columns() {
 
         const auto& virtual_slots = slots_it->second;
 
-        // Check: can ALL virtual slots be promoted (each has a scalar typed_value leaf)?
+        // Check: can ALL virtual slots be promoted?  Three conditions must hold for each slot:
+        // 1. Has a scalar typed_value leaf reader.
+        // 2. Fallback value column is all-null for this row group (data is exclusively in
+        //    typed_value).  If any path has non-null fallback values, _read_range_skip_base_payload's
+        //    runtime detection would fall back to the base payload — which promotion bypasses,
+        //    producing all-NULLs.
+        // 3. The typed_value leaf's read type is directly compatible with the virtual slot's
+        //    target column type for raw writing.  Variable-length types (VARCHAR/VARBINARY etc.)
+        //    share the same BinaryColumn layout and are mutually compatible.  Fixed-size types
+        //    must match exactly; a mismatch (e.g. INT32 typed_value → BIGINT slot) causes the
+        //    PlainDecoder to write the wrong element width into the destination column, crashing.
+        const uint64_t rg_num_rows = get_row_group_metadata()->num_rows;
+        auto var_len_type = [](LogicalType t) {
+            return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
+        };
         bool all_promotable = true;
         for (const auto& vsi : virtual_slots) {
             auto proj_it = _variant_virtual_projections.find(vsi.virtual_slot_id);
@@ -1412,6 +1426,18 @@ Status GroupReader::_promote_variant_virtual_columns() {
             }
             const auto& parsed_path = proj_it->second.parsed_path;
             if (vreader->scalar_typed_value_reader_for_path(parsed_path) == nullptr) {
+                all_promotable = false;
+                break;
+            }
+            if (!vreader->fallback_values_all_null_in_row_group_for_path(parsed_path, rg_num_rows)) {
+                all_promotable = false;
+                break;
+            }
+            const TypeDescriptor* leaf_type = vreader->typed_value_read_type_for_path(parsed_path);
+            const TypeDescriptor& target = proj_it->second.target_type;
+            bool type_ok = (leaf_type != nullptr) &&
+                           (var_len_type(leaf_type->type) && var_len_type(target.type) ? true : *leaf_type == target);
+            if (!type_ok) {
                 all_promotable = false;
                 break;
             }
