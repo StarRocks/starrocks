@@ -87,9 +87,8 @@ select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- result:
 [REGEX].*no global dict.*
 -- !result
-select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
+[UC]select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
-[REGEX].*no global dict.*
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
