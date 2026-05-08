@@ -54,8 +54,8 @@
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_metrics.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/non_retryable_load_errors.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

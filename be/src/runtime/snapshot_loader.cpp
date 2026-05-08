@@ -57,12 +57,12 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 #endif
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

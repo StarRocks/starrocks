@@ -32,33 +32,29 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 #include <sstream>
-#include <utility>
 
 #include "base/network/network_util.h"
 #include "base/time/monotime.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
+#include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "gen_cpp/TFileBrokerService.h"
 
 namespace starrocks {
 
-using apache::thrift::protocol::TProtocol;
-using apache::thrift::protocol::TBinaryProtocol;
-using apache::thrift::transport::TSocket;
-using apache::thrift::transport::TTransport;
-using apache::thrift::transport::TBufferedTransport;
+ThriftRpcClientCaches ThriftRpcHelper::_s_client_caches;
 
-ExecEnv* ThriftRpcHelper::_s_exec_env = nullptr;
+void ThriftRpcHelper::setup(const ThriftRpcClientCaches& client_caches) {
+    _s_client_caches = client_caches;
+}
 
-void ThriftRpcHelper::setup(ExecEnv* exec_env) {
-    _s_exec_env = exec_env;
+void ThriftRpcHelper::clear() {
+    _s_client_caches = {};
 }
 
 template <typename T>
@@ -96,23 +92,36 @@ Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<T>&)>
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             const std::function<void(ClientConnection<T>&)>& callback) {
-    return rpc(ip, port, callback, config::thrift_rpc_timeout_ms);
+    return rpc(_s_client_caches.get<T>(), ip, port, callback, config::thrift_rpc_timeout_ms);
 }
 
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             const std::function<void(ClientConnection<T>&)>& callback, int timeout_ms,
                             int retry_times) {
-    if (UNLIKELY(_s_exec_env == nullptr)) {
+    return rpc(_s_client_caches.get<T>(), ip, port, callback, timeout_ms, retry_times);
+}
+
+template <typename T>
+Status ThriftRpcHelper::rpc(ClientCache<T>* client_cache, const std::string& ip, const int32_t port,
+                            const std::function<void(ClientConnection<T>&)>& callback) {
+    return rpc(client_cache, ip, port, callback, config::thrift_rpc_timeout_ms);
+}
+
+template <typename T>
+Status ThriftRpcHelper::rpc(ClientCache<T>* client_cache, const std::string& ip, const int32_t port,
+                            const std::function<void(ClientConnection<T>&)>& callback, int timeout_ms,
+                            int retry_times) {
+    if (UNLIKELY(client_cache == nullptr)) {
         return Status::ThriftRpcError(
                 "Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please retry "
                 "later");
     }
     TNetworkAddress address = make_network_address(ip, port);
     Status status;
-    ClientConnection<T> client(_s_exec_env->get_client_cache<T>(), address, timeout_ms, &status);
+    ClientConnection<T> client(client_cache, address, timeout_ms, &status);
     if (!status.ok()) {
-        _s_exec_env->get_client_cache<T>()->close_connections(address);
+        client_cache->close_connections(address);
         LOG(WARNING) << "Connect " << ThriftMsgTypeTraits<T>::rpc_name << " failed, address=" << address
                      << ", status=" << status.message();
         return status;
@@ -160,6 +169,31 @@ template Status ThriftRpcHelper::rpc<BackendServiceClient>(
 
 template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
         const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback, int timeout_ms,
+        int retry_times);
+
+template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
+        FrontendServiceClientCache* client_cache, const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback);
+
+template Status ThriftRpcHelper::rpc<BackendServiceClient>(
+        BackendServiceClientCache* client_cache, const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<BackendServiceClient>&)>& callback);
+
+template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+        BrokerServiceClientCache* client_cache, const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback);
+
+template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
+        FrontendServiceClientCache* client_cache, const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback, int timeout_ms, int retry_times);
+
+template Status ThriftRpcHelper::rpc<BackendServiceClient>(
+        BackendServiceClientCache* client_cache, const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<BackendServiceClient>&)>& callback, int timeout_ms, int retry_times);
+
+template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+        BrokerServiceClientCache* client_cache, const std::string& ip, const int32_t port,
         const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback, int timeout_ms,
         int retry_times);
 

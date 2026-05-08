@@ -50,10 +50,10 @@
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
-#include "util/thrift_rpc_helper.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -179,7 +179,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     // set up thrift client before providing any service to the external
     // because these services may use thrift client, for example, stream
     // load will send thrift rpc to FE after http server is started
-    ThriftRpcHelper::setup(exec_env);
+    ThriftRpcHelper::setup(
+            {exec_env->client_cache(), exec_env->frontend_client_cache(), exec_env->broker_client_cache()});
 
     // Start thrift server
     int thrift_port = config::be_port;

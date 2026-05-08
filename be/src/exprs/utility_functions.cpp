@@ -47,10 +47,10 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

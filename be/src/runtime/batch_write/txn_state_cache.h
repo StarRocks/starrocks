@@ -26,8 +26,8 @@
 #include "base/testutil/sync_point.h"
 #include "common/thread/threadpool.h"
 #include "common/utils.h"
+#include "gen_cpp/Status_types.h"
 #include "util/dynamic_cache.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

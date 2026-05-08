@@ -42,8 +42,8 @@
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "serde/protobuf_serde.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

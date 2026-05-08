@@ -26,7 +26,9 @@
 #include "base/testutil/scoped_updater.h"
 #include "common/config.h"
 #include "common/thread/threadpool.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -34,7 +36,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "test_util.h"
-#include "util/thrift_rpc_helper.h"
 
 // NOLINTNEXTLINE
 #include "service/staros_worker.h"
@@ -52,7 +53,7 @@ public:
     ~TabletWarmupManagerTest() override = default;
     void SetUp() override {
         // mock thrift rpc failure
-        ThriftRpcHelper::setup(nullptr);
+        ThriftRpcHelper::clear();
 
         std::vector<starrocks::StorePath> paths;
         CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
@@ -91,7 +92,9 @@ public:
         FileSystem::Default()->delete_dir_recursive(_test_dir);
         _update_starlet_cache_config.reset();
         // reset the env setup
-        ThriftRpcHelper::setup(ExecEnv::GetInstance());
+        auto* exec_env = ExecEnv::GetInstance();
+        ThriftRpcHelper::setup(
+                {exec_env->client_cache(), exec_env->frontend_client_cache(), exec_env->broker_client_cache()});
     }
 
     StarOSWorker::ShardInfo generateShardInfo(int64_t tablet_id, bool enable_warmup, int64_t partition_id = -1) {

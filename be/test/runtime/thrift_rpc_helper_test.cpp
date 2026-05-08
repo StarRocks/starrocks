@@ -12,22 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 #include <gtest/gtest.h>
 
 #include "base/network/network_util.h"
 #include "base/testutil/assert.h"
+#include "gen_cpp/BackendService.h"
+#include "gen_cpp/FrontendService.h"
+#include "gen_cpp/TFileBrokerService.h"
 #include "runtime/client_cache.h"
 
 namespace starrocks {
 
 class ThriftRpcHelperTest : public ::testing::Test {
 protected:
-    ThriftRpcHelperTest() {}
-
-    ~ThriftRpcHelperTest() override {}
+    void SetUp() override { ThriftRpcHelper::clear(); }
+    void TearDown() override { ThriftRpcHelper::clear(); }
 };
+
+TEST_F(ThriftRpcHelperTest, client_caches_get_typed_cache) {
+    BackendServiceClientCache backend_cache;
+    FrontendServiceClientCache frontend_cache;
+    BrokerServiceClientCache broker_cache;
+    ThriftRpcClientCaches caches{&backend_cache, &frontend_cache, &broker_cache};
+
+    EXPECT_EQ(&backend_cache, caches.get<BackendServiceClient>());
+    EXPECT_EQ(&frontend_cache, caches.get<FrontendServiceClient>());
+    EXPECT_EQ(&broker_cache, caches.get<TFileBrokerServiceClient>());
+}
+
+TEST_F(ThriftRpcHelperTest, rpc_after_clear_returns_setup_error) {
+    FrontendServiceClientCache frontend_cache;
+    ThriftRpcHelper::setup({nullptr, &frontend_cache, nullptr});
+    ThriftRpcHelper::clear();
+
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            "127.0.0.1", 9020, [](FrontendServiceConnection&) { ADD_FAILURE() << "callback should not run"; }, 1, 0);
+    EXPECT_STATUS(Status::ThriftRpcError(""), st);
+    EXPECT_EQ(
+            "Rpc error: Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please "
+            "retry later",
+            st.to_string());
+}
 
 TEST_F(ThriftRpcHelperTest, fe_rpc_impl) {
     {

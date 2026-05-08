@@ -38,7 +38,7 @@
 
 #include "common/status.h"
 #include "common/system/master_info.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 using std::map;
 using std::string;
