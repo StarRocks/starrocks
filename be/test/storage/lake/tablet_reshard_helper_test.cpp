@@ -19,7 +19,12 @@
 
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <random>
+
+#include "storage/datum_variant.h"
+#include "storage/types.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks::lake {
 
@@ -502,6 +507,260 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_skips_when_num_del
 
     update_rowset_data_stats(&rowset, /*split_count=*/2, /*split_index=*/0);
     EXPECT_FALSE(rowset.has_num_dels());
+}
+
+// ---------------------------------------------------------------------------
+// Range-helper tests (PR-1).
+// ---------------------------------------------------------------------------
+
+// Build a TabletRangePB from optional int32 lower/upper bounds. nullopt means
+// unbounded on that side. Callers pass int values for the sort-key value
+// component; this matches the existing generate_sort_key style in
+// tablet_reshard_test.cpp without pulling in the heavy fixture.
+namespace {
+
+TabletRangePB make_range(std::optional<int> lower, bool lower_included, std::optional<int> upper, bool upper_included) {
+    TabletRangePB pb;
+    auto write_int = [](TuplePB* tuple_pb, int v) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(v));
+        VariantTuple t;
+        t.append(variant);
+        t.to_proto(tuple_pb);
+    };
+    if (lower) {
+        write_int(pb.mutable_lower_bound(), *lower);
+        pb.set_lower_bound_included(lower_included);
+    }
+    if (upper) {
+        write_int(pb.mutable_upper_bound(), *upper);
+        pb.set_upper_bound_included(upper_included);
+    }
+    return pb;
+}
+
+// Convenience: closed-open [lower, upper).
+TabletRangePB co_range(std::optional<int> lower, std::optional<int> upper) {
+    return make_range(lower, /*lower_included=*/true, upper, /*upper_included=*/false);
+}
+
+bool ranges_pb_equal(const TabletRangePB& a, const TabletRangePB& b) {
+    if (a.has_lower_bound() != b.has_lower_bound()) return false;
+    if (a.has_upper_bound() != b.has_upper_bound()) return false;
+    if (a.has_lower_bound() && a.lower_bound().DebugString() != b.lower_bound().DebugString()) return false;
+    if (a.has_upper_bound() && a.upper_bound().DebugString() != b.upper_bound().DebugString()) return false;
+    if (a.lower_bound_included() != b.lower_bound_included()) return false;
+    if (a.upper_bound_included() != b.upper_bound_included()) return false;
+    return true;
+}
+
+} // namespace
+
+// ranges_are_contiguous --------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_overlap) {
+    EXPECT_TRUE(ranges_are_contiguous(co_range(0, 15), co_range(10, 20)));
+    EXPECT_TRUE(ranges_are_contiguous(co_range(10, 20), co_range(0, 15)));
+}
+
+TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_touching_included) {
+    // [0, 10] + [10, 20) → contiguous (10 is in left side).
+    EXPECT_TRUE(ranges_are_contiguous(make_range(0, true, 10, true), make_range(10, false, 20, false)));
+    // [0, 10) + [10, 20) → contiguous (10 is in right side, lower_included).
+    EXPECT_TRUE(ranges_are_contiguous(co_range(0, 10), co_range(10, 20)));
+    // Reverse argument order.
+    EXPECT_TRUE(ranges_are_contiguous(co_range(10, 20), co_range(0, 10)));
+}
+
+TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_touching_excluded) {
+    // [0, 10) + (10, 20) → gap at value 10 (excluded both sides).
+    EXPECT_FALSE(ranges_are_contiguous(co_range(0, 10), make_range(10, false, 20, false)));
+}
+
+TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_gap) {
+    EXPECT_FALSE(ranges_are_contiguous(co_range(0, 10), co_range(20, 30)));
+    EXPECT_FALSE(ranges_are_contiguous(co_range(20, 30), co_range(0, 10)));
+}
+
+TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_unbounded_same_side) {
+    // (-∞, 10) + (-∞, 20) → both reach -∞, overlap → contiguous.
+    EXPECT_TRUE(ranges_are_contiguous(co_range(std::nullopt, 10), co_range(std::nullopt, 20)));
+    // [10, +∞) + [20, +∞) → both reach +∞, overlap → contiguous.
+    EXPECT_TRUE(ranges_are_contiguous(make_range(10, true, std::nullopt, false),
+                                      make_range(20, true, std::nullopt, false)));
+}
+
+TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_unbounded_inner) {
+    // (-∞, +∞) covers everything, contiguous with anything non-empty.
+    EXPECT_TRUE(ranges_are_contiguous(make_range(std::nullopt, false, std::nullopt, false), co_range(0, 10)));
+    // (-∞, 10) + [20, +∞) → strict gap [10, 20).
+    EXPECT_FALSE(ranges_are_contiguous(co_range(std::nullopt, 10), make_range(20, true, std::nullopt, false)));
+    // (-∞, 10) + [10, +∞) → touch at 10, contiguous.
+    EXPECT_TRUE(ranges_are_contiguous(make_range(std::nullopt, false, 10, false),
+                                      make_range(10, true, std::nullopt, false)));
+}
+
+// sort_and_merge_adjacent_ranges -----------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_basic) {
+    auto result = sort_and_merge_adjacent_ranges({co_range(20, 30), co_range(0, 10)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result.value()[0]));
+    EXPECT_TRUE(ranges_pb_equal(co_range(20, 30), result.value()[1]));
+}
+
+TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_overlapping) {
+    auto result = sort_and_merge_adjacent_ranges({co_range(5, 15), co_range(0, 10), co_range(12, 20)});
+    ASSERT_TRUE(result.ok());
+    // [0,15) ∪ [12,20) merge to [0,20). [5,15) overlaps with [0,15) → [0,15).
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 20), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_touching) {
+    // [0,10) and [10,20) touch at 10 with right side included → merge.
+    auto result = sort_and_merge_adjacent_ranges({co_range(10, 20), co_range(0, 10)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 20), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_unbounded) {
+    auto result =
+            sort_and_merge_adjacent_ranges({co_range(std::nullopt, 10), make_range(10, true, std::nullopt, false)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_FALSE(result.value()[0].has_lower_bound());
+    EXPECT_FALSE(result.value()[0].has_upper_bound());
+}
+
+// compute_disjoint_gaps_within --------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_full_coverage) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(0, 30)});
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value().empty());
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_internal_gap) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(0, 10), co_range(20, 30)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(10, 20), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_left_edge) {
+    // bound=[0,30), children=[10,30). Gap = [0,10).
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(10, 30)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_right_edge) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(0, 20)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(20, 30), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_outside_clipped) {
+    // bound=[0,30), children include a slice extending below bound → clip.
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(-5, 10), co_range(10, 30)});
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value().empty()); // children fully cover bound after clipping.
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_no_children) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 30), result.value()[0]));
+}
+
+// compute_non_contributed_ranges (unbounded universe) --------------------------
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_full_coverage) {
+    // Children = (-∞, +∞). Result empty.
+    auto result = compute_non_contributed_ranges({make_range(std::nullopt, false, std::nullopt, false)});
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value().empty());
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_internal_gap) {
+    auto result = compute_non_contributed_ranges({co_range(0, 10), co_range(20, 30)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(3u, result.value().size());
+    // (-∞, 0)
+    EXPECT_FALSE(result.value()[0].has_lower_bound());
+    EXPECT_TRUE(ranges_pb_equal(co_range(std::nullopt, 0), result.value()[0]));
+    // [10, 20)
+    EXPECT_TRUE(ranges_pb_equal(co_range(10, 20), result.value()[1]));
+    // [30, +∞)
+    EXPECT_TRUE(ranges_pb_equal(make_range(30, true, std::nullopt, false), result.value()[2]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_left_edge_only) {
+    // First-child-compaction case: children = [K1, +∞). Result = (-∞, K1).
+    auto result = compute_non_contributed_ranges({make_range(10, true, std::nullopt, false)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(std::nullopt, 10), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_right_edge_only) {
+    // Last-child-compaction case: children = (-∞, K2). Result = [K2, +∞).
+    auto result = compute_non_contributed_ranges({co_range(std::nullopt, 20)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(make_range(20, true, std::nullopt, false), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_both_edges) {
+    auto result = compute_non_contributed_ranges({co_range(10, 20)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(std::nullopt, 10), result.value()[0]));
+    EXPECT_TRUE(ranges_pb_equal(make_range(20, true, std::nullopt, false), result.value()[1]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_empty_children) {
+    auto result = compute_non_contributed_ranges({});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    // (-∞, +∞)
+    EXPECT_FALSE(result.value()[0].has_lower_bound());
+    EXPECT_FALSE(result.value()[0].has_upper_bound());
+}
+
+// effective_child_local_range --------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_effective_child_local_range_rowset_present) {
+    RowsetMetadataPB rowset;
+    *rowset.mutable_range() = co_range(0, 10);
+    TabletMetadataPB ctx;
+    *ctx.mutable_range() = co_range(0, 30);
+
+    const auto& result = effective_child_local_range(rowset, ctx);
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result));
+}
+
+TEST_F(TabletReshardHelperTest, test_effective_child_local_range_rowset_absent_ctx_present) {
+    RowsetMetadataPB rowset; // no range
+    TabletMetadataPB ctx;
+    *ctx.mutable_range() = co_range(0, 30);
+
+    const auto& result = effective_child_local_range(rowset, ctx);
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 30), result));
+}
+
+TEST_F(TabletReshardHelperTest, test_effective_child_local_range_both_absent) {
+    RowsetMetadataPB rowset;
+    TabletMetadataPB ctx;
+
+    const auto& result = effective_child_local_range(rowset, ctx);
+    EXPECT_FALSE(result.has_lower_bound());
+    EXPECT_FALSE(result.has_upper_bound());
 }
 
 } // namespace starrocks::lake
