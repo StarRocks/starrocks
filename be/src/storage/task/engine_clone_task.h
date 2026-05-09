@@ -34,24 +34,24 @@
 
 #pragma once
 
-#include "agent/task_worker_pool.h"
-#include "agent/utils.h"
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "common/agent_status.h"
 #include "gen_cpp/AgentService_types.h"
-#include "gen_cpp/HeartbeatService.h"
-#include "gen_cpp/MasterService_types.h"
 #include "storage/olap_define.h"
 #include "storage/task/engine_task.h"
 
 namespace starrocks {
-
-void run_clone_task(std::shared_ptr<CloneAgentTaskRequest> agent_task_req);
 
 // base class for storage engine
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineCloneTask : public EngineTask {
 public:
     EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& _clone_req, int64_t _signature,
-                    vector<string>* error_msgs, vector<TTabletInfo>* tablet_infos, AgentStatus* _res_status);
+                    std::vector<std::string>* error_msgs, std::vector<TTabletInfo>* tablet_infos,
+                    AgentStatus* _res_status);
 
     ~EngineCloneTask() override = default;
 
@@ -73,8 +73,8 @@ private:
     Status _clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta,
                             std::vector<RowsetMetaSharedPtr>& rs_to_clone);
 
-    Status _clone_copy(DataDir& data_dir, const string& local_data_path, vector<string>* error_msgs,
-                       const vector<Version>* missing_versions,
+    Status _clone_copy(DataDir& data_dir, const std::string& local_data_path, std::vector<std::string>* error_msgs,
+                       const std::vector<Version>* missing_versions,
                        const std::vector<int64_t>* missing_version_ranges = nullptr);
 
     void _set_tablet_info(Status status, bool is_new_tablet);
@@ -94,8 +94,8 @@ private:
 private:
     std::unique_ptr<MemTracker> _mem_tracker;
     const TCloneReq& _clone_req;
-    vector<string>* _error_msgs;
-    vector<TTabletInfo>* _tablet_infos;
+    std::vector<std::string>* _error_msgs;
+    std::vector<TTabletInfo>* _tablet_infos;
     AgentStatus* _res_status;
     int64_t _signature;
     int64_t _copy_size = 0;

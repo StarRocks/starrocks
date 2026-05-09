@@ -54,10 +54,10 @@
 
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
-#include "agent/status.h"
 #include "base/failpoint/fail_point.h"
 #include "base/path/path_util.h"
 #include "base/uid_util.h"
+#include "common/agent_status.h"
 #include "common/config_object_storage_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"

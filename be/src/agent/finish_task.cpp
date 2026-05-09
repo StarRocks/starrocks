@@ -15,9 +15,9 @@
 #include "finish_task.h"
 
 #include "agent/agent_metrics.h"
-#include "agent/status.h"
 #include "agent/utils.h"
 #include "base/testutil/sync_point.h"
+#include "common/agent_status.h"
 #include "common/logging.h"
 #include "runtime/exec_env.h"
 

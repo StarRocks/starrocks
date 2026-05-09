@@ -42,8 +42,8 @@
 #include <vector>
 
 #include "agent/agent_common.h"
-#include "agent/status.h"
 #include "agent/utils.h"
+#include "common/agent_status.h"
 #include "common/system/cpu_usage_info.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"

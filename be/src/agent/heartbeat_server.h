@@ -37,7 +37,7 @@
 #include <memory>
 #include <mutex>
 
-#include "agent/status.h"
+#include "common/agent_status.h"
 #include "common/statusor.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/Status_types.h"

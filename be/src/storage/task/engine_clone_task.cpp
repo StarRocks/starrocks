@@ -40,9 +40,6 @@
 #include <filesystem>
 #include <set>
 
-#include "agent/agent_common.h"
-#include "agent/finish_task.h"
-#include "agent/task_signatures_manager.h"
 #include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"

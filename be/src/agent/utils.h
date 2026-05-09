@@ -34,7 +34,7 @@
 
 #pragma once
 
-#include "agent/status.h"
+#include "common/agent_status.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"

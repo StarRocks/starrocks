@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "agent/status.h"
+#include "common/agent_status.h"
 
 namespace starrocks {
 
