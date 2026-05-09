@@ -406,6 +406,7 @@ public class JDBCMetadataTest {
     public void testGetTableFromQuery() throws SQLException {
         String passThroughQuery = "SELECT 1 AS id, payload ? 'k' AS name FROM docs";
         String metadataQuery = "SELECT * FROM (" + passThroughQuery + ") starrocks_query WHERE 1 = 0";
+
         new Expectations() {
             {
                 connection.createStatement();
