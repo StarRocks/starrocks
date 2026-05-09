@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
@@ -169,7 +170,16 @@ public class IvmOpUtils {
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + stateUnionFunctionName + " not found");
         }
+        // <agg>_state_union overloads share one signature (varbinary, varbinary), so FunctionSet only
+        // keeps the first; its AggStateDesc may not match the real input type. The AGG_STATE column
+        // type carries the typed AggStateDesc from AggStateCombineCombinator.of — use it to specialize.
+        AggStateDesc inputAggStateDesc = intermediateAggScalarOp.getType().getAggStateDesc();
+        Preconditions.checkState(inputAggStateDesc != null,
+                "intermediateAggScalarOp's type must carry an AggStateDesc, got: %s",
+                intermediateAggScalarOp.getType());
+        Function specializedFunc = newFunc.copy();
+        specializedFunc.setAggStateDesc(inputAggStateDesc.clone());
         return new CallOperator(stateUnionFunctionName, intermediateAggScalarOp.getType(),
-                List.of(intermediateAggScalarOp, aggStateAggStateColumnRef), newFunc);
+                List.of(intermediateAggScalarOp, aggStateAggStateColumnRef), specializedFunc);
     }
 }
