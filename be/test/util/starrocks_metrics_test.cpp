@@ -381,7 +381,6 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_commit_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_duration_us"));
-    ASSERT_NE(nullptr, instance->get_metric("delta_writer_pk_preload_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_replica_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_txn_commit_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_finalize_duration_us"));

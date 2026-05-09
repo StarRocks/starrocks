@@ -30,6 +30,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Field;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -70,19 +71,20 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (af == null) {
                     continue;
                 }
+                String fieldName = af.value();
 
                 // fields related to big queries are not written into audit log by default,
                 // they will be written into big query log.
-                if (af.value().equals("BigQueryLogCPUSecondThreshold") ||
-                        af.value().equals("BigQueryLogScanBytesThreshold") ||
-                        af.value().equals("BigQueryLogScanRowsThreshold")) {
+                if (fieldName.equals("BigQueryLogCPUSecondThreshold") ||
+                        fieldName.equals("BigQueryLogScanBytesThreshold") ||
+                        fieldName.equals("BigQueryLogScanRowsThreshold")) {
                     continue;
                 }
-                if (af.value().equalsIgnoreCase("features")) {
+                if (fieldName.equalsIgnoreCase("features")) {
                     continue;
                 }
 
-                if (af.value().equals("Time")) {
+                if (fieldName.equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
 
@@ -114,9 +116,15 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         continue;
                     }
                 }
+                if (value instanceof Collection) {
+                    Collection<?> collectionValue = (Collection<?>) value;
+                    if (collectionValue.isEmpty() && af.ignore_empty()) {
+                        continue;
+                    }
+                }
 
                 if (Config.audit_log_json_format) {
-                    logMap.put(af.value(), value);
+                    logMap.put(fieldName, value);
                 } else {
                     sb.append("|").append(af.value()).append("=").append(value);
                 }

@@ -33,6 +33,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -45,9 +46,9 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -79,17 +80,18 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  * - Build an incremental refresh plan based on the changed version ranges of base tables.
  * - Execute the refresh plan to update the materialized view.
  */
-public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
-    // This map is used to store the temporary tvr version range for each base table
-    private final Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap = Maps.newConcurrentMap();
+public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
+    // Per-call buffer: stores TVR deltas computed in getProcessExecPlan(), consumed in execProcessExecPlan().
+    // NOT the editlog-persisted temp map (that is AsyncRefreshContext.tempBaseTableInfoTvrDeltaMap).
+    private final Map<BaseTableInfo, TvrVersionRange> stagedTvrDeltaMap = Maps.newConcurrentMap();
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
 
-    public MVIVMBasedRefreshProcessor(Database db, MaterializedView mv,
-                                      MvTaskRunContext mvContext,
-                                      IMaterializedViewMetricsEntity mvEntity,
-                                      MaterializedView.RefreshMode refreshMode) {
-        super(db, mv, mvContext, mvEntity, refreshMode, MVIVMBasedRefreshProcessor.class);
+    public MVIVMRefreshProcessor(Database db, MaterializedView mv,
+                                 MvTaskRunContext mvContext,
+                                 IMaterializedViewMetricsEntity mvEntity,
+                                 MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVIVMRefreshProcessor.class);
     }
 
     @Override
@@ -97,6 +99,9 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         if (!mvRefreshParams.isCompleteRefresh()) {
             throw new SemanticException("IVM based refresh only supports complete refresh, but got partial refresh");
         }
+        // Reset per-call buffer to prevent accumulation across retries within the same task run
+        // (processor instance is reused by retryProcessTaskRun).
+        this.stagedTvrDeltaMap.clear();
         syncAndCheckPCTPartitions(taskRunContext);
 
         // collect change snapshots
@@ -111,7 +116,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                 // collect changed version range
                 TvrTableSnapshotInfo tvrTableSnapshotInfo = (TvrTableSnapshotInfo) snapshotInfo;
 
-                tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
+                stagedTvrDeltaMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
                 // update the snapshot info with the changed version range
                 tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
             }
@@ -160,8 +165,9 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
             MaterializedView.AsyncRefreshContext mvRefreshContext =
                     mv.getRefreshScheme().getAsyncRefreshContext();
-            logger.info("temp tvr version range map: {}", tempMvTvrVersionRangeMap);
-            mvRefreshContext.getTempBaseTableInfoTvrDeltaMap().putAll(tempMvTvrVersionRangeMap);
+            logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
+            String owner = mvContext.getStatus().getStartTaskRunId();
+            mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
             executor.executePlan(execPlan, insertStmt);
         }
 
@@ -200,35 +206,53 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
             return maxTvrDelta;
         }
 
-        if (maxTvrDelta.start().isEmpty() && mv.getCurrentRefreshMode() == MaterializedView.RefreshMode.AUTO) {
-            throw new SemanticException("No checkpoint found for base table: %s.%s during AUTO IVM planning",
+        if (maxTvrDelta.start().isEmpty() && mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
+            // No TVR baseline. The hybrid processor catches this and falls back to PCT to
+            // rebuild the baseline; on the pure IVM path it propagates as a hard failure.
+            throw new SemanticException("No checkpoint found for base table: %s.%s during IVM planning",
                     baseTableInfo.getDbName(), baseTableInfo.getTableName());
         }
 
         // check the delta traits between the max delta
-        List<TvrTableDeltaTrait> tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
-                        maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
+        List<TvrTableDeltaTrait> tableDeltaTraits;
+        try {
+            tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
+                            maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
+        } catch (StarRocksConnectorException e) {
+            if (isAncestryBrokenError(e)) {
+                throw new SemanticException(formatPartitionShapeChangeError(
+                        String.format("snapshot ancestry broken for base table %s.%s (%s)",
+                                baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
+                        e);
+            }
+            throw e;
+        }
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
                     baseTableInfo.getDbName());
-            throw new SemanticException("No tvr delta traits found for base table: %s.%s",
-                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            throw new SemanticException(formatPartitionShapeChangeError(
+                    String.format("no tvr delta traits found for base table %s.%s",
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName())));
         }
         // check whether the last delta trait is equal to the max delta
         TvrTableDeltaTrait lastTvrDeltaTrait = tableDeltaTraits.get(tableDeltaTraits.size() - 1);
         TvrTableSnapshot lastTvrDeltaSnapshot = lastTvrDeltaTrait.getTvrDelta().toSnapshot();
         if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
-            logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}, " +
-                    "use the max tvr delta instead", lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
-            throw new SemanticException("The last tvr delta snapshot: %s is not equal to the max tvr delta snapshot: %s",
+            logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}",
                     lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
+            throw new SemanticException(formatPartitionShapeChangeError(
+                    String.format("tvr delta lineage inconsistent for base table %s.%s "
+                                    + "(last delta snapshot %s != max delta snapshot %s)",
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName(),
+                            lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot())));
         }
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             if (!deltaTrait.isAppendOnly()) {
                 if (refreshMode.isIncremental()) {
-                    throw new SemanticException("TvrTableDeltaTrait is not append-only for base table: %s.%s, delta:%s",
-                            baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait);
+                    throw new SemanticException(formatPartitionShapeChangeError(
+                            String.format("non-append-only change on base table %s.%s (delta: %s)",
+                                    baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait)));
                 } else {
                     logger.info("TvrTableDeltaTrait is not append-only for base table: {}, db: {}, delta:{}, " +
                                     "use the max tvr delta instead", baseTableInfo.getTableName(),
@@ -243,6 +267,20 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                     baseTableInfo.getTableName(), baseTableInfo.getDbName(), maxTvrDelta);
             return maxTvrDelta;
         }
+    }
+
+    private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
+        String message = e.getMessage();
+        return message != null && message.contains("is not a parent ancestor");
+    }
+
+    private String formatPartitionShapeChangeError(String reasonFragment) {
+        return String.format(
+                "Cannot incrementally refresh materialized view %s: %s. "
+                        + "INCREMENTAL materialized views do not support partition-shape changes "
+                        + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). "
+                        + "Drop and recreate the materialized view to recover.",
+                mv.getName(), reasonFragment);
     }
 
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,
@@ -408,44 +446,53 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                 .setQuerySource(QueryDetail.QuerySource.MV.name())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
 
-        // set tvr target mvid
+        // Scope the IVM session variables to this method only. The same ConnectContext
+        // is reused by MVHybridRefreshProcessor.switchToPCTRefresh on IVM failure, so
+        // leaking enable_ivm_refresh=true into the PCT retry would make IvmRewriter run
+        // on a non-IVM plan and fail at convergence — defeating the AUTO fallback.
+        boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
+        String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
         ctx.getSessionVariable().setTvrTargetMvid(GsonUtils.GSON.toJson(mv.getMvId()));
+        try {
+            final Set<Table> baseTables = snapshotBaseTables.values()
+                    .stream()
+                    .map(BaseTableSnapshotInfo::getBaseTable)
+                    .collect(Collectors.toSet());
+            changeDefaultConnectContextIfNeeded(ctx, baseTables);
 
-        final Set<Table> baseTables = snapshotBaseTables.values()
-                .stream()
-                .map(BaseTableSnapshotInfo::getBaseTable)
-                .collect(Collectors.toSet());
-        changeDefaultConnectContextIfNeeded(ctx, baseTables);
-
-        InsertStmt insertStmt = null;
-        try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
-            // generate insert statement from defined query
-            insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition());
-        }
-
-        PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
-        if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
-        }
-        try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
-            // analyze the insert statement
-            try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
-                analyzeInsertStmt(insertStmt);
-                // build the insert plan
-                insertStmt = buildInsertPlan(insertStmt);
-                ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+            InsertStmt insertStmt = null;
+            try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
+                // generate insert statement from defined query
+                insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition());
             }
-        } finally {
-            locker.unlock();
-        }
 
-        try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
-            ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
-            ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
-            mvContext.setExecPlan(execPlan);
+            PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
+            if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+                throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
+            }
+            try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
+                // analyze the insert statement
+                try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
+                    analyzeInsertStmt(insertStmt);
+                    // build the insert plan
+                    insertStmt = buildInsertPlan(insertStmt);
+                    ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+                }
+            } finally {
+                locker.unlock();
+            }
+
+            try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
+                ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
+                ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                mvContext.setExecPlan(execPlan);
+            }
+            return insertStmt;
+        } finally {
+            ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
+            ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
         }
-        return insertStmt;
     }
 
     private void analyzeInsertStmt(InsertStmt insertStmt) throws AnalysisException {

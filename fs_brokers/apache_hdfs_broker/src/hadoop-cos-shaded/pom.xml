@@ -102,6 +102,20 @@ under the License.
                              <shadedPattern>shaded.starrocks.org.apache.hadoop.security.proto</shadedPattern>
                          </relocation>
                     </relocations>
+                    <filters>
+                        <filter>
+                            <artifact>com.qcloud:hadoop-ranger-client-for-hadoop</artifact>
+                            <excludes>
+                                <exclude>META-INF/maven/io.netty/netty/**</exclude>
+                            </excludes>
+                        </filter>
+                        <filter>
+                            <artifact>com.qcloud:cos_api-bundle</artifact>
+                            <excludes>
+                                <exclude>META-INF/maven/com.fasterxml.jackson.core/jackson-core/**</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
                 </configuration>
                 <executions>
                     <execution>

@@ -24,7 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
@@ -368,7 +368,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
 
         // get base table partitions
         List<String> baseParNames =
-                mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+                mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", ConnectorMetadataRequestContext.DEFAULT);
         Assertions.assertEquals(4, baseParNames.size());
 
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");

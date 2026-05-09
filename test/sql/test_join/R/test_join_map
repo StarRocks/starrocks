@@ -77,7 +77,7 @@ select t.map0, s.map4 from map_test t join map_test s where s.map0 = t.map4 orde
 -- !result
 select t.map0, s.map5 from map_test t join map_test s where s.map0 = t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map1, s.map2 from map_test t join map_test s where s.map1 = t.map2 order by t.pk;
 -- result:
@@ -93,7 +93,7 @@ select t.map1, s.map4 from map_test t join map_test s where s.map1 = t.map4 orde
 -- !result
 select t.map1, s.map5 from map_test t join map_test s where s.map1 = t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<decimal(16, 3),varchar(30)> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<decimal(16, 3),varchar(30)> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map2, s.map3 from map_test t join map_test s where s.map2 = t.map3 order by t.pk;
 -- result:
@@ -105,7 +105,7 @@ E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. 
 -- !result
 select t.map2, s.map5 from map_test t join map_test s where s.map2 = t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map3, s.map4 from map_test t join map_test s where s.map3 = t.map4 order by t.pk;
 -- result:
@@ -113,11 +113,11 @@ E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. 
 -- !result
 select t.map3, s.map5 from map_test t join map_test s where s.map3 = t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map4, s.map5 from map_test t join map_test s where s.map4 = t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),json> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),json> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map3, s.map3 from map_test t join map_test s on s.map3 <=> t.map3 order by t.pk;
 -- result:
@@ -137,7 +137,7 @@ E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. 
 -- !result
 select t.map2, s.map5 from map_test t join map_test s where s.map2 <=> t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map3, s.map4 from map_test t join map_test s where s.map3 <=> t.map4 order by t.pk;
 -- result:
@@ -145,11 +145,11 @@ E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. 
 -- !result
 select t.map3, s.map5 from map_test t join map_test s where s.map3 <=> t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map4, s.map5 from map_test t join map_test s where s.map4 <=> t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. Detail message: Column type map<int(11),json> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. Detail message: Column type map<int(11),json> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map0, s.map0 from map_test t join map_test s on s.map0 < t.map0 order by t.pk;
 -- result:
@@ -184,7 +184,7 @@ select map3 from map_test t where exists (select 1 from map_test s where t.map3 
 -- !result
 select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. Detail message: Column type map<int(11),struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type map<varchar(65533),map<int(11),varchar(30)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. Detail message: Column type map<int(11),struct<`c` int(11), `b` varchar(65533)>> does not support binary predicate operation with type map<varchar(65533),map<int(11),varchar(30)>>.')
 -- !result
 select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map0) order by t.pk;
 -- result:
@@ -197,11 +197,11 @@ None
 -- !result
 select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map5) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select map5 from map_test t where not exists (select 1 from map_test s where t.map5 < s.map5) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type map<int(11),struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type map<int(11),struct<`c` int(11), `b` varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select map3 from map_test t where map3 in (select map3 from map_test s) order by t.pk;
 -- result:
@@ -212,7 +212,7 @@ select map3 from map_test t where map3 in (select map3 from map_test s) order by
 -- !result
 select map4 from map_test t where map4 in (select map5 from map_test s) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: The input types (map<int(11),json>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: The input types (map<int(11),json>,map<int(11),struct<`c` int(11), `b` varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select map5 from map_test t where map5 in (select map5 from map_test s) order by t.pk;
 -- result:
@@ -238,7 +238,7 @@ None
 -- !result
 select map3 in (select map5 from map_test s) from map_test order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: The input types (map<varchar(65533),map<int(11),varchar(30)>>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: The input types (map<varchar(65533),map<int(11),varchar(30)>>,map<int(11),struct<`c` int(11), `b` varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select map5 in (select map5 from map_test s) from map_test order by 1;
 -- result:
@@ -266,7 +266,7 @@ None
 -- !result
 select map4 not in (select map5 from map_test s) from map_test order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: The input types (map<int(11),json>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: The input types (map<int(11),json>,map<int(11),struct<`c` int(11), `b` varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select map5 not in (select map5 from map_test s) from map_test order by 1;
 -- result:
@@ -286,7 +286,7 @@ E: (1064, "Getting syntax error at line 1, column 59. Detail message: Unexpected
 -- !result
 select t.map2, s.map5 from map_test t left join map_test s on s.map2 = t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 73. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 73. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map3, s.map4 from map_test t left join map_test s on s.map3 <=> t.map4 order by t.pk;
 -- result:
@@ -346,7 +346,7 @@ E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 73. 
 -- !result
 select t.map2, s.map5 from map_test t full join map_test s on s.map2 = t.map5 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 73. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 73. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<`c` int(11), `b` varchar(65533)>>.')
 -- !result
 select t.map3, s.map4 from map_test t full join map_test s on s.map3 <=> t.map4 order by t.pk;
 -- result:

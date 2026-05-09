@@ -510,10 +510,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
-    if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txns=" << get_txn_ids_string(request) << ". cost=" << cost << "us\n"
-                  << trace->DumpToString();
-    } else if (is_slow) {
+    if (is_slow) {
         LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
@@ -1163,23 +1160,26 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     for (const auto& rowset : (*tablet_metadata)->rowsets()) {
                         int64_t num_deletes = 0;
                         if (is_pk_tablet) {
-                            if (accurate_mode) {
+                            if (rowset.has_range()) {
+                                // Rowset went through a reshard (split or merge-back). Shared delvec
+                                // cardinality reflects the parent's full delete set, not this child's
+                                // share, so reading delvec would over-subtract. Use the pre-scaled
+                                // num_dels written by tablet_splitter / tablet_merger / tablet_reshard_helper.
+                                num_deletes = rowset.has_num_dels() ? rowset.num_dels() : 0;
+                            } else if (accurate_mode) {
                                 // Accurate mode (default): fetch delete vectors from object storage.
                                 // Reuses the already-loaded tablet metadata to avoid repeated loads per segment.
                                 num_deletes = static_cast<int64_t>(
                                         _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
-                            } else {
+                            } else if (rowset.has_num_dels()) {
                                 // Approximate mode: prefer the pre-stored num_dels field in rowset
                                 // metadata. This avoids additional I/O while still providing a reasonable estimate.
                                 // Rows deleted but not yet compacted may be slightly overcounted.
-                                if (rowset.has_num_dels()) {
-                                    num_deletes = rowset.num_dels();
-                                } else {
-                                    // Fallback for old metadata without num_dels.
-                                    num_deletes =
-                                            static_cast<int64_t>(_tablet_mgr->update_mgr()->get_rowset_num_deletes(
-                                                    **tablet_metadata, rowset));
-                                }
+                                num_deletes = rowset.num_dels();
+                            } else {
+                                // Fallback for old metadata without num_dels.
+                                num_deletes = static_cast<int64_t>(
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
                             }
                         }
                         // For non-PK tablets, num_deletes stays 0: they have no delete vectors.

@@ -29,7 +29,7 @@ import com.starrocks.common.proc.ExternalSchemaProcNode;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorType;
@@ -334,7 +334,7 @@ public class PaimonMetadataTest {
                 result = Arrays.asList(partition1, partition2);
             }
         };
-        List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+        List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadataRequestContext.DEFAULT);
         assertEquals(2, result.size());
         List<String> expectations = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
         Assertions.assertThat(result).hasSameElementsAs(expectations);

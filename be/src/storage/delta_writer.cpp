@@ -756,20 +756,6 @@ Status DeltaWriter::commit() {
     }
     auto rowset_build_ts = watch.elapsed_time();
 
-    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
-        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) &&
-        !_storage_engine->update_manager()->update_state_mem_tracker()->any_limit_exceeded()) {
-        Status st;
-        FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
-                load_pk_preload, st, PK_PRELOAD_FP_ACTION(_opt.txn_id, _opt.tablet_id),
-                _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get()));
-        if (!st.ok() && !st.is_uninitialized()) {
-            _set_state(kAborted, st);
-            return st;
-        }
-    }
-    auto pk_preload_ts = watch.elapsed_time();
-
     if (_replicate_token != nullptr) {
         if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {
             LOG(WARNING) << st;
@@ -806,15 +792,13 @@ Status DeltaWriter::commit() {
     ADD_COUNTER_RELAXED(_stats.commit_time_ns, watch.elapsed_time());
     ADD_COUNTER_RELAXED(_stats.commit_wait_flush_time_ns, flush_ts);
     ADD_COUNTER_RELAXED(_stats.commit_rowset_build_time_ns, rowset_build_ts - flush_ts);
-    ADD_COUNTER_RELAXED(_stats.commit_pk_preload_time_ns, pk_preload_ts - rowset_build_ts);
-    ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - pk_preload_ts);
+    ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - rowset_build_ts);
     ADD_COUNTER_RELAXED(_stats.commit_txn_commit_time_ns, commit_txn_ts - replica_ts);
     StarRocksMetrics::instance()->delta_writer_commit_task_total.increment(1);
     StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
-    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment((pk_preload_ts - rowset_build_ts) /
-                                                                                1000);
-    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_preload_ts) / 1000);
+    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - rowset_build_ts) /
+                                                                                  1000);
     StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment((commit_txn_ts - replica_ts) / 1000);
     return Status::OK();
 }

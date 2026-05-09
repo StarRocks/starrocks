@@ -309,6 +309,13 @@ CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
+// Row interval between consecutive sort-key samples recorded by the segment
+// writer. Samples are consumed by tablet split and range-split parallel
+// compaction to accurately estimate row distribution for overlapping segments.
+// Setting to 0 disables sampling. The per-segment value is persisted in
+// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
+// does not break cross-version readers.
+CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
@@ -470,6 +477,11 @@ CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
+// Max threads for lake partial update segment-level parallelism.
+// <= 0 means use half of CPU core count. Runtime on/off is controlled by enable_pk_index_parallel_execution.
+CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
+// Queue size for the lake partial update threadpool.
+CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
@@ -1310,7 +1322,6 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
-CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
@@ -1802,7 +1813,6 @@ CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
-CONF_mBool(skip_pk_preload, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:

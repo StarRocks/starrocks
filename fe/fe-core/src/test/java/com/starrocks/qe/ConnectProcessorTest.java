@@ -41,6 +41,7 @@ import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -85,6 +86,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -455,6 +457,39 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+    public void testQueryAuditRelations() throws Exception {
+        auditBuilder.reset();
+        starRocksAssert.withView("create or replace view relation_view_cp as select v1 from testTable1");
+
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString("select rv.v1 from relation_view_cp rv "
+                + "join (select v1 from testTable1) sq on rv.v1 = sq.v1 "
+                + "join relation_view_cp rv2 on rv2.v1 = sq.v1");
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(UserIdentity.ROOT.getUser());
+        myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        myContext.setDatabase("testDb1");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        processor.processOnce();
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        Assertions.assertEquals(Arrays.asList(
+                qualifiedRelationName("testDb1", "relation_view_cp"),
+                qualifiedRelationName("testDb1", "testTable1")),
+                auditEvent.queriedRelations);
+    }
+
+    @Test
     public void testQueryWithInlineWarehouse() throws Exception {
         Config.run_mode = RunMode.SHARED_DATA.getName();
         RunMode.detectRunMode();
@@ -508,6 +543,10 @@ public class ConnectProcessorTest extends DDLTestBase {
             Config.run_mode = RunMode.SHARED_NOTHING.getName();
             RunMode.detectRunMode();
         }
+    }
+
+    private String qualifiedRelationName(String dbName, String tableName) {
+        return String.format("%s.%s.%s", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tableName);
     }
 
     @Test
@@ -636,6 +675,34 @@ public class ConnectProcessorTest extends DDLTestBase {
         // customQueryId is cleared after query finished
         Assertions.assertEquals("", ctx.getCustomQueryId());
         Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
+    }
+
+    @Test
+    public void testQueryWithCustomSessionName() throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
+        ctx.getSessionVariable().setCustomSessionName("session_name");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        AtomicReference<String> customSessionName = new AtomicReference<>();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                customSessionName.set(ctx.getCustomSessionName());
+            }
+            
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+        processor.processOnce();
+        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        // verify customSessionName is set during query execution
+        Assertions.assertEquals("session_name", customSessionName.get());
+        // customSessionName is NOT cleared after query finished
+        Assertions.assertEquals("session_name", ctx.getCustomSessionName());
+        Assertions.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
     }
 
     @Test

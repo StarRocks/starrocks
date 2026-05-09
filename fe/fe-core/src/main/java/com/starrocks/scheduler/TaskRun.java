@@ -74,6 +74,8 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_VALUES = "PARTITION_VALUES";
     public static final String FORCE = "FORCE";
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    // Set on pinned-PCT batches only; value is the pinning job's START_TASK_RUN_ID.
+    public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
@@ -81,22 +83,25 @@ public class TaskRun implements Comparable<TaskRun> {
     // MV's task run can be generated from the last task run, those properties are not allowed to be copied from one task run
     // to another and must be only set specifically for each run but cannot be extended from the last task run.
     // eg: `FORCE` is only allowed to set in the first task run and cannot be copied into the following task run.
+    // `PINNED_REFRESH_JOB_ID` is re-set per batch based on pinning owner status — must not inherit.
     public static final Set<String> MV_UNCOPYABLE_PROPERTIES = ImmutableSet.of(
-            PARTITION_START, PARTITION_END, PARTITION_VALUES);
+            PARTITION_START, PARTITION_END, PARTITION_VALUES, PINNED_REFRESH_JOB_ID);
     // If there are many pending mv task runs, we can merge some of them by comparing the properties, those properties that are
     // used to check equality of task runs and we can ignore the other properties.
     // eg:
     // - `FORCE` is used to check equality of task runs because the refresh partitions are different for each task run.
     // - `PROPERTIES_WAREHOUSE`/`START_TASK_RUN_ID` is no need to check equality of task runs because they will not affect
     //  the task run's result.
+    // - `PINNED_REFRESH_JOB_ID` scopes merge isolation to pinned batches; pure PCT is unaffected.
     public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID);
     // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
     // and will ignore other properties in the task run history.
     // This should be only used in the task run history table and should not used for checking task run's real properties
     // because this is not a complete list of task run properties.
     public static final Set<String> RESERVED_HISTORY_TASK_RUN_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE, IS_TEST);
+            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE,
+            PINNED_REFRESH_JOB_ID, IS_TEST);
 
     public static final int INVALID_TASK_PROGRESS = -1;
 

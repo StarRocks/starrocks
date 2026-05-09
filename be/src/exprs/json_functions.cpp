@@ -98,52 +98,6 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
     return Status::OK();
 }
 
-Status JsonFunctions::json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL) {
-        return Status::OK();
-    }
-
-    if (!context->is_notnull_constant_column(1)) {
-        return Status::OK();
-    }
-
-    ColumnPtr path = context->get_constant_column(1);
-    auto path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path);
-    std::string path_str(path_value.data, path_value.size);
-    // Must remove or replace the escape sequence.
-    path_str.erase(std::remove(path_str.begin(), path_str.end(), '\\'), path_str.end());
-    if (path_str.empty()) {
-        return Status::OK();
-    }
-
-    std::vector<std::string> path_exprs;
-    try {
-        boost::tokenizer<boost::escaped_list_separator<char>> tok(path_str,
-                                                                  boost::escaped_list_separator<char>("\\", ".", "\""));
-        path_exprs.assign(tok.begin(), tok.end());
-    } catch (const boost::escaped_list_error& e) {
-        return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
-    }
-    auto* parsed_paths = new std::vector<SimpleJsonPath>();
-    RETURN_IF_ERROR(_get_parsed_paths(path_exprs, parsed_paths));
-
-    context->set_function_state(scope, parsed_paths);
-    VLOG(10) << "prepare json path. size: " << parsed_paths->size();
-    return Status::OK();
-}
-
-Status JsonFunctions::json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
-        if (parsed_paths != nullptr) {
-            delete parsed_paths;
-            VLOG(10) << "close json path";
-        }
-    }
-
-    return Status::OK();
-}
-
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
 #define HANDLE_SIMDJSON_ERROR(err, msg)                                                          \

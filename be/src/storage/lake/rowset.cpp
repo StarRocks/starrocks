@@ -14,6 +14,7 @@
 
 #include "storage/lake/rowset.h"
 
+#include <algorithm>
 #include <future>
 #include <unordered_set>
 
@@ -214,8 +215,7 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
         }
         if (metadata().segment_metas_size() > 0) {
             auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
-            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            file.write_sort_key_fields_to(segment_meta);
             segment_meta->set_num_rows(file.num_rows);
             segment_meta->set_segment_idx(next_segment_id++);
         }
@@ -767,8 +767,11 @@ int64_t Rowset::data_size_after_deletion() const {
     if (num_rows() == 0 || data_size() == 0) {
         return 0;
     }
-    // data size * (num_rows - num_deleted_rows) / num_rows
-    return (int64_t)(data_size() * ((double)(num_rows() - num_dels()) / num_rows()));
+    // data size * (num_rows - num_deleted_rows) / num_rows. Clamp live rows to 0 to
+    // guard against callers that observe an inflated num_dels (e.g. pre-fix reshard
+    // children that inherited the parent's full delvec cardinality).
+    int64_t live_rows = std::max<int64_t>(0, num_rows() - num_dels());
+    return (int64_t)(data_size() * ((double)live_rows / num_rows()));
 }
 
 } // namespace starrocks::lake

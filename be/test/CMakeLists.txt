@@ -71,6 +71,7 @@ set(EXEC_FILES
         ./exec/workgroup/work_group_manager_test.cpp
         ./exec/workgroup/mem_tracker_manager_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
+        ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
@@ -543,6 +544,7 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
+    ./storage/lake/tablet_splitter_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
@@ -626,6 +628,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
+    ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
     ./storage/rowset/series_column_iterator_test.cpp
     ./storage/rowset/struct_column_rw_test.cpp
     ./storage/rowset/unique_rowset_id_generator_test.cpp

@@ -44,7 +44,6 @@ namespace starrocks {
 
 struct RowsetColumnPartialUpdateParam {
     int64_t primary_key_batch_get_index_memory_limit;
-    bool skip_pk_preload;
 };
 
 class RowsetColumnPartialUpdateTest : public ::testing::Test,
@@ -54,7 +53,6 @@ public:
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         _update_mem_tracker = std::make_unique<MemTracker>();
         config::primary_key_batch_get_index_memory_limit = GetParam().primary_key_batch_get_index_memory_limit;
-        config::skip_pk_preload = GetParam().skip_pk_preload;
         config::enable_pk_size_tiered_compaction_strategy = false;
     }
 
@@ -66,7 +64,6 @@ public:
             }
         }
         config::enable_pk_size_tiered_compaction_strategy = true;
-        config::skip_pk_preload = false;
     }
 
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys, bool add_v3 = false) {
@@ -1674,8 +1671,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_meta_reader_with_multiple_dcg_columns
 }
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
-                         ::testing::Values(RowsetColumnPartialUpdateParam{1, false},
-                                           RowsetColumnPartialUpdateParam{1024, true},
-                                           RowsetColumnPartialUpdateParam{104857600, false}));
+                         ::testing::Values(RowsetColumnPartialUpdateParam{1}, RowsetColumnPartialUpdateParam{1024},
+                                           RowsetColumnPartialUpdateParam{104857600}));
 
 } // namespace starrocks

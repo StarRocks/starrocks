@@ -178,11 +178,10 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.put(origRef, stateUnion);
         }
 
-        // Add __ACTION__ column so appendPkLoadOpColumn can derive __op from it.
-        // For aggregate MVs, all output rows are UPSERTs (action = INSERT = 1).
+        // Aggregate MV outputs are all UPSERTs. __ACTION__ = 0 (= __op UPSERT).
         ColumnRefOperator actionColumn = delta.getActionColumn();
         if (actionColumn != null) {
-            projMap.put(actionColumn, ConstantOperator.createTinyInt((byte) 1));
+            projMap.put(actionColumn, ConstantOperator.createTinyInt((byte) 0));
         }
 
         OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
