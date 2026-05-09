@@ -206,7 +206,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 可変: はい
 - 説明: マテリアライズドビュー (MV) の高速スキーマ進化 (FSE) の動作を制御します。有効な値は次のとおりです: `strict` (デフォルト) - `isSupportFastSchemaEvolutionInDanger` が true の場合にのみ FSE を許可し、影響を受けるパーティションエントリをバージョンマップからクリアします。 `force` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可し、影響を受けるパーティションエントリをクリアしてリフレッシュ時に再計算をトリガーします。 `force_no_clear` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可しますが、パーティションエントリはクリアしません。
-- 導入バージョン: v3.4.0
+- 導入バージョン: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
