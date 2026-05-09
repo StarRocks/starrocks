@@ -1458,7 +1458,6 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
             // Snapshot the subtask input footprint onto the context so list_tasks() can
             // surface it consistently for both running and completed subtasks.
             context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
-            context->subtask_input_bytes = it->second.input_bytes;
             // Store context pointer for real-time progress/status tracking
             it->second.context = context.get();
         }
@@ -1646,8 +1645,8 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
             if (subtask_info.context != nullptr && subtask_info.context->stats) {
                 stats_ptr = subtask_info.context->stats.get();
             }
-            info.profile = stats_ptr->to_json_stats_with_subtask_metadata(
-                    subtask_id, subtask_info.input_rowset_ids.size(), subtask_info.input_bytes);
+            info.profile =
+                    stats_ptr->to_json_stats_with_subtask_metadata(subtask_id, subtask_info.input_rowset_ids.size());
         }
 
         // Add completed subtasks that haven't been cleaned up yet
@@ -1667,7 +1666,7 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
                 // parallel subtask.
                 if (ctx->subtask_id >= 0) {
                     info.profile = ctx->stats->to_json_stats_with_subtask_metadata(
-                            ctx->subtask_id, static_cast<size_t>(ctx->subtask_input_rowsets), ctx->subtask_input_bytes);
+                            ctx->subtask_id, static_cast<size_t>(ctx->subtask_input_rowsets));
                 } else {
                     info.profile = ctx->stats->to_json_stats();
                 }
@@ -2212,7 +2211,6 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
             context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
-            context->subtask_input_bytes = it->second.input_bytes;
             it->second.context = context.get();
         }
     }
@@ -2559,7 +2557,6 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
             context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
-            context->subtask_input_bytes = it->second.input_bytes;
             it->second.context = context.get();
         }
     }

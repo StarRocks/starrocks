@@ -1388,7 +1388,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     ctx0->finish_time.store(::time(nullptr), std::memory_order_release);
     ctx0->skipped.store(false, std::memory_order_relaxed);
     ctx0->subtask_input_rowsets = 4;
-    ctx0->subtask_input_bytes = 1234;
     ctx0->stats->in_queue_time_sec = 7;
     ctx0->txn_log = std::make_unique<TxnLogPB>();
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
@@ -1411,7 +1410,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
             EXPECT_NE(info.profile.find(R"("in_queue_sec":7)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("subtask_id":0)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("input_rowsets":4)"), std::string::npos);
-            EXPECT_NE(info.profile.find(R"("input_bytes":1234)"), std::string::npos);
+            EXPECT_EQ(info.profile.find(R"("input_bytes")"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("is_parallel_subtask":true)"), std::string::npos);
             found_completed_profile = true;
         }

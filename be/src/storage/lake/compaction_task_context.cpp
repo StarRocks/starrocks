@@ -118,15 +118,13 @@ std::string CompactionTaskStats::to_json_stats() const {
     return serialize(root);
 }
 
-std::string CompactionTaskStats::to_json_stats_with_subtask_metadata(int32_t subtask_id, size_t input_rowsets,
-                                                                     int64_t input_bytes) const {
+std::string CompactionTaskStats::to_json_stats_with_subtask_metadata(int32_t subtask_id, size_t input_rowsets) const {
     rapidjson::Document root;
     root.SetObject();
     fill_stats_fields(root, *this);
     auto& allocator = root.GetAllocator();
     root.AddMember("subtask_id", rapidjson::Value(subtask_id), allocator);
     root.AddMember("input_rowsets", rapidjson::Value(static_cast<int64_t>(input_rowsets)), allocator);
-    root.AddMember("input_bytes", rapidjson::Value(input_bytes), allocator);
     root.AddMember("is_parallel_subtask", rapidjson::Value(true), allocator);
     return serialize(root);
 }

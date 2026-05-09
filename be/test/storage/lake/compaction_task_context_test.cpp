@@ -165,7 +165,7 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats_with_subtask_metadata) {
     context.stats->in_queue_time_sec = 11;
 
     std::string json_profile = context.stats->to_json_stats_with_subtask_metadata(
-            /*subtask_id=*/3, /*input_rowsets=*/5, /*input_bytes=*/2048);
+            /*subtask_id=*/3, /*input_rowsets=*/5);
 
     // Stats fields must still be present (this is the regression that was being lost).
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("read_remote_mb":2)"));
@@ -173,10 +173,12 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats_with_subtask_metadata) {
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("write_segment_count":7)"));
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("in_queue_sec":11)"));
 
-    // Subtask metadata must be appended alongside the stats.
+    // Subtask metadata must be appended alongside the stats. The planned input_bytes
+    // is intentionally omitted because the actual read volume is already reported via
+    // read_local_mb / read_remote_mb in the stats fields above.
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("subtask_id":3)"));
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("input_rowsets":5)"));
-    EXPECT_THAT(json_profile, testing::HasSubstr(R"("input_bytes":2048)"));
+    EXPECT_THAT(json_profile, testing::Not(testing::HasSubstr(R"("input_bytes")")));
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("is_parallel_subtask":true)"));
 }
 } // namespace starrocks::lake
