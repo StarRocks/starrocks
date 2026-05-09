@@ -139,10 +139,26 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
+   将节点添加至集群。
+
+   ```SQL
+   -- 添加 Follower 节点：
+   ALTER SYSTEM ADD FOLLOWER "<follower_host>:<follower_edit_log_port>";
+   
+   -- 添加 Observer 节点：
+   ALTER SYSTEM ADD OBSERVER "<observer_host>:<observer_edit_log_port>";
+   ```
+
 4. **清理 `storage_root_path` 目录后** 启动 CN 节点。
 
    ```Bash
    ./be/bin/start_cn.sh --daemon
+   ```
+
+   将节点添加至集群。
+
+   ```SQL
+   ALTER SYSTEM ADD COMPUTE NODE "<cn_host>:<cn_heartbeat_service_port>";
    ```
 
 如果您在步骤 1 中修改了 **cluster_snapshot.yaml**，节点和存储卷将根据文件中的信息在新集群中重新配置。
