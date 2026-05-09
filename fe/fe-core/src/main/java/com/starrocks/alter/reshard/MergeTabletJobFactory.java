@@ -257,6 +257,14 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
 
     private List<List<Long>> createMergeTabletGroups(
             PhysicalPartition physicalPartition, MaterializedIndex oldIndex, long targetSize) {
+        // pairThresh: a single tablet at or above this is excluded from merging — aligned with
+        //             TabletReshardUtils.needMerge() so a tablet that on its own already satisfies
+        //             the new size band cannot be picked up as a merge candidate.
+        // mergeCap:   maximum cumulative size of a merge group; merged output stays strictly below
+        //             splitThreshold so it cannot turn around and trigger a split.
+        long pairThresh = TabletReshardUtils.mergePairThreshold(targetSize);
+        long mergeCap = TabletReshardUtils.mergeGroupCap(targetSize);
+
         // MaterializedIndex tablets are already ordered by range.
         List<Tablet> orderedTablets = oldIndex.getTablets();
         List<List<Long>> mergeTabletGroups = new ArrayList<>();
@@ -266,29 +274,23 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
         for (Tablet tablet : orderedTablets) {
             if (!(tablet instanceof LakeTablet)) {
-                if (currentTabletGroup.size() >= 2) {
-                    mergeTabletGroups.add(currentTabletGroup);
-                }
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
                 continue;
             }
 
             long dataSize = tablet.getDataSize(true);
-            if (dataSize >= targetSize
+            if (dataSize >= pairThresh
                     || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
-                if (currentTabletGroup.size() >= 2) {
-                    mergeTabletGroups.add(currentTabletGroup);
-                }
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
                 continue;
             }
 
-            if (currentSize + dataSize > targetSize) {
-                if (currentTabletGroup.size() >= 2) {
-                    mergeTabletGroups.add(currentTabletGroup);
-                }
+            if (currentSize + dataSize > mergeCap) {
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
             }
@@ -297,11 +299,14 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             currentSize += dataSize;
         }
 
-        if (currentTabletGroup.size() >= 2) {
-            mergeTabletGroups.add(currentTabletGroup);
-        }
-
+        flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
         return mergeTabletGroups;
+    }
+
+    private static void flushMergeTabletGroup(List<List<Long>> groups, List<Long> currentGroup) {
+        if (currentGroup.size() >= 2) {
+            groups.add(currentGroup);
+        }
     }
 
     private List<ReshardingTablet> createReshardingTablets(MaterializedIndex index,
