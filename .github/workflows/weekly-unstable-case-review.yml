@@ -219,7 +219,7 @@ jobs:
   teardown:
     name: TEARDOWN
     needs: [prepare, deploy, sql-tester-review]
-    if: always() && needs.deploy.result == 'success'
+    if: always() && needs.deploy.result != 'skipped'
     runs-on: [self-hosted, normal]
     env:
       BRANCH:    ${{ needs.prepare.outputs.BRANCH }}
