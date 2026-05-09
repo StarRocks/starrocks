@@ -151,6 +151,78 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * Aggregate-function whitelist: each (function, argument-type) combination listed in
+     * {@code IVM_SUPPORTED_AGG_FUNCTIONS} must be accepted by the analyzer.
+     */
+    @Test
+    public void testWhitelistAcceptsSupportedAggregates() throws Exception {
+        // t_numeric: id INT, c1 INT, c2 INT — all numeric.
+        String[] ddls = {
+                // sum / avg over numeric
+                "SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, AVG(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // min / max over numeric
+                "SELECT id, MIN(c1), MAX(c2) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // count(col) — count(*) is exercised by testAggregateQueryWithCountStar above.
+                "SELECT id, COUNT(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // approx_count_distinct / ndv
+                "SELECT id, APPROX_COUNT_DISTINCT(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, NDV(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+        };
+
+        for (String selectSql : ddls) {
+            String ddl = "CREATE MATERIALIZED VIEW mv_wl "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS " + selectSql;
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                    analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+            assertTrue(result.isPresent(), "whitelist must accept: " + selectSql);
+        }
+    }
+
+    /**
+     * Aggregate-function whitelist: combinations not on the list must be rejected at
+     * CREATE time so the user sees a clear error instead of silently wrong data or a
+     * refresh-time crash.
+     */
+    @Test
+    public void testWhitelistRejectsUnsupportedAggregates() throws Exception {
+        record Case(String selectSql, String expectedFragment) { }
+        Case[] cases = {
+                // Unknown function: array_agg is not on the whitelist.
+                new Case("SELECT id, ARRAY_AGG(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                        "does not support aggregate function: array_agg"),
+                // Function on the whitelist but argument type not allowed: MIN(varchar).
+                // t0 has columns: id INT, data STRING, date STRING.
+                new Case("SELECT id, MIN(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id",
+                        "does not support min with argument types"),
+        };
+
+        for (Case c : cases) {
+            String ddl = "CREATE MATERIALIZED VIEW mv_wl_neg "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS " + c.selectSql;
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                    "whitelist must reject: " + c.selectSql);
+            assertTrue(ex.getMessage().toLowerCase().contains(c.expectedFragment.toLowerCase()),
+                    "error message must contain '" + c.expectedFragment + "', got: " + ex.getMessage());
+        }
+    }
+
+    /**
      * A non-aggregate (scan-only) MV query over an append-only Iceberg table must yield
      * {@link RowIdStrategy#AUTO_INCREMENT}.
      *
