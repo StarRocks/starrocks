@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "column/chunk_builder.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
@@ -33,7 +34,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "storage/aggregate_type.h"
-#include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/flat_json_config.h"
 #include "storage/olap_common.h"
@@ -2168,7 +2168,7 @@ TEST_F(FlatJsonColumnRWTest, testGetIORangeVec) {
 GROUP_SLOW_TEST_F(FlatJsonColumnRWTest, testJsonColumnCompression) {
     constexpr size_t num_rows = 16 * 4096; // Generate several MBs of data
     // Construct JSON objects with the same schema
-    auto col = ChunkHelper::column_from_field_type(TYPE_JSON, true);
+    auto col = ChunkBuilder::column_from_field_type(TYPE_JSON, true);
     col->reserve(num_rows);
     std::string json_strings;
     std::vector<std::string> kind_dict = {"commit", "rebase", "merge"};

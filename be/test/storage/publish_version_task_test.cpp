@@ -26,6 +26,7 @@
 #include "base/testutil/assert.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/system/cpu_info.h"
@@ -153,7 +154,7 @@ public:
     static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, 1024);
+        auto chunk = ChunkBuilder::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
             auto cols = chunk->mutable_columns();

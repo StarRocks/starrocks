@@ -20,7 +20,6 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "serde/column_array_serde.h"
-#include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"

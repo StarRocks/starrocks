@@ -20,6 +20,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -150,9 +151,9 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto ret = ChunkHelper::new_chunk(*_schema, 128);
+        auto ret = ChunkBuilder::new_chunk(*_schema, 128);
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*_schema, 128);
+            auto tmp = ChunkBuilder::new_chunk(*_schema, 128);
             auto st = reader->get_next(tmp.get());
             if (st.is_end_of_file()) {
                 break;
@@ -237,7 +238,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkBuilder::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(k0.size(), read_chunk_ptr->num_rows());
 

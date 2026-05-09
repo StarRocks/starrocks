@@ -15,6 +15,7 @@
 #include "storage/lake/update_compaction_state.h"
 
 #include "base/debug/trace.h"
+#include "column/chunk_builder.h"
 #include "common/config_exec_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -75,7 +76,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == rowset->num_segments());
 
     // only hold pkey, so can use larger chunk size
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
+    auto chunk_shared_ptr = ChunkBuilder::new_chunk(pkey_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = _segment_iters[segment_id].get();

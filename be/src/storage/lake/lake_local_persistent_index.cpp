@@ -14,7 +14,6 @@
 
 #include "storage/lake/lake_local_persistent_index.h"
 
-#include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index_tablet_loader.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"

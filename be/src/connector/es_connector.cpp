@@ -25,7 +25,6 @@
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 

@@ -17,6 +17,7 @@
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "common/config_exec_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/connector_sink_executor.h"
@@ -26,7 +27,6 @@
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
@@ -484,7 +484,7 @@ ChunkPtr SpillPartitionChunkWriter::_create_schema_chunk(const ChunkPtr& base_ch
             _schema = _make_schema();
         }
     }
-    auto chunk = ChunkHelper::new_chunk(*_schema, num_rows);
+    auto chunk = ChunkBuilder::new_chunk(*_schema, num_rows);
     return chunk;
 }
 

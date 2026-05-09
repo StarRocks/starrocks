@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_builder.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -140,7 +141,7 @@ void BinlogReaderTest::create_rowset(int32_t* start_key, RowsetInfo& rowset_info
         int64_t extra_rows = seg_index < rowset_info.total_rows % rowset_info.num_segments;
         int64_t num_rows = avg_rows + extra_rows;
         std::vector<uint32_t> column_indexes{0, 1, 2};
-        auto chunk = ChunkHelper::new_chunk(_schema, num_rows);
+        auto chunk = ChunkBuilder::new_chunk(_schema, num_rows);
         for (int i = *start_key; i < num_rows + *start_key; i++) {
             auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
@@ -196,7 +197,7 @@ void verify_binlog_reader(TabletSharedPtr tablet, std::vector<RowsetInfo>& rowse
     ASSERT_OK(binlog_reader->seek(rowset_infos[rowset_index].version, row_index));
     ASSERT_EQ(rowset_infos[next_rowset_index].version, binlog_reader->next_version());
     ASSERT_EQ(next_row_index, binlog_reader->next_seq_id());
-    ChunkPtr chunk = ChunkHelper::new_chunk(output_schema, 100);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(output_schema, 100);
     Status st;
     while (true) {
         chunk->reset();

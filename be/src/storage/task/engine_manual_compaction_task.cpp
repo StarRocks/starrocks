@@ -20,7 +20,6 @@
 #include "common/config_compaction_fwd.h"
 #include "runtime/exec_env.h"
 #include "storage/base_compaction.h"
-#include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/cumulative_compaction.h"

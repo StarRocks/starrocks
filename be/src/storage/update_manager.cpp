@@ -27,7 +27,6 @@
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/persistent_index_compaction_manager.h"

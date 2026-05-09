@@ -24,6 +24,7 @@
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
 #include "storage/primary_key_encoding_types.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 

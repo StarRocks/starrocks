@@ -21,6 +21,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -156,7 +157,7 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkBuilder::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -2052,7 +2053,7 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*schema, 128);
+        auto chunk = ChunkBuilder::new_chunk(*schema, 128);
         auto ret = int64_t{0};
         auto rowid = int64_t{0};
         while (true) {
@@ -2528,7 +2529,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkBuilder::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_default_values = false;
@@ -2973,7 +2974,7 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkBuilder::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_updated_rows = false;
@@ -3128,7 +3129,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(TabletReaderParams()));
-        auto chk = ChunkHelper::new_chunk(*_schema, 256);
+        auto chk = ChunkBuilder::new_chunk(*_schema, 256);
         std::vector<bool> seen(kChunkSize, false);
         while (true) {
             auto st = reader->get_next(chk.get());
@@ -3299,7 +3300,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     ASSERT_OK(reader->prepare());
     ASSERT_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkBuilder::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_new_rows = false;
@@ -3435,7 +3436,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     ASSERT_OK(reader->prepare());
     ASSERT_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkBuilder::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_correct_defaults = false;
@@ -3548,7 +3549,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
 
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkBuilder::new_chunk(*_schema, 128);
         int total_rows = 0;
         int new_rows_found = 0;
 
@@ -3608,7 +3609,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+    auto chunk = ChunkBuilder::new_chunk(*_schema, 128);
     int total_rows = 0;
     int existing_rows_updated = 0;
     int new_rows_verified = 0;
@@ -3849,7 +3850,7 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(TabletReaderParams()));
 
-        auto chk = ChunkHelper::new_chunk(*_schema, 256);
+        auto chk = ChunkBuilder::new_chunk(*_schema, 256);
         std::set<int> found_keys;
         while (true) {
             auto st = reader->get_next(chk.get());

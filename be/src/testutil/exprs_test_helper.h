@@ -30,7 +30,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

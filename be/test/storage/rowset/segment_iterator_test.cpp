@@ -23,6 +23,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -125,7 +126,7 @@ struct TabletDataBuilder {
         RETURN_IF_ERROR(writer.init(column_indexes, true));
 
         auto schema = ChunkHelper::convert_schema(_schema, column_indexes);
-        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        auto chunk = ChunkBuilder::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto cols = chunk->mutable_columns();
@@ -248,7 +249,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
     set.insert(1);
     ASSERT_OK(chunk_iter->init_output_schema(set));
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->output_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();
@@ -358,7 +359,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     set.insert(1);
     ASSERT_OK(chunk_iter->init_output_schema(set));
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->output_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();
@@ -423,7 +424,7 @@ TEST_F(SegmentIteratorTest, TestPredicateLateMaterializationMaterializesRestColu
     ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
     ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
+    auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     ASSERT_EQ(res_chunk->num_rows(), 5); // rows where c1 == 5
 
@@ -486,7 +487,7 @@ TEST_F(SegmentIteratorTest, TestPredicateLateMaterializationSingleColumnPushdown
     ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
     ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
+    auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
     size_t total = 0;
     while (true) {
         res_chunk->reset();
@@ -577,7 +578,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
     ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->output_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();
@@ -677,7 +678,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_TRUE(chunk_iter->init_encoded_schema(dict_map).ok());
     ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->output_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();
@@ -753,7 +754,7 @@ TEST_F(SegmentIteratorTest, testBasicColumnHashIsCongruentFilter) {
     int num_columns = 2;
     ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->output_schema(), chunk_size);
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     ASSERT_TRUE(res_chunk->num_rows() == 6);
     ASSERT_TRUE(res_chunk->num_columns() == num_columns);
@@ -782,7 +783,7 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
     ASSERT_OK(writer.init(key_column_indexes, true));
 
     auto schema = ChunkHelper::convert_schema(tablet_schema, key_column_indexes);
-    auto chunk = ChunkHelper::new_chunk(schema, 1024);
+    auto chunk = ChunkBuilder::new_chunk(schema, 1024);
 
     // Add data rows - create providers for each column
     auto int_provider = [](int32_t i) { return Datum(i); };
@@ -840,7 +841,7 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
         const auto& chunk_iter = chunk_iter_res.value();
         ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-        auto res_chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1024);
+        auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->schema(), 1024);
         ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
 
         // Should return exactly one row: c0=0, c1="abc"
@@ -907,7 +908,7 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
         ASSERT_OK(chunk_iter_res.status());
         const auto& chunk_iter = chunk_iter_res.value();
         ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
-        auto res_chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1024);
+        auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->schema(), 1024);
         auto status = chunk_iter->get_next(res_chunk.get());
         ASSERT_TRUE(status.is_end_of_file());
         ASSERT_EQ(res_chunk->num_rows(), 0);
@@ -941,7 +942,7 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
         const auto& chunk_iter = chunk_iter_res.value();
         ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-        auto res_chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1024);
+        auto res_chunk = ChunkBuilder::new_chunk(chunk_iter->schema(), 1024);
         ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
 
         // Should return two rows: c0=1,2 with c1="def","ghi"

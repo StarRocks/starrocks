@@ -22,7 +22,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
 #include "types/percentile_value.h"

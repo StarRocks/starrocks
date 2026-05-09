@@ -29,7 +29,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state_helper.h"
-#include "storage/chunk_helper.h"
 
 DEFINE_FAIL_POINT(spill_always_streaming);
 DEFINE_FAIL_POINT(spill_always_selection_streaming);

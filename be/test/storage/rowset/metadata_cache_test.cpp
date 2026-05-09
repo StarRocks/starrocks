@@ -18,6 +18,7 @@
 #include "storage/rowset/metadata_cache.h"
 #undef private
 
+#include "column/chunk_builder.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -120,7 +121,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));

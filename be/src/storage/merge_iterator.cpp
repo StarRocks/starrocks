@@ -19,9 +19,9 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -208,7 +208,7 @@ inline Status MergeIterator::init() {
     for (size_t i = 0; i < _children.size(); i++) {
         // No need to reserve, because it's already reserved in segment interators.
         // If we reserve here, for small segment files, it will consume large memory then need.
-        _chunk_pool[i] = ChunkHelper::new_chunk(output_schema(), 0);
+        _chunk_pool[i] = ChunkBuilder::new_chunk(output_schema(), 0);
         RETURN_IF_ERROR(fill(i));
     }
     _inited = true;

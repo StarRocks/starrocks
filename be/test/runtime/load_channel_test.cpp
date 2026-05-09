@@ -20,6 +20,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -221,9 +222,9 @@ protected:
         opts.chunk_size = 1024;
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkBuilder::new_chunk(*_schema, 1024);
         while (true) {
-            auto tmp_chunk = ChunkHelper::new_chunk(*_schema, 1024);
+            auto tmp_chunk = ChunkBuilder::new_chunk(*_schema, 1024);
             auto st = seg_iter->get_next(tmp_chunk.get());
             if (st.is_end_of_file()) {
                 break;

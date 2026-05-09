@@ -38,12 +38,12 @@
 #include <cstdlib>
 #include <memory>
 
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
@@ -60,7 +60,7 @@ public:
 
     template <LogicalType type, class PageDecoderType, class CppType = StorageCppType<type>>
     void copy_one(PageDecoderType* decoder, CppType* ret) {
-        auto column = ChunkHelper::column_from_field_type(type, false);
+        auto column = ChunkBuilder::column_from_field_type(type, false);
 
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
@@ -98,7 +98,7 @@ public:
         ASSERT_EQ(0, rle_page_decoder.current_index());
         ASSERT_EQ(size, rle_page_decoder.count());
 
-        auto column = ChunkHelper::column_from_field_type(Type, true);
+        auto column = ChunkBuilder::column_from_field_type(Type, true);
         size_t size_to_fetch = size;
         status = rle_page_decoder.next_batch(&size_to_fetch, column.get());
         ASSERT_TRUE(status.ok());

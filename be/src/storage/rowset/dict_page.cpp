@@ -19,11 +19,11 @@
 
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h" // for Slice
+#include "column/chunk_builder.h"
 #include "column/raw_data_visitor.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
-#include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 
@@ -218,7 +218,7 @@ Status DictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(DataTypeTraits<Type>::type, false);
+        _vec_code_buf = ChunkBuilder::column_from_field_type(DataTypeTraits<Type>::type, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());

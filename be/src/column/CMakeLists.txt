@@ -53,6 +53,7 @@ ADD_BE_LIB(ColumnCore
 )
 
 ADD_BE_LIB(ChunkCore
+        chunk_builder.cpp
         field.cpp
         schema.cpp
         chunk.cpp

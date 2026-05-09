@@ -20,6 +20,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
+#include "column/chunk_builder.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -66,7 +67,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));

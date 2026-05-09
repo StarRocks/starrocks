@@ -20,6 +20,7 @@
 #include <iostream>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_builder.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
 #include "common/logging.h"
@@ -80,7 +81,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
     auto partial_schema = ChunkHelper::convert_schema(partial_tablet_schema);
-    auto partial_chunk = ChunkHelper::new_chunk(partial_schema, chunk_size);
+    auto partial_chunk = ChunkBuilder::new_chunk(partial_schema, chunk_size);
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         partial_chunk->reset();
@@ -115,7 +116,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);
-        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto column = ChunkBuilder::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         write_columns[i] = column->clone_empty();
         for (auto j = 0; j < num_rows; ++j) {
             write_columns[i]->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
@@ -140,7 +141,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     const auto& seg_iterator = res.value();
 
     size_t count = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkBuilder::new_chunk(schema, chunk_size);
     while (true) {
         chunk->reset();
         auto st = seg_iterator->get_next(chunk.get());

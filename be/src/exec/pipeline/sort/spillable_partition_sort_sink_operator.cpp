@@ -25,7 +25,6 @@
 #include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {

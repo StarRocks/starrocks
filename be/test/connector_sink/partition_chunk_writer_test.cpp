@@ -23,6 +23,7 @@
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
+#include "column/chunk_builder.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "connector/connector_chunk_sink.h"
@@ -1033,7 +1034,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
 
         for (size_t i = 0; i < 3; ++i) {
             // Create a chunk
-            ChunkPtr chunk = ChunkHelper::new_chunk(*schema, 3);
+            ChunkPtr chunk = ChunkBuilder::new_chunk(*schema, 3);
             std::string suffix = std::to_string(3 - i);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));

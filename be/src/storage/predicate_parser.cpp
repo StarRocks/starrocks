@@ -18,7 +18,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_tree/predicate_tree.hpp"

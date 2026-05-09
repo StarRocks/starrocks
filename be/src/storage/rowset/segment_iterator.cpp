@@ -26,6 +26,7 @@
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
@@ -1403,7 +1404,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
-    const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
+    const size_t n = std::max<size_t>(1 + ChunkBuilder::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
     if constexpr (check_global_dict) {
         _column_decoders.resize(n);
@@ -1954,7 +1955,7 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(key.schema(), 1);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(key.schema(), 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
@@ -2009,7 +2010,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(short_key_schema, 1);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(short_key_schema, 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
@@ -3366,7 +3367,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_check_low_cardinality_optimization() {
-    _predicate_need_rewrite.resize(1 + ChunkHelper::max_column_id(_schema), false);
+    _predicate_need_rewrite.resize(1 + ChunkBuilder::max_column_id(_schema), false);
     const size_t n = _opts.pred_tree.num_columns();
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& field = _schema.field(i);
@@ -3611,7 +3612,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         _inverted_index_ctx = std::make_unique<InvertedIndexContext>();
     }
 
-    _inverted_index_ctx->inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    _inverted_index_ctx->inverted_index_iterators.resize(ChunkBuilder::max_column_id(_schema) + 1, nullptr);
     std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
 
     for (const auto& field : _schema.fields()) {

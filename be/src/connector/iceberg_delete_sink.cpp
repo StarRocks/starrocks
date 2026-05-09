@@ -37,7 +37,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/service_contexts.h"
-#include "storage/chunk_helper.h"
 #include "types/datum.h"
 #include "utils.h"
 

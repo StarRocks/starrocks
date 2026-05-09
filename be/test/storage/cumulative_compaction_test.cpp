@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -239,7 +240,7 @@ public:
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(_tablet_schema);
         for (size_t j = 0; j < 8; ++j) {
-            auto chunk = ChunkHelper::new_chunk(schema, 128);
+            auto chunk = ChunkBuilder::new_chunk(schema, 128);
             for (size_t i = 0; i < 128; ++i) {
                 test_data.push_back("well" + std::to_string(i));
                 auto cols = chunk->mutable_columns();
@@ -1016,7 +1017,7 @@ TEST_F(CumulativeCompactionTest, test_issue_20084) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*schema, 1024);
+    auto read_chunk_ptr = ChunkBuilder::new_chunk(*schema, 1024);
     int count_rows = 0;
     while (true) {
         read_chunk_ptr->reset();

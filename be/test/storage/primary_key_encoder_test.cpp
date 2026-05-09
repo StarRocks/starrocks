@@ -21,9 +21,9 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/schema.h"
 #include "gutil/stringprintf.h"
-#include "storage/chunk_helper.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 
@@ -51,7 +51,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     const int n = 1000;
-    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int32(i * 2343);
@@ -72,7 +72,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     const int n = 1000;
-    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int128(i * 2343);
@@ -98,7 +98,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     const int n = 1;
-    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int32(i * 2343);
@@ -140,7 +140,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
         auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
-        auto pchunk = ChunkHelper::new_chunk(*sc, n);
+        auto pchunk = ChunkBuilder::new_chunk(*sc, n);
         Datum tmp;
         tmp.set_int32(42);
         pchunk->mutable_columns()[0]->append_datum(tmp);
@@ -161,7 +161,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
         auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
-        auto pchunk = ChunkHelper::new_chunk(*sc, n);
+        auto pchunk = ChunkBuilder::new_chunk(*sc, n);
         Datum tmp;
         tmp.set_int32(42);
         pchunk->mutable_columns()[0]->append_datum(tmp);
@@ -182,7 +182,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
     auto sc = create_key_schema({TYPE_VARCHAR});
     const int n = 2;
     {
-        auto pchunk = ChunkHelper::new_chunk(*sc, n);
+        auto pchunk = ChunkBuilder::new_chunk(*sc, n);
         Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
@@ -196,7 +196,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
                                                            PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
     {
-        auto pchunk = ChunkHelper::new_chunk(*sc, n);
+        auto pchunk = ChunkBuilder::new_chunk(*sc, n);
         Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
@@ -219,7 +219,7 @@ TEST(PrimaryKeyEncoderTest, testSingleIntV2EncodingRoundTripAndColumnType) {
     ASSERT_FALSE(v1_dest->is_binary());
     ASSERT_TRUE(v2_dest->is_binary());
 
-    auto pchunk = ChunkHelper::new_chunk(*sc, 5);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 5);
     std::vector<int32_t> values = {std::numeric_limits<int32_t>::min(), -1, 0, 1, std::numeric_limits<int32_t>::max()};
     for (int32_t v : values) {
         Datum d;
@@ -263,7 +263,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForInt) {
     MutableColumnPtr dest;
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2).ok());
 
-    auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
+    auto pchunk = ChunkBuilder::new_chunk(*sc, sorted_values.size());
     for (int32_t v : sorted_values) {
         Datum d;
         d.set_int32(v);
@@ -290,7 +290,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForBigint) {
     MutableColumnPtr dest;
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2).ok());
 
-    auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
+    auto pchunk = ChunkBuilder::new_chunk(*sc, sorted_values.size());
     for (int64_t v : sorted_values) {
         Datum d;
         d.set_int64(v);
@@ -355,7 +355,7 @@ static void verify_v2_round_trip(const Schema& schema, const Chunk& original) {
 
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForBoolean) {
     auto sc = create_key_schema({TYPE_BOOLEAN});
-    auto pchunk = ChunkHelper::new_chunk(*sc, 2);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 2);
     // false(0) < true(1)
     for (uint8_t v : {(uint8_t)0, (uint8_t)1}) {
         Datum d;
@@ -370,7 +370,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForTinyint) {
     auto sc = create_key_schema({TYPE_TINYINT});
     std::vector<int8_t> sorted_values = {std::numeric_limits<int8_t>::min(), -1, 0, 1,
                                          std::numeric_limits<int8_t>::max()};
-    auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
+    auto pchunk = ChunkBuilder::new_chunk(*sc, sorted_values.size());
     for (int8_t v : sorted_values) {
         Datum d;
         d.set_int8(v);
@@ -384,7 +384,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForSmallint) {
     auto sc = create_key_schema({TYPE_SMALLINT});
     std::vector<int16_t> sorted_values = {std::numeric_limits<int16_t>::min(), -1, 0, 1,
                                           std::numeric_limits<int16_t>::max()};
-    auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
+    auto pchunk = ChunkBuilder::new_chunk(*sc, sorted_values.size());
     for (int16_t v : sorted_values) {
         Datum d;
         d.set_int16(v);
@@ -399,7 +399,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForLargeint) {
     std::vector<int128_t> sorted_values = {std::numeric_limits<int128_t>::min(), static_cast<int128_t>(-1),
                                            static_cast<int128_t>(0), static_cast<int128_t>(1),
                                            std::numeric_limits<int128_t>::max()};
-    auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
+    auto pchunk = ChunkBuilder::new_chunk(*sc, sorted_values.size());
     for (int128_t v : sorted_values) {
         Datum d;
         d.set_int128(v);
@@ -412,7 +412,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForLargeint) {
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForDate) {
     auto sc = create_key_schema({TYPE_DATE});
     // DateValue stores julian day as int32_t internally
-    auto pchunk = ChunkHelper::new_chunk(*sc, 3);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 3);
     // 2000-01-01, 2020-06-15, 2025-12-31
     std::vector<std::string> date_strings = {"2000-01-01", "2020-06-15", "2025-12-31"};
     for (const auto& s : date_strings) {
@@ -428,7 +428,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForDate) {
 
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForDatetime) {
     auto sc = create_key_schema({TYPE_DATETIME});
-    auto pchunk = ChunkHelper::new_chunk(*sc, 3);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 3);
     // TimestampValue stores microseconds as int64_t internally
     std::vector<std::string> datetime_strings = {"2000-01-01 00:00:00", "2020-06-15 12:30:45", "2025-12-31 23:59:59"};
     for (const auto& s : datetime_strings) {
@@ -444,7 +444,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForDatetime) {
 
 TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForSingleVarchar) {
     auto sc = create_key_schema({TYPE_VARCHAR});
-    auto pchunk = ChunkHelper::new_chunk(*sc, 4);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 4);
     std::vector<std::string> values = {"", "abc", "hello world", std::string("with\0null", 9)};
     for (const auto& s : values) {
         Datum d;
@@ -456,7 +456,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForSingleVarchar) {
 
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForSingleVarchar) {
     auto sc = create_key_schema({TYPE_VARCHAR});
-    auto pchunk = ChunkHelper::new_chunk(*sc, 4);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 4);
     // Lexicographic order: "" < "aaa" < "aab" < "b"
     std::vector<std::string> sorted_values = {"", "aaa", "aab", "b"};
     for (const auto& s : sorted_values) {
@@ -470,7 +470,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForSingleVarchar) {
 TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForCompositeIntVarchar) {
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR});
     const int n = 10;
-    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         Datum d_int;
         d_int.set_int32(i * 100 - 500);
@@ -491,7 +491,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForCompositeIntVarchar) {
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForCompositeIntInt) {
     auto sc = create_key_schema({TYPE_INT, TYPE_BIGINT});
     // Pairs in ascending order: (int, bigint)
-    auto pchunk = ChunkHelper::new_chunk(*sc, 5);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 5);
     std::vector<std::pair<int32_t, int64_t>> sorted_pairs = {{-100, -1000}, {-100, 0}, {0, -1}, {0, 0}, {100, 999}};
     for (const auto& [v1, v2] : sorted_pairs) {
         Datum d1, d2;
@@ -506,7 +506,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForCompositeIntInt) 
 
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForCompositeVarcharInt) {
     auto sc = create_key_schema({TYPE_VARCHAR, TYPE_INT});
-    auto pchunk = ChunkHelper::new_chunk(*sc, 4);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, 4);
     // Composite order: ("aaa", 1) < ("aaa", 2) < ("aab", -1) < ("b", 0)
     std::vector<std::pair<std::string, int32_t>> sorted_pairs = {{"aaa", 1}, {"aaa", 2}, {"aab", -1}, {"b", 0}};
     for (const auto& [s, v] : sorted_pairs) {
@@ -523,7 +523,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForCompositeVarcharI
 TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForCompositeAllTypes) {
     auto sc = create_key_schema({TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_VARCHAR});
     const int n = 5;
-    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         Datum d;
         d.set_uint8(i % 2);
@@ -551,7 +551,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForCompositeAllTypes) {
 TEST(PrimaryKeyEncoderTest, testV2EncodeSelectiveRoundTrip) {
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR});
     const int n = 6;
-    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         Datum d_int;
         d_int.set_int32(i * 111);
@@ -585,7 +585,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodeSelectiveRoundTrip) {
 TEST(PrimaryKeyEncoderTest, testV2EncodeExceedLimitForComposite) {
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT});
     const int n = 1;
-    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkBuilder::new_chunk(*sc, n);
     Datum d;
     d.set_int32(42);
     pchunk->mutable_columns()[0]->append_datum(d);

@@ -21,6 +21,7 @@
 #include "agent/publish_version.h"
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "common/config_storage_fwd.h"
 #include "exec/pipeline/query_context.h"
@@ -118,7 +119,7 @@ public:
             return *writer->build();
         }
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
@@ -197,7 +198,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 }
 
 static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
-    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkBuilder::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());

@@ -28,6 +28,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
@@ -1048,7 +1049,7 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
         const auto& source_info = source_info_iter->second;
 
         auto field = ChunkHelper::convert_field(column_index, tablet_column);
-        MutableColumnPtr output_column = ChunkHelper::column_from_field(field);
+        MutableColumnPtr output_column = ChunkBuilder::column_from_field(field);
         output_column->reserve(num_rows_in_target);
 
         for (const auto& window : windows) {

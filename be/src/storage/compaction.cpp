@@ -19,6 +19,7 @@
 #include "base/debug/trace.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "gutil/strings/substitute.h"
@@ -184,7 +185,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     RETURN_IF_ERROR(reader.open(reader_params));
 
     int64_t output_rows = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
+    auto chunk = ChunkBuilder::new_chunk(schema, reader_params.chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     Status status;
@@ -279,7 +280,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         RETURN_IF_ERROR(reader.open(reader_params));
 
         int64_t output_rows = 0;
-        auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
+        auto chunk = ChunkBuilder::new_chunk(schema, reader_params.chunk_size);
         auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
         Status status;

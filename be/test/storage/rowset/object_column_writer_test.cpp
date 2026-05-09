@@ -15,12 +15,12 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_builder.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/aggregate_type.h"
-#include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -118,7 +118,7 @@ void ObjectColumnWriterTest::read_and_verify_object_column(ColumnMetaPB* meta, c
     ASSERT_OK(iter->init(iter_opts));
     ASSERT_OK(iter->seek_to_first());
 
-    MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, nullable);
+    MutableColumnPtr dst = ChunkBuilder::column_from_field_type(type, nullable);
     size_t rows_read = src.size();
     dst->reserve(rows_read);
     ASSERT_OK(iter->next_batch(&rows_read, dst.get()));

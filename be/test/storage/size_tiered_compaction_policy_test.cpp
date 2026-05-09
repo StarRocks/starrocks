@@ -24,6 +24,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -60,7 +61,7 @@ public:
         std::srand(std::time(nullptr));
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(_tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, 1024);
+        auto chunk = ChunkBuilder::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1500 * pow(config::size_tiered_level_multiple + 3, level - 2); ++i) {
             test_data.emplace_back("well" + std::to_string(id++));
             auto cols = chunk->mutable_columns();

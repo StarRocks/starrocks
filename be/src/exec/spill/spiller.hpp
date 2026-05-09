@@ -36,7 +36,6 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::spill {
 DECLARE_FAIL_POINT(spill_restore_sleep);

@@ -26,7 +26,6 @@
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
-#include "storage/chunk_helper.h"
 #include "storage/persistent_index.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"

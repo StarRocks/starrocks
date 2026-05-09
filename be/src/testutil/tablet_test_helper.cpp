@@ -15,7 +15,6 @@
 #include "testutil/tablet_test_helper.h"
 
 #include "common/config_exec_fwd.h"
-#include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/tablet.h"
 

@@ -24,6 +24,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
@@ -1477,7 +1478,7 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
     LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
-    auto chunk = ChunkHelper::new_chunk(schema, size);
+    auto chunk = ChunkBuilder::new_chunk(schema, size);
     auto cols = chunk->mutable_columns();
     if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
         for (size_t i = 0; i < size; i++) {

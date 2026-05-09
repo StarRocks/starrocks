@@ -38,11 +38,11 @@
 
 #include <memory>
 
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "storage/chunk_helper.h"
 #include "storage/types.h"
 #include "util/bloom_filter.h"
 
@@ -96,7 +96,7 @@ Status BloomFilterIndexReader::new_iterator(const IndexReadOptions& opts,
 }
 
 Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_ptr<BloomFilter>* bf) {
-    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    auto column = ChunkBuilder::column_from_field_type(TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bloom_filter_iter->seek_to_ordinal(ordinal));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;

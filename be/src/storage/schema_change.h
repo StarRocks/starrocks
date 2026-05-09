@@ -41,7 +41,6 @@
 
 #include "column/datum_convert.h"
 #include "gen_cpp/AgentService_types.h"
-#include "storage/chunk_helper.h"
 #include "storage/delete_handler.h"
 #include "storage/delta_column_group.h"
 #include "storage/rowset/rowset.h"

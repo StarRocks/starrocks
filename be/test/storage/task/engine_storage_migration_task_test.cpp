@@ -23,6 +23,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -111,7 +112,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
 
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
@@ -266,7 +267,7 @@ public:
     static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, 1024);
+        auto chunk = ChunkBuilder::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
             auto cols = chunk->mutable_columns();

@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "column/chunk_builder.h"
 #include "fs/fs_factory.h"
-#include "storage/chunk_helper.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet.h"
@@ -60,7 +60,7 @@ Status BinlogReader::init() {
         }
     }
     _data_schema = Schema(&_reader_params.output_schema, _data_column_index);
-    _data_chunk = ChunkHelper::new_chunk(_data_schema, 0);
+    _data_chunk = ChunkBuilder::new_chunk(_data_schema, 0);
 
     _initialized = true;
 

@@ -23,6 +23,7 @@
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "column/chunk_builder.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
@@ -181,7 +182,7 @@ public:
             return *writer->build();
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {

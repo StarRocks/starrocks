@@ -34,7 +34,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "storage/chunk_helper.h"
 #include "storage/rowset/segment_options.h"
 
 namespace starrocks::pipeline {

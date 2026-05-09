@@ -14,6 +14,7 @@
 
 #include "storage/local_tablet_reader.h"
 
+#include "column/chunk_builder.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
 #include "serde/protobuf_serde.h"
@@ -155,7 +156,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, value_column_ids_by_order);
     MutableColumns read_columns(value_column_ids_by_order.size());
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
-        read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
+        read_columns[i] = ChunkBuilder::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
     RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids_by_order, _version, false, rowids_by_rssid,
                                                           &read_columns, nullptr, tablet_schema));
@@ -231,7 +232,7 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
         return keys_st.status();
     }
     vector<bool> found;
-    ChunkPtr values = ChunkHelper::new_chunk(values_schema, keys_st.value().num_rows());
+    ChunkPtr values = ChunkBuilder::new_chunk(values_schema, keys_st.value().num_rows());
     RETURN_IF_ERROR(local_tablet_reader->multi_get(keys_st.value(), value_column_ids, found, *values));
     auto* found_pb = result.mutable_found();
     found_pb->Reserve(found.size());

@@ -41,11 +41,11 @@
 
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
+#include "column/chunk_builder.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
@@ -220,7 +220,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
 
     // Case 2: Nullable destination column but the page has no NULL flags (null_data is nullptr).
     {
-        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+        auto column = ChunkBuilder::column_from_field_type(TYPE_VARCHAR, true);
 
         std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
         std::vector<const ColumnPredicate*> predicates;
@@ -261,7 +261,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
     // Case 3: With NULLs
     {
         // Use NullableColumn with ByteColumn as data
-        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+        auto column = ChunkBuilder::column_from_field_type(TYPE_VARCHAR, true);
 
         // Prepare filter: >= "c_300"
         std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));

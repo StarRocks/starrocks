@@ -20,6 +20,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
 #include "gutil/strings/substitute.h"
@@ -66,7 +67,7 @@ protected:
     // starting at `start_key`, and column 1 (value) is a constant 0.
     ChunkUniquePtr make_increasing_chunk(int64_t n, int32_t start_key) {
         auto s = ChunkHelper::convert_schema(_schema);
-        auto chunk = ChunkHelper::new_chunk(s, n);
+        auto chunk = ChunkBuilder::new_chunk(s, n);
         auto cols = chunk->mutable_columns();
         for (int64_t i = 0; i < n; ++i) {
             cols[0]->append_datum(Datum(static_cast<int32_t>(start_key + i)));
@@ -162,7 +163,7 @@ TEST_F(SegmentWriterSortKeySamplingTest, leading_min_duplicate_samples) {
     ASSERT_OK(w->init(true));
 
     auto s = ChunkHelper::convert_schema(_schema);
-    auto chunk = ChunkHelper::new_chunk(s, num_rows);
+    auto chunk = ChunkBuilder::new_chunk(s, num_rows);
     auto cols = chunk->mutable_columns();
     for (int64_t i = 0; i < leading; ++i) {
         cols[0]->append_datum(Datum(static_cast<int32_t>(0)));
@@ -189,7 +190,7 @@ TEST_F(SegmentWriterSortKeySamplingTest, all_identical_key) {
     ASSERT_OK(w->init(true));
 
     auto s = ChunkHelper::convert_schema(_schema);
-    auto chunk = ChunkHelper::new_chunk(s, num_rows);
+    auto chunk = ChunkBuilder::new_chunk(s, num_rows);
     auto cols = chunk->mutable_columns();
     for (int64_t i = 0; i < num_rows; ++i) {
         cols[0]->append_datum(Datum(static_cast<int32_t>(42)));
@@ -220,7 +221,7 @@ TEST_F(SegmentWriterSortKeySamplingTest, vertical_writer_reinit_preserves_sample
 
     // Append key-column-only chunks.
     auto key_schema_view = ChunkHelper::convert_schema(_schema, key_cols);
-    auto key_chunk = ChunkHelper::new_chunk(key_schema_view, num_rows);
+    auto key_chunk = ChunkBuilder::new_chunk(key_schema_view, num_rows);
     auto* key_col = key_chunk->mutable_columns()[0].get();
     for (int64_t i = 0; i < num_rows; ++i) {
         key_col->append_datum(Datum(static_cast<int32_t>(i)));

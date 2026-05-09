@@ -22,6 +22,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/status.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -888,7 +889,7 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
 
         // init chunk iterator
         do {
-            ChunkPtr chunk(ChunkHelper::new_chunk_pooled(iterator->output_schema(), row_id_ranges.span_size()));
+            ChunkPtr chunk(ChunkBuilder::new_chunk_pooled(iterator->output_schema(), row_id_ranges.span_size()));
             auto status = iterator->get_next(chunk.get());
             if (status.is_end_of_file()) {
                 break;

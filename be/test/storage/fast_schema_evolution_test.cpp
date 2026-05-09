@@ -20,6 +20,7 @@
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "column/chunk_builder.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -88,7 +89,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         size_t size = keys.size();
         for (size_t i = 0; i < size; i++) {

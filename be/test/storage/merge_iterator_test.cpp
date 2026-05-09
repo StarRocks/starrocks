@@ -20,6 +20,7 @@
 #include <memory>
 #include <vector>
 
+#include "column/chunk_builder.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
@@ -73,7 +74,7 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
     std::sort(expected.begin(), expected.end());
 
     std::vector<int32_t> real;
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(iter->schema(), config::vector_chunk_size);
     while (iter->get_next(chunk.get(), &source_masks).ok()) {
         ColumnPtr& c = chunk->get_column_by_index(0);
         for (size_t i = 0; i < c->size(); i++) {
@@ -114,7 +115,7 @@ TEST_F(MergeIteratorTest, heap_merge_no_overlapping) {
     std::sort(expected.begin(), expected.end());
 
     std::vector<int32_t> real;
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(iter->schema(), config::vector_chunk_size);
     while (iter->get_next(chunk.get()).ok()) {
         ColumnPtr& c = chunk->get_column_by_index(0);
         for (size_t i = 0; i < c->size(); i++) {
@@ -140,7 +141,7 @@ TEST_F(MergeIteratorTest, merge_one) {
         return c->get_data()[row];
     };
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(iter->schema(), config::vector_chunk_size);
     Status st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(6U, chunk->num_rows());
@@ -179,7 +180,7 @@ TEST_F(MergeIteratorTest, test_issue_6167) {
         return c->get_data()[row];
     };
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), chunk_size);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(iter->schema(), chunk_size);
     Status st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(chunk_size, chunk->num_rows());
@@ -256,7 +257,7 @@ TEST_F(MergeIteratorTest, mask_merge) {
     std::sort(expected.begin(), expected.end());
 
     std::vector<int32_t> real;
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(iter->schema(), config::vector_chunk_size);
     while (iter->get_next(chunk.get(), &source_masks).ok()) {
         ColumnPtr& c = chunk->get_column_by_index(0);
         for (size_t i = 0; i < c->size(); i++) {
@@ -346,7 +347,7 @@ TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
     ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     std::vector<int32_t> real;
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(iter->schema(), config::vector_chunk_size);
     while (iter->get_next(chunk.get(), &source_masks).ok()) {
         ColumnPtr& c = chunk->get_column_by_index(0);
         for (size_t i = 0; i < c->size(); i++) {
@@ -389,7 +390,7 @@ TEST_F(MergeIteratorTest, mask_merge_exhausted_iterator) {
     auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2}, &mask_buffer);
     ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkBuilder::new_chunk(iter->schema(), config::vector_chunk_size);
     Status st;
     while (true) {
         chunk->reset();

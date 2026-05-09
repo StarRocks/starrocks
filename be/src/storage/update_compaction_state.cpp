@@ -14,6 +14,7 @@
 
 #include "storage/update_compaction_state.h"
 
+#include "column/chunk_builder.h"
 #include "common/config_exec_fwd.h"
 #include "common/stack_util.h"
 #include "gutil/strings/substitute.h"
@@ -97,7 +98,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkBuilder::new_chunk(pkey_schema, config::vector_chunk_size));
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = itrs[segment_id].get();

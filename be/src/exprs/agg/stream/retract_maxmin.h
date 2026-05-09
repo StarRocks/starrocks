@@ -27,7 +27,6 @@
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/stream/stream_detail_state.h"
 #include "gutil/casts.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

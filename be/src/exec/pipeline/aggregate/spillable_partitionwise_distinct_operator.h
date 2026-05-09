@@ -22,7 +22,6 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/spill/spill_components.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 class SpillablePartitionWiseDistinctSourceOperator;

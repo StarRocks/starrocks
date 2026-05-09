@@ -25,6 +25,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -225,7 +226,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkBuilder::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(2 * kChunkSize, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {
@@ -427,7 +428,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, opts.chunk_size);
+        auto read_chunk_ptr = ChunkBuilder::new_chunk(*_schema, opts.chunk_size);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(opts.chunk_size, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {

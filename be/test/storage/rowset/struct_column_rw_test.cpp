@@ -25,7 +25,6 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "fs/fs_memory.h"
-#include "storage/chunk_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"

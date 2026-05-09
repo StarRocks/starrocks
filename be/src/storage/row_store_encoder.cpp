@@ -19,7 +19,6 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
-#include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder_util.h"

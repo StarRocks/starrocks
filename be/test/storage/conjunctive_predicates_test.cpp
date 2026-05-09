@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_builder.h"
 #include "common/config_exec_fwd.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
@@ -35,7 +36,6 @@
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
@@ -90,11 +90,11 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     schema->append(c3_field);
     schema->append(c4_field);
 
-    auto c0 = ChunkHelper::column_from_field(*c0_field);
-    auto c1 = ChunkHelper::column_from_field(*c1_field);
-    auto c2 = ChunkHelper::column_from_field(*c2_field);
-    auto c3 = ChunkHelper::column_from_field(*c3_field);
-    auto c4 = ChunkHelper::column_from_field(*c4_field);
+    auto c0 = ChunkBuilder::column_from_field(*c0_field);
+    auto c1 = ChunkBuilder::column_from_field(*c1_field);
+    auto c2 = ChunkBuilder::column_from_field(*c2_field);
+    auto c3 = ChunkBuilder::column_from_field(*c3_field);
+    auto c4 = ChunkBuilder::column_from_field(*c4_field);
 
     // +------+-------+------------+----------------------+----------+
     // | c0   | c1    | c2         | c3                   | c4       |
@@ -180,7 +180,7 @@ TEST(ConjunctivePredicatesTest, test_empty_predicates) {
     SchemaPtr schema(new Schema());
     auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
     schema->append(c0_field);
-    auto c0 = ChunkHelper::column_from_field(*c0_field);
+    auto c0 = ChunkBuilder::column_from_field(*c0_field);
 
     // +------+
     // | c0   |
@@ -217,7 +217,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto c0 = ChunkBuilder::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -256,7 +256,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
     SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto c0 = ChunkBuilder::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |

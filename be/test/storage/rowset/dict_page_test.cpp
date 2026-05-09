@@ -20,10 +20,10 @@
 #include <iostream>
 #include <limits>
 
+#include "column/chunk_builder.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/util/debug_util.h"
-#include "storage/chunk_helper.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
@@ -98,7 +98,7 @@ public:
         ASSERT_EQ(data_num, page_decoder.count());
 
         // check values
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkBuilder::column_from_field_type(Type, false);
         size_t decode_size = data_num;
         status = page_decoder.next_batch(&decode_size, column.get());
         ASSERT_TRUE(status.ok());
@@ -135,7 +135,7 @@ public:
 
         ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
-        column = ChunkHelper::column_from_field_type(Type, false);
+        column = ChunkBuilder::column_from_field_type(Type, false);
         SparseRange<> read_range;
         read_range.add(Range<>(0, 2));
         read_range.add(Range<>(4, 7));
@@ -373,7 +373,7 @@ TEST_F(DictPageTest, TestLargeDataSize) {
         page_decoder.set_dict_decoder(dict_page_decoder.get());
 
         // check values
-        auto column = ChunkHelper::column_from_field_type(TYPE_BIGINT, false);
+        auto column = ChunkBuilder::column_from_field_type(TYPE_BIGINT, false);
         size_t page_start_id = page_start_ids[i];
         size_t page_size = page_start_ids[i + 1] - page_start_id;
         size_t decode_size = page_size;

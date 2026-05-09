@@ -24,6 +24,7 @@
 #include "base/path/path_util.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -92,7 +93,7 @@ public:
             return *writer->build();
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
@@ -148,7 +149,7 @@ public:
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         for (int i = 0; i < keys_by_segment.size(); i++) {
-            auto chunk = ChunkHelper::new_chunk(schema, keys_by_segment[i].size());
+            auto chunk = ChunkBuilder::new_chunk(schema, keys_by_segment[i].size());
             auto cols = chunk->mutable_columns();
             for (int64_t key : keys_by_segment[i]) {
                 if (schema.num_key_fields() == 1) {
@@ -203,7 +204,7 @@ public:
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
         if (keys.size() > 0) {
-            auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+            auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
             auto cols = chunk->mutable_columns();
             for (int64_t key : keys) {
@@ -235,7 +236,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
-            auto chunk = ChunkHelper::new_chunk(schema, max_rows_per_segment);
+            auto chunk = ChunkBuilder::new_chunk(schema, max_rows_per_segment);
             auto cols = chunk->mutable_columns();
             for (size_t i = 0; i < max_rows_per_segment; i++) {
                 cols[0]->append_datum(Datum(keys[written_rows + i]));
@@ -264,7 +265,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto nkeys = keys.size();
-        auto chunk = ChunkHelper::new_chunk(schema, nkeys);
+        auto chunk = ChunkBuilder::new_chunk(schema, nkeys);
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
@@ -301,7 +302,7 @@ public:
             }
         }
         auto schema_without_full_row_column = std::make_unique<Schema>(&schema, cids);
-        auto chunk = ChunkHelper::new_chunk(*schema_without_full_row_column, nkeys);
+        auto chunk = ChunkBuilder::new_chunk(*schema_without_full_row_column, nkeys);
         string varchar_value;
         if (large_var_column) {
             varchar_value = std::string(1024 * 1024, 'a');
@@ -336,7 +337,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto nkeys = keys.size();
-        auto chunk = ChunkHelper::new_chunk(schema, nkeys);
+        auto chunk = ChunkBuilder::new_chunk(schema, nkeys);
         auto cols = chunk->mutable_columns();
         for (auto i = 0; i < nkeys; ++i) {
             cols[0]->append_datum(Datum(keys[i]));
@@ -365,7 +366,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto keys_size = all_cols[0].size();
-        auto chunk = ChunkHelper::new_chunk(schema, keys_size);
+        auto chunk = ChunkBuilder::new_chunk(schema, keys_size);
         auto cols = chunk->mutable_columns();
         for (auto i = 0; i < keys_size; ++i) {
             append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));

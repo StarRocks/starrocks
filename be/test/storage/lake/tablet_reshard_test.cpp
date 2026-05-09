@@ -26,6 +26,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
@@ -397,7 +398,7 @@ protected:
         CHECK_OK(iter_or.status());
 
         std::vector<int32_t> result;
-        auto chunk = ChunkHelper::new_chunk(iter_schema, 4096);
+        auto chunk = ChunkBuilder::new_chunk(iter_schema, 4096);
         while (true) {
             chunk->reset();
             auto status = iter_or.value()->get_next(chunk.get());

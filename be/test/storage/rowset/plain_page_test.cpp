@@ -39,12 +39,12 @@
 #include <iostream>
 #include <limits>
 
+#include "column/chunk_builder.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
@@ -67,7 +67,7 @@ public:
 
     template <LogicalType type, class PageDecoderType, class CppType = StorageCppType<type>>
     void copy_one(PageDecoderType* decoder, CppType* ret) {
-        auto column = ChunkHelper::column_from_field_type(type, false);
+        auto column = ChunkBuilder::column_from_field_type(type, false);
         size_t n = 1;
         decoder->next_batch(&n, column.get());
         ASSERT_EQ(1, n);
@@ -103,7 +103,7 @@ public:
 
         ASSERT_EQ(0, page_decoder.current_index());
 
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkBuilder::column_from_field_type(Type, false);
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
         const auto decoded = GetStorageContainer<Type>::get_data(column);
@@ -113,7 +113,7 @@ public:
             }
         }
 
-        auto column1 = ChunkHelper::column_from_field_type(Type, false);
+        auto column1 = ChunkBuilder::column_from_field_type(Type, false);
         ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
 

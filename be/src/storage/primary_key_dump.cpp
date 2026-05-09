@@ -18,6 +18,7 @@
 #include <memory>
 #include <thread>
 
+#include "column/chunk_builder.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -253,7 +254,7 @@ Status PrimaryKeyDump::_dump_segment_keys() {
     auto rowset_map = _tablet->updates()->get_rowset_map();
     // only hold pkey, so can use larger chunk size
     OlapReaderStatistics stats;
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk_shared_ptr = ChunkBuilder::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : *rowset_map) {
         RowsetReleaseGuard guard(rowset.second);
@@ -365,7 +366,7 @@ Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
         auto schema_pair = build_pkey_schema(tablet_schema);
         Schema& pkey_schema = schema_pair.first;
         auto pkey_tschema = schema_pair.second;
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+        auto chunk_shared_ptr = ChunkBuilder::new_chunk(pkey_schema, 4096);
         auto chunk = chunk_shared_ptr.get();
         PrimaryKeyChunkReader reader;
         ASSIGN_OR_RETURN(auto itr, reader.read(dump_filepath, pkey_schema, pkey_tschema, primary_key_column));

@@ -52,7 +52,6 @@
 #include "runtime/exec_env.h"
 #include "staros_integration/staros_worker.h"
 #include "staros_integration/staros_worker_runtime.h"
-#include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"

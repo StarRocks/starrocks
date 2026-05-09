@@ -29,6 +29,7 @@
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_compression_fwd.h"
@@ -3493,7 +3494,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
     std::vector<uint32_t> rowids;
     TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkBuilder::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
     RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
                                                              uint32_t rowset_id) {

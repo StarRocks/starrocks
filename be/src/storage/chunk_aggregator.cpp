@@ -14,6 +14,7 @@
 
 #include "storage/chunk_aggregator.h"
 
+#include "column/chunk_builder.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "gutil/casts.h"
@@ -213,7 +214,7 @@ bool ChunkAggregator::is_finish() {
 }
 
 void ChunkAggregator::aggregate_reset() {
-    _aggregate_chunk = ChunkHelper::new_chunk(*_schema, _reserve_rows);
+    _aggregate_chunk = ChunkBuilder::new_chunk(*_schema, _reserve_rows);
     _aggregate_rows = 0;
     SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
     for (int i = 0; i < _num_fields; ++i) {

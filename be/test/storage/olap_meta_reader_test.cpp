@@ -18,6 +18,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
+#include "column/chunk_builder.h"
 #include "column/fixed_length_column.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
@@ -101,7 +102,7 @@ protected:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
 
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
 
         for (int64_t key : keys) {
@@ -137,7 +138,7 @@ protected:
 
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         for (const auto& keys : keys_by_segment) {
-            auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+            auto chunk = ChunkBuilder::new_chunk(schema, keys.size());
             auto cols = chunk->mutable_columns();
 
             for (int64_t key : keys) {

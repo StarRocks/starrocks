@@ -32,7 +32,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "types/logical_type.h"
 
 using namespace starrocks;

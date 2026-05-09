@@ -36,7 +36,6 @@
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
 #include "runtime/user_function_cache.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 ArraySortLambdaExpr::ArraySortLambdaExpr(const TExprNode& node) : Expr(node, false) {}

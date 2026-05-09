@@ -17,9 +17,9 @@
 #include <fmt/format.h>
 
 #include "base/simd/simd.h"
+#include "column/chunk_builder.h"
 #include "column/column_helper.h"
 #include "column/struct_column.h"
-#include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
@@ -102,11 +102,11 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     // init key / value chunk and struct column template for evaluation
     std::vector<ColumnId> key_cids(_dictionary_get_expr.key_size);
     std::iota(key_cids.begin(), key_cids.end(), 0);
-    _key_chunk = ChunkHelper::new_chunk(Schema(_schema.get(), key_cids), 0);
+    _key_chunk = ChunkBuilder::new_chunk(Schema(_schema.get(), key_cids), 0);
 
     std::vector<ColumnId> value_cids(_schema->fields().size() - _dictionary_get_expr.key_size);
     std::iota(value_cids.begin(), value_cids.end(), _dictionary_get_expr.key_size);
-    _value_chunk = ChunkHelper::new_chunk(Schema(_schema.get(), value_cids), 0);
+    _value_chunk = ChunkBuilder::new_chunk(Schema(_schema.get(), value_cids), 0);
 
     DCHECK(_key_chunk != nullptr);
     DCHECK(_value_chunk != nullptr);

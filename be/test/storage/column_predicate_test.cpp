@@ -17,9 +17,9 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_builder.h"
 #include "gtest/gtest.h"
 #include "runtime/runtime_filter.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -50,7 +50,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // boolean
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_BOOLEAN), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_BOOLEAN, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_BOOLEAN, false);
         c->append_datum(Datum((uint8_t)1));
         c->append_datum(Datum((uint8_t)0));
         c->append_datum(Datum((uint8_t)0));
@@ -91,7 +91,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // tinyint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_TINYINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_TINYINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_TINYINT, false);
         c->append_datum(Datum((int8_t)1));
         c->append_datum(Datum((int8_t)2));
         c->append_datum(Datum((int8_t)3));
@@ -132,7 +132,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // smallint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_SMALLINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_SMALLINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_SMALLINT, false);
         c->append_datum(Datum((int16_t)1));
         c->append_datum(Datum((int16_t)2));
         c->append_datum(Datum((int16_t)3));
@@ -173,7 +173,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // int
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, false);
         c->append_datum(Datum((int32_t)1));
         c->append_datum(Datum((int32_t)2));
         c->append_datum(Datum((int32_t)3));
@@ -214,7 +214,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // nullable int
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "101"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum((int32_t)1));
         c->append_datum(Datum((int32_t)2));
         c->append_datum(Datum((int32_t)101));
@@ -275,7 +275,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // bigint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_BIGINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_BIGINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_BIGINT, false);
         c->append_datum(Datum((int64_t)1));
         c->append_datum(Datum((int64_t)2));
         c->append_datum(Datum((int64_t)3));
@@ -316,7 +316,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // laregeint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_LARGEINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_LARGEINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_LARGEINT, false);
         c->append_datum(Datum((int128_t)1));
         c->append_datum(Datum((int128_t)2));
         c->append_datum(Datum((int128_t)3));
@@ -357,7 +357,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // float
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_FLOAT), 0, "1.0"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_FLOAT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_FLOAT, false);
         c->append_datum(Datum((float)1.0));
         c->append_datum(Datum((float)2.1));
         c->append_datum(Datum((float)3.1));
@@ -398,7 +398,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // double
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_DOUBLE), 0, "1.0"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_DOUBLE, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_DOUBLE, false);
         c->append_datum(Datum((double)1.0));
         c->append_datum(Datum((double)2.1));
         c->append_datum(Datum((double)3.1));
@@ -439,7 +439,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // date_v2
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_DATE), 0, "1990-01-01"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_DATE, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_DATE, false);
         c->append_datum(Datum(DateValue::create(1990, 1, 1)));
         c->append_datum(Datum(DateValue::create(1991, 1, 1)));
         c->append_datum(Datum(DateValue::create(1992, 1, 1)));
@@ -481,7 +481,7 @@ TEST(ColumnPredicateTest, test_eq) {
     {
         std::unique_ptr<ColumnPredicate> p(
                 new_column_eq_predicate(get_type_info(TYPE_DATETIME), 0, "1990-01-01 00:00:00"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_DATETIME, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_DATETIME, false);
         c->append_datum(Datum(TimestampValue::create(1990, 1, 1, 0, 0, 0)));
         c->append_datum(Datum(TimestampValue::create(1990, 1, 1, 0, 0, 1)));
         c->append_datum(Datum(TimestampValue::create(1990, 1, 1, 0, 0, 2)));
@@ -523,7 +523,7 @@ TEST(ColumnPredicateTest, test_eq) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_DECIMALV2), 0, "1.23"));
         auto field = std::make_shared<Field>(1, "test", TYPE_DECIMALV2, 27, 9, false);
-        auto c = ChunkHelper::column_from_field(*field);
+        auto c = ChunkBuilder::column_from_field(*field);
         c->append_datum(Datum(DecimalV2Value("1.23")));
         c->append_datum(Datum(DecimalV2Value("1.24")));
         c->append_datum(Datum(DecimalV2Value("1.25")));
@@ -564,7 +564,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // varchar
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 0, "aa"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_VARCHAR, false);
         c->append_datum(Datum("aa"));
         c->append_datum(Datum("ab"));
         c->append_datum(Datum("ac"));
@@ -605,7 +605,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // nullable char
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_CHAR), 0, "abc"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("xxx"));
         c->append_datum(Datum("yyy"));
         c->append_datum(Datum("abc"));
@@ -684,7 +684,7 @@ TEST(ColumnPredicateTest, test_ne) {
     // boolean
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(TYPE_BOOLEAN), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_BOOLEAN, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_BOOLEAN, false);
         c->append_datum(Datum((uint8_t)1));
         c->append_datum(Datum((uint8_t)0));
         c->append_datum(Datum((uint8_t)1));
@@ -729,7 +729,7 @@ TEST(ColumnPredicateTest, test_ne) {
     // tinyint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(TYPE_TINYINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_TINYINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_TINYINT, false);
         c->append_datum(Datum((int8_t)1));
         c->append_datum(Datum((int8_t)0));
         c->append_datum(Datum((int8_t)1));
@@ -774,7 +774,7 @@ TEST(ColumnPredicateTest, test_ne) {
     // smallint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(TYPE_SMALLINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_SMALLINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_SMALLINT, false);
         c->append_datum(Datum((int16_t)1));
         c->append_datum(Datum((int16_t)0));
         c->append_datum(Datum((int16_t)1));
@@ -819,7 +819,7 @@ TEST(ColumnPredicateTest, test_ne) {
     // nullable int
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(TYPE_INT), 0, "101"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(101));
@@ -880,7 +880,7 @@ TEST(ColumnPredicateTest, test_ne) {
     // bigint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(TYPE_BIGINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_BIGINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_BIGINT, false);
         c->append_datum(Datum((int64_t)1));
         c->append_datum(Datum((int64_t)0));
         c->append_datum(Datum((int64_t)1));
@@ -925,7 +925,7 @@ TEST(ColumnPredicateTest, test_ne) {
     // largeint
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(TYPE_LARGEINT), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_LARGEINT, false);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_LARGEINT, false);
         c->append_datum(Datum((int128_t)1));
         c->append_datum(Datum((int128_t)0));
         c->append_datum(Datum((int128_t)1));
@@ -969,7 +969,7 @@ TEST(ColumnPredicateTest, test_ne) {
     }
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(TYPE_CHAR), 0, "abc"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("xyz"));
         c->append_datum(Datum("yyy"));
         c->append_datum(Datum("abc"));
@@ -1033,7 +1033,7 @@ TEST(ColumnPredicateTest, test_ne) {
 TEST(ColumnPredicateTest, test_gt) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_gt_predicate(get_type_info(TYPE_INT), 0, "3"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -1093,7 +1093,7 @@ TEST(ColumnPredicateTest, test_gt) {
     }
     {
         std::unique_ptr<ColumnPredicate> p(new_column_gt_predicate(get_type_info(TYPE_CHAR), 0, "xyz"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
         c->append_datum(Datum("xyz"));
@@ -1157,7 +1157,7 @@ TEST(ColumnPredicateTest, test_gt) {
 TEST(ColumnPredicateTest, test_ge) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "3"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -1217,7 +1217,7 @@ TEST(ColumnPredicateTest, test_ge) {
     }
     {
         std::unique_ptr<ColumnPredicate> p(new_column_ge_predicate(get_type_info(TYPE_CHAR), 0, "xyz"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
         c->append_datum(Datum("xyz"));
@@ -1281,7 +1281,7 @@ TEST(ColumnPredicateTest, test_ge) {
 TEST(ColumnPredicateTest, test_lt) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_lt_predicate(get_type_info(TYPE_INT), 0, "3"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -1341,7 +1341,7 @@ TEST(ColumnPredicateTest, test_lt) {
     }
     {
         std::unique_ptr<ColumnPredicate> p(new_column_lt_predicate(get_type_info(TYPE_CHAR), 0, "xyz"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
         c->append_datum(Datum("xyz"));
@@ -1405,7 +1405,7 @@ TEST(ColumnPredicateTest, test_lt) {
 TEST(ColumnPredicateTest, test_le) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_le_predicate(get_type_info(TYPE_INT), 0, "3"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -1465,7 +1465,7 @@ TEST(ColumnPredicateTest, test_le) {
     }
     {
         std::unique_ptr<ColumnPredicate> p(new_column_le_predicate(get_type_info(TYPE_CHAR), 0, "xyz"));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
         c->append_datum(Datum("xyz"));
@@ -1529,7 +1529,7 @@ TEST(ColumnPredicateTest, test_le) {
 TEST(ColumnPredicateTest, test_in) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_INT), 0, {"3", "4"}));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -1589,7 +1589,7 @@ TEST(ColumnPredicateTest, test_in) {
     }
     {
         std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_CHAR), 0, {"xyz", "yyy"}));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
         c->append_datum(Datum("xyz"));
@@ -1661,7 +1661,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
     ASSERT_EQ(PredicateType::kInList, bitset_pred->type());
     ASSERT_TRUE(bitset_pred->can_vectorized());
 
-    auto nullable_col = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto nullable_col = ChunkBuilder::column_from_field_type(TYPE_INT, true);
     nullable_col->append_datum(Datum(1));   // 0
     nullable_col->append_datum(Datum(12));  // 1
     nullable_col->append_datum(Datum(13));  // 0
@@ -1670,7 +1670,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
     (void)nullable_col->append_nulls(1);    // 0
     (void)nullable_col->append_nulls(1);    // 0
 
-    auto col = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto col = ChunkBuilder::column_from_field_type(TYPE_INT, true);
     col->append_datum(Datum(1));   // 0
     col->append_datum(Datum(12));  // 1
     col->append_datum(Datum(13));  // 0
@@ -1783,7 +1783,7 @@ TEST(ColumnPredicateTest, test_dict_in) {
     {
         std::unique_ptr<ColumnPredicate> p(
                 new_dictionary_code_in_predicate(get_type_info(TYPE_INT), 0, {3, 4, 6, 8, 10}, 200));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -1853,7 +1853,7 @@ TEST(ColumnPredicateTest, test_dict_in) {
 TEST(ColumnPredicateTest, test_no_in) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_not_in_predicate(get_type_info(TYPE_INT), 0, {"3", "4"}));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -1913,7 +1913,7 @@ TEST(ColumnPredicateTest, test_no_in) {
     }
     {
         std::unique_ptr<ColumnPredicate> p(new_column_not_in_predicate(get_type_info(TYPE_CHAR), 0, {"xyz", "yyy"}));
-        auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
         c->append_datum(Datum("xyz"));
@@ -1977,7 +1977,7 @@ TEST(ColumnPredicateTest, test_no_in) {
 TEST(ColumnPredicateTest, test_is_null) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_null_predicate(get_type_info(TYPE_INT), 0, true));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));
@@ -2038,7 +2038,7 @@ TEST(ColumnPredicateTest, test_is_null) {
 TEST(ColumnPredicateTest, test_not_null) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_null_predicate(get_type_info(TYPE_INT), 0, false));
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        auto c = ChunkBuilder::column_from_field_type(TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
         c->append_datum(Datum(3));

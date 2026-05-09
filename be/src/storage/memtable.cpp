@@ -18,6 +18,7 @@
 
 #include "base/time/time.h"
 #include "column/binary_column.h"
+#include "column/chunk_builder.h"
 #include "column/json_column.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_ingest_fwd.h"
@@ -179,7 +180,7 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.insert_time_ns, MonotonicMicros() - start_time); });
     ADD_COUNTER_RELAXED(_stats.insert_count, 1);
     if (_chunk == nullptr) {
-        _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
+        _chunk = ChunkBuilder::new_chunk(*_vectorized_schema, 0);
     }
 
     bool is_column_with_row = false;

@@ -18,6 +18,7 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/stack_util.h"
@@ -40,7 +41,7 @@
 namespace starrocks::lake {
 
 Status SegmentPKIterator::_load() {
-    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkHelper::new_chunk(_pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkBuilder::new_chunk(_pkey_schema, 4096));
     auto chunk_container = _pk_column_chunk->clone_empty();
     if (_iter != nullptr) {
         while (true) {
@@ -369,7 +370,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     }
     std::vector<uint32_t> column_id{auto_increment_column_id};
     auto auto_inc_column_schema = ChunkHelper::convert_schema(params.tablet_schema, column_id);
-    auto column = ChunkHelper::column_from_field(*auto_inc_column_schema.field(0).get());
+    auto column = ChunkBuilder::column_from_field(*auto_inc_column_schema.field(0).get());
     MutableColumns read_column;
 
     std::shared_ptr<TabletSchema> modified_columns_schema = nullptr;
@@ -486,7 +487,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     _partial_update_states[segment_id].write_columns.resize(read_columns.size());
     _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->standalone_pk_column()->size());
     for (uint32_t j = 0; j < read_columns.size(); ++j) {
-        auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
+        auto column = ChunkBuilder::column_from_field(*read_column_schema.field(j).get());
         read_columns[j] = column->clone_empty();
         _partial_update_states[segment_id].write_columns[j] = column->clone_empty();
     }

@@ -72,6 +72,7 @@ target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)
 
 set(CHUNK_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    chunk_builder_core_test.cpp
     column_access_path_core_test.cpp
     chunk_core_test.cpp
     segmented_chunk_core_test.cpp

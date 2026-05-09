@@ -17,6 +17,7 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_builder.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -113,7 +114,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     }
 
     ChunkPtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkBuilder::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
 
     // alloc first BatchPKsPtr
     auto header_ptr = std::make_shared<BatchPKs>();
@@ -345,8 +346,8 @@ static Status read_from_source_segment_and_update(
     ASSIGN_OR_RETURN(auto seg_iter, (*segment)->new_iterator(schema, seg_options));
     ChunkUniquePtr source_chunk_ptr;
     ChunkUniquePtr tmp_chunk_ptr;
-    TRY_CATCH_BAD_ALLOC(source_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size));
-    TRY_CATCH_BAD_ALLOC(tmp_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(source_chunk_ptr = ChunkBuilder::new_chunk(schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(tmp_chunk_ptr = ChunkBuilder::new_chunk(schema, config::vector_chunk_size));
     uint32_t start_rowid = 0;
     while (true) {
         tmp_chunk_ptr->reset();
@@ -457,7 +458,7 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         const uint32_t upt_id = each.first;
         // 1. get chunk from upt file
         ChunkUniquePtr upt_chunk;
-        TRY_CATCH_BAD_ALLOC(upt_chunk = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE));
+        TRY_CATCH_BAD_ALLOC(upt_chunk = ChunkBuilder::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE));
         ASSIGN_OR_RETURN(auto update_iterator, rowset->get_update_file_iterator(partial_schema, upt_id, stats));
         DeferOp iter_defer([&]() {
             if (update_iterator != nullptr) {
@@ -475,7 +476,7 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
         // fetch upt rows from upt_chunk
-        auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
+        auto tmp_chunk = ChunkBuilder::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
         // update source chunk use upt rows
@@ -623,8 +624,8 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
                 }
             });
             // 1. generate segment file
-            auto chunk_ptr = ChunkHelper::new_chunk(schema, _partial_update_states[upt_id].insert_rowids.size());
-            ChunkUniquePtr partial_chunk_ptr = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+            auto chunk_ptr = ChunkBuilder::new_chunk(schema, _partial_update_states[upt_id].insert_rowids.size());
+            ChunkUniquePtr partial_chunk_ptr = ChunkBuilder::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
             ASSIGN_OR_RETURN(auto writer, _prepare_segment_writer(rowset, tablet_schema, segid));
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, partial_chunk_ptr));
             for (uint32_t column_id : read_update_column_ids.second) {
