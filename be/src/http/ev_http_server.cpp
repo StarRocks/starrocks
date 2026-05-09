@@ -54,7 +54,6 @@
 
 #include "base/brpc/brpc.h"
 #include "base/system/errno.h"
-#include "common/config.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/system/backend_options.h"
