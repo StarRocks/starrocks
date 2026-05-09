@@ -3345,6 +3345,8 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
     EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi"));
     // The alive segment must still exist; vacuum did not crash on the partial-metas rowset.
     EXPECT_TRUE(exists("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat"));
+}
+
 // IDG: a referenced .idx file (in idg_meta) survives vacuum, while one only
 // listed in orphan_files is removed. Mirrors the DCG referenced/orphan split.
 // The .idx file in idg_meta is *not* in orphan_files so it survives the
