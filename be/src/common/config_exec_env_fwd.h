@@ -58,6 +58,13 @@ CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 // Queue size for the lake partial update threadpool.
 CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
 
+// Kill switch for the daemon. Defaults to false during the phased rollout
+// so clusters that upgrade to a Phase 3 binary do not start shipping
+// rejected records into _statistics_.rejected_records until the operator
+// has verified the table exists and set log_rejected_record_num > 0 on
+// targeted loads.
+CONF_mBool(enable_rejected_record_sync, "false");
+
 CONF_Int32(streaming_load_thread_pool_num_min, "0");
 
 CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");
@@ -196,10 +203,5 @@ CONF_Int32(merge_commit_thread_pool_num_max, "512");
 CONF_Int32(merge_commit_thread_pool_queue_size, "4096");
 
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
-
-// rejected records sync daemon (Phase 3 of the rejected_records feature)
-// Guard flag: the daemon only starts shipping rejected-record files to
-// _statistics_.rejected_records when this flag is set to true.
-CONF_mBool(enable_rejected_record_sync, "false");
 
 } // namespace starrocks::config
