@@ -492,6 +492,31 @@ While operators listed above generally support incremental refresh, certain oper
 - However, incremental computation is **not** supported when performing Join after aggregation or UNION ALL after aggregation.
 :::
 
+#### Supported Aggregate Functions
+
+`refresh_mode = INCREMENTAL` only accepts aggregate functions that have been validated end-to-end. `CREATE MATERIALIZED VIEW` fails at analysis time with an explicit error if your aggregate is outside this list.
+
+| Function                                  | Supported argument types                  | Notes                                                                         |
+|-------------------------------------------|-------------------------------------------|-------------------------------------------------------------------------------|
+| `COUNT(*)` / `COUNT(col)`                 | any                                       |                                                                               |
+| `SUM(col)`                                | integer / float / DECIMAL                 |                                                                               |
+| `AVG(col)`                                | integer / float                           | DECIMAL is pending a BE state-union fix.                                      |
+| `MIN(col)` / `MAX(col)`                   | integer / float / DATE / DATETIME         | VARCHAR / STRING is pending a combinator type-widening fix.                   |
+| `BOOL_OR(col)`                            | boolean                                   |                                                                               |
+| `APPROX_COUNT_DISTINCT(col)` / `NDV(col)` | any                                       |                                                                               |
+
+The following aggregate forms are explicitly rejected at CREATE time:
+
+- **Distinct aggregates** (`COUNT(DISTINCT)`, `SUM(DISTINCT)`, ...): incompatible with state-based incremental refresh because the rewrite drops the `DISTINCT` flag and the resulting state union loses distinct semantics.
+- **`AVG(DECIMAL)`**: a known BE state-union bug; until fixed the materialized view would silently return `0` after any incremental refresh.
+- **`MIN(VARCHAR)` / `MAX(VARCHAR)`**: a known FE combinator type-widening bug; refresh throws `IllegalArgumentException`.
+- **`ARRAY_AGG`**: a known FE combinator type bug; refresh fails during thrift serialization.
+- **`HLL_UNION` / `BITMAP_UNION` / `GROUP_CONCAT`**: combinators are not yet registered for these functions.
+- **Window functions** (`ROW_NUMBER`, `RANK`, `LAG`, `LEAD`, ...): outside the incremental-refresh model.
+- **`PERCENTILE_*`, `STDDEV_*`, `VAR_*`, `MAP_AGG`, `RETENTION`, `WINDOW_FUNNEL`** and similar: not on the whitelist.
+
+The whitelist will be widened as the underlying BE / combinator issues are fixed; check release notes when upgrading to know which combinations have been newly enabled.
+
 ## Usage notes
 
 - The current version of StarRocks does not support creating multiple materialized views at the same time. A new materialized view can only be created when the one before is completed.
