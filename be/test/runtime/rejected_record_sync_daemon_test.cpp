@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -54,6 +54,12 @@ public:
 
 protected:
     std::vector<std::string> scan_once() override { return _scan_result; }
+
+    // GC uses list_once() (a pure read, by design separate from scan_once
+    // so renaming logic doesn't fire). Mirror the same injected list so
+    // GC tests can drive the GC path without standing up a real
+    // store-path tree.
+    std::vector<std::string> list_once() const override { return _scan_result; }
 
     Status post_to_stream_load(const std::string& payload) override {
         _payloads.push_back(payload);

@@ -23,7 +23,7 @@
 #include <sstream>
 #include <system_error>
 
-#include "common/config.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
 #include "common/system/master_info.h"
 #include "gen_cpp/HeartbeatService_types.h"
