@@ -54,6 +54,7 @@ import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryString;
+import org.apache.paimon.data.GenericArray;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
@@ -183,6 +184,9 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
         // create partitioned table
         createPaimonParitionedTable(catalog, db);
+
+        // create vector-search table
+        createPaimonVectorTable(catalog, db);
     }
 
     private static void createPaimonUnpartitionedTable(Catalog catalog, String db) throws Exception {
@@ -236,6 +240,35 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             genericRow.setField(0, BinaryString.fromString("1"));
             genericRow.setField(1, BinaryString.fromString("2"));
             genericRow.setField(2, (int) LocalDate.now().toEpochDay() + i);
+            batchTableWrite.write(genericRow, 1);
+        }
+        batchTableCommit.commit(batchTableWrite.prepareCommit());
+    }
+
+    private static void createPaimonVectorTable(Catalog catalog, String db) throws Exception {
+        Identifier identifier = Identifier.create(db, "vector_table");
+        Map<String, String> options = org.apache.paimon.shade.guava30.com.google.common.collect.Maps.newHashMap();
+        options.put("vector.column", "vec");
+        options.put("vector.metric_type", "l2_distance");
+        options.put("vector.dim", "3");
+        Schema schema = new Schema(
+                Lists.newArrayList(
+                        new DataField(0, "pk", DataTypes.STRING(), "primary key"),
+                        new DataField(1, "vec", DataTypes.ARRAY(DataTypes.FLOAT()), "vector field")),
+                Collections.emptyList(),
+                Lists.newArrayList("pk"),
+                options,
+                "");
+        catalog.createTable(identifier, schema, false);
+
+        // Write sample data to guarantee at least one valid snapshot and visible files.
+        org.apache.paimon.table.Table table = catalog.getTable(identifier);
+        BatchTableWrite batchTableWrite = table.newBatchWriteBuilder().newWrite();
+        BatchTableCommit batchTableCommit = table.newBatchWriteBuilder().newCommit();
+        for (int i = 0; i < 5; i++) {
+            GenericRow genericRow = new GenericRow(2);
+            genericRow.setField(0, BinaryString.fromString(String.valueOf(i)));
+            genericRow.setField(1, new GenericArray(new float[] {(float) i + 1.0f, (float) i + 2.0f, (float) i + 3.0f}));
             batchTableWrite.write(genericRow, 1);
         }
         batchTableCommit.commit(batchTableWrite.prepareCommit());

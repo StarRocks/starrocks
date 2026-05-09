@@ -24,6 +24,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -417,5 +418,14 @@ public interface ConnectorMetadata {
      */
     default void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
         throw new UnsupportedOperationException("Metadata delete is not supported by this connector");
+    }
+
+    /**
+     * Get the shard ranges for the global vector index of the given table.
+     * Each element is a (rangeFrom, rangeTo) pair representing one shard's row range.
+     * Only implemented for connectors that support vector index search.
+     */
+    default List<Pair<Long, Long>> getGlobalIndexShardRanges(Table table) {
+        return Lists.newArrayList(Pair.create(0L, Long.MAX_VALUE));
     }
 }

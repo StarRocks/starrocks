@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.paimon.PaimonVectorSearchOptions;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -66,6 +67,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimizeOption scanOptimizeOption;
     protected TvrVersionRange tvrVersionRange;
+    protected PaimonVectorSearchOptions paimonVectorSearchOptions;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -153,6 +155,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
         this.tvrVersionRange = tvrVersionRange;
+    }
+
+    public PaimonVectorSearchOptions getPaimonVectorSearchOptions() {
+        return paimonVectorSearchOptions;
     }
 
     // for mark empty partitions/empty tablet
@@ -262,6 +268,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.scanOptimizeOption = scanOperator.scanOptimizeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
             builder.tvrVersionRange = scanOperator.tvrVersionRange;
+            builder.paimonVectorSearchOptions = scanOperator.paimonVectorSearchOptions;
             return (B) this;
         }
 
@@ -303,6 +310,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
         public B setTableVersionRange(TvrVersionRange tableVersionRange) {
             builder.tvrVersionRange = tableVersionRange;
+            return (B) this;
+        }
+
+        public B setPaimonVectorSearchOptions(PaimonVectorSearchOptions options) {
+            builder.paimonVectorSearchOptions = options;
             return (B) this;
         }
     }

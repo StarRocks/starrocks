@@ -169,6 +169,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRu
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteToPaimonVectorPlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
@@ -259,7 +260,8 @@ public class RuleSet {
     ));
 
     public static final Rule VECTOR_REWRITE_RULES = new CombinationRule(RuleType.GP_VECTOR_REWRITE, ImmutableList.of(
-            new RewriteToVectorPlanRule()
+            new RewriteToVectorPlanRule(),
+            new RewriteToPaimonVectorPlanRule()
     ));
 
     public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(
