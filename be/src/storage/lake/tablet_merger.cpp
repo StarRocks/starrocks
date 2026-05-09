@@ -1280,7 +1280,7 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
             if (canonical.segment_encryption_metas_size() > seg_pos) {
                 seg_file_info.encryption_meta = canonical.segment_encryption_metas(seg_pos);
             }
-            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(seg_file_info.path));
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(seg_file_info.path));
             ASSIGN_OR_RETURN(auto base_segment,
                              Segment::open(fs, seg_file_info, /*segment_id=*/0, schema,
                                            /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr,
@@ -1871,7 +1871,7 @@ void delete_partial_legacy_rebuild_output(LegacyRebuildOutputWriter& writer) {
     if (writer.writable_file) {
         (void)writer.writable_file->close();
     }
-    auto filesystem_or = FileSystemFactory::CreateSharedFromString(writer.location);
+    auto filesystem_or = FileSystem::CreateSharedFromString(writer.location);
     if (filesystem_or.ok()) {
         (void)(*filesystem_or)->delete_file(writer.location);
     }
