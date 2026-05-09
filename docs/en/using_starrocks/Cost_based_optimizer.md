@@ -645,7 +645,7 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 ## Collect statistics of external tables
 
-Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.** Since v3.3.0, StarRocks supports collecting statistics of Delta Lake tables and statistics of sub-fields in STRUCT. Since v3.4.0, StarRocks supports automatic statistics collection via query-triggered ANALYZE tasks.
+Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported.** Since v3.3.0, StarRocks supports collecting statistics of Delta Lake tables and statistics of sub-fields in STRUCT. Since v3.4.0, StarRocks supports automatic statistics collection via query-triggered ANALYZE tasks. Since v3.4.0, StarRocks also supports manual sampled collection (`ANALYZE TABLE ... SAMPLE`) for external tables. Histogram collection is currently only supported on Hive external tables.
 
 The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
 
@@ -674,7 +674,7 @@ partition_name:
 The following limits apply when you collect statistics for external tables:
 
 - You can collect statistics of only Hive, Iceberg, Hudi, and Delta Lake (Since v3.3.0) tables.
-- Only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.
+- Only manual full collection, manual histogram collection (since v3.2.7), automatic full collection, query-triggered collection (since v3.4.0), and manual sampled collection (since v3.4.0) are supported. Histogram collection is only supported on Hive external tables.
 - For the system to automatically collect full statistics, you must create an Analyze job, which is different from collecting statistics of StarRocks internal tables where the system does this in the background by default.
 - For automatic collection tasks:
   - You can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in an external catalog.
