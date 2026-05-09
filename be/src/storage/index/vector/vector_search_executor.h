@@ -40,8 +40,7 @@ public:
     virtual ~VectorSearchExecutor() = default;
 
     virtual Status init() = 0;
-    virtual Status search(const VectorQuery& query, const ScalarPredicate* predicate,
-                          VectorSearchOutput* output) = 0;
+    virtual Status search(const VectorQuery& query, const ScalarPredicate* predicate, VectorSearchOutput* output) = 0;
     virtual Status close() = 0;
 };
 

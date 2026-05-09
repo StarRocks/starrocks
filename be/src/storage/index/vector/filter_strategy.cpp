@@ -31,9 +31,8 @@ std::unique_ptr<FilterStrategy> FilterStrategy::create(FilterStrategyType type) 
 // PreFilterStrategy
 // ============================================================
 
-Status PreFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& query,
-                                  ScalarIndexProvider* scalar_provider, const ScalarPredicate* predicate,
-                                  VectorAnnResult* result) {
+Status PreFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& query, ScalarIndexProvider* scalar_provider,
+                                  const ScalarPredicate* predicate, VectorAnnResult* result) {
     if (!predicate || predicate->empty() || !scalar_provider) {
         return index->search(query, result);
     }
