@@ -22,6 +22,7 @@ set(COMMON_FILES
   brpc_helper.cpp
   configbase.cpp
   config.cpp
+  greplog.cpp
   memory/column_allocator.cpp
   metrics/process_metrics_registry.cpp
   runtime_profile.cpp

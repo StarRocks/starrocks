@@ -19,6 +19,7 @@
 #include <regex>
 
 #include "base/url_coding.h"
+#include "common/greplog.h"
 #include "common/logging.h"
 #include "common/stack_util.h"
 #include "common/vlog_cntl.h"
@@ -31,7 +32,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/prof/heap_prof.h"
-#include "service/greplog.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"

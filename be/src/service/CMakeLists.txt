@@ -23,7 +23,6 @@ set(EXEC_FILES
     backend_metrics_initializer.cpp
     backend_base.cpp
     daemon.cpp
-    greplog.cpp
     internal_service.cpp
     service_metrics.cpp
     mem_hook.cpp

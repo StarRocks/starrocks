@@ -15,10 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "service/greplog.h"
+#include "common/greplog.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <filesystem>
+#include <sstream>
+#include <vector>
 
 #include "base/utility/defer_op.h"
 #include "common/config_path_fwd.h"
@@ -114,10 +121,12 @@ static int scan_by_line_handler(unsigned int id, unsigned long long from, unsign
     parse_log(new_log, context);
     if (context->start_ts > 0 && new_log.timestamp < context->start_ts) {
         context->entries->pop_back();
+        return 0;
     }
     if (context->end_ts > 0 && new_log.timestamp >= context->end_ts) {
         context->entries->pop_back();
         context->stop_scan = true;
+        return 0;
     }
     if (context->limit > 0) {
         while (context->entries->size() > context->limit) {
@@ -212,9 +221,10 @@ Status grep_log(int64_t start_ts, int64_t end_ts, char level, const std::string&
         hs_compile_error_t* compile_err;
         if (hs_compile(pattern.c_str(), HS_FLAG_SINGLEMATCH, HS_MODE_BLOCK, nullptr, &database, &compile_err) !=
             HS_SUCCESS) {
+            std::string error_msg = compile_err != nullptr ? compile_err->message : "";
             hs_free_compile_error(compile_err);
             return Status::InternalError(
-                    strings::Substitute("grep log failed compile pattern $0 failed $1", pattern, compile_err->message));
+                    strings::Substitute("grep log failed compile pattern $0 failed $1", pattern, error_msg));
         }
     }
     DeferOp free_database_defer([&database]() {
@@ -224,7 +234,6 @@ Status grep_log(int64_t start_ts, int64_t end_ts, char level, const std::string&
     hs_scratch_t* scratch = nullptr;
     if (database != nullptr) {
         if (hs_alloc_scratch(database, &scratch) != HS_SUCCESS) {
-            hs_free_database(database);
             return Status::InternalError(
                     strings::Substitute("grep log failed alloc scratch failed pattern:$0", pattern));
         }
