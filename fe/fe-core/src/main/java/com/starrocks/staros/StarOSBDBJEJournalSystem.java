@@ -15,13 +15,14 @@
 
 package com.starrocks.staros;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.staros.exception.ExceptionCode;
 import com.staros.exception.StarException;
-import com.staros.journal.Journal;
 import com.staros.journal.JournalSystem;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
+import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
@@ -31,6 +32,7 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.JournalObservable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,10 +47,11 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     private static final int REPLAY_INTERVAL_MS = 1;
     private static final Logger LOG = LogManager.getLogger(StarOSBDBJEJournalSystem.class);
 
-    private BDBJEJournal bdbjeJournal;
+    private Journal bdbjeJournal;
     private JournalWriter journalWriter;
     private EditLog editLog;
     private AtomicLong replayedJournalId;
+    private JournalObservable journalObservable;
     private Daemon replayer; // TODO: maybe it's better to move this to StarMgr
 
     public StarOSBDBJEJournalSystem(BDBEnvironment environment) {
@@ -64,8 +67,17 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         replayer = null;
     }
 
+    @VisibleForTesting
+    public static StarOSBDBJEJournalSystem forTest(Journal journal) {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+        StarOSBDBJEJournalSystem journalSystem = new StarOSBDBJEJournalSystem(journal);
+        journalSystem.journalWriter = new JournalWriter(journalSystem.bdbjeJournal, journalQueue);
+        journalSystem.editLog = new EditLog(journalQueue);
+        return journalSystem;
+    }
+
     // for checkpoint thread only
-    public StarOSBDBJEJournalSystem(BDBJEJournal journal) {
+    public StarOSBDBJEJournalSystem(Journal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
         editLog = new EditLog(null);
@@ -77,6 +89,10 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
 
     public void setReplayId(long replayId) {
         replayedJournalId.set(replayId);
+    }
+
+    public void setJournalObservable(JournalObservable journalObservable) {
+        this.journalObservable = journalObservable;
     }
 
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
@@ -157,7 +173,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         }
     }
 
-    public void write(Journal journal) throws StarException {
+    public void write(com.staros.journal.Journal journal) throws StarException {
         try {
             editLog.logStarMgrOperation(new StarMgrJournal(journal));
         } catch (Exception e) {
@@ -166,7 +182,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     }
 
     @Override
-    public Future<Boolean> writeAsync(Journal journal) throws StarException {
+    public Future<Boolean> writeAsync(com.staros.journal.Journal journal) throws StarException {
         try {
             return editLog.logStarMgrOperationNoWait(new StarMgrJournal(journal));
         } catch (Exception e) {
@@ -209,10 +225,13 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
             }
 
             editLog.loadJournal(null /* GlobalStateMgr */, entity);
-            replayedJournalId.incrementAndGet();
+            long newReplayId = replayedJournalId.incrementAndGet();
+            if (journalObservable != null) {
+                journalObservable.notifyObservers(newReplayId);
+            }
             long innerEndTime = System.currentTimeMillis();
 
-            LOG.debug("star mgr journal {} replayed.", replayedJournalId);
+            LOG.debug("star mgr journal {} replayed.", newReplayId);
             if (innerEndTime - innerStartTime > 3000) {
                 LOG.info("star mgr journal replay id:{} op:{} cost {}ms.", replayedJournalId, entity.opCode(),
                         innerEndTime - innerStartTime);
@@ -228,18 +247,11 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         return false;
     }
 
-    public BDBJEJournal getJournal() {
+    public Journal getJournal() {
         return bdbjeJournal;
     }
 
     public JournalWriter getJournalWriter() {
         return journalWriter;
     }
-
-    public void markLeaderTransferred() {
-        if (journalWriter != null) {
-            journalWriter.setLeaderTransferred();
-        }
-    }
 }
-

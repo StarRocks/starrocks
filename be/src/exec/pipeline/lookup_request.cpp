@@ -61,7 +61,9 @@ StatusOr<size_t> LocalLookUpRequestContext::fill_response(const ChunkPtr& result
 }
 
 void LocalLookUpRequestContext::callback(const Status& status) {
-    fetch_ctx->unit->finished_request_num++;
+    if (auto unit = fetch_ctx->unit.lock(); unit != nullptr) {
+        unit->finished_request_num++;
+    }
 }
 
 // Deserialize remote request payload into a reusable chunk for processing.
@@ -76,7 +78,8 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
         VLOG_FILE << "deserialize column, slot_id: " << slot_id << ", data_size: " << data_size
                   << ", column: " << col->get_name();
         const uint8_t* buff = reinterpret_cast<const uint8_t*>(pcolumn.data().data());
-        auto ret = serde::ColumnArraySerde::deserialize(buff, col.get());
+        const auto* end = buff + data_size;
+        auto ret = serde::ColumnArraySerde::deserialize(buff, end, col.get());
         if (!ret.ok()) {
             auto msg = fmt::format("deserialize column failed, slot_id: {}, data_size: {}", slot_id, data_size);
             LOG(WARNING) << msg;

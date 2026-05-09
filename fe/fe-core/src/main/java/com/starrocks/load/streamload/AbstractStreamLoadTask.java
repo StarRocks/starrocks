@@ -8,6 +8,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.http.rest.TransactionResult;
@@ -27,7 +28,7 @@ import java.util.List;
  * Abstract base class for stream load tasks
  */
 public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse {
+        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse, LoadsSystemTable.Job {
 
     public abstract void beginTxnFromFrontend(TransactionResult resp);
     public abstract void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp);
@@ -69,6 +70,7 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract String getLabel();
     public abstract String getDBName();
     public abstract long getDBId();
+    public abstract String getUser();
     public abstract long getTxnId();
     public abstract String getTableName();
     public abstract String getStateName();
@@ -76,6 +78,26 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract long createTimeMs();
     public abstract long endTimeMs();
     public abstract long getFinishTimestampMs();
+
+    @Override
+    public long getDbId() {
+        return getDBId();
+    }
+
+    @Override
+    public boolean matchTableName(String tableName) {
+        return tableName.equals(getTableName());
+    }
+
+    @Override
+    public Long getCreateTimeMs() {
+        return createTimeMs();
+    }
+
+    @Override
+    public Long getLoadFinishTimeMs() {
+        return getFinishTimestampMs();
+    }
 
     /**
      * Returns detailed information about the stream load task for SHOW STREAM LOAD statement.

@@ -1758,8 +1758,15 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 full_rowset_size = r.value();
                 rowset->rowset_meta()->clear_txn_meta();
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
+                const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
+                // full_rowset_size is the segment file bytes (column data + embedded indexes).
+                // index_disk_size tracks additional index bytes recorded in RowsetMeta; these may
+                // be separately persisted (e.g. primary-key SSTable indexes) or otherwise accounted
+                // for outside the segment file.
+                // Canonical invariant: data_disk_size = segment_size - index_size,
+                //                      total_disk_size = segment_size (== data + index).
+                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - index_disk_size));
                 rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
-                rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
                 rowset->set_schema(apply_tschema);
                 rowset->rowset_meta()->set_tablet_schema(apply_tschema);
                 (void)rowset->reload();
@@ -5354,6 +5361,14 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
     std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
+        if (iter == rssid_to_rowsets.begin()) {
+            std::string msg = strings::Substitute(
+                    "rssid $0 is smaller than the minimum rowset seg id $1 in tablet $2, "
+                    "which may be caused by stale primary index entries after compaction",
+                    rssid, rssid_to_rowsets.begin()->first, _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::InternalError(msg);
+        }
         --iter;
         const auto& rowset = iter->second.get();
         if (!(rowset->rowset_meta()->get_rowset_seg_id() <= rssid &&

@@ -45,6 +45,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -408,7 +409,8 @@ public class ColocateTableBalancerTest {
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", IntegerType.INT));
-        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 3);
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5,
+                (short) 3, DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
 
@@ -525,7 +527,8 @@ public class ColocateTableBalancerTest {
         for (GroupId groupId : groupIds) {
             List<Column> distributionCols = Lists.newArrayList();
             distributionCols.add(new Column("k1", IntegerType.INT));
-            ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 3, (short) 1);
+            ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 3,
+                    (short) 1, DistributionInfo.DistributionInfoType.HASH);
             group2Schema.put(groupId, groupSchema);
         }
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -570,7 +573,8 @@ public class ColocateTableBalancerTest {
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", IntegerType.INT));
         ColocateGroupSchema groupSchema =
-                    new ColocateGroupSchema(groupId, distributionCols, bucketNum, replicationNum);
+                    new ColocateGroupSchema(groupId, distributionCols, bucketNum, replicationNum,
+                            DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
@@ -785,7 +789,8 @@ public class ColocateTableBalancerTest {
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", IntegerType.INT));
-        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 1);
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5,
+                (short) 1, DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
 
@@ -1041,7 +1046,8 @@ public class ColocateTableBalancerTest {
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", IntegerType.INT));
-        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 3);
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5,
+                (short) 3, DistributionInfo.DistributionInfoType.HASH);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
 

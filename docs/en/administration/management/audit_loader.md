@@ -53,6 +53,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `pendingTimeMs` BIGINT COMMENT "Time the query waited in the queue (milliseconds)",
   `candidateMVs` VARCHAR(65533) NULL COMMENT "List of candidate materialized views",
   `hitMvs` VARCHAR(65533) NULL COMMENT "List of matched materialized views",
+  `QueriedRelations` ARRAY<VARCHAR(65533)> NULL COMMENT "List of directly referenced tables and views",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse name"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
@@ -207,6 +208,7 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
      pendingTimeMs: -1
       candidateMvs: null
             hitMVs: null
+  QueriedRelations: ["default_catalog.db1.tbl1","default_catalog.db1.view1"]
     …………
     ```
 

@@ -180,10 +180,18 @@ public class AlterJobMgr {
                 throw new DdlException(
                         "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }
-            // check table state
             targetTable = (OlapTable) table;
+            // check table state
             if (targetTable.getState() != OlapTableState.NORMAL) {
-                throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+                if (stmt.isForceDrop()) {
+                    materializedViewHandler.cancelRollupJobsForForceDrop(
+                            targetTable.getId(), stmt.getMvName(), "force drop materialized view");
+                    if (targetTable.getState() != OlapTableState.NORMAL) {
+                        targetTable.setState(OlapTableState.NORMAL);
+                    }
+                } else {
+                    throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+                }
             }
         } catch (MetaNotFoundException e) {
             if (stmt.isSetIfExists()) {
@@ -201,6 +209,9 @@ public class AlterJobMgr {
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
+            if (targetTable.getState() != OlapTableState.NORMAL && !stmt.isForceDrop()) {
+                throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+            }
             // drop materialized view
             materializedViewHandler.processDropMaterializedView(stmt, db, targetTable);
         } finally {
@@ -247,7 +258,7 @@ public class AlterJobMgr {
             if (task == null) {
                 throw new SemanticException("Can not find running task for materialized view [%s]", materializedView.getName());
             }
-            taskManager.resumeTask(task);
+            taskManager.resumeTask(task, isReplay);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
@@ -266,7 +277,7 @@ public class AlterJobMgr {
                     taskRunManager.taskRunUnlock();
                 }
                 // suspend the task to avoid scheduling new task runs
-                taskManager.suspendTask(currentTask);
+                taskManager.suspendTask(currentTask, isReplay);
             }
         }
     }
@@ -295,7 +306,11 @@ public class AlterJobMgr {
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getOrderedOutputColumns(true).stream()
+        // Use baseSchemaWithoutGeneratedColumn (not getOrderedOutputColumns) because this
+        // compares the MV's full schema against createStmt.getMvColumnItems(). The latter
+        // includes storage-filled columns (e.g. AUTO_INCREMENT __ROW_ID__) which are not
+        // part of query output but are in the MV schema.
+        List<Column> existedColumns = materializedView.getBaseSchemaWithoutGeneratedColumn().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {

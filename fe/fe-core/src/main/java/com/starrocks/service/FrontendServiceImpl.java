@@ -72,6 +72,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.FeThreadsSystemTable;
+import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -90,6 +91,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
@@ -415,6 +417,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -460,15 +463,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        UserIdentity currentUser;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
@@ -516,16 +518,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Database db = metadataMgr.getDb(context, catalogName, params.db);
@@ -805,15 +805,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setColumns(columns);
 
         // database privs should be checked in analysis phrase
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         long limit = params.isSetLimit() ? params.getLimit() : -1;
 
@@ -822,7 +821,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // describe_table interface only once, which can reduce RPC time from BE to FE, and
         // the amount of data. In additional,we need add db_name & table_name values to TColumnDesc.
         if (!params.isSetDb() && StringUtils.isBlank(params.getTable_name())) {
-            describeWithoutDbAndTable(currentUser, columns, limit);
+            describeWithoutDbAndTable(context, columns, limit);
             return result;
         }
 
@@ -857,11 +856,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // get describeTable without db name and table name parameter, so we need iterate over
     // dbs and tables, when reach limit, we break;
-    private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
+    private void describeWithoutDbAndTable(ConnectContext context, List<TColumnDef> columns, long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
 
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(context);
         boolean reachLimit;
@@ -910,6 +906,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (Column column : table.getBaseSchema()) {
             if (column.isHidden()) {
+                continue;
+            }
+            // Filter out expression partition generated columns in DESC and information_schema.columns.
+            // SHOW CREATE TABLE also filters them in AstToStringBuilder to display user-created DDL.
+            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 continue;
             }
             final TColumnDesc desc =
@@ -1072,6 +1073,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             final TMasterOpResult result = new TMasterOpResult();
             result.setErrorMsg(e.getMessage());
             return result;
+        } finally {
+            ConnectContext.remove();
         }
     }
 
@@ -2270,8 +2273,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         " already create partition failed");
             }
 
+            // Run analyzer first so that system partitions enclosed by existing partitions
+            // are removed from the resolved list before we decide whether new partitions
+            // will actually be created.
+            ConnectContext ctx = Util.getOrCreateInnerContext();
+            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            }
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                    Lists.newArrayList(table.getId()), LockType.READ)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(ctx, addPartitionClause);
+            }
+
+            Set<String> resolvedPartitionNames = new TreeSet<>();
+            for (PartitionDesc desc : addPartitionClause.getResolvedPartitionDescList()) {
+                resolvedPartitionNames.add(desc.getPartitionName());
+            }
             boolean willCreateNewPartition =
-                    CatalogUtils.checkIfNewPartitionExists(olapTable, creatingPartitionNames);
+                    CatalogUtils.checkIfNewPartitionExists(olapTable, resolvedPartitionNames);
 
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
@@ -2299,17 +2319,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
 
-            // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = Util.getOrCreateInnerContext();
-            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            if (willCreateNewPartition) {
+                state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+            } else {
+                LOG.info("skip addPartitions for automatic create partition txn_id={}, no new partition after analyze",
+                        request.getTxn_id());
             }
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
-                    LockType.READ)) {
-                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-                analyzer.analyze(ctx, addPartitionClause);
-            }
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to add partitions", e);
             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2619,58 +2634,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetLoadsResult getLoads(TGetLoadsParams request) throws TException {
         LOG.debug("Recieve getLoads: {}", request);
-
-        TGetLoadsResult result = new TGetLoadsResult();
-        List<TLoadInfo> loads = Lists.newArrayList();
-        try {
-            if (request.isSetJob_id()) {
-                LoadJob job = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(request.getJob_id());
-                if (job != null) {
-                    loads.add(job.toThrift());
-                }
-            } else if (request.isSetDb()) {
-                long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb()).getId();
-                if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                                    dbId, request.getLabel(), true).stream()
-                            .map(LoadJob::toThrift).collect(Collectors.toList()));
-                } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                                    dbId, null, false).stream().map(LoadJob::toThrift)
-                            .collect(Collectors.toList()));
-                }
-            } else {
-                if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(request.getLabel())
-                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
-                } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(null)
-                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
-                }
-            }
-
-            if (request.isSetJob_id()) {
-                AbstractStreamLoadTask task = GlobalStateMgr.getCurrentState()
-                        .getStreamLoadMgr().getTaskById(request.getJob_id());
-                if (task != null) {
-                    loads.addAll(task.toThrift());
-                }
-            } else {
-                List<AbstractStreamLoadTask> streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
-                        .getTaskByName(request.getLabel());
-                if (streamLoadTaskList != null) {
-                    for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
-                        loads.addAll(streamLoadTask.toThrift());
-                    }
-                }
-            }
-
-            result.setLoads(loads);
-        } catch (Exception e) {
-            LOG.warn("Failed to getLoads", e);
-            throw e;
-        }
-        return result;
+        return LoadsSystemTable.query(request);
     }
 
     @Override

@@ -91,6 +91,10 @@ public class ShowResultSet {
         return true;
     }
 
+    public void setResultRows(List<List<String>> resultRows) {
+        this.resultRows = resultRows;
+    }
+
     public List<List<String>> getResultRows() {
         return resultRows;
     }

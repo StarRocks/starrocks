@@ -165,7 +165,7 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNullable) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -201,7 +201,7 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -231,7 +231,7 @@ TEST_F(OrcFileWriterTest, TestWriteFloat) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -260,7 +260,7 @@ TEST_F(OrcFileWriterTest, TestWriteDouble) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -288,7 +288,7 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNullable) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -317,7 +317,7 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNotNull) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -352,7 +352,7 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -385,7 +385,7 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -434,7 +434,7 @@ TEST_F(OrcFileWriterTest, TestWriteDecimal) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -483,7 +483,7 @@ TEST_F(OrcFileWriterTest, TestWriteDecimalNotNull) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -528,7 +528,7 @@ TEST_F(OrcFileWriterTest, TestWriteDate) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -569,7 +569,7 @@ TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -616,7 +616,7 @@ TEST_F(OrcFileWriterTest, TestAllocatedBytes) {
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_TRUE(writer->get_allocated_bytes() > 0);
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_TRUE(writer->get_allocated_bytes() == 0);
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -663,7 +663,7 @@ TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -705,7 +705,7 @@ TEST_F(OrcFileWriterTest, TestWriteTimestampNotNull) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -760,7 +760,7 @@ TEST_F(OrcFileWriterTest, TestWriteMapNullable) {
                                                            std::move(column_evaluators),
                                                            TCompressionType::NO_COMPRESSION, _write_options, []() {});
     ASSERT_OK(writer->init());
-    ASSERT_OK(writer->commit().io_status);
+    ASSERT_OK(writer->close().io_status);
 }
 
 TEST_F(OrcFileWriterTest, TestWriteMapNotNull) {
@@ -776,7 +776,7 @@ TEST_F(OrcFileWriterTest, TestWriteMapNotNull) {
                                                            std::move(column_evaluators),
                                                            TCompressionType::NO_COMPRESSION, _write_options, []() {});
     ASSERT_OK(writer->init());
-    ASSERT_OK(writer->commit().io_status);
+    ASSERT_OK(writer->close().io_status);
 }
 
 TEST_F(OrcFileWriterTest, TestWriteArrayNullable) {
@@ -864,7 +864,7 @@ TEST_F(OrcFileWriterTest, TestOrcPatchedBaseWrongBaseWidth) {
     }
 
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 22);
 

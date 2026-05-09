@@ -59,7 +59,7 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
 
-    void cancel() override;
+    void cancel(const std::string& reason) override;
 
     void abort() override;
 

@@ -72,7 +72,7 @@ ALTER MATERIALIZED VIEW lo_mv1 RENAME lo_mv1_new_name;
 例2: マテリアライズドビューのリフレッシュ間隔を変更します。
 
 ```SQL
-ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
+ALTER MATERIALIZED VIEW lo_mv2 REFRESH SCHEDULE EVERY(INTERVAL 1 DAY);
 ```
 
 例3: マテリアライズドビューのリフレッシュタスクのタイムアウト期間を1時間（デフォルト）に変更します。

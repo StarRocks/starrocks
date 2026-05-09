@@ -26,14 +26,18 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 public class EsScanNodeTest extends EsTestCase {
@@ -63,18 +67,29 @@ public class EsScanNodeTest extends EsTestCase {
     }
 
     @Test
-    public void test(@Mocked EsTable esTable)  throws Exception {
+    public void test()  throws Exception {
 
         List<Column> columns = new ArrayList<>();
         Column k1 = new Column("k1", IntegerType.BIGINT);
         columns.add(k1);
 
-        esTable = fakeEsTable("doe", "doe", "doc", columns);
+        Map<String, String> props = new HashMap<>();
+        props.put(EsTable.KEY_HOSTS, "http://127.0.0.1:8200");
+        props.put(EsTable.KEY_INDEX, "doe");
+        props.put(EsTable.KEY_TYPE, "doc");
+        props.put(EsTable.KEY_VERSION, "6.5.3");
+        props.put(EsTable.KEY_DOC_VALUE_SCAN, "false");
+        props.put(EsTable.KEY_KEYWORD_SNIFF, "false");
+        EsTable esTable = new EsTable(1L, "doe", columns, props, null);
 
         TupleDescriptor td = new TupleDescriptor(new TupleId(0));
         td.setTable(esTable);
         PlanNodeId planNodeId = new PlanNodeId(11);
         EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE);
+        TPlanNode node = new TPlanNode();
+        scanNode.toThrift(node);
+        Assertions.assertNotNull(node.getConnector_scan_node());
+        Assertions.assertEquals("elasticsearch", node.getConnector_scan_node().getCatalog_type());
 
         scanNode.assignNodes();
 

@@ -77,6 +77,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -374,6 +375,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                 } else {
                     table.setEnablePersistentIndex(enablePersistentIndex);
                 }
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    table.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2);
+                } else {
+                    table.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1);
+                }
             }
             if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 TPersistentIndexType persistentIndexType;
@@ -649,16 +655,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
             }
 
-            // check colocation properties
-            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (StringUtils.isNotEmpty(colocateGroup)) {
-                if (!distributionInfo.supportColocate()) {
-                    throw new DdlException("random distribution does not support 'colocate_with'");
-                }
-
-                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* expectLakeTable */);
-            }
-
             // get base index storage type. default is COLUMN
             TStorageType baseIndexStorageType;
             try {
@@ -684,6 +680,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 table.setIndexMeta(baseIndexMetaId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null);
+            }
+
+            // check colocation properties and set up colocate group before tablet creation.
+            // Must be after setIndexMeta because range colocate needs baseIndexMeta to resolve sort key columns.
+            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            if (StringUtils.isNotEmpty(colocateGroup)) {
+                if (!distributionInfo.supportColocate()) {
+                    throw new DdlException("random distribution does not support 'colocate_with'");
+                }
+
+                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* afterTabletCreation */);
             }
 
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
@@ -877,7 +884,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             // process lake table colocation properties, after partition and tablet creation
-            colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
+            colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* afterTabletCreation */);
         } catch (DdlException e) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(tableId);
             throw e;

@@ -35,6 +35,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -131,7 +132,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return normal.listPartitionNames(databaseName, tableName, requestContext);
     }
 
@@ -223,6 +225,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                             ConnectorMetadataRequestContext requestContext) {
+        return normal.getPartitions(table, partitionNames, requestContext);
+    }
+
+    @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
                                          TvrVersionRange version) {
@@ -293,13 +301,19 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                           ConnectContext context) {
+        normal.finishSink(dbName, table, commitInfos, branch, extra, context);
+    }
+
+    @Override
     public void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         normal.abortSink(dbName, table, commitInfos);
     }
 
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
-        normal.alterTable(context, stmt);
+    public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+        return normal.alterTable(context, stmt);
     }
 
     @Override

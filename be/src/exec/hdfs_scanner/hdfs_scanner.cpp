@@ -16,6 +16,7 @@
 
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
+#include "column/datum_convert.h"
 #include "column/type_traits.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/exec_node.h"
@@ -25,12 +26,40 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/predicate_parser.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/types.h"
+#include "types/timestamp_value.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_decompressor.h"
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
+
+static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc, const std::string& default_value,
+                                                      size_t row_count, Column* column) {
+    auto type_info = get_type_info(slot_desc->type());
+    if (type_info == nullptr) {
+        return Status::InternalError(fmt::format("failed to get type info for slot {}", slot_desc->col_name()));
+    }
+    if (default_value.empty() && !slot_desc->type().is_string_type()) {
+        return Status::InvalidArgument(fmt::format(
+                "empty default value is only supported for string-like columns, col_name={}", slot_desc->col_name()));
+    }
+
+    // Parse default value into Datum using TypeInfo::from_string
+    // This handles all basic types: INT, BIGINT, FLOAT, DOUBLE, BOOLEAN, STRING, DATE, TIMESTAMP
+    MemPool mem_pool;
+    Datum datum;
+    RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, default_value, &mem_pool));
+
+    // Fill column with the default value
+    for (size_t i = 0; i < row_count; ++i) {
+        column->append_datum(datum);
+    }
+
+    return Status::OK();
+}
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
 public:
@@ -126,7 +155,8 @@ Status HdfsScanner::_build_scanner_context() {
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
         if (slot->col_name() == ICEBERG_ROW_ID || slot->col_name() == "_row_source_id" ||
-            slot->col_name() == "_scan_range_id" || slot->col_name() == ICEBERG_ROW_POSITION) {
+            slot->col_name() == "_scan_range_id" || slot->col_name() == ICEBERG_ROW_POSITION ||
+            slot->col_name() == ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
             ctx.reserved_field_slots.emplace_back(slot);
         } else {
             HdfsScannerContext::ColumnInfo column;
@@ -158,6 +188,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
     ctx.scan_range_id = _scanner_params.scan_range_id;
+    ctx.materialize_slot_default_values = _scanner_params.materialize_slot_default_values;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
@@ -165,6 +196,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
     ctx.use_min_max_opt = _scanner_params.use_min_max_opt;
+    ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.use_count_opt = _scanner_params.use_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
@@ -601,12 +633,32 @@ void HdfsScannerContext::update_min_max_columns() {
     const std::map<int32_t, TExprMinMaxValue>& min_max_values = scan_range->min_max_values;
     for (auto& column : materialized_columns) {
         if (min_max_values.find(column.slot_id()) != min_max_values.end()) {
-            // handled in non existed slot
+            // This column has file-level min/max statistics.  Move it to
+            // not_existed_slots so that append_or_update_min_max_column_to_chunk()
+            // fills the column with the statistics values instead of reading the
+            // actual data from the file.
             update_with_none_existed_slot(column.slot_desc);
-            continue;
+        } else if (can_use_any_column) {
+            // This column has no min/max statistics (e.g. STRING or TIMESTAMP type
+            // which are not yet supported, or a placeholder column injected by
+            // PruneHDFSScanColumnRule when every queried column is a partition column).
+            // Because can_use_any_column is set we know its value is irrelevant to the
+            // query result, so fill it with a default value and skip reading the file.
+            update_with_none_existed_slot(column.slot_desc);
         } else {
+            // This column genuinely needs to be read from the data file.
             updated_columns.emplace_back(column);
         }
+    }
+    // When can_use_any_column is set, also drain reserved_field_slots (e.g. _pos, _row_id)
+    // into not_existed_slots.  reserved_field_slots are meta/hidden columns whose
+    // values are irrelevant to the min/max query result, so filling them with defaults
+    // is safe and allows can_use_min_max_optimization() to return true.
+    if (can_use_any_column) {
+        for (SlotDescriptor* slot_desc : reserved_field_slots) {
+            update_with_none_existed_slot(slot_desc);
+        }
+        reserved_field_slots.clear();
     }
     materialized_columns.swap(updated_columns);
 }
@@ -648,6 +700,9 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
                 col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
                 col->append_datum(int64_t(1));
                 col->assign(row_count, 0);
+            } else if (auto it = materialize_slot_default_values.find(slot_desc->id());
+                       it != materialize_slot_default_values.end()) {
+                RETURN_IF_ERROR(fill_default_value_for_not_existed_slot(slot_desc, it->second, row_count, col.get()));
             } else {
                 col->append_default(row_count);
             }
@@ -721,6 +776,23 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
             data.emplace_back((double)value.min_int_value * 1e-6);
             data.emplace_back((double)value.max_int_value * 1e-6);
             break;
+        case TYPE_DATETIME: {
+            auto to_ts = [](int64_t micros) {
+                constexpr int64_t kMicrosPerSecond = 1000000L;
+                TimestampValue ts;
+                int64_t seconds = micros / kMicrosPerSecond;
+                int64_t microseconds = micros % kMicrosPerSecond;
+                if (microseconds < 0) {
+                    microseconds += kMicrosPerSecond;
+                    --seconds;
+                }
+                ts.from_unix_second(seconds, microseconds);
+                return ts;
+            };
+            data.emplace_back(to_ts(value.min_int_value));
+            data.emplace_back(to_ts(value.max_int_value));
+            break;
+        }
         default:
             break;
         }

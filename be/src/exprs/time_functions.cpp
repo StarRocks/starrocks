@@ -2358,7 +2358,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
                 result.append(ts);
             } else {
                 const Slice& fmt = fmt_viewer.value(i);
-                str_to_date_internal(&ts, fmt, str, &result);
+                RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
             }
         }
     }
@@ -2366,14 +2366,18 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
 }
 
 // uncommon approach to process string content, based on uncommon string format.
-void TimeFunctions::str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
-                                         ColumnBuilder<TYPE_DATETIME>* result) {
+Status TimeFunctions::str_to_date_internal(FunctionContext* context, TimestampValue* ts, const Slice& fmt,
+                                           const Slice& str, ColumnBuilder<TYPE_DATETIME>* result) {
     bool r = ts->from_uncommon_format_str(fmt.get_data(), fmt.get_size(), str.get_data(), str.get_size());
     if (r) {
         result->append(*ts);
-    } else {
-        result->append_null();
+        return Status::OK();
     }
+    if (context != nullptr && context->allow_throw_exception()) {
+        return Status::InvalidArgument("Fail to parse date");
+    }
+    result->append_null();
+    return Status::OK();
 }
 
 // Try to process string content, based on uncommon string format
@@ -2392,7 +2396,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context
             const Slice& str = str_viewer.value(i);
             const Slice& fmt = fmt_viewer.value(i);
             TimestampValue ts;
-            str_to_date_internal(&ts, fmt, str, &result);
+            RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
         }
     }
 
@@ -2712,8 +2716,11 @@ StatusOr<ColumnPtr> standard_format(const std::string& fmt, int len, const starr
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2762,8 +2769,11 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
-        builder->append(Slice(std::string(buf)), !b);
+        if (!standard_format_one_row(ts, buf, viewer_format->value(i).to_string())) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 
@@ -2905,8 +2915,11 @@ StatusOr<ColumnPtr> joda_standard_format(const std::string& fmt, int len, const 
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = joda_standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!joda_standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2955,8 +2968,11 @@ void common_joda_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TY
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = joda_standard_format_one_row(ts, buf, format);
-        builder->append(Slice(std::string(buf)), !b);
+        if (!joda_standard_format_one_row(ts, buf, format)) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 

@@ -44,6 +44,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /*
  * Rule Objective:
@@ -326,8 +327,12 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                     return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
                 }
 
-                return skewInfo.maybeMcvs().stream().flatMap(Collection::stream).map(p -> (new SkewedInfo(col,
-                        ConstantOperator.createVarchar(p.first)))).toList();
+                return skewInfo.maybeMcvs().stream() //
+                        .flatMap(Collection::stream) //
+                        .map(mcv -> ConstantOperator.createVarchar(mcv.first).castTo(col.getType())) //
+                        .filter(Optional::isPresent) //
+                        .map(value -> new SkewedInfo(col, value.get())) //
+                        .toList();
             }
         }
         return Collections.emptyList();

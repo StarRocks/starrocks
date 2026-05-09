@@ -42,6 +42,13 @@ inline int64_t calc_effective_segment_count(const RowsetMetadataPB& rowset) {
         return 1;
     }
     int segments_size = rowset.segments_size();
+    // Only skip rowsets produced by large-rowset-split compaction.
+    // Use a narrow condition to avoid affecting other overlapped rowsets whose
+    // next_compaction_offset may also reach segments_size for different reasons.
+    if (rowset.next_compaction_offset() >= static_cast<uint32_t>(segments_size) &&
+        rowset.data_size() >= config::lake_compaction_max_rowset_size) {
+        return 0;
+    }
     if (segments_size == 0) {
         return 1;
     }

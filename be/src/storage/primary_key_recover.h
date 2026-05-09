@@ -62,6 +62,8 @@ public:
 
     // delete pk index and delvec, then rebuild them
     Status recover();
+
+    virtual StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const = 0;
 };
 
 } // namespace starrocks

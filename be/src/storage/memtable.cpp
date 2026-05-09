@@ -27,6 +27,7 @@
 #include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
+#include "storage/non_retryable_load_errors.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
@@ -69,12 +70,18 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
     }
 }
 
-Status MemTable::prepare() {
+Status MemTable::prepare(PrimaryKeyEncodingType pk_encoding_type) {
     if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
         // otherwise it will take up a lot of memory and may not be released.
         ASSIGN_OR_RETURN(_aggregator, ChunkAggregator::create(_vectorized_schema, 0, INT_MAX, 0));
+    }
+    if (_keys_type == KeysType::PRIMARY_KEYS) {
+        if (pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE) {
+            return Status::InternalError("invalid primary key encoding type");
+        }
+        _pk_encoding_type = pk_encoding_type;
     }
     return Status::OK();
 }
@@ -287,11 +294,12 @@ Status MemTable::finalize() {
             _result_chunk = _aggregator->aggregate_result();
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
-                                                       _result_chunk->num_rows(), config::primary_key_limit_size)) {
+                                                       _result_chunk->num_rows(), config::primary_key_limit_size,
+                                                       _pk_encoding_type)) {
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
                 _aggregator_bytes_usage = 0;
-                return Status::Cancelled("primary key size exceed the limit.");
+                return Status::Cancelled(kPrimaryKeySizeExceedError);
             }
             if (_has_op_slot) {
                 // TODO(cbl): mem_tracker
@@ -496,7 +504,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
     if (!(*deletes)) {
-        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes);
+        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes, _pk_encoding_type);
         if (!st.ok()) {
             LOG(ERROR) << "create column for primary key encoder failed, schema:" << *_vectorized_schema
                        << ", status:" << st.to_string();
@@ -509,7 +517,8 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
         (*deletes)->reset_column();
     }
     auto& delidx = indexes[TOpType::DELETE];
-    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get());
+    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get(),
+                                        _pk_encoding_type);
     return Status::OK();
 }
 

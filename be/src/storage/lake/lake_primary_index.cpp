@@ -20,6 +20,7 @@
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/local_pk_index_manager.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
@@ -50,13 +51,15 @@ Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetada
     if (need_rebuild()) {
         unload_without_lock();
     }
+    // _do_lake_load may need tablet id to fetch tablet schema/encoding type.
+    // Set it before loading to avoid using the default value (0).
+    _tablet_id = metadata->id();
     _status = _do_lake_load(tablet_mgr, metadata, base_version, builder);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
     if (_status.ok()) {
         // update data version when memory index or persistent index load finish.
         _data_version = base_version;
     }
-    _tablet_id = metadata->id();
     _loaded = true;
     TRACE("end load pk index");
     if (!_status.ok()) {
@@ -127,9 +130,10 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
 
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
+    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        // more than one key column or V2 encoding
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
     }
     vector<uint32_t> rowids;
     rowids.reserve(4096);
@@ -163,12 +167,14 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                     const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  pk_encoding_type);
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
-                    RETURN_IF_ERROR(insert(rowset->id() + i, rowids, *pkc));
+                    uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+                    RETURN_IF_ERROR(insert(rssid, rowids, *pkc));
                 }
             }
             itr->close();
@@ -254,6 +260,17 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
                                      PersistentIndexTypePB_Name(metadata->persistent_index_type()));
     }
     return Status::OK();
+}
+
+Status LakePrimaryIndex::sync_flush_persistent_index(int64_t wait_timeout_us) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index == nullptr) {
+        return Status::OK();
+    }
+    return lake_persistent_index->sync_flush_all_memtables(wait_timeout_us);
 }
 
 double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
@@ -357,6 +374,24 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
     return Status::OK();
 }
 
+void LakePrimaryIndex::reset_publish_sst_stats() {
+    if (!_enable_persistent_index) return;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (idx != nullptr) idx->reset_publish_sst_stats();
+}
+
+int32_t LakePrimaryIndex::publish_sst_flush_count() const {
+    if (!_enable_persistent_index) return 0;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    return idx != nullptr ? idx->publish_sst_flush_count() : 0;
+}
+
+int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
+    if (!_enable_persistent_index) return 0;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    return idx != nullptr ? idx->publish_sst_flush_bytes() : 0;
+}
+
 // Query index for existing rows matching primary keys from all segments.
 // This is used during read-only publish when index files already exist.
 //
@@ -451,6 +486,92 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
 
     RETURN_IF_ERROR(status); // Check for errors from parallel tasks
     return segment_pk_iterator->status();
+}
+
+// Parallel query of PK index to retrieve rss_rowids for all segments at once.
+// Submits chunks from all segments to a single shared thread pool token, enabling
+// cross-segment parallelism.
+Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
+                                                       std::vector<SegmentPKIteratorPtr>& pk_iters,
+                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
+    const uint32_t num_segments = pk_iters.size();
+    rss_rowids_per_segment->resize(num_segments);
+
+    struct RssRowidSlot {
+        size_t begin_rowid = 0;
+        size_t count = 0;
+        std::vector<uint64_t> values;
+    };
+
+    std::mutex mutex;
+    Status status = Status::OK();
+    std::vector<std::vector<std::unique_ptr<RssRowidSlot>>> per_segment_slots(num_segments);
+
+    // Iterate all segments' chunks on the main thread and submit them all to the shared pool.
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        auto* pk_iter = pk_iters[seg_idx].get();
+        for (; !pk_iter->done(); pk_iter->next()) {
+            auto current = pk_iter->current();
+            size_t num_rows = current.first->num_rows();
+            size_t begin_rowid = current.second;
+
+            auto slot = std::make_unique<RssRowidSlot>();
+            slot->begin_rowid = begin_rowid;
+            slot->count = num_rows;
+            per_segment_slots[seg_idx].push_back(std::move(slot));
+            auto* slot_ptr = per_segment_slots[seg_idx].back().get();
+
+            auto func = [this, slot_ptr, current = std::move(current), pk_iter, &mutex, &status]() {
+                auto pk_column_st = pk_iter->encoded_pk_column(current.first.get());
+                Status st;
+                if (pk_column_st.ok()) {
+                    slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
+                    st = get(*pk_column_st.value(), &slot_ptr->values);
+                } else {
+                    st = pk_column_st.status();
+                }
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+            };
+
+            if (token) {
+                auto st = token->submit_func(func);
+                TRACE_COUNTER_INCREMENT("batch_parallel_get_rss_rowids_cnt", 1);
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+            } else {
+                func();
+                RETURN_IF_ERROR(status);
+            }
+        }
+    }
+
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("batch_parallel_get_rss_rowids_wait_us");
+        token->wait();
+    }
+    RETURN_IF_ERROR(status);
+
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        RETURN_IF_ERROR(pk_iters[seg_idx]->status());
+    }
+
+    // Merge per-chunk results into per-segment output vectors
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        auto& slots = per_segment_slots[seg_idx];
+        size_t total = 0;
+        if (!slots.empty()) {
+            auto& last = slots.back();
+            total = last->begin_rowid + last->count;
+        }
+        auto& output = (*rss_rowids_per_segment)[seg_idx];
+        output.resize(total);
+        for (auto& slot : slots) {
+            memcpy(output.data() + slot->begin_rowid, slot->values.data(), slot->count * sizeof(uint64_t));
+        }
+    }
+
+    return Status::OK();
 }
 
 // Update index with new primary keys from all segments.

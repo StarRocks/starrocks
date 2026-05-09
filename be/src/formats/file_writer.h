@@ -65,12 +65,12 @@ public:
     virtual int64_t get_allocated_bytes() = 0;
     virtual int64_t get_flush_batch_size() = 0;
     virtual Status write(Chunk* chunk) = 0;
-    virtual CommitResult commit() = 0;
+    virtual CommitResult close() = 0;
 };
 
 struct WriterAndStream {
-    std::unique_ptr<FileWriter> writer;
     std::unique_ptr<io::AsyncFlushOutputStream> stream;
+    std::unique_ptr<FileWriter> writer;
 };
 
 class FileWriterFactory {

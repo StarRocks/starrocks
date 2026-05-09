@@ -77,6 +77,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.starrocks.qe.SessionVariableConstants.AUTO;
 import static com.starrocks.qe.SessionVariableConstants.FORCE_PREAGGREGATION;
 import static com.starrocks.qe.SessionVariableConstants.FORCE_STREAMING;
 import static com.starrocks.qe.SessionVariableConstants.LIMITED;
@@ -391,6 +392,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         if (useSortAgg) {
             output.append(detailPrefix).append("sorted streaming: true\n");
         }
+        if (detailLevel == TExplainLevel.VERBOSE && !AUTO.equalsIgnoreCase(streamingPreaggregationMode)) {
+            output.append(detailPrefix).append("streaming preaggregation mode: ")
+                    .append(streamingPreaggregationMode).append("\n");
+        }
 
         if (withLocalShuffle) {
             output.append(detailPrefix).append("withLocalShuffle: true\n");
@@ -589,9 +594,33 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         if (sv.getEnableTopNRuntimeFilter() && topNSortInfo != null
                 && !topNSortInfo.getOrderingExprs().isEmpty()) {
             Expr topnExpr = topNSortInfo.getOrderingExprs().get(0);
-            pushDownUnaryTopNRuntimeFilter(generator, topnExpr, descTbl, execGroupSets, 0);
+            int topnExprOrder = getGroupByExprOrder(topnExpr);
+            if (topnExprOrder >= 0) {
+                pushDownUnaryTopNRuntimeFilter(generator, topnExpr, descTbl, execGroupSets, topnExprOrder);
+            }
         }
         withRuntimeFilters = !buildRuntimeFilters.isEmpty();
+    }
+
+    // Find the index of the topN expression in the group-by expression list by matching SlotId.
+    // The topN ordering expression and group-by expressions are SlotRefs from different tuples
+    // (sort tuple vs input tuple), but they share the same SlotId (ColumnRefOperator ID).
+    // Find the index of the topN expression in the group-by expression list by matching SlotId.
+    // The topN ordering expression and group-by expressions are SlotRefs from different tuples
+    // (sort tuple vs input tuple), but they share the same SlotId (ColumnRefOperator ID).
+    private int getGroupByExprOrder(Expr topnExpr) {
+        if (!(topnExpr instanceof SlotRef)) {
+            return -1;
+        }
+        int topnSlotId = ((SlotRef) topnExpr).getSlotId().asInt();
+        List<Expr> groupingExprs = aggInfo.getGroupingExprs();
+        for (int i = 0; i < groupingExprs.size(); i++) {
+            Expr gexpr = groupingExprs.get(i);
+            if (gexpr instanceof SlotRef && ((SlotRef) gexpr).getSlotId().asInt() == topnSlotId) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private int getProbeExprOrder(List<Expr> exprs, Expr probeExpr) {

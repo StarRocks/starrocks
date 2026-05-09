@@ -141,18 +141,34 @@ public:
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
 
-    // Return the files cnt that need to rebuild.
-    static size_t need_rebuild_file_cnt(const TabletMetadataPB& metadata,
-                                        const PersistentIndexSstableMetaPB& sstable_meta);
+    // Return the {file_cnt, row_cnt} that need to rebuild in a single rowset traversal.
+    static std::pair<size_t, int64_t> need_rebuild_counts(const TabletMetadataPB& metadata,
+                                                          const PersistentIndexSstableMetaPB& sstable_meta);
 
     Status flush_memtable(bool force = false);
 
     Status sync_flush_all_memtables(int64_t wait_timeout_us);
 
+    // Publish-phase SST flush stats tracking
+    void reset_publish_sst_stats() {
+        _publish_sst_flush_count = 0;
+        _publish_sst_flush_bytes = 0;
+    }
+    int32_t publish_sst_flush_count() const { return _publish_sst_flush_count; }
+    int64_t publish_sst_flush_bytes() const { return _publish_sst_flush_bytes; }
+
 private:
+    // Open all SSTables in parallel using thread pool.
+    // Returns opened SSTables in the same order as sstable_meta.sstables().
+    static StatusOr<std::vector<PersistentIndexSstableUniquePtr>> _open_sstables_parallel(
+            const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id,
+            Cache* cache, const TabletMetadataPtr& metadata);
+
     bool is_memtable_full() const;
 
     bool too_many_rebuild_files() const;
+
+    bool too_many_rebuild_rows() const;
 
     // batch get
     // |n|: size of key/value array
@@ -190,8 +206,13 @@ private:
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     size_t _need_rebuild_file_cnt{0};
+    int64_t _need_rebuild_row_cnt{0};
     // Collection of sstable fileset, from old to new.
     std::vector<std::unique_ptr<PersistentIndexSstableFileset>> _sstable_filesets;
+
+    // Counters for SST files flushed during publish phase
+    int32_t _publish_sst_flush_count{0};
+    int64_t _publish_sst_flush_bytes{0};
 };
 
 } // namespace lake

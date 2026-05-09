@@ -22,8 +22,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 
@@ -33,7 +33,7 @@ import java.util.List;
 
 public class ShowAnalyzeJobStmt extends ShowStmt {
 
-    public ShowAnalyzeJobStmt(Predicate predicate, List<OrderByElement> orderByElements,
+    public ShowAnalyzeJobStmt(Expr predicate, List<OrderByElement> orderByElements,
                               LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;

@@ -977,6 +977,36 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testAllocateFilePathFromOtherService() throws StarClientException {
+        long dbId = 1000;
+        long tableId = 123;
+        String storageVolumeId = "test-sv";
+        String otherServiceId = "other-service-id";
+
+        new Expectations(client) {
+            {
+                client.allocateFilePath("1", storageVolumeId, anyString, otherServiceId);
+                result = FilePathInfo.newBuilder().setFullPath("s3://bucket/path").build();
+                client.allocateFilePath("2", storageVolumeId, anyString, otherServiceId);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() -> {
+            FilePathInfo pathInfo = starosAgent.allocateFilePathFromOtherService(storageVolumeId, dbId, tableId,
+                    otherServiceId);
+            Assertions.assertNotNull(pathInfo);
+            Assertions.assertEquals("s3://bucket/path", pathInfo.getFullPath());
+        });
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.allocateFilePathFromOtherService(storageVolumeId, dbId, tableId, otherServiceId));
+    }
+
+    @Test
     public void testCreateShardWithVirtualTabletId() throws StarClientException {
         long groupId = 333L;
         long vTabletId = 1000L;

@@ -47,12 +47,14 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.PartitionPublishVersionData;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.TxnInfoPB;
@@ -77,6 +79,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -85,6 +88,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends FrontendDaemon {
@@ -117,6 +121,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        MetricRepo.COUNTER_PUBLISH_VERSION_DAEMON_LOOP.increase(1L);
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
@@ -364,8 +369,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
         boolean shouldFinishTxn = true;
         if (!allTaskFinished) {
-            shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
-                    publishErrorReplicaIds, unfinishedBackends);
+            try {
+                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
+                        publishErrorReplicaIds, unfinishedBackends,
+                        Config.finish_transaction_default_lock_timeout_ms);
+            } catch (LockTimeoutException exception) {
+                LOG.info("Fail to get lock to check canTxnFinished for transaction {}, error: {}. Will retry later",
+                        transactionState.getTransactionId(), exception.getMessage());
+                return;
+            }
+        } else {
+            // All publish tasks finished; the transaction was logically ready to finish as soon as the last
+            // publish task completed. Use publishVersionFinishTime so that publishCanFinishLatencyMs is not
+            // inflated by the daemon loop interval (which would happen if we used System.currentTimeMillis()).
+            transactionState.setReadyToFinishTimeIfUnset(transactionState.getPublishVersionFinishTime());
         }
 
         if (shouldFinishTxn) {
@@ -453,6 +470,17 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
         Set<Long> publishingTransactions = getPublishingTransactions();
         for (TransactionStateBatch txnStateBatch : readyTransactionStatesBatch) {
+            // Trim batch at version gap boundary to avoid deadlock with SplitTabletJob.
+            // See trimBatchAtVersionGap() javadoc for details.
+            try {
+                txnStateBatch = trimBatchAtVersionGap(txnStateBatch);
+            } catch (Exception e) {
+                LOG.warn("Failed to trim batch at version gap, proceeding with original batch", e);
+            }
+            if (txnStateBatch == null) {
+                continue; // entire batch unpublishable (head txn has gap), skip this cycle
+            }
+
             if (txnStateBatch.size() == 1) {
                 // there are two situations:
                 // 1. the transactionState in txnStateBatch is with multi-tables
@@ -537,6 +565,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     txnState.updatePublishTaskFinishTime();
+                    // For lake transactions there is no quorum check; the transaction is ready to finish
+                    // as soon as the publish task succeeds. Set readyToFinishTime here so that
+                    // publishCanFinishLatencyMs and publishAckLatencyMs are recorded correctly.
+                    txnState.setReadyToFinishTimeIfUnset();
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
@@ -754,6 +786,103 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
+    /**
+     * Trim a transaction batch to its publishable prefix by checking each partition's
+     * first commit version against the partition's current visibleVersion.
+     *
+     * If a partition has visibleVersion + 1 != firstCommitVersion (a version gap, typically
+     * caused by SplitTabletJob reserving a phantom version), the batch is truncated before
+     * the first transaction that touches the gap-affected partition.
+     *
+     * @return the original batch if no gap is found, or a new trimmed batch containing
+     *         only the publishable prefix. Returns null if the entire batch is unpublishable
+     *         (first transaction already touches a gap partition).
+     */
+    @VisibleForTesting
+    @Nullable
+    TransactionStateBatch trimBatchAtVersionGap(TransactionStateBatch txnStateBatch) {
+        if (txnStateBatch.size() <= 1) {
+            return txnStateBatch;
+        }
+
+        long dbId = txnStateBatch.getDbId();
+        long tableId = txnStateBatch.getTableId();
+        List<TransactionState> states = txnStateBatch.getTransactionStates();
+
+        // Step 1: Collect first version per partition across the batch
+        // partitionId -> firstVersion (from the earliest txn in the batch that touches it)
+        Map<Long, Long> partitionFirstVersions = new LinkedHashMap<>();
+        for (TransactionState state : states) {
+            TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+            if (tableCommitInfo == null) {
+                continue;
+            }
+            for (Map.Entry<Long, PartitionCommitInfo> entry :
+                    tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
+                partitionFirstVersions.putIfAbsent(entry.getKey(), entry.getValue().getVersion());
+            }
+        }
+
+        // Step 2: Check each partition's first version against visibleVersion
+        Set<Long> gapPartitions = new HashSet<>();
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            return txnStateBatch;
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(dbId, List.of(tableId), LockType.READ);
+        try {
+            for (Map.Entry<Long, Long> entry : partitionFirstVersions.entrySet()) {
+                long partitionId = entry.getKey();
+                long firstVersion = entry.getValue();
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                if (partition != null
+                        && partition.getVisibleVersion() + 1 != firstVersion
+                        // REPLICATION txns may have non-consecutive versions, skip check
+                        && states.get(0).getSourceType()
+                                != TransactionState.LoadJobSourceType.REPLICATION) {
+                    gapPartitions.add(partitionId);
+                }
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(dbId, List.of(tableId), LockType.READ);
+        }
+
+        if (gapPartitions.isEmpty()) {
+            return txnStateBatch; // no gap, return original batch unchanged
+        }
+
+        // Step 3: Find the first transaction that touches any gap-affected partition
+        for (int i = 0; i < states.size(); i++) {
+            TableCommitInfo tableCommitInfo = states.get(i).getTableCommitInfo(tableId);
+            if (tableCommitInfo != null) {
+                for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+                    if (gapPartitions.contains(partitionId)) {
+                        if (i == 0) {
+                            LOG.debug("Skipping publish batch for table {}: head txn {}"
+                                    + " touches gap partition {}. Gap partitions: {}",
+                                    tableId, states.get(0).getTransactionId(),
+                                    partitionId, gapPartitions);
+                            return null; // entire batch unpublishable
+                        }
+                        LOG.info("Trimming publish batch for table {} from {} to {} txns"
+                                + " due to version gap on partitions {}."
+                                + " First gap txn: {}, all txns: {}",
+                                tableId, states.size(), i, gapPartitions,
+                                states.get(i).getTransactionId(),
+                                states.stream().map(s -> String.valueOf(s.getTransactionId()))
+                                        .collect(Collectors.joining(",")));
+                        return new TransactionStateBatch(
+                                new ArrayList<>(states.subList(0, i)));
+                    }
+                }
+            }
+        }
+        return txnStateBatch; // gap partitions not touched by any txn (shouldn't happen)
+    }
+
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         assert txnStateBatch.size() > 1;
@@ -824,6 +953,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     states.forEach(TransactionState::updatePublishTaskFinishTime);
+                    // For lake transactions there is no quorum check; the transaction is ready to finish
+                    // as soon as the publish task succeeds. Set readyToFinishTime here so that
+                    // publishCanFinishLatencyMs and publishAckLatencyMs are recorded correctly.
+                    states.forEach(TransactionState::setReadyToFinishTimeIfUnset);
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);

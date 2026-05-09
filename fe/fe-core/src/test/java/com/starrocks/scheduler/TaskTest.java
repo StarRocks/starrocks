@@ -15,9 +15,17 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class TaskTest {
 
@@ -39,6 +47,59 @@ public class TaskTest {
     }
 
     @Test
+    public void testGetWarehouseName() {
+        Task task = new Task();
+        Assertions.assertEquals(task.getWarehouseName(), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+
+        Map<String, String> properties = new HashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "aaa");
+        task.setProperties(properties);
+        Assertions.assertEquals(task.getWarehouseName(), "aaa");
+    }
+
+    @Test
+    public void testGetWarehouseNameForMvTask() {
+        // Mock warehouse environment
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        // Create an MV and set a specific warehouse
+        MaterializedView mv = new MaterializedView();
+        mv.setId(10001L);
+        mv.setName("test_mv");
+        mv.setTableProperty(new TableProperty());
+        mv.setWarehouseId(1000L);
+
+        // Create MV task
+        Task mvTask = TaskBuilder.buildMvTask(mv, "test_db");
+
+        // The task should not have warehouse in properties (after our fix)
+        Assertions.assertNull(mvTask.getProperties().get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+
+        // But getWarehouseName() should return the default warehouse since MV is not in GlobalStateMgr
+        // In real scenario, it would fetch from MV's warehouse
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, mvTask.getWarehouseName());
+    }
+
+    @Test
+    public void testMvTaskWithoutWarehouseProperty() {
+        // Mock warehouse environment
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        MaterializedView mv = new MaterializedView();
+        mv.setId(10002L);
+        mv.setName("test_mv2");
+        mv.setTableProperty(new TableProperty());
+
+        // Create MV task - should not have warehouse property
+        Task mvTask = TaskBuilder.buildMvTask(mv, "test_db");
+
+        // Verify no warehouse property is stored
+        Assertions.assertNull(mvTask.getProperties().get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+
+        // Verify it's an MV task
+        Assertions.assertEquals(Constants.TaskSource.MV, mvTask.getSource());
+    }
+
     public void testConstantTaskState() {
         // whether it's a finished state
         Assertions.assertEquals(true, Constants.TaskRunState.FAILED.isFinishState());

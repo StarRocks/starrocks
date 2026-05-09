@@ -83,6 +83,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.SlotDescriptor;
@@ -269,6 +270,11 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxIndexId")
     protected long maxIndexId = -1;
 
+    // Persisted primary key encoding type. null means the table was created before this field was introduced,
+    // in which case we fall back to the legacy computed logic in getPrimaryKeyEncodingType().
+    @SerializedName(value = "primaryKeyEncodingType")
+    private TPrimaryKeyEncodingType primaryKeyEncodingType = null;
+
     // the id of the session that created this table, only used in temporary table
     @SerializedName(value = "sessionId")
     protected UUID sessionId = null;
@@ -412,7 +418,7 @@ public class OlapTable extends Table {
             olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
         }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
-        Map<String, Partition> nameToPartitions = Maps.newLinkedHashMap();
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
@@ -431,6 +437,7 @@ public class OlapTable extends Table {
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.sessionId = this.sessionId;
+        olapTable.primaryKeyEncodingType = this.primaryKeyEncodingType;
 
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
@@ -1486,7 +1493,9 @@ public class OlapTable extends Table {
     }
 
     public List<Partition> getNonEmptyPartitions() {
-        return idToPartition.values().stream().filter(Partition::hasData).collect(Collectors.toList());
+        return idToPartition.values().stream().filter(
+                        p -> !p.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .filter(Partition::hasData).collect(Collectors.toList());
     }
 
     public int getNumberOfPartitions() {
@@ -1704,7 +1713,7 @@ public class OlapTable extends Table {
         }
 
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(nameToColumn);
+            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(idToColumn);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ((ListPartitionInfo) partitionInfo).updateLiteralExprValues(idToColumn);
         }
@@ -2696,6 +2705,19 @@ public class OlapTable extends Table {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateTableIndex.isColocateTable(getId())) {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            // For range colocate groups, journal the range mgr state ahead of OP_COLOCATE_ADD_TABLE_V2
+            // so the record lands after OP_CREATE_TABLE is durably written. A crash between this
+            // record and the add-table record leaves only an orphan range entry on a fresh grpId,
+            // which is harmless because the next create on the same colocate_with name allocates a
+            // new grpId via getNextId().
+            if (colocateTableIndex.isRangeColocateGroup(groupId)) {
+                List<ColocateRange> ranges = colocateTableIndex.getColocateRangeMgr()
+                        .getColocateRanges(groupId.grpId);
+                if (!ranges.isEmpty()) {
+                    GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
+                            ColocateRangePersistInfo.create(groupId.grpId, ranges));
+                }
+            }
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
                     backendsPerBucketSeq);
@@ -2960,6 +2982,15 @@ public class OlapTable extends Table {
         if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
             properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
+        }
+
+        // lake_compaction_max_parallel (only for cloud native table, only show when not default)
+        if (isCloudNativeTable()) {
+            int lakeCompactionMaxParallel = getLakeCompactionMaxParallel();
+            if (lakeCompactionMaxParallel != Config.lake_compaction_max_parallel_default) {
+                properties.put(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL,
+                        String.valueOf(lakeCompactionMaxParallel));
+            }
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
@@ -3341,11 +3372,21 @@ public class OlapTable extends Table {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
     }
 
+    public void setPrimaryKeyEncodingType(TPrimaryKeyEncodingType type) {
+        this.primaryKeyEncodingType = type;
+    }
+
     public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
         if (getKeysType() != KeysType.PRIMARY_KEYS) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
         }
 
+        // Use persisted value if available (new tables created after this field was introduced)
+        if (primaryKeyEncodingType != null) {
+            return primaryKeyEncodingType;
+        }
+
+        // Legacy fallback for tables created before primaryKeyEncodingType was persisted
         if (!isCloudNativeTableOrMaterializedView()) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
         }

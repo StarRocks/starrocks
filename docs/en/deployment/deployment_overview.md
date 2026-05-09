@@ -2,11 +2,11 @@
 displayed_sidebar: docs
 ---
 
-# Deployment overview
+# Deployment Overview
 
 This chapter describes how to deploy, upgrade, and downgrade a StarRocks cluster in a production environment.
 
-## Deployment procedure
+## Deployment Procedure
 
 A summary of the deployment procedure is as follows and later topics provide the details.
 
@@ -18,7 +18,7 @@ The deployment of StarRocks generally follows the steps outlined here:
 
 2. [Plan your cluster size](../deployment/plan_cluster.md).
 
-   Plan the number of FE nodes and BE nodes in your cluster, and the hardware specifications of the servers.
+   Plan the number of FE nodes and BE/CN nodes in your cluster, and the hardware specifications of the servers.
 
 3. [Check environment configurations](../deployment/environment_configurations.md).
 
@@ -32,7 +32,7 @@ The deployment of StarRocks generally follows the steps outlined here:
 
 5. Deploy StarRocks.
 
-   - If you want to deploy a shared-data StarRocks cluster, which features a disaggregated storage and compute architecture, see [Deploy and use shared-data StarRocks](../deployment/shared_data/s3.md) for instructions.
+   - If you want to deploy a shared-data StarRocks cluster, which features a disaggregated storage and compute architecture, see [Deploy and use shared-data StarRocks](../deployment/deploy_shared_data_manually.md) for instructions.
    - If you want to deploy a shared-nothing StarRocks cluster, which uses local storage, you have the following options:
 
      - [Deploy StarRocks manually](../deployment/deploy_manually.md).
@@ -43,7 +43,7 @@ The deployment of StarRocks generally follows the steps outlined here:
 
    Further setup measures are needed before your StarRocks cluster is put into production. These measures include securing the initial account and setting some performance-related system variables.
 
-## Upgrade and downgrade
+## Upgrade and Downgrade
 
 If you plan to upgrade an existing StarRocks cluster to a later version rather than install StarRocks for the first time, see [Upgrade StarRocks](../deployment/upgrade.md) for information about upgrade procedures and issues that you should consider before upgrading.
 

@@ -19,7 +19,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCacheStatsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
@@ -50,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
@@ -57,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCacheStatsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
@@ -241,6 +245,14 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalFilter(LogicalFilterOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalDelta(LogicalDeltaOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalVersion(LogicalVersionOperator node, C context) {
         return visitOperator(node, context);
     }
 
@@ -448,6 +460,14 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalLookUp(PhysicalLookUpOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalCacheStatsScan(LogicalCacheStatsScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitPhysicalCacheStatsScan(PhysicalCacheStatsScanOperator node, C context) {
         return visitOperator(node, context);
     }
 }

@@ -366,15 +366,18 @@ public:
                                            const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
+            // Dictionary cache currently only works with share-nothing PK tables which always use V1.
             MutableColumnPtr encoded_columns;
-            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                         .ok()) {
                 std::stringstream ss;
                 ss << "create column for primary key encoder failed";
                 LOG(WARNING) << ss.str();
                 return nullptr;
             }
             if (chunk->num_rows() > 0) {
-                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get());
+                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get(),
+                                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
             }
             return encoded_columns;
         }
@@ -389,7 +392,10 @@ public:
                                  const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
-            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, value_encode_flags);
+            // use V1 encoding type to decode the column for simplicity.
+            // Dictionary cache currently only works with share-nothing PK tables which always use V1.
+            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk,
+                                             PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, value_encode_flags);
         }
         default:
             break;
@@ -439,11 +445,13 @@ public:
                                         const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
+            // Dictionary cache currently only works with share-nothing PK tables which always use V1.
             std::vector<uint32_t> idxes;
             for (uint32_t i = 0; i < schema.fields().size(); i++) {
                 idxes.push_back((uint32_t)i);
             }
-            return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes);
+            return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes,
+                                                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
         }
         default:
             break;

@@ -40,6 +40,8 @@ import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /*
@@ -163,6 +165,9 @@ public class AuditEvent {
     @AuditField(value = "CustomQueryId")
     public String customQueryId = "";
 
+    @AuditField(value = "CustomSessionName")
+    public String customSessionName = "";
+
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
 
@@ -174,6 +179,9 @@ public class AuditEvent {
 
     @AuditField(value = "PreparedStmtId", ignore_zero = true)
     public String preparedStmtId = null;
+
+    @AuditField(value = "QueriedRelations", ignore_empty = true)
+    public List<String> queriedRelations = Collections.emptyList();
 
     public long readLocalCnt = 0;
     public long readRemoteCnt = 0;
@@ -470,6 +478,11 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setCustomSessionName(String customSessionName) {
+            auditEvent.customSessionName = customSessionName;
+            return this;
+        }
+
         public AuditEventBuilder addTransmittedBytes(long transmittedBytes) {
             if (auditEvent.transmittedBytes == -1) {
                 auditEvent.transmittedBytes = transmittedBytes;
@@ -491,6 +504,15 @@ public class AuditEvent {
 
         public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
             auditEvent.preparedStmtId = preparedStmtId;
+            return this;
+        }
+
+        public AuditEventBuilder setQueriedRelations(List<String> queriedRelations) {
+            if (queriedRelations == null || queriedRelations.isEmpty()) {
+                auditEvent.queriedRelations = Collections.emptyList();
+            } else {
+                auditEvent.queriedRelations = Collections.unmodifiableList(new ArrayList<>(queriedRelations));
+            }
             return this;
         }
 

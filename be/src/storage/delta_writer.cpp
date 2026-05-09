@@ -698,7 +698,11 @@ Status DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
-    RETURN_IF_ERROR(_mem_table->prepare());
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+        pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+    }
+    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
     _write_buffer_size = _mem_table->write_buffer_size();
     return Status::OK();
@@ -752,20 +756,6 @@ Status DeltaWriter::commit() {
     }
     auto rowset_build_ts = watch.elapsed_time();
 
-    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
-        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) &&
-        !_storage_engine->update_manager()->update_state_mem_tracker()->any_limit_exceeded()) {
-        Status st;
-        FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
-                load_pk_preload, st, PK_PRELOAD_FP_ACTION(_opt.txn_id, _opt.tablet_id),
-                _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get()));
-        if (!st.ok() && !st.is_uninitialized()) {
-            _set_state(kAborted, st);
-            return st;
-        }
-    }
-    auto pk_preload_ts = watch.elapsed_time();
-
     if (_replicate_token != nullptr) {
         if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {
             LOG(WARNING) << st;
@@ -802,15 +792,13 @@ Status DeltaWriter::commit() {
     ADD_COUNTER_RELAXED(_stats.commit_time_ns, watch.elapsed_time());
     ADD_COUNTER_RELAXED(_stats.commit_wait_flush_time_ns, flush_ts);
     ADD_COUNTER_RELAXED(_stats.commit_rowset_build_time_ns, rowset_build_ts - flush_ts);
-    ADD_COUNTER_RELAXED(_stats.commit_pk_preload_time_ns, pk_preload_ts - rowset_build_ts);
-    ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - pk_preload_ts);
+    ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - rowset_build_ts);
     ADD_COUNTER_RELAXED(_stats.commit_txn_commit_time_ns, commit_txn_ts - replica_ts);
     StarRocksMetrics::instance()->delta_writer_commit_task_total.increment(1);
     StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
-    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment((pk_preload_ts - rowset_build_ts) /
-                                                                                1000);
-    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_preload_ts) / 1000);
+    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - rowset_build_ts) /
+                                                                                  1000);
     StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment((commit_txn_ts - replica_ts) / 1000);
     return Status::OK();
 }
@@ -887,12 +875,13 @@ Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
-    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     MutableColumnPtr upserts = std::move(col);
 
     std::vector<uint64_t> rss_rowids;

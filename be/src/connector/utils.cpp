@@ -14,6 +14,8 @@
 
 #include "connector/utils.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "arrow/util/decimal.h"
 #include "column/chunk_extra_data.h"
 #include "column/column.h"
@@ -22,10 +24,35 @@
 #include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "util/compression/compression_utils.h"
 #include "util/integer_util.h"
 #include "util/url_coding.h"
 
 namespace starrocks::connector {
+
+std::string normalize_format_name(std::string format) {
+    boost::algorithm::trim(format);
+    boost::algorithm::to_lower(format);
+    boost::algorithm::trim_left_if(format, boost::is_any_of("."));
+
+    // Strip any accidental extension chain like "csv.gz.csv" to keep format canonical.
+    auto dot = boost::algorithm::find_first(format, ".");
+    if (!dot.empty()) {
+        format.erase(dot.begin(), format.end());
+    }
+    return format;
+}
+
+StatusOr<std::string> build_canonical_file_suffix(const std::string& format, TCompressionType::type compression_type) {
+    if (format.empty()) {
+        return Status::InvalidArgument("file format is empty");
+    }
+    if (format == formats::CSV) {
+        ASSIGN_OR_RETURN(std::string compression_suffix, CompressionUtils::to_compression_ext(compression_type));
+        return format + compression_suffix;
+    }
+    return format;
+}
 
 StatusOr<std::string> HiveUtils::make_partition_name(
         const std::vector<std::string>& column_names,
@@ -136,24 +163,33 @@ StatusOr<std::string> HiveUtils::iceberg_column_value(const TypeDescriptor& type
         timeinfo.tm_year = year - 1900;
         timeinfo.tm_mon = month - 1;
         char buffer[10];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m", &timeinfo);
-        value = std::string(buffer);
+        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m", &timeinfo);
+        if (written == 0) {
+            return Status::InternalError("strftime overflow formatting iceberg month partition");
+        }
+        value = std::string(buffer, written);
     } else if (transform_expr == "day") {
         const auto days_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(days_from_epoch) * 86400;
         std::tm tm_utc;
         gmtime_r(&seconds, &tm_utc);
         char buffer[20];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm_utc);
-        value = std::string(buffer);
+        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm_utc);
+        if (written == 0) {
+            return Status::InternalError("strftime overflow formatting iceberg day partition");
+        }
+        value = std::string(buffer, written);
     } else if (transform_expr == "hour") {
         const auto hours_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(hours_from_epoch) * 3600;
         std::tm tm_utc;
         gmtime_r(&seconds, &tm_utc);
         char buffer[20];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", &tm_utc);
-        value = std::string(buffer);
+        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", &tm_utc);
+        if (written == 0) {
+            return Status::InternalError("strftime overflow formatting iceberg hour partition");
+        }
+        value = std::string(buffer, written);
     } else if (transform_expr.compare(0, 8, "truncate") == 0) {
         ASSIGN_OR_RETURN(value, column_value(type_desc, column, idx));
     } else if (transform_expr.compare(0, 6, "bucket") == 0) {

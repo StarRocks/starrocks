@@ -23,6 +23,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -239,20 +240,21 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // update new rowset meta
     for (const auto& f : writer->segments()) {
+        uint32_t segment_idx = new_rowset_metadata->segments_size();
         new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
         auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
-    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
+    _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
 
@@ -280,14 +282,19 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
-    // create writer
+    // Pass the new tablet schema directly so DeltaWriter does not consult TableSchemaService.
+    // The schema-service lookup is keyed by (db_id, table_id, schema_id) and falls back to an
+    // FE RPC; without catalog ids on the alter task the RPC goes out with zeros and FE replies
+    // "Table not exist". The schema-change task already holds the exact schema, so we sidestep
+    // the lookup entirely.
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_manager)
                                           .set_tablet_id(_new_tablet.id())
                                           .set_txn_id(_txn_id)
                                           .set_max_buffer_size(_max_buffer_size)
                                           .set_mem_tracker(CurrentThread::mem_tracker())
-                                          .set_schema_id(_new_tablet_schema->id()) // TODO: pass tablet schema directly
+                                          .set_schema_id(_new_tablet_schema->id())
+                                          .set_tablet_schema(_new_tablet_schema)
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
@@ -329,13 +336,14 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(writer->finish());
 
     for (const auto& f : writer->segments()) {
+        uint32_t segment_idx = new_rowset_metadata->segments_size();
         new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
         auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -343,7 +351,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
-    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
+    _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
 

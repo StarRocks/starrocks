@@ -144,4 +144,8 @@ int64_t LocalPrimaryKeyRecover::tablet_id() {
     return _tablet->tablet_id();
 }
 
+StatusOr<PrimaryKeyEncodingType> LocalPrimaryKeyRecover::primary_key_encoding_type() const {
+    return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+}
+
 } // namespace starrocks

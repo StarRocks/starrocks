@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.IntegerType;
 
@@ -45,7 +46,7 @@ public class RollbackToSnapshotProcedure extends IcebergTableProcedure {
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         if (args.size() != 1) {
             throw new StarRocksConnectorException("invalid args. rollback snapshot must contain `snapshot id`");
         }
@@ -57,5 +58,6 @@ public class RollbackToSnapshotProcedure extends IcebergTableProcedure {
                         new StarRocksConnectorException("invalid argument type for %s, expected BIGINT", SNAPSHOT_ID));
 
         context.transaction().manageSnapshots().rollbackTo(snapshotId).commit();
+        return null;
     }
 }

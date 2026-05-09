@@ -213,4 +213,15 @@ public class LakeMaterializedView extends MaterializedView {
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
         return Lists.newArrayList();
     }
+
+    public boolean isFastSchemaEvolutionV2() {
+        return tableProperty.isCloudNativeFastSchemaEvolutionV2();
+    }
+
+    public void setFastSchemaEvolutionV2(boolean enabled) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                Boolean.valueOf(enabled).toString());
+        tableProperty.buildCloudNativeFastSchemaEvolutionV2();
+    }
 }

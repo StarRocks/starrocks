@@ -28,12 +28,10 @@ displayed_sidebar: docs
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 and later | 8    | 2.11,2.12 |
 
 > **NOTICE**
 >
@@ -42,6 +40,25 @@ displayed_sidebar: docs
 ## Release notes
 
 ### 1.2
+
+#### 1.2.14
+
+Release date: February 11, 2026
+
+##### Features
+
+- Supports Merge Commit. [#474](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/474)
+
+##### Improvements
+
+- Supports setting `sink.buffer-flush.interval-ms` to lower than 1 second. [#475](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/475)
+- Supports configurable transaction Publish timeout. [#480](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/480)
+
+##### Bug Fixes
+
+The following issues have been fixed:
+
+- Fix CVE-2023-2976 by upgrading guava version to `32.0.1-jre`. [#467](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/467)
 
 #### 1.2.12
 

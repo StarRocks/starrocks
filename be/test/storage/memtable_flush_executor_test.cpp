@@ -274,7 +274,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
     const string path = "./MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-    ASSERT_TRUE(mem_table->prepare().ok());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
 
     std::vector<DataDir*> data_dirs = {nullptr, nullptr};
@@ -305,7 +305,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
     const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-    ASSERT_TRUE(mem_table->prepare().ok());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
 
     std::vector<DataDir*> data_dirs = {nullptr, nullptr};
@@ -419,7 +419,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSlotIdx) {
     for (int i = 0; i < 3; i++) {
         auto mem_table =
                 make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-        ASSERT_TRUE(mem_table->prepare().ok());
+        ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
 
         auto pchunk = gen_chunk(*_slots, n);
         vector<uint32_t> indexes;
@@ -466,7 +466,7 @@ TEST_F(MemTableFlushExecutorTest, testWaitForTimeout) {
 
     const size_t n = 2000;
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-    ASSERT_TRUE(mem_table->prepare().ok());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
 
     auto pchunk = gen_chunk(*_slots, n);
     vector<uint32_t> indexes;
@@ -522,7 +522,7 @@ TEST_F(MemTableFlushExecutorTest, testParallelMemtableFinalize) {
 
     const size_t n = 2000;
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-    ASSERT_TRUE(mem_table->prepare().ok());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
 
     auto pchunk = gen_chunk(*_slots, n);
     vector<uint32_t> indexes;
@@ -559,7 +559,7 @@ TEST_F(MemTableFlushExecutorTest, testFinalizeIdempotent) {
 
     const size_t n = 1000;
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-    ASSERT_TRUE(mem_table->prepare().ok());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
 
     auto pchunk = gen_chunk(*_slots, n);
     vector<uint32_t> indexes;

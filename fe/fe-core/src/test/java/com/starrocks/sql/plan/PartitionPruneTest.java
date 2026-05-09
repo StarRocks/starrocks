@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
@@ -54,6 +55,24 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "PARTITION p202004 VALUES [('2020-01-01'), ('2020-04-01')),\n"
                 + "PARTITION p202007 VALUES [('2020-04-01'), ('2020-07-01')),\n"
                 + "PARTITION p202012 VALUES [('2020-07-01'), ('2020-12-01')))\n"
+                + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
+                + "PROPERTIES (\n"
+                + "\"replication_num\" = \"1\",\n"
+                + "\"in_memory\" = \"false\"\n"
+                + ");");
+
+        starRocksAssert.withTable("CREATE TABLE `ptest_case` (\n"
+                + "  `k1` int(11) NOT NULL COMMENT \"\",\n"
+                + "  `d2` date    NULL COMMENT \"\",\n"
+                + "  `v1` int(11) NULL COMMENT \"\"\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(`k1`, `d2`)\n"
+                + "COMMENT \"OLAP\"\n"
+                + "PARTITION BY RANGE(`d2`)\n"
+                + "(PARTITION P202001 VALUES [('0000-01-01'), ('2020-01-01')),\n"
+                + "PARTITION P202004 VALUES [('2020-01-01'), ('2020-04-01')),\n"
+                + "PARTITION P202007 VALUES [('2020-04-01'), ('2020-07-01')),\n"
+                + "PARTITION P202012 VALUES [('2020-07-01'), ('2020-12-01')))\n"
                 + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
                 + "PROPERTIES (\n"
                 + "\"replication_num\" = \"1\",\n"
@@ -237,6 +256,13 @@ public class PartitionPruneTest extends PlanTestBase {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=0/4");
+    }
+
+    @Test
+    public void testPartitionClauseCaseInsensitive() throws Exception {
+        String sql = "select * from ptest_case partition(p202007)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "partitions=1/4");
     }
 
     private static Pair<ScalarOperator, LogicalScanOperator> buildConjunctAndScan(String sql) throws Exception {
@@ -593,7 +619,7 @@ public class PartitionPruneTest extends PlanTestBase {
     public void testMinMaxRangePartitionPruneWithEmptyPartition() throws Exception {
         UtFrameUtils.mockDML();
         starRocksAssert.withTable("CREATE TABLE `t4_range_minmax` (\n" +
-                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `dt` datetime NULL COMMENT \"\",\n" +
                 "    `id` int(11) NULL COMMENT \"\",\n" +
                 "    `name` varchar(65533) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -608,10 +634,150 @@ public class PartitionPruneTest extends PlanTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
         starRocksAssert.getCtx().executeSql("insert into t4_range_minmax values('2025-04-29', 1, 'bar')");
+        try {
+            FeConstants.runningUnitTest = false;
+            starRocksAssert.getTable("test", "t4_range_minmax")
+                    .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
+            starRocksAssert.getTable("test", "t4_range_minmax")
+                    .getPartition("p20250428").getDefaultPhysicalPartition().setDataVersion(1);
+            starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
+        } finally {
+            FeConstants.runningUnitTest = true;
+        }
+    }
+
+    @Test
+    public void testMinMaxRangePartitionPruneWithDateTruncPartition() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_expr_range_minmax` (\n" +
+                "    `dt` datetime NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx().executeSql("insert into t4_expr_range_minmax values('2025-04-29', 1, 'bar')");
         FeConstants.runningUnitTest = false;
-        starRocksAssert.getTable("test", "t4_range_minmax")
-                .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
-        starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
+        starRocksAssert.getTable("test", "t4_expr_range_minmax")
+                .getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME)
+                .getDefaultPhysicalPartition()
+                // after `alter table t4_expr_range_minmax modify column `id` varchar(11)`,
+                // visible version of shadow partition will increase
+                .updateVisibleVersion(2);
+        // min(dt) should not be affected by shadow partition
+        starRocksAssert.query("select min(dt) from t4_expr_range_minmax").explainContains("partitions=1/2");
+        FeConstants.runningUnitTest = true;
+
+    }
+
+    @Test
+    public void testMinMaxConstantWithRangePartition() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_range_minmax2` (\n" +
+                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "    PARTITION p20250428 VALUES [(\"2025-04-28\"), (\"2025-04-29\")),\n" +
+                "    PARTITION p20250429 VALUES [(\"2025-04-29\"), (\"2025-04-30\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx().executeSql("insert into t4_range_minmax2 partition(p20250429) values('2025-04-29', 1, 'bar')");
+        FeConstants.runningUnitTest = false;
+        starRocksAssert.query("select min(dt) from t4_range_minmax2")
+                .explainContains("     constant exprs: \n         '2025-04-29'\n");
+        FeConstants.runningUnitTest = true;
+
+    }
+
+    @Test
+    public void testMinMaxConstantWithDateTruncPartition() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_expr_range_minmax` (\n" +
+                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx()
+                .executeSql("insert into t4_expr_range_minmax partition(p20250429) values('2025-04-29', 1, 'bar')");
+        FeConstants.runningUnitTest = false;
+        // there are 2 partitions: p20250428 and p20250429, p20250428 is empty
+        starRocksAssert.query("select min(dt) from t4_expr_range_minmax")
+                .explainContains("     constant exprs: \n         '2025-04-29'\n");
+        starRocksAssert.dropTable("t4_expr_range_minmax");
+        FeConstants.runningUnitTest = true;
+
+    }
+
+    @Test
+    public void testMinMaxConstantWithDateTruncPartition2() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_expr_range_minmax` (\n" +
+                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY date_trunc('month', `dt`)(\n" +
+                " START (\"2025-04-01\") END (\"2025-06-01\") EVERY (INTERVAL 1 MONTH)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx().executeSql("insert into t4_expr_range_minmax values('2025-04-29', 1, 'bar')");
+        FeConstants.runningUnitTest = false;
+        starRocksAssert.getTable("test", "t4_expr_range_minmax")
+                .getPartition("p202505").getDefaultPhysicalPartition().updateVisibleVersion(1);
+        // month partition should not produce constant result
+        starRocksAssert.query("select min(dt), max(dt) from t4_expr_range_minmax").explainContains("partitions=1/2");
+        FeConstants.runningUnitTest = true;
+        starRocksAssert.dropTable("t4_expr_range_minmax");
+
+    }
+
+    @Test
+    public void testMinMaxConstantWithDateTruncPartition3() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_expr_range_minmax` (\n" +
+                "    `dt` datetime NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx()
+                .executeSql("insert into t4_expr_range_minmax partition(p20250429) values('2025-04-29', 1, 'bar')");
+        FeConstants.runningUnitTest = false;
+        // datetime partition column should not produce constant result
+        starRocksAssert.query("select min(dt), max(dt) from t4_expr_range_minmax").explainContains("partitions=1/2");
+        starRocksAssert.dropTable("t4_expr_range_minmax");
         FeConstants.runningUnitTest = true;
 
     }

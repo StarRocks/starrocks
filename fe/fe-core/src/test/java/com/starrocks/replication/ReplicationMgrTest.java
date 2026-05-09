@@ -73,6 +73,7 @@ public class ReplicationMgrTest {
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_DATA);
+        GlobalStateMgr.getCurrentState().getPublishVersionDaemon().setStop();
         starRocksAssert = AnalyzeTestUtil.starRocksAssert;
 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");

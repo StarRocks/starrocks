@@ -30,6 +30,75 @@
 
 namespace starrocks::lake {
 
+// Produce a Datum holding the minimum value for the given logical type.
+static StatusOr<Datum> datum_from_type_min(LogicalType type) {
+    switch (type) {
+    case TYPE_BOOLEAN: {
+        bool v;
+        get_type_info(TYPE_BOOLEAN)->set_to_min(&v);
+        Datum d;
+        d.set_int8(v);
+        return d;
+    }
+    case TYPE_TINYINT: {
+        int8_t v{};
+        get_type_info(TYPE_TINYINT)->set_to_min(&v);
+        Datum d;
+        d.set_int8(v);
+        return d;
+    }
+    case TYPE_SMALLINT: {
+        int16_t v{};
+        get_type_info(TYPE_SMALLINT)->set_to_min(&v);
+        Datum d;
+        d.set_int16(v);
+        return d;
+    }
+    case TYPE_INT: {
+        int32_t v{};
+        get_type_info(TYPE_INT)->set_to_min(&v);
+        Datum d;
+        d.set_int32(v);
+        return d;
+    }
+    case TYPE_BIGINT: {
+        int64_t v{};
+        get_type_info(TYPE_BIGINT)->set_to_min(&v);
+        Datum d;
+        d.set_int64(v);
+        return d;
+    }
+    case TYPE_LARGEINT: {
+        int128_t v{};
+        get_type_info(TYPE_LARGEINT)->set_to_min(&v);
+        Datum d;
+        d.set_int128(v);
+        return d;
+    }
+    case TYPE_DATE: {
+        int32_t v{};
+        get_type_info(TYPE_DATE)->set_to_min(&v);
+        Datum d;
+        d.set_int32(v);
+        return d;
+    }
+    case TYPE_DATETIME: {
+        int64_t v{};
+        get_type_info(TYPE_DATETIME)->set_to_min(&v);
+        Datum d;
+        d.set_int64(v);
+        return d;
+    }
+    case TYPE_VARCHAR: {
+        Datum d;
+        d.set_slice(Slice("", 0));
+        return d;
+    }
+    default:
+        return Status::NotSupported(fmt::format("unsupported type for PK min datum: {}", type));
+    }
+}
+
 Status TabletRangeHelper::_validate_tablet_range(const TabletRangePB& tablet_range_pb) {
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         return Status::OK();
@@ -146,11 +215,18 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
             RETURN_IF_ERROR(DatumVariant::from_proto(tuple.values(i), &datum, &type_desc));
             const bool is_nullable = tablet_schema->column(idx).is_nullable();
             if (!is_nullable && datum.is_null()) {
-                return Status::InvalidArgument("Non-nullable primary key contains NULL in tablet range");
+                // PK columns are non-nullable, so a NULL variant in the range boundary
+                // can only represent a MIN sentinel (FE maps MIN → NULL_VALUE).
+                // Fill with the per-type minimum value for correct PK encoding.
+                ASSIGN_OR_RETURN(datum, datum_from_type_min(type_desc.type));
+                auto column = ColumnHelper::create_column(type_desc, false);
+                column->append_datum(datum);
+                chunk->append_column(std::move(column), (SlotId)idx);
+            } else {
+                auto column = ColumnHelper::create_column(type_desc, is_nullable);
+                column->append_datum(datum);
+                chunk->append_column(std::move(column), (SlotId)idx);
             }
-            auto column = ColumnHelper::create_column(type_desc, is_nullable);
-            column->append_datum(datum);
-            chunk->append_column(std::move(column), (SlotId)idx);
         }
 
         std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -159,8 +235,12 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
         }
         auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
         MutableColumnPtr pk_column;
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
+        RETURN_IF(pk_encoding_type != PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2,
+                  Status::InvalidArgument(
+                          "Big-endian encoding is required for range-distribution table in share data mode"));
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), pk_encoding_type);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -194,15 +274,17 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
 
             if (t_val.__isset.value) {
                 pb_val->set_value(t_val.value);
-            } else {
-                return Status::InvalidArgument("TVariant value is required");
+            } else if (!t_val.__isset.variant_type || t_val.variant_type == TVariantType::NORMAL_VALUE) {
+                return Status::InvalidArgument("TVariant value is required for NORMAL_VALUE variant");
             }
 
-            if (t_val.__isset.variant_type) {
-                pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
-            } else {
+            if (!t_val.__isset.variant_type) {
                 return Status::InvalidArgument("TVariant variant_type is required");
             }
+            if (t_val.variant_type == TVariantType::MINIMUM || t_val.variant_type == TVariantType::MAXIMUM) {
+                return Status::InvalidArgument("MINIMUM/MAXIMUM variant is not supported in tablet range");
+            }
+            pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
         }
         return Status::OK();
     };

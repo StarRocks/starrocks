@@ -68,6 +68,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.BackendResourceStat;
+import com.starrocks.thrift.TBinaryEncodingFormat;
+import com.starrocks.thrift.TBinaryEncodingLevel;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -92,11 +94,14 @@ import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
+import static com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
 
@@ -119,6 +124,71 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
         }
         SETTER_MAP = builder.build();
+    }
+
+    public enum BinaryEncodingFormat {
+        RAW("raw", TBinaryEncodingFormat.RAW),
+        HEX("hex", TBinaryEncodingFormat.HEX),
+        BASE64("base64", TBinaryEncodingFormat.BASE64);
+
+        private final String sessionValue;
+        private final TBinaryEncodingFormat thriftValue;
+
+        BinaryEncodingFormat(String sessionValue, TBinaryEncodingFormat thriftValue) {
+            this.sessionValue = sessionValue;
+            this.thriftValue = thriftValue;
+        }
+
+        public String sessionValue() {
+            return sessionValue;
+        }
+
+        public TBinaryEncodingFormat thriftValue() {
+            return thriftValue;
+        }
+
+        public static BinaryEncodingFormat fromString(String value) {
+            for (BinaryEncodingFormat format : values()) {
+                if (format.sessionValue.equalsIgnoreCase(value)) {
+                    return format;
+                }
+            }
+            String legalValues = Joiner.on(", ").join(
+                    Arrays.stream(values()).map(BinaryEncodingFormat::sessionValue).collect(Collectors.toList()));
+            throw new IllegalArgumentException("Legal values of binary_encoding_format are " + legalValues);
+        }
+    }
+
+    public enum BinaryEncodingLevel {
+        ALL("all", TBinaryEncodingLevel.ALL),
+        NESTED("nested", TBinaryEncodingLevel.NESTED);
+
+        private final String sessionValue;
+        private final TBinaryEncodingLevel thriftValue;
+
+        BinaryEncodingLevel(String sessionValue, TBinaryEncodingLevel thriftValue) {
+            this.sessionValue = sessionValue;
+            this.thriftValue = thriftValue;
+        }
+
+        public String sessionValue() {
+            return sessionValue;
+        }
+
+        public TBinaryEncodingLevel thriftValue() {
+            return thriftValue;
+        }
+
+        public static BinaryEncodingLevel fromString(String value) {
+            for (BinaryEncodingLevel level : values()) {
+                if (level.sessionValue.equalsIgnoreCase(value)) {
+                    return level;
+                }
+            }
+            String legalValues = Joiner.on(", ").join(
+                    Arrays.stream(values()).map(BinaryEncodingLevel::sessionValue).collect(Collectors.toList()));
+            throw new IllegalArgumentException("Legal values of binary_encoding_level are " + legalValues);
+        }
     }
 
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
@@ -170,6 +240,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
+    public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -191,8 +263,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SQL_TRANSACTION = "enable_sql_transaction";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
-    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
-    public static final String AUTHENTICATION_POLICY = "authentication_policy"; 
+    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin";
+    public static final String AUTHENTICATION_POLICY = "authentication_policy";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -228,6 +300,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String INSERT_MAX_FILTER_RATIO = "insert_max_filter_ratio";
     public static final String INSERT_TIMEOUT = "insert_timeout";
     public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
+    public static final String ENABLE_CACHE_UDAF = "enable_cache_udaf";
     public static final String ENABLE_SPILL = "enable_spill";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
@@ -326,6 +399,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKIP_PAGE_CACHE = "skip_page_cache";
 
     public static final String SKIP_BLACK_LIST = "skip_black_list";
+
+    /**
+     * Policy for selecting a backup compute node when the tablet's primary worker cannot be used in shared-data mode.
+     */
+    public static final String BLACKLIST_BACKUP_ROUTING = "blacklist_backup_routing";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -702,6 +780,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE =
+            "enable_iceberg_compaction_with_row_lineage";
     public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
     public static final String EXCHANGE_HASH_FUNCTION_VERSION = "exchange_hash_function_version";
 
@@ -737,6 +818,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String OPTIMIZE_DISTINCT_AGG_OVER_FRAMED_WINDOW =
             "optimize_distinct_agg_over_framed_window";
+
+    public static final String CUSTOM_SESSION_NAME = "custom_session_name";
+    public static final int CUSTOM_SESSION_NAME_MAX_LENGTH = 64;
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -875,6 +959,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
     public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
     public static final String DATA_SKEW_ROW_PERCENTAGE_THRESHOLD = "data_skew_row_percentage_threshold";
+    public static final String ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED =
+            "enable_force_group_by_skew_eliminate_when_skewed";
     public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
@@ -1064,6 +1150,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
 
+    /**
+     * When true, EXPLAIN output may include extended sections (e.g. query queue info at COSTS/VERBOSE level).
+     * Extensible for future explain-related features. Default false to preserve original explain output.
+     */
+    public static final String ENABLE_EXTENDED_EXPLAIN = "enable_extended_explain";
+
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
@@ -1071,12 +1163,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
 
-    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
-    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
-
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
 
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
+
+    public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
+    public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1162,8 +1254,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * used for test
-     * Determines whether to enable gather fragment locality optimization. When enabled, 
-     * gather fragments will be assigned to the same node as other fragments if all 
+     * Determines whether to enable gather fragment locality optimization. When enabled,
+     * gather fragments will be assigned to the same node as other fragments if all
      * other fragments' instances are on the same node.
      */
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
@@ -1177,6 +1269,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = SKIP_BLACK_LIST)
     private boolean skipBlackList = false;
+
+    @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -1238,9 +1333,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
 
+    @VariableMgr.VarAttr(name = BINARY_ENCODING_FORMAT)
+    private String binaryEncodingFormat = BinaryEncodingFormat.HEX.sessionValue();
+
+    @VariableMgr.VarAttr(name = BINARY_ENCODING_LEVEL)
+    private String binaryEncodingLevel = BinaryEncodingLevel.NESTED.sessionValue();
+
     // Toggle ANSI color in explain output
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
     private boolean colorExplainOutput = true;
+
+    // When true, EXPLAIN may include extended sections (e.g. query queue info). Extensible for other features.
+    @VariableMgr.VarAttr(name = ENABLE_EXTENDED_EXPLAIN)
+    private boolean enableExtendedExplain = false;
 
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
@@ -1302,9 +1407,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DEFAULT_TMP_STORAGE_ENGINE)
     private String defaultTmpStorageEngine = "InnoDB";
     @VariableMgr.VarAttr(name = DEFAULT_AUTHENTICATION_PLUGIN)
-    private String defaultAuthenticationPlugin = "mysql_native_password"; 
+    private String defaultAuthenticationPlugin = "mysql_native_password";
     @VariableMgr.VarAttr(name = AUTHENTICATION_POLICY)
-    private String authenticationPolicy = "*,,"; 
+    private String authenticationPolicy = "*,,";
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
@@ -1540,6 +1645,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = INSERT_TIMEOUT)
     private int insertTimeoutS = 14400;
+
+    @VariableMgr.VarAttr(name = ENABLE_CACHE_UDAF)
+    private boolean enableCacheUdaf = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
@@ -2224,6 +2332,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return splitTopNAggLimit;
     }
 
+    public void setEnableSplitTopNAgg(boolean enableSplitTopNAgg) {
+        this.enableSplitTopNAgg = enableSplitTopNAgg;
+    }
+
     public void setEnableDistinctAggOverWindow(boolean value) {
         this.enableDistinctAggOverWindow = value;
     }
@@ -2253,17 +2365,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
-    
+
     @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
     private boolean enablePredicateColLateMaterialize = true;
 
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
-
-    @VarAttr(name = ARROW_FLIGHT_PROXY)
-    private String arrowFlightProxy = "";
-    @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
-    private boolean arrowFlightProxyEnabled = true;
 
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
@@ -2547,6 +2654,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorSinkCompressionCodec;
     }
 
+    public void setConnectorSinkCompressionCodec(String connectorSinkCompressionCodec) {
+        this.connectorSinkCompressionCodec = connectorSinkCompressionCodec;
+    }
+
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)
     private long connectorSinkTargetMaxFileSize = 1024L * 1024 * 1024;
 
@@ -2806,6 +2917,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DATA_SKEW_ROW_PERCENTAGE_THRESHOLD)
     private double dataSkewRowPercentageThreshold = 0.2;
 
+    @VariableMgr.VarAttr(name = ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED)
+    private boolean enableForceGroupBySkewEliminateWhenSkewed = false;
+
     @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
     private boolean enableSplitWindowSkewToUnion = false;
 
@@ -2922,6 +3036,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
+
+    // The percentage of rows that need to be contained in MCVs so that MCV propagation through operators is enabled
+    // while losing bucket information. Lowering this threshold can lead to worse plans.
+    @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double mcvRowPercentagePropagationThreshold = 0.5;
 
     // To set ANN tuning parameters for user.
     // Since the session variables does not support map variables,
@@ -3183,6 +3302,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
+    @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
+    private boolean enableIcebergCompactionWithRowLineage = true;
+
     @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
     private boolean enablePlanSerializeConcurrently = true;
 
@@ -3288,6 +3410,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
     private String customQueryId = "";
 
+    @VarAttr(name = CUSTOM_SESSION_NAME, flag = VariableMgr.SESSION_ONLY)
+    private String customSessionName = "";
+
     @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
     private boolean enableRewriteUnnestBitmapToArray = true;
 
@@ -3367,6 +3492,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public double getDataSkewRowPercentageThreshold() {
         return dataSkewRowPercentageThreshold;
+    }
+
+    public void setEnableForceGroupBySkewEliminateWhenSkewed(boolean enableForceGroupBySkewEliminateWhenSkewed) {
+        this.enableForceGroupBySkewEliminateWhenSkewed = enableForceGroupBySkewEliminateWhenSkewed;
+    }
+
+    public boolean isEnableForceGroupBySkewEliminateWhenSkewed() {
+        return enableForceGroupBySkewEliminateWhenSkewed;
     }
 
     public boolean isEnableSplitWindowSkewToUnion() {
@@ -3513,6 +3646,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return skipBlackList;
     }
 
+    public void setBlacklistBackupRouting(String blacklistBackupRouting) {
+        BlacklistBackupRoutingPolicy result =
+                Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(BlacklistBackupRoutingPolicy.values());
+            throw new IllegalArgumentException("Legal values of " + BLACKLIST_BACKUP_ROUTING + " are " + legalValues);
+        }
+        this.blacklistBackupRouting = StringUtils.upperCase(blacklistBackupRouting);
+    }
+
+    public BlacklistBackupRoutingPolicy getBlacklistBackupRoutingPolicy() {
+        return Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting))
+                .or(BlacklistBackupRoutingPolicy.getDefault());
+    }
+
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
     }
@@ -3648,6 +3798,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getColorExplainOutput() {
         return colorExplainOutput;
+    }
+
+    public boolean isEnableExtendedExplain() {
+        return enableExtendedExplain;
+    }
+
+    public void setEnableExtendedExplain(boolean enableExtendedExplain) {
+        this.enableExtendedExplain = enableExtendedExplain;
     }
 
     public boolean isEnableLoadProfile() {
@@ -3873,6 +4031,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setInsertTimeoutS(int insertTimeoutS) {
         this.insertTimeoutS = insertTimeoutS;
+    }
+
+    public boolean isEnableCacheUdaf() {
+        return enableCacheUdaf;
+    }
+
+    public void setEnableCacheUdaf(boolean enableCacheUdaf) {
+        this.enableCacheUdaf = enableCacheUdaf;
     }
 
     public boolean isEnableSpill() {
@@ -4444,6 +4610,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableAsyncProfile() {
         return enableAsyncProfile;
+    }
+
+    public String getBinaryEncodingFormat() {
+        return binaryEncodingFormat;
+    }
+
+    public void setBinaryEncodingFormat(String binaryEncodingFormat) {
+        BinaryEncodingFormat format = binaryEncodingFormat == null ? BinaryEncodingFormat.HEX
+                : BinaryEncodingFormat.fromString(binaryEncodingFormat);
+        this.binaryEncodingFormat = format.sessionValue();
+    }
+
+    public String getBinaryEncodingLevel() {
+        return binaryEncodingLevel;
+    }
+
+    public void setBinaryEncodingLevel(String binaryEncodingLevel) {
+        BinaryEncodingLevel level = binaryEncodingLevel == null ? BinaryEncodingLevel.NESTED
+                : BinaryEncodingLevel.fromString(binaryEncodingLevel);
+        this.binaryEncodingLevel = level.sessionValue();
     }
 
     public void setEnableAsyncProfile(boolean enableAsyncProfile) {
@@ -5443,6 +5629,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
+    public boolean getEnableIcebergCompactionWithRowLineage() {
+        return enableIcebergCompactionWithRowLineage;
+    }
+
+    public void setEnableIcebergCompactionWithRowLineage(boolean enableIcebergCompactionWithRowLineage) {
+        this.enableIcebergCompactionWithRowLineage = enableIcebergCompactionWithRowLineage;
+    }
+
     public boolean getEnablePlanSerializeConcurrently() {
         return enablePlanSerializeConcurrently;
     }
@@ -5577,6 +5771,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCustomQueryId(String customQueryId) {
         this.customQueryId = customQueryId;
+    }
+
+    public String getCustomSessionName() {
+        return customSessionName;
+    }
+
+    public void setCustomSessionName(String customSessionName) {
+        this.customSessionName = customSessionName;
     }
 
     public int getConnectorRemoteFileAsyncQueueSize() {
@@ -5873,7 +6075,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
-    
+
     public void setEnablePredicateColLateMaterialize(boolean enablePredicateColLateMaterialize) {
         this.enablePredicateColLateMaterialize = enablePredicateColLateMaterialize;
     }
@@ -5890,22 +6092,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.pushDownHeavyExprs;
     }
 
-    public void setArrowFlightProxy(String proxy) {
-        this.arrowFlightProxy = proxy;
-    }
-
-    public String getArrowFlightProxy() {
-        return this.arrowFlightProxy;
-    }
-
-    public void setArrowFlightProxyEnabled(boolean flag) {
-        this.arrowFlightProxyEnabled = flag;
-    }
-
-    public boolean isArrowFlightProxyEnabled() {
-        return this.arrowFlightProxyEnabled;
-    }
-
     public void setEnablePreAggTopNPushDown(int  topNPushDownAggMode) {
         this.topNPushDownAggMode = topNPushDownAggMode;
     }
@@ -5920,6 +6106,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLabeledColumnStatisticOutput() {
         return this.enableLabeledColumnStatisticOutput;
+    }
+
+    public void setMcvRowPercentagePropagationThreshold(double mcvRowPercentagePropagationThreshold) {
+        this.mcvRowPercentagePropagationThreshold = mcvRowPercentagePropagationThreshold;
+    }
+
+    public double getMcvRowPercentagePropagationThreshold() {
+        return mcvRowPercentagePropagationThreshold;
     }
 
     // Serialize to thrift object
@@ -5939,6 +6133,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         }
         tResult.setEnable_profile(enableProfile);
+        tResult.setBinary_encoding_format(BinaryEncodingFormat.fromString(binaryEncodingFormat).thriftValue());
+        tResult.setBinary_encoding_level(BinaryEncodingLevel.fromString(binaryEncodingLevel).thriftValue());
         tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
         tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
@@ -5955,7 +6151,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
             tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
         }
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO)) {
+            tResult.setError_for_division_by_zero(true);
+        }
 
+        tResult.setEnable_cache_udaf(enableCacheUdaf);
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
             TSpillOptions spillOptions = new TSpillOptions();

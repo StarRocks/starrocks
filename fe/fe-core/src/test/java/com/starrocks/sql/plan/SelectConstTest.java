@@ -90,6 +90,22 @@ public class SelectConstTest extends PlanTestBase {
     }
 
     @Test
+    public void testMultipleInformationFunctions() throws Exception {
+        // Before the fix, different InformationFunction instances were considered equal
+        // due to missing equalsWithoutChild()/hashCode() overrides, causing them to be
+        // deduplicated into the same output slot.
+        assertPlanContains("select current_user, current_group",
+                "<slot 2> : '\\'root\\'@\\'%\\''",
+                "<slot 3> : 'NONE'");
+        assertPlanContains("select current_user, current_role",
+                "<slot 2> : '\\'root\\'@\\'%\\''",
+                "<slot 3> : 'root'");
+        assertPlanContains("select database(), catalog()",
+                "<slot 2> : 'test'",
+                "<slot 3> : 'default_catalog'");
+    }
+
+    @Test
     public void testFromUnixtime() throws Exception {
         assertPlanContains("select from_unixtime(10)", "'1970-01-01 08:00:10'");
         assertPlanContains("select from_unixtime(1024)", "'1970-01-01 08:17:04'");
@@ -201,6 +217,28 @@ public class SelectConstTest extends PlanTestBase {
                 "78883632:00:00");
         assertFeExecuteResult("select timediff('1000-01-01 01:01:01.000001', '9999-01-02 01:01:01.123456')",
                 "-78883632:00:01");
+    }
+
+    @Test
+    public void testRegexpReplaceExecuteInFe() throws Exception {
+        String[][] cases = new String[][] {
+                {"select regexp_replace('a b c', ' ', '-')", "a-b-c", "<slot 2> : 'a-b-c'"},
+                {"select regexp_replace('a sdfwe b c', '( )', '<\\\\1>')", "a< >sdfwe< >b< >c",
+                        "<slot 2> : 'a< >sdfwe< >b< >c'"},
+                {"select regexp_replace('a b c', '(b)', '<\\\\1>')", "a <b> c", "<slot 2> : 'a <b> c'"},
+                {"select regexp_replace('xxxx', 'xx', '-')", "--", "<slot 2> : '--'"},
+                {"select regexp_replace('xxxx', 'xxx', '-')", "-x", "<slot 2> : '-x'"},
+                {"select regexp_replace('abcd', 'bc', 'xx')", "axxd", "<slot 2> : 'axxd'"},
+                {"select regexp_replace('abc中文def', '[\\\\p{Han}]+', 'xx')", "abcxxdef",
+                        "<slot 2> : 'abcxxdef'"},
+                {"select regexp_replace('ab\\ncd', 'a.*d', 'xx')", "xx", "<slot 2> : 'xx'"}
+        };
+
+        for (String[] tc : cases) {
+            String sql = tc[0];
+            assertPlanContains(sql, tc[2]);
+            assertFeExecuteResult(sql, tc[1]);
+        }
     }
 
     @Test

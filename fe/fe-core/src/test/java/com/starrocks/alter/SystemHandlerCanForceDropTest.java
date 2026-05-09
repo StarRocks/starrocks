@@ -29,9 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Test class for SystemHandler.canForceDrop method
@@ -304,9 +302,9 @@ public class SystemHandlerCanForceDropTest {
             }
             
             @Mock
-            public Map<Long, Replica> getReplicas(long tabletId) {
-                Map<Long, Replica> replicas = new HashMap<>();
-                replicas.put(1L, new Replica(1L, 1L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
+            public List<Replica> getReplicasByTabletId(long tabletId) {
+                List<Replica> replicas = new ArrayList<>();
+                replicas.add(new Replica(1L, 1L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
                 return replicas;
             }
         };
@@ -320,9 +318,9 @@ public class SystemHandlerCanForceDropTest {
             }
             
             @Mock
-            public Map<Long, Replica> getReplicas(long tabletId) {
-                Map<Long, Replica> replicas = new HashMap<>();
-                replicas.put(1L, new Replica(1L, 1L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
+            public List<Replica> getReplicasByTabletId(long tabletId) {
+                List<Replica> replicas = new ArrayList<>();
+                replicas.add(new Replica(1L, 1L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
                 return replicas;
             }
         };
@@ -336,10 +334,10 @@ public class SystemHandlerCanForceDropTest {
             }
             
             @Mock
-            public Map<Long, Replica> getReplicas(long tabletId) {
-                Map<Long, Replica> replicas = new HashMap<>();
+            public List<Replica> getReplicasByTabletId(long tabletId) {
+                List<Replica> replicas = new ArrayList<>();
                 // Create replica on non-retained backend (backendId = 2)
-                replicas.put(1L, new Replica(1L, 2L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
+                replicas.add(new Replica(1L, 2L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
                 return replicas;
             }
         };
@@ -353,11 +351,11 @@ public class SystemHandlerCanForceDropTest {
             }
             
             @Mock
-            public Map<Long, Replica> getReplicas(long tabletId) {
-                Map<Long, Replica> replicas = new HashMap<>();
+            public List<Replica> getReplicasByTabletId(long tabletId) {
+                List<Replica> replicas = new ArrayList<>();
                 // Create replica on retained backend (backendId = 1)
-                replicas.put(1L, new Replica(1L, 1L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
-                replicas.put(2L, new Replica(2L, 2L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
+                replicas.add(new Replica(1L, 1L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
+                replicas.add(new Replica(2L, 2L, 1L, 1, 0L, 0L, Replica.ReplicaState.NORMAL, -1L, 1L));
                 return replicas;
             }
         };

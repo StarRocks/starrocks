@@ -76,7 +76,8 @@ public class TypeParser {
         } else if (context.CHAR() != null) {
             return TypeFactory.createCharType(length);
         } else if (context.SIGNED() != null) {
-            return IntegerType.INT;
+            // Align with MySQL semantics: CAST(... AS SIGNED) returns a 64-bit signed integer (BIGINT).
+            return IntegerType.BIGINT;
         } else if (context.HLL() != null) {
             return HLLType.HLL;
         } else if (context.BINARY() != null || context.VARBINARY() != null) {

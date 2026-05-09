@@ -24,8 +24,8 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -68,6 +68,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
 
+    // HikariCP connection lifecycle constants
+    static final long MINIMUM_MAX_LIFETIME_MS = 30_000L;
+    static final long DEFAULT_MAX_LIFETIME_MS = 300_000L;
+    static final long MINIMUM_KEEPALIVE_TIME_MS = 30_000L;
+    static final long KEEPALIVE_DISABLED = 0L;
+
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
     }
@@ -91,7 +97,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
             schemaResolver = new ClickhouseSchemaResolver(properties);
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
-            schemaResolver = new OracleSchemaResolver();
+            schemaResolver = new OracleSchemaResolver(properties);
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
             schemaResolver = new SqlServerSchemaResolver();
         } else {
@@ -151,7 +157,37 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
         config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
+
+        applyLifecycleConfig(config);
+
         return new HikariDataSource(config);
+    }
+
+    // Package-visible for testing
+    static void applyLifecycleConfig(HikariConfig config) {
+        long maxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        if (maxLifetime < MINIMUM_MAX_LIFETIME_MS) {
+            LOG.warn("jdbc_connection_max_lifetime_ms={} is below minimum {}, using default {}",
+                    maxLifetime, MINIMUM_MAX_LIFETIME_MS, DEFAULT_MAX_LIFETIME_MS);
+            maxLifetime = DEFAULT_MAX_LIFETIME_MS;
+        }
+        config.setMaxLifetime(maxLifetime);
+
+        // keepaliveTime: 0 = disabled (HikariCP semantics), otherwise must be >= 30s and < maxLifetime
+        long keepaliveTime = Config.jdbc_connection_keepalive_time_ms;
+        if (keepaliveTime != KEEPALIVE_DISABLED) {
+            if (keepaliveTime < MINIMUM_KEEPALIVE_TIME_MS || keepaliveTime >= maxLifetime) {
+                LOG.warn("jdbc_connection_keepalive_time_ms={} is invalid (must be 0 or >= {} and < {}), disabling keepalive",
+                        keepaliveTime, MINIMUM_KEEPALIVE_TIME_MS, maxLifetime);
+                keepaliveTime = KEEPALIVE_DISABLED;
+            }
+        }
+        config.setKeepaliveTime(keepaliveTime);
+
+        // Connection leak detection (for debugging)
+        if (Config.jdbc_connection_leak_detection_threshold_ms > 0) {
+            config.setLeakDetectionThreshold(Config.jdbc_connection_leak_detection_threshold_ms);
+        }
     }
 
     public Connection getConnection() throws SQLException {
@@ -256,8 +292,12 @@ public class JDBCMetadata implements ConnectorMetadata {
 
                         Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
                                 j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
-                        return schemaResolver.getTable(tableId, tblName, fullSchema,
+                        Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
+                        if (table != null) {
+                            table.setComment(schemaResolver.getTableComment(connection, dbName, tblName));
+                        }
+                        return table;
                     } catch (SQLException | DdlException e) {
                         LOG.warn("get table for JDBC catalog fail!", e);
                         return null;
@@ -266,7 +306,8 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {

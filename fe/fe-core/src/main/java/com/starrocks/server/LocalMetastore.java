@@ -56,6 +56,8 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -83,6 +85,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -176,6 +179,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
@@ -1063,10 +1067,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                  List<PartitionDesc> partitionDescs)
             throws DdlException {
         if (colocateTableIndex.isColocateTable(olapTable.getId())) {
-            String fullGroupName = db.getId() + "_" + olapTable.getColocateGroup();
+            String fullGroupName = ColocateTableIndex.getFullGroupName(db.getId(), olapTable.getColocateGroup());
             ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
             Preconditions.checkNotNull(groupSchema);
-            groupSchema.checkDistribution(olapTable.getIdToColumn(), distributionInfo);
+            groupSchema.checkDistribution(olapTable, distributionInfo);
             for (PartitionDesc partitionDesc : partitionDescs) {
                 groupSchema.checkReplicationNum(partitionDesc.getReplicationNum());
             }
@@ -1294,25 +1298,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     private void cleanExistPartitionNameSet(Set<String> existPartitionNameSet,
                                             HashMap<String, Set<Long>> partitionNameToTabletSet) {
+        Set<Long> allTabletIds = Sets.newHashSet();
         for (String partitionName : existPartitionNameSet) {
             Set<Long> existPartitionTabletSet = partitionNameToTabletSet.get(partitionName);
             if (existPartitionTabletSet == null) {
                 // should not happen
                 continue;
             }
-            for (Long tabletId : existPartitionTabletSet) {
-                // createPartitionWithIndices create duplicate tablet that if not exists scenario
-                // so here need to clean up those created tablets which partition already exists from invert index
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
-            }
+            // createPartitionWithIndices create duplicate tablet that if not exists scenario
+            // so here need to clean up those created tablets which partition already exists from invert index
+            allTabletIds.addAll(existPartitionTabletSet);
         }
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(allTabletIds);
     }
 
     private void cleanTabletIdSetForAll(Set<Long> tabletIdSetForAll) {
         // Cleanup of shards for LakeTable is taken care by ShardDeleter
-        for (Long tabletId : tabletIdSetForAll) {
-            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
-        }
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(tabletIdSetForAll);
     }
 
     private void checkPartitionNum(OlapTable olapTable) throws DdlException {
@@ -1383,7 +1385,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             Set<String> existPartitionNameSet = Sets.newHashSet();
             try {
-                olapTable = checkTable(db, tableName);
+                // Use ID-based lookup to ensure we get the same table we locked,
+                // avoiding lock leak when a concurrent SWAP changes the name-to-table mapping.
+                olapTable = checkTable(db, olapTable.getId());
                 existPartitionNameSet = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable,
                         partitionDescs);
                 if (existPartitionNameSet.size() > 0) {
@@ -1702,6 +1706,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
                                  int numSubPartition, ComputeResource computeResource) throws DdlException {
+        addSubPartitions(db, table, partition, numSubPartition, 0, computeResource);
+    }
+
+    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+                                 int numSubPartition, int bucketNum,
+                                 ComputeResource computeResource) throws DdlException {
         try {
             table.setAutomaticBucketing(true);
 
@@ -1719,6 +1729,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
+            }
+
+            // Set user-specified bucket number on the copied table (thread-safe, no impact on the original table)
+            if (bucketNum > 0) {
+                copiedTable.setMutableBucketNum(bucketNum);
             }
 
             Preconditions.checkNotNull(olapTable);
@@ -1764,6 +1779,88 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } finally {
             table.setAutomaticBucketing(false);
         }
+    }
+
+    /**
+     * Add a new physical partition to an existing logical partition.
+     * This method is designed to be called via admin execute script for cross-cluster
+     * data replication scenarios.
+     *
+     *
+     * @param dbName        the database name
+     * @param tableName     the table name
+     * @param partitionName the partition name (null for non-partitioned table)
+     * @param bucketNum     the bucket number (0 to use system default)
+     */
+    public void addPhysicalPartition(String dbName, String tableName, String partitionName,
+                                     int bucketNum) throws DdlException {
+        Database db = getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Database '" + dbName + "' does not exist");
+        }
+
+        Table table = getTable(dbName, tableName);
+        if (table == null) {
+            throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
+        }
+
+        if (!(table instanceof OlapTable)) {
+            throw new DdlException("Only OLAP table supports adding physical partition");
+        }
+
+        OlapTable olapTable = (OlapTable) table;
+
+        // Check if the table uses random distribution
+        if (olapTable.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new DdlException("Only random distribution table supports adding physical partition");
+        }
+
+        Partition partition;
+        if (partitionName == null) {
+            // For non-partitioned table, get the single partition
+            if (olapTable.getPartitionInfo().isPartitioned()) {
+                throw new DdlException("Partition name must be specified for partitioned table");
+            }
+            Collection<Partition> partitions = olapTable.getPartitions();
+            if (partitions.size() != 1) {
+                throw new DdlException("Non-partitioned table should have exactly one partition");
+            }
+            partition = partitions.iterator().next();
+        } else {
+            partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException("Partition '" + partitionName + "' does not exist");
+            }
+        }
+
+        // Validate distribution type at partition level
+        if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new DdlException("Only random distribution table supports adding physical partition");
+        }
+
+        if (bucketNum < 0) {
+            throw new DdlException("Bucket number must be non-negative");
+        }
+
+        if (bucketNum > Config.max_bucket_number_per_partition) {
+            throw new DdlException("Bucket number exceeds maximum allowed: " + Config.max_bucket_number_per_partition);
+        }
+
+        // Get compute resource
+        long warehouseId = ConnectContext.get() != null
+                ? ConnectContext.get().getCurrentWarehouseId()
+                : WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+
+        // Add one physical partition with the specified bucket number.
+        // The bucketNum is set on the shadow-copied table inside addSubPartitions,
+        // so there is no concurrent safety issue with the original table object.
+        addSubPartitions(db, olapTable, partition, 1, bucketNum, computeResource);
+
+        LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
+                partition.getName(), olapTable.getName());
     }
 
     public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
@@ -2136,13 +2233,25 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
-        int bucketNum = distributionInfo.getBucketNum();
         final long warehouseId = computeResource.getWarehouseId();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
         }
+
+        // For range colocate tables: create tablets aligned with colocate ranges,
+        // each tablet belonging to both SPREAD and PACK shard groups.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (distributionInfo instanceof RangeDistributionInfo
+                && colocateTableIndex.isColocateTable(table.getId())) {
+            createRangeColocateLakeTablets(table, physicalPartitionId, shardGroupId,
+                    index, tabletMeta, tabletIdSet, computeResource, properties,
+                    colocateTableIndex.getGroup(table.getId()));
+            return;
+        }
+
+        int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
@@ -2155,6 +2264,39 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             index.addTablet(tablet, tabletMeta);
             tabletIdSet.add(tablet.getId());
+        }
+    }
+
+    private void createRangeColocateLakeTablets(OlapTable table, long physicalPartitionId,
+                                                 long spreadShardGroupId, MaterializedIndex index,
+                                                 TabletMeta tabletMeta, Set<Long> tabletIdSet,
+                                                 ComputeResource computeResource,
+                                                 Map<String, String> properties,
+                                                 ColocateTableIndex.GroupId groupId)
+            throws DdlException {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRangeMgr()
+                .getColocateRanges(groupId.grpId);
+        if (colocateRanges.isEmpty()) {
+            throw new DdlException("Colocate range metadata is missing for group '"
+                    + table.getColocateGroup() + "', cannot create range colocate tablets");
+        }
+        int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+
+        for (ColocateRange colocateRange : colocateRanges) {
+            List<Long> shardIds = stateMgr.getStarOSAgent().createShards(1,
+                    table.getPartitionFilePathInfo(physicalPartitionId),
+                    table.getPartitionFileCacheInfo(physicalPartitionId),
+                    List.of(spreadShardGroupId, colocateRange.getShardGroupId()),
+                    null, properties, computeResource);
+
+            long shardId = shardIds.get(0);
+            TabletRange tabletRange = new TabletRange(ColocateRangeUtils.expandToFullSortKey(
+                    colocateRange.getRange(), sortKeyColumns, colocateColumnCount));
+            LakeTablet tablet = new LakeTablet(shardId, tabletRange);
+            index.addTablet(tablet, tabletMeta);
+            tabletIdSet.add(shardId);
         }
     }
 
@@ -2892,9 +3034,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * including SchemaChangeHandler and RollupHandler
      */
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+    public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
         alterJobExecutor.process(stmt, context);
+        return null;
     }
 
     /**
@@ -3155,6 +3298,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         materializedView.setIndexMeta(baseIndexMetaId, mvName, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
 
+        // Assign unique ids for columns after index meta is set up, so that getBaseSchema() returns
+        // the actual columns. The initUniqueId() call in the MV constructor is a no-op because it
+        // runs before setIndexMeta(), when getBaseSchema() returns an empty list.
+        materializedView.initUniqueId();
+
         // validate hint
         Map<String, String> optHints = Maps.newHashMap();
         if (stmt.isExistQueryScopeHint()) {
@@ -3175,6 +3323,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         boolean isNonPartitioned = partitionInfo.isUnPartitioned();
         DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
         String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+        // PropertyAnalyzer.analyzeMVProperties calls addTableToGroup(false) internally,
+        // which handles non-lake MVs and range colocate lake MVs (before tablet creation).
         PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
                 stmt.getPartitionByExprToAdjustExprMap());
         final long warehouseId = materializedView.getWarehouseId();
@@ -3196,9 +3346,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 materializedView.setPartitionExprMaps(partitionExprMaps);
             }
 
-            // shared-data mv's colocation info must be updated after tablet creation
+            // Hash colocate lake tables: set up MetaGroup after tablet creation
             if (StringUtils.isNotEmpty(colocateGroup)) {
-                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup, true /* expectLakeTable */);
+                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
+                        true /* afterTabletCreation */);
             }
 
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().prepareMaintenanceWork(stmt, materializedView);
@@ -4772,9 +4923,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     private void deleteUselessTablets(Set<Long> tabletIdSet) {
         // create partition failed, remove all newly created tablets.
         // For lakeTable, shards cleanup is taken care in ShardDeleter.
-        for (Long tabletId : tabletIdSet) {
-            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
-        }
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(tabletIdSet);
     }
 
     protected void truncateTableInternal(long dbId, OlapTable olapTable, List<Partition> newPartitions,
@@ -4798,17 +4947,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         // remove the tablets in old partitions
-        for (Tablet tablet : oldTablets) {
-            TabletInvertedIndex index = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-            index.deleteTablet(tablet.getId());
-            // Ensure that only the leader records truncate information.
-            // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
-            // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
-            // solution.
-            if (!isReplay) {
-                index.markTabletForceDelete(tablet);
-            }
+        TabletInvertedIndex index = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        // Mark force-delete before removing tablet meta so that ReportHandler always
+        // sees the force flag when it discovers a missing tablet during the race window.
+        // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
+        // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
+        // solution.
+        if (!isReplay) {
+            index.markTabletsForceDelete(oldTablets);
         }
+        List<Long> oldTabletIds = oldTablets.stream().map(Tablet::getId).collect(Collectors.toList());
+        index.deleteTablets(oldTabletIds);
     }
 
     public void replayTruncateTable(TruncateTableInfo info) {
@@ -5162,14 +5311,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        List<Long> tabletIds = new ArrayList<>();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
-                    long tabletId = tablet.getId();
-                    invertedIndex.deleteTablet(tabletId);
+                    tabletIds.add(tablet.getId());
                 }
             }
         }
+        invertedIndex.deleteTablets(tabletIds);
     }
 
     // for test only
@@ -5279,9 +5429,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     .flatMap(p -> p.stream()).collect(Collectors.toList()), computeResource);
         } catch (Exception e) {
             // create partition failed, remove all newly created tablets
-            for (Long tabletId : tabletIdSet) {
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
-            }
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(tabletIdSet);
             LOG.warn("create partitions from partitions failed.", e);
             throw new RuntimeException("create partitions failed: " + e.getMessage(), e);
         }

@@ -101,7 +101,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok()) {
         std::string err_msg = fmt::format("create column for primary key encoder failed, tablet_id: {}", _tablet_id);
         DCHECK(false) << err_msg;
         return Status::InternalError(err_msg);
@@ -134,8 +134,8 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    TRY_CATCH_BAD_ALLOC(
-                            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+                    TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
                 }
             }
         }
@@ -561,8 +561,10 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
     for (const auto& each_chunk : segid_to_chunk) {
         new_deletes[rowset_id + each_chunk.first] = {};
         MutableColumnPtr pk_column;
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get());
+        RETURN_IF_ERROR(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
         RETURN_IF_ERROR(index.upsert(rowset_id + each_chunk.first, 0, *pk_column, &new_deletes));
     }
     RETURN_IF_ERROR(index.commit(&index_meta));
@@ -579,7 +581,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
 Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& stat, Rowset* rowset) {
     rowset->rowset_meta()->set_num_rows(stat.num_rows_written);
     rowset->rowset_meta()->set_total_row_size(stat.total_row_size);
-    rowset->rowset_meta()->set_total_disk_size(stat.total_data_size);
+    rowset->rowset_meta()->set_total_disk_size(stat.total_data_size + stat.total_index_size);
     rowset->rowset_meta()->set_data_disk_size(stat.total_data_size);
     rowset->rowset_meta()->set_index_disk_size(stat.total_index_size);
     rowset->rowset_meta()->set_empty(stat.num_rows_written == 0);
@@ -636,9 +638,9 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             padding_char_columns(schema, tablet_schema, chunk_ptr.get());
             RETURN_IF_ERROR(writer->append_chunk(*chunk_ptr));
             RETURN_IF_ERROR(writer->finalize(&segment_file_size, &index_size, &footer_position));
-            // update statisic
+            // update statistic
             stat.num_segment++;
-            stat.total_data_size += segment_file_size;
+            stat.total_data_size += static_cast<int64_t>(segment_file_size) - static_cast<int64_t>(index_size);
             stat.total_index_size += index_size;
             stat.num_rows_written += static_cast<int64_t>(chunk_ptr->num_rows());
             stat.total_row_size += static_cast<int64_t>(chunk_ptr->bytes_usage());

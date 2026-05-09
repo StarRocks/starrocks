@@ -14,10 +14,34 @@
 
 #include "runtime/current_thread.h"
 
+#include "common/logging.h"
 #include "runtime/exec_env.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
+
+// The TP-relative offset of tls_thread_status, written once at startup by
+// init_tls_thread_status_offset().  External profilers (e.g. query_cpu_profile.py)
+// can read this global from /proc/PID/mem to obtain the exact TLS offset without
+// needing ELF arithmetic or DTV walking.
+// Value is 0 until init_tls_thread_status_offset() is called.
+volatile int64_t g_tls_thread_status_tpoff = 0;
+
+void init_tls_thread_status_offset() {
+    // __builtin_thread_pointer() returns the thread-pointer register value:
+    //   x86-64 : FS base  (TLS Variant II, negative offsets)
+    //   aarch64: TPIDR_EL0 (TLS Variant I,  positive offsets)
+    // Supported by GCC >= 4.8 and Clang >= 3.5 on both architectures.
+    auto tp = reinterpret_cast<uintptr_t>(__builtin_thread_pointer());
+    if (tp != 0) {
+        g_tls_thread_status_tpoff =
+                static_cast<int64_t>(reinterpret_cast<uintptr_t>(&tls_thread_status)) - static_cast<int64_t>(tp);
+    }
+
+    LOG(INFO) << "[eBPF] tls_thread_status tpoff=" << g_tls_thread_status_tpoff
+              << " query_id_offset=" << CurrentThread::query_id_offset()
+              << " module_type_offset=" << CurrentThread::module_type_offset();
+}
 
 CurrentThread::~CurrentThread() {
     if (!GlobalEnv::is_init()) {

@@ -1067,8 +1067,11 @@ void PrimaryIndex::_set_schema(const Schema& pk_schema) {
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
         sort_key_idxes[i] = i;
     }
-    _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes);
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+    // _enc_pk_type is only use for share nothing mode now and share nothing always
+    // use ORIGINAL encoding type to keep the original way
+    _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes,
+                                                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
@@ -1228,7 +1231,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+        RETURN_IF_ERROR(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
@@ -1264,8 +1268,9 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                     const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        TRY_CATCH_BAD_ALLOC(
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+                        TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                                      pk_column.get(),
+                                                                      PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
@@ -1482,6 +1487,27 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
         return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), stat, ctx);
     } else {
         return Status::NotSupported("upsert with thread pool is not supported in memory primary index");
+    }
+}
+
+Status PrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
+                            ParallelPublishContext* ctx) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+        const uint32_t n = pks.size();
+        DCHECK_EQ(rowids.size(), n);
+        DCHECK(ctx != nullptr && !ctx->slots.empty());
+        auto slot = ctx->slots.back().get();
+        slot->values.reserve(n);
+        slot->old_values.resize(n, NullIndexValue);
+        const Slice* vkeys = build_persistent_keys(pks, _key_size, 0, n, &slot->keys);
+        RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, n, &slot->values));
+        RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
+                                                  reinterpret_cast<IndexValue*>(slot->old_values.data()), stat, ctx));
+        return Status::OK();
+    } else {
+        return Status::NotSupported("rowids upsert with thread pool is not supported in memory primary index");
     }
 }
 

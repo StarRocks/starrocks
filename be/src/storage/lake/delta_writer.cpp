@@ -18,6 +18,7 @@
 #include <fmt/format.h>
 
 #include <memory>
+#include <shared_mutex>
 #include <utility>
 
 #include "agent/master_info.h"
@@ -107,7 +108,8 @@ public:
                              int64_t schema_id, const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
-                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn)
+                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
+                             std::shared_ptr<const TabletSchema> tablet_schema)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -118,6 +120,7 @@ public:
               _mem_tracker(mem_tracker),
               _slots(slots),
               _max_buffer_size(max_buffer_size > 0 ? max_buffer_size : config::write_buffer_size),
+              _tablet_schema(std::move(tablet_schema)),
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
@@ -142,6 +145,12 @@ public:
     Status finish();
 
     void close();
+
+    void flush_and_wait();
+
+    void release_resources();
+
+    void cancel(const Status& st);
 
     [[nodiscard]] int64_t partition_id() const { return _partition_id; }
 
@@ -193,6 +202,14 @@ public:
         return _flush_token == nullptr ? nullptr : &(_flush_token->get_stats());
     }
 
+    // Thread-safe accessor: returns a shared_ptr copy so the caller keeps the
+    // FlushToken alive while reading its stats, preventing use-after-free when
+    // close() concurrently resets _flush_token.
+    std::shared_ptr<FlushToken> get_flush_token() const {
+        std::shared_lock l(_cancel_lock);
+        return _flush_token;
+    }
+
     bool has_spill_block() const;
 
     const DictColumnsValidMap* global_dict_columns_valid_info() const;
@@ -204,6 +221,8 @@ public:
     bool already_finished() const { return _already_finished; }
 
 private:
+    Status current_cancel_status() const;
+
     Status reset_memtable();
 
     Status fill_auto_increment_id(Chunk& chunk);
@@ -238,7 +257,7 @@ private:
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
-    std::unique_ptr<FlushToken> _flush_token;
+    std::shared_ptr<FlushToken> _flush_token;
 
     // The full list of columns defined
     std::shared_ptr<const TabletSchema> _tablet_schema;
@@ -302,7 +321,21 @@ private:
     // 2. After finish completes, txnlog is generated with all data files. Any subsequent write
     //    tasks will have their data discarded, resulting in data loss.
     bool _already_finished = false;
+
+    // The cancel status set by cancel(). Used to support fast cancel when transaction is aborted.
+    // Once set to a non-OK status, subsequent write/flush operations will fail quickly with this status.
+    // Protected by _cancel_lock. Read paths (write/flush_async) use shared_lock for minimal contention,
+    // while cancel() and close() use unique_lock for exclusive access.
+    Status _cancel_status;
+    mutable std::shared_mutex _cancel_lock;
 };
+
+Status DeltaWriterImpl::current_cancel_status() const {
+    // Shared lock keeps the write/flush/finish hot paths cheap while preserving synchronization
+    // with cancel()/close() updates to cancel state and flush token lifecycle.
+    std::shared_lock l(_cancel_lock);
+    return _cancel_status;
+}
 
 bool DeltaWriterImpl::is_immutable() const {
     return _is_immutable.load(std::memory_order_relaxed);
@@ -440,12 +473,23 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
     }
-    RETURN_IF_ERROR(_mem_table->prepare());
+
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        ASSIGN_OR_RETURN(pk_encoding_type, _tablet_schema->primary_key_encoding_type_or_error());
+    }
+    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
     _mem_table->set_write_buffer_row(_max_buffer_rows);
     return Status::OK();
 }
 
 inline Status DeltaWriterImpl::flush_async() {
+    // Fast-fail if writer has been cancelled.
+    auto cancel_st = current_cancel_status();
+    if (!cancel_st.ok()) {
+        return cancel_st;
+    }
+
     Status st;
     if (_mem_table != nullptr) {
         DeferOp defer([this] {
@@ -587,6 +631,12 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
+    // Fast-fail if writer has been cancelled.
+    auto cancel_st = current_cancel_status();
+    if (!cancel_st.ok()) {
+        return cancel_st;
+    }
+
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
@@ -695,6 +745,12 @@ Status DeltaWriterImpl::merge_blocks_to_segments() {
 }
 
 Status DeltaWriterImpl::finish() {
+    // Fast-fail cancelled writer before any schema/tablet writer initialization.
+    auto cancel_st = current_cancel_status();
+    if (!cancel_st.ok()) {
+        return cancel_st;
+    }
+
     _eos = true;
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
@@ -740,6 +796,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     table_schema_key->set_schema_id(_tablet_schema->id());
 
     for (const auto& f : _tablet_writer->segments()) {
+        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
         op_write->mutable_rowset()->add_segments(f.path);
         op_write->mutable_rowset()->add_segment_size(f.size.value());
         op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
@@ -747,9 +804,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
         }
         auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
     for (const auto& f : _tablet_writer->dels()) {
         op_write->add_dels(f.path);
@@ -768,17 +825,21 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
 
-    // We can support partial update with row mode to be used with condition update at the same time.
+    // Column-mode PCU combined with condition update requires the condition column to be part of
+    // the partial update column set: the handler compares old vs new values from the partial chunk
+    // itself and cannot read the new value otherwise.
     if (is_partial_update() && !_merge_condition.empty() &&
         (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
          _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
-        return Status::NotSupported("partial update with column mode and condition update at the same time");
+        if (_write_schema->field_index(_merge_condition) == static_cast<size_t>(-1)) {
+            return Status::NotSupported(fmt::format(
+                    "partial update with column mode requires merge_condition column '{}' to be included in the "
+                    "partial update column set",
+                    _merge_condition));
+        }
     }
 
     // handle partial update
-    // If there is bundle data file, we will skip preload pk state, because the bundle data file hasn't been
-    // flushed to storage yet.
-    bool skip_pk_preload = config::skip_pk_preload || op_write->rowset().bundle_file_offsets_size() > 0;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {
@@ -793,8 +854,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
-            } else {
-                skip_pk_preload = true;
             }
             // handle partial update
             op_write->mutable_txn_meta()->set_partial_update_mode(_partial_update_mode);
@@ -856,23 +915,20 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     ADD_COUNTER_RELAXED(_stats.finish_put_txn_log_time_ns, commit_txn_duration_ns);
     StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment(commit_txn_duration_ns /
                                                                                 NANOSECS_PER_USEC);
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
-        // preload update state here to minimaze the cost when publishing.
-        FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(load_pk_preload, (void)PK_PRELOAD_FP_ACTION(_txn_id, _tablet_id),
-                                              tablet.update_mgr()->preload_update_state(*txn_log, &tablet));
-    }
-    auto pk_preload_duration_ns = watch.elapsed_time() - put_txn_log_ts;
-    ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, pk_preload_duration_ns);
-    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
-                                                                                NANOSECS_PER_USEC);
     VLOG(2) << "txn_log: " << txn_log->DebugString();
 
     if (config::enable_tablet_write_log) {
         int64_t finish_time = UnixMillis();
+        int32_t sst_output_files = static_cast<int32_t>(_tablet_writer->ssts().size());
+        int64_t sst_output_bytes = 0;
+        for (const auto& sst : _tablet_writer->ssts()) {
+            sst_output_bytes += sst.size.value_or(0);
+        }
         TabletWriteLogManager::instance()->add_load_log(
                 get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
                 _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
-                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time);
+                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
+                sst_output_files, sst_output_bytes);
     }
 
     return txn_log;
@@ -880,7 +936,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
 
 Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
-
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < _write_schema->num_key_columns(); i++) {
@@ -888,12 +943,13 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_write_schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet_schema->primary_key_encoding_type_or_error());
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
-    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get(), pk_encoding_type);
     MutableColumns upserts;
     upserts.resize(1);
     upserts[0] = std::move(col);
@@ -947,27 +1003,68 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     return Status::OK();
 }
 
-void DeltaWriterImpl::close() {
+void DeltaWriterImpl::flush_and_wait() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    auto start_time = MonotonicNanos();
-    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
     if (_flush_token != nullptr) {
         auto st = _flush_token->wait();
         LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;
         VLOG(3) << "Tablet_id: " << tablet_id() << ", flush stats: " << _flush_token->get_stats();
     }
-
-    // Destruct variables manually for counting memory usage into |_mem_tracker|
     if (_tablet_writer != nullptr) {
         _tablet_writer->close();
     }
+}
+
+void DeltaWriterImpl::release_resources() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    // Destruct variables manually for counting memory usage into |_mem_tracker|
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
-    _flush_token.reset();
+    if (_load_spill_block_mgr != nullptr) {
+        // ignore the return status of clear_parent_path,
+        // because the spill blocks will be cleared by GC later.
+        (void)_load_spill_block_mgr->clear_parent_path();
+    }
+    {
+        // Take exclusive lock before resetting _flush_token to prevent race with cancel()
+        // and get_flush_token(), which may be accessing _flush_token concurrently.
+        std::unique_lock l(_cancel_lock);
+        _flush_token.reset();
+    }
     _tablet_schema.reset();
     _write_schema.reset();
     _merge_condition.clear();
+}
+
+void DeltaWriterImpl::close() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    auto start_time = MonotonicNanos();
+    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
+    flush_and_wait();
+    release_resources();
+}
+
+void DeltaWriterImpl::cancel(const Status& st) {
+    if (st.ok()) {
+        return;
+    }
+
+    {
+        std::unique_lock l(_cancel_lock);
+        if (!_cancel_status.ok()) {
+            return;
+        }
+        _cancel_status = st;
+        // Cancel the flush token under the lock to prevent race with close() which resets _flush_token.
+        // FlushToken::cancel() is lightweight (just sets a status flag), so holding the lock is fine.
+        if (_flush_token != nullptr) {
+            _flush_token->cancel(st);
+        }
+    }
+
+    LOG(INFO) << "Lake DeltaWriter cancelled. tablet_id=" << _tablet_id << ", txn_id=" << _txn_id
+              << ", status=" << st.message();
 }
 
 const std::vector<SegmentFileInfo>& DeltaWriterImpl::segments() const {
@@ -997,11 +1094,8 @@ int64_t DeltaWriterImpl::num_rows() const {
 }
 
 int64_t DeltaWriterImpl::queueing_memtable_num() const {
-    if (_flush_token != nullptr) {
-        return _flush_token->get_stats().queueing_memtable_num;
-    } else {
-        return 0;
-    }
+    auto token = get_flush_token();
+    return token ? token->get_stats().queueing_memtable_num.load() : 0;
 }
 
 //// DeltaWriter
@@ -1032,6 +1126,18 @@ Status DeltaWriter::finish() {
 void DeltaWriter::close() {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::close() in a bthread";
     _impl->close();
+}
+
+void DeltaWriter::flush_and_wait() {
+    _impl->flush_and_wait();
+}
+
+void DeltaWriter::release_resources() {
+    _impl->release_resources();
+}
+
+void DeltaWriter::cancel(const Status& st) {
+    _impl->cancel(st);
 }
 
 int64_t DeltaWriter::partition_id() const {
@@ -1109,6 +1215,10 @@ const FlushStatistic* DeltaWriter::get_flush_stats() const {
     return _impl->get_flush_stats();
 }
 
+std::shared_ptr<FlushToken> DeltaWriter::get_flush_token() const {
+    return _impl->get_flush_token();
+}
+
 bool DeltaWriter::has_spill_block() const {
     return _impl->has_spill_block();
 }
@@ -1161,11 +1271,15 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_schema_id == 0)) {
         return Status::InvalidArgument("schema_id not set");
     }
-    auto impl =
-            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size, _mem_tracker,
-                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
+    if (UNLIKELY(_tablet_schema != nullptr && _tablet_schema->id() != _schema_id)) {
+        return Status::InvalidArgument(
+                fmt::format("tablet_schema id {} mismatches schema_id {}", _tablet_schema->id(), _schema_id));
+    }
+    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                    _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size,
+                                    _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
+                                    _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
+                                    _global_dicts, _is_multi_statements_txn, _tablet_schema);
     return std::make_unique<DeltaWriter>(impl);
 }
 

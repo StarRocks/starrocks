@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.util.List;
@@ -44,5 +45,5 @@ public abstract class IcebergTableProcedure {
         return this.operation;
     }
 
-    public abstract void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args);
+    public abstract ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args);
 }

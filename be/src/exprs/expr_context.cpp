@@ -235,4 +235,7 @@ Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
     return Status::OK();
 }
 
+bool ExprContext::error_for_division_by_zero() const {
+    return _runtime_state != nullptr && _runtime_state->error_for_division_by_zero();
+}
 } // namespace starrocks

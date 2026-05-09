@@ -93,7 +93,6 @@ protected:
 };
 
 struct ConnectorChunkSinkContext {
-public:
     virtual ~ConnectorChunkSinkContext() = default;
 };
 

@@ -43,6 +43,14 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalDelta(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitLogicalVersion(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitLogicalLimit(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -183,6 +191,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalJDBCScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalCacheStatsScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
 

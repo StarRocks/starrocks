@@ -14,24 +14,38 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public abstract class ShowStmt extends StatementBase {
-    protected Predicate predicate;
+    protected Expr predicate;
     protected LimitElement limitElement;
     protected List<OrderByElement> orderByElements;
     protected List<OrderByPair> orderByPairs;
+
+    // version flag to indicate which part is implemented by self
+    // 1st bit: predicate
+    // 2nd bit: order by
+    // 3rd bit: limit
+    private short predicateOrderLimitVersion = 0;
 
     protected ShowStmt(NodePosition pos) {
         super(pos);
     }
 
-    public Predicate getPredicate() {
+    public void setPredicate(Expr predicate) {
+        this.predicate = predicate;
+    }
+
+    public Expr getPredicate() {
         return predicate;
+    }
+
+    public void setOrderByElements(List<OrderByElement> orderByElements) {
+        this.orderByElements = orderByElements;
     }
 
     public List<OrderByElement> getOrderByElements() {
@@ -46,8 +60,43 @@ public abstract class ShowStmt extends StatementBase {
         this.orderByPairs = orderByPairs;
     }
 
+    public void setLimitElement(LimitElement limitElement) {
+        this.limitElement = limitElement;
+    }
+
     public LimitElement getLimitElement() {
         return limitElement;
+    }
+
+    // some show stmt was implemented `where`/`order by`/`limit` by self, so need clean predicate to avoid conflict,
+    // and we can find these stmt by this function
+    // Todo: unify the implementation show stmt
+    public void markSelfPredicateOrderLimit(boolean isSelfPredicate, boolean isSelfOrderBy, boolean isSelfLimit) {
+        if (isSelfPredicate) {
+            predicateOrderLimitVersion |= 1;
+        }
+        if (isSelfOrderBy) {
+            predicateOrderLimitVersion |= 2;
+        }
+        if (isSelfLimit) {
+            predicateOrderLimitVersion |= 4;
+        }
+    }
+
+    public void markSelfPredicate() {
+        markSelfPredicateOrderLimit(true, false, false);
+    }
+
+    public boolean isSelfPredicate() {
+        return (predicateOrderLimitVersion & 1) != 0;
+    }
+
+    public boolean isSelfOrderBy() {
+        return (predicateOrderLimitVersion & 2) != 0;
+    }
+
+    public boolean isSelfLimit() {
+        return (predicateOrderLimitVersion & 4) != 0;
     }
 
     @Override

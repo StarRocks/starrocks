@@ -33,6 +33,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -102,7 +103,7 @@ public interface ConnectorMetadata {
      * @return a list of partition names
      */
     default List<String> listPartitionNames(String databaseName, String tableName,
-                                            ConnectorMetadatRequestContext requestContext) {
+                                            ConnectorMetadataRequestContext requestContext) {
         return Lists.newArrayList();
     }
 
@@ -210,6 +211,15 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Get partition info at a specific snapshot identified by the request context.
+     * Default implementation ignores the context and falls back to the live-snapshot variant.
+     */
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                              ConnectorMetadataRequestContext requestContext) {
+        return getPartitions(table, partitionNames);
+    }
+
+    /**
      * Get statistics for the table.
      *
      * @param session           optimizer context
@@ -295,10 +305,15 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                            ConnectContext context) {
+        finishSink(dbName, table, commitInfos, branch, extra);
+    }
+
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+    default ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 

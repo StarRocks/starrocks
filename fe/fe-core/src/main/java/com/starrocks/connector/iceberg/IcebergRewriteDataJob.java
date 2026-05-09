@@ -53,6 +53,7 @@ public class IcebergRewriteDataJob {
     private final boolean rewriteAll;
     private final long minFileSizeBytes;
     private final long batchSize;
+    private final boolean writeRowLineage;
     private final ConnectContext context;
     private final AlterTableStmt originAlterStmt;
     private IcebergRewriteStmt rewriteStmt;
@@ -62,6 +63,34 @@ public class IcebergRewriteDataJob {
     private long batchParallelism = 1;
     private StatementBase parsedStmt;
     private final ConcurrentLinkedQueue<FinishArgs> collected = new ConcurrentLinkedQueue<>();
+
+    public static class RewriteMetrics {
+        public static final RewriteMetrics EMPTY = new RewriteMetrics(0, 0, 0);
+
+        private final long rewrittenDataFilesCount;
+        private final long rewrittenDeleteFilesCount;
+        private final long addedDataFilesCount;
+
+        public RewriteMetrics(long rewrittenDataFilesCount, long rewrittenDeleteFilesCount,
+                              long addedDataFilesCount) {
+            this.rewrittenDataFilesCount = rewrittenDataFilesCount;
+            this.rewrittenDeleteFilesCount = rewrittenDeleteFilesCount;
+            this.addedDataFilesCount = addedDataFilesCount;
+        }
+
+        public long getRewrittenDataFilesCount() {
+            return rewrittenDataFilesCount;
+        }
+
+        public long getRewrittenDeleteFilesCount() {
+            return rewrittenDeleteFilesCount;
+        }
+
+        public long getAddedDataFilesCount() {
+            return addedDataFilesCount;
+        }
+    }
+
     public interface FinishSinkHandler {
         void finish(String catalog, String db, String table,
                 List<TSinkCommitInfo> commitInfos, String branch, Object extra) throws Exception;
@@ -114,6 +143,7 @@ public class IcebergRewriteDataJob {
                                  long minFileSizeBytes,
                                  long batchSize,
                                  long batchParallelism,
+                                 boolean writeRowLineage,
                                  ConnectContext context,
                                  AlterTableStmt stmt) {
         this.insertSql = insertSql;
@@ -121,6 +151,7 @@ public class IcebergRewriteDataJob {
         this.minFileSizeBytes = minFileSizeBytes;
         this.batchSize = batchSize;
         this.batchParallelism = batchParallelism;
+        this.writeRowLineage = writeRowLineage;
         this.context = context;
         this.originAlterStmt = stmt;
     }
@@ -130,8 +161,8 @@ public class IcebergRewriteDataJob {
                 .parse(insertSql, context.getSessionVariable())
                 .get(0);
 
-        this.rewriteStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-        this.execPlan = StatementPlanner.plan(parsedStmt, context);
+        this.rewriteStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage);
+        this.execPlan = StatementPlanner.plan(rewriteStmt, context);
         this.scanNodes = execPlan.getFragments().stream()
                 .flatMap(fragment -> fragment.collectScanNodes().values().stream())
                 .filter(scan -> scan instanceof IcebergScanNode && "IcebergScanNode".equals(scan.getPlanNodeName()))
@@ -186,10 +217,10 @@ public class IcebergRewriteDataJob {
         return context;
     }
 
-    public void execute() throws Exception {
+    public RewriteMetrics execute() throws Exception {
         if (scanNodes == null || scanNodes.isEmpty()) {
             LOG.info("No IcebergScanNode for empty table, rewrite data job execute skipped.");
-            return;
+            return RewriteMetrics.EMPTY;
         }
         if (rewriteStmt == null || execPlan == null || rewriteData == null) {
             throw new IllegalStateException("Must call prepare() before execute()");
@@ -207,16 +238,16 @@ public class IcebergRewriteDataJob {
                 futures.add(executorService.submit(() -> {
                     ConnectContext subCtx = buildSubConnectContext(context);
                     try (var scope = subCtx.bindScope()) {
-                        IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-                        ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
-
+                        IcebergRewriteStmt localStmt =
+                                new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage);
+                        ExecPlan localPlan = StatementPlanner.plan(localStmt, subCtx);
+        
                         List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
                                 .flatMap(f -> f.collectScanNodes().values().stream())
-                                .filter(s -> s instanceof IcebergScanNode &&
-                                        "IcebergScanNode".equals(s.getPlanNodeName()))
+                                .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
                                 .map(s -> (IcebergScanNode) s)
                                 .collect(Collectors.toList());
-
+        
                         if (localScanNodes.isEmpty()) {
                             LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
                             return null;
@@ -224,7 +255,7 @@ public class IcebergRewriteDataJob {
                         for (IcebergScanNode sn : localScanNodes) {
                             sn.rebuildScanRange(res);
                         }
-
+        
                         StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
                         if (context.getExecutor() != null) {
                             context.getExecutor().registerSubStmtExecutor(exec);
@@ -249,7 +280,7 @@ public class IcebergRewriteDataJob {
             }
 
             if (collected.size() == 0) {
-                return;
+                return RewriteMetrics.EMPTY;
             }
             IcebergSinkExtra extra = new IcebergSinkExtra();
             List<TSinkCommitInfo> faList = Lists.newArrayList();
@@ -261,7 +292,8 @@ public class IcebergRewriteDataJob {
             try {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(
                         collected.peek().getCatalog(), collected.peek().getDb(), collected.peek().getTable(),
-                        faList, collected.peek().getBranch(), extra);
+                        faList, collected.peek().getBranch(), extra, context);
+                return buildMetrics(faList, extra);
             } catch (Exception e) {
                 LOG.error("Failed to commit iceberg rewrite on [{}]", originAlterStmt.getTableName(), e);
                 throw new StarRocksConnectorException("Failed to commit iceberg rewrite", e);
@@ -275,5 +307,18 @@ public class IcebergRewriteDataJob {
         } finally {
             executorService.shutdownNow();
         }
+    }
+
+    private RewriteMetrics buildMetrics(List<TSinkCommitInfo> commitInfos, IcebergSinkExtra extra) {
+        long addedDataFilesCount = commitInfos.stream()
+                .map(TSinkCommitInfo::getIceberg_data_file)
+                .filter(Objects::nonNull)
+                .count();
+
+        long rewrittenDataFilesCount = extra.getScannedDataFiles().size();
+        long rewrittenDeleteFilesCount = extra.getAppliedDeleteFiles().size();
+
+        return new RewriteMetrics(rewrittenDataFilesCount, rewrittenDeleteFilesCount,
+                addedDataFilesCount);
     }
 }

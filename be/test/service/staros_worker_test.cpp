@@ -18,13 +18,18 @@
 #include <aws/core/Aws.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <grpcpp/grpcpp.h>
 #include <gtest/gtest.h>
+#include <manager.grpc.pb.h>
+#include <shard.pb.h>
 
 #include <condition_variable>
 #include <functional>
 
 #include "common/config.h"
 #include "common/shutdown_hook.h"
+#include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -230,6 +235,83 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     key2.reset();
 
     EXPECT_FALSE(worker->lookup_fs_cache(cache_key));
+}
+
+// Verify that a cache hit in retrieve_shard_info() does not trigger the fallback path
+// and therefore does not increment the fallback counters.
+TEST_F(StarOSWorkerTest, test_fallback_metric_not_incremented_on_cache_hit) {
+    auto* metrics = StarRocksMetrics::instance();
+    int64_t before_total = metrics->staros_shard_info_fallback_total.value();
+    int64_t before_failed = metrics->staros_shard_info_fallback_failed_total.value();
+
+    auto worker = std::make_unique<StarOSWorker>();
+    StarOSWorker::ShardInfo info;
+    info.id = 7;
+    ASSERT_TRUE(worker->add_shard(info).ok());
+
+    auto got = worker->retrieve_shard_info(7);
+    ASSERT_TRUE(got.ok());
+    EXPECT_EQ(7u, got.value().id);
+    // Cache hit -- neither counter should move.
+    EXPECT_EQ(before_total, metrics->staros_shard_info_fallback_total.value());
+    EXPECT_EQ(before_failed, metrics->staros_shard_info_fallback_failed_total.value());
+}
+
+// Mock starmgr gRPC service that returns an error for every GetShard request.
+class ErrorStarMgrService : public staros::StarManager::Service {
+public:
+    ::grpc::Status GetShard(::grpc::ServerContext* /*context*/, const staros::GetShardRequest* /*req*/,
+                            staros::GetShardResponse* /*reply*/) override {
+        return ::grpc::Status(::grpc::StatusCode::INTERNAL, "mock starmgr error");
+    }
+    ::grpc::Status WorkerHeartbeat(::grpc::ServerContext* /*context*/, const staros::WorkerHeartbeatRequest* /*req*/,
+                                   staros::WorkerHeartbeatResponse* /*reply*/) override {
+        return ::grpc::Status::OK;
+    }
+};
+
+TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) {
+    // Start a mock starmgr gRPC server on localhost that returns error for GetShard.
+    ErrorStarMgrService mock_service;
+    int port = 0;
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
+    builder.RegisterService(&mock_service);
+    auto server = builder.BuildAndStart();
+    ASSERT_NE(server, nullptr);
+    ASSERT_GT(port, 0);
+
+    // Save original g_starlet and set up a temporary one pointing at our mock.
+    // Use DeferOp to guarantee cleanup on all exit paths (including ASSERT_* failures).
+    auto orig_starlet = std::move(g_starlet);
+    DeferOp restore_starlet([&orig_starlet, &server] {
+        if (g_starlet) {
+            g_starlet->stop();
+        }
+        g_starlet = std::move(orig_starlet);
+        server->Shutdown();
+    });
+
+    auto worker = std::make_shared<StarOSWorker>();
+    g_starlet = std::make_unique<staros::starlet::Starlet>(worker);
+    staros::starlet::StarletConfig config;
+    config.rpc_port = 0;
+    config.heartbeat_interval = 10;
+    g_starlet->init(config);
+    g_starlet->start();
+    g_starlet->set_star_mgr_addr("127.0.0.1:" + std::to_string(port));
+    ASSERT_TRUE(g_starlet->is_ready());
+
+    auto* metrics = StarRocksMetrics::instance();
+    int64_t before_total = metrics->staros_shard_info_fallback_total.value();
+    int64_t before_failed = metrics->staros_shard_info_fallback_failed_total.value();
+
+    // Shard 99 is not in the local cache, so retrieve_shard_info triggers the real
+    // _fetch_shard_info_from_remote -> g_starlet->get_shard_info() -> mock starmgr -> error.
+    auto got = worker->retrieve_shard_info(99);
+    ASSERT_FALSE(got.ok());
+    EXPECT_EQ(before_total + 1, metrics->staros_shard_info_fallback_total.value());
+    EXPECT_EQ(before_failed + 1, metrics->staros_shard_info_fallback_failed_total.value());
 }
 
 } // namespace starrocks

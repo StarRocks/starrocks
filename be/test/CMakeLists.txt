@@ -33,6 +33,7 @@ set(EXEC_FILES
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
         ./common/cow_test.cpp
+        ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
@@ -66,15 +67,18 @@ set(EXEC_FILES
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/workgroup/pipeline_executor_set_test.cpp
+        ./exec/workgroup/pipeline_executor_set_manager_test.cpp
         ./exec/workgroup/work_group_manager_test.cpp
         ./exec/workgroup/mem_tracker_manager_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
+        ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
+        ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
@@ -83,6 +87,7 @@ set(EXEC_FILES
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
+        ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_spill_manager_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -113,6 +118,7 @@ set(EXEC_FILES
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
+        ./exec/cache_stats_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
@@ -262,6 +268,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/parquet_variant_test.cpp
         ./formats/parquet/parquet_pos_reader_test.cpp
+        ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
@@ -341,7 +348,7 @@ set(EXEC_FILES
         ./types/int256_test.cpp
         ./types/int256_arithmetic_test.cpp
         ./types/type_checker_test.cpp
-        ./types/type_checker_xml_loader_test.cpp 
+        ./types/type_checker_xml_loader_test.cpp
         ./types/variant_value_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
@@ -387,6 +394,7 @@ set(EXEC_FILES
         ./util/md5_test.cpp
         ./util/memcmp_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
+        ./util/metrics/catalog_scan_metrics_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
         ./util/new_metrics_test.cpp
@@ -534,7 +542,9 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
+    ./storage/lake/tablet_splitter_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
@@ -567,6 +577,7 @@ SET(DW_TEST_FILES
     ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
+    ./storage/non_retryable_load_errors_test.cpp
     ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/options_test.cpp
@@ -617,6 +628,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
+    ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
     ./storage/rowset/series_column_iterator_test.cpp
     ./storage/rowset/struct_column_rw_test.cpp
     ./storage/rowset/unique_rowset_id_generator_test.cpp

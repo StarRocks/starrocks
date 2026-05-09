@@ -239,3 +239,7 @@ select cast(if (1 > rand(), "[]", "") as array<string>) l , array_map((x)-> (con
 -- result:
 []	[["abcdefghasdasdasirnqwrq"],["abcdefghasdasdasirnqwrq"]]
 -- !result
+SELECT cast(array_map(x->cast(json_query(x, '$.Id') as varchar), ['a','b']) as array<varchar>);
+-- result:
+[null,null]
+-- !result

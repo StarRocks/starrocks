@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.VarcharType;
 
@@ -46,7 +47,7 @@ public class FastForwardProcedure extends IcebergTableProcedure {
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         if (args.size() != 2) {
             throw new StarRocksConnectorException("invalid args. fast forward must contain `from branch` and `to branch`");
         }
@@ -68,5 +69,6 @@ public class FastForwardProcedure extends IcebergTableProcedure {
                         TO_BRANCH));
 
         context.transaction().manageSnapshots().fastForwardBranch(from, to).commit();
+        return null;
     }
 }

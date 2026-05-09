@@ -47,6 +47,7 @@ import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -220,7 +221,7 @@ public class HDFSBackendSelector implements BackendSelector {
         }
 
         ComputeNode node = null;
-        long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
+        long addedScans = computeScanRangeWeight(scanRangeLocations);
         for (ComputeNode backend : backends) {
             long assignedScanRanges = assignedBytesPerComputeNode.get(backend);
             if (assignedScanRanges + addedScans < avgNodeScanRangeBytes * kMaxImbalanceRatio) {
@@ -268,7 +269,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private long computeTotalSize() {
         long size = 0;
         for (TScanRangeLocations scanRangeLocations : locations) {
-            size += scanRangeLocations.scan_range.hdfs_scan_range.getLength();
+            size += computeScanRangeWeight(scanRangeLocations);
         }
         return size;
     }
@@ -384,7 +385,7 @@ public class HDFSBackendSelector implements BackendSelector {
         workerProvider.selectWorker(worker.getId());
 
         // update statistic
-        long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
+        long addedScans = computeScanRangeWeight(scanRangeLocations);
         assignedBytesPerComputeNode.put(worker, assignedBytesPerComputeNode.get(worker) + addedScans);
         // the fist item in backends will be assigned if there is no re-balance, we compute re-balance bytes
         // if the worker is not the first item in backends.
@@ -402,6 +403,21 @@ public class HDFSBackendSelector implements BackendSelector {
         assignment.put(worker.getId(), scanNode.getId().asInt(), scanRangeParams);
         assignedScanRangesPerComputeNode.put(worker,
                 assignedScanRangesPerComputeNode.get(worker) + 1);
+    }
+
+    private long computeScanRangeWeight(TScanRangeLocations scanRangeLocations) {
+        THdfsScanRange hdfsScanRange = scanRangeLocations.scan_range.hdfs_scan_range;
+        long weight = hdfsScanRange.getLength();
+        if (!hdfsScanRange.isSetDelete_files()) {
+            return weight;
+        }
+
+        for (TIcebergDeleteFile deleteFile : hdfsScanRange.getDelete_files()) {
+            if (deleteFile.isSetLength()) {
+                weight += deleteFile.getLength();
+            }
+        }
+        return weight;
     }
 
     private void recordScanRangeStatistic() {

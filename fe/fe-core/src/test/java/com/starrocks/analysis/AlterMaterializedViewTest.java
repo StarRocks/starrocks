@@ -36,10 +36,13 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -137,14 +140,19 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = starRocksAssert.getMv("test", mvName);
         String taskDefinition = mv.getTaskDefinition();
         for (String refresh : refreshSchemes) {
-            // alter
+            // alter — ASYNC is kept as a legacy synonym; SCHEDULE is the preferred keyword
+            // for the EVERY form and is what SHOW CREATE displays.
             String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
             starRocksAssert.ddl(sql);
 
-            // verify
             mv = starRocksAssert.getMv("test", mvName);
             String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
-            Assertions.assertTrue(showCreateStmt.contains(refresh),
+            // SHOW CREATE rewrites "ASYNC ... EVERY ..." to "SCHEDULE ... EVERY ..." but leaves
+            // bare ASYNC (no EVERY) unchanged.
+            String expected = refresh.contains("EVERY")
+                    ? refresh.replaceFirst("^ASYNC", "SCHEDULE")
+                    : refresh;
+            Assertions.assertTrue(showCreateStmt.contains(expected),
                     String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt));
             Assertions.assertEquals(taskDefinition, mv.getTaskDefinition());
         }
@@ -175,6 +183,19 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assertions.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
+    }
+
+    @Test
+    public void testAlterMVAddColumnWithDefaultValue() throws Exception {
+        String alterMvSql = "alter materialized view mv1 add column v1_default as v1 default 10";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        AddMVColumnClause clause = (AddMVColumnClause) stmt.getAlterTableClause();
+        ColumnDef.DefaultValueDef defaultValueDef = clause.getDefaultValueDef();
+        Assertions.assertTrue(defaultValueDef.isSet);
+        Assertions.assertTrue(defaultValueDef.expr.isConstant());
+        IntLiteral intLiteral = (IntLiteral) defaultValueDef.expr;
+        Assertions.assertEquals(10, intLiteral.getValue());
     }
 
     // TODO: consider to support alterjob for mv

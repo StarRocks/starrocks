@@ -15,6 +15,7 @@
 
 package com.starrocks.staros;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.staros.metrics.MetricsSystem;
@@ -25,12 +26,12 @@ import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.StarMgrCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
+import com.starrocks.qe.JournalObservable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
@@ -91,6 +92,7 @@ public class StarMgrServer {
 
     private StarManagerServer starMgrServer;
     private StarOSBDBJEJournalSystem journalSystem;
+    private final JournalObservable starMgrJournalObservable = new JournalObservable();
     private ThreadPoolExecutor grpcExecutor;
 
     public StarMgrServer() {
@@ -108,7 +110,7 @@ public class StarMgrServer {
     }
 
     // for checkpoint thread only
-    public StarMgrServer(BDBJEJournal journal) {
+    public StarMgrServer(com.starrocks.journal.Journal journal) {
         journalSystem = new StarOSBDBJEJournalSystem(journal);
         starMgrServer = new StarManagerServer(journalSystem);
     }
@@ -125,8 +127,22 @@ public class StarMgrServer {
         return execution;
     }
 
+    /**
+     * NOTE: Only used by UtFrameUtils to construct a StarMgrServer with MockedJournal for testing.
+     */
+    @VisibleForTesting
+    public void initializeForTest(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
     public void initialize(BDBEnvironment environment, String baseImageDir) throws IOException {
-        journalSystem = new StarOSBDBJEJournalSystem(environment);
+        StarOSBDBJEJournalSystem bdbJournalSystem = new StarOSBDBJEJournalSystem(environment);
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
+    private void initializeImpl(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        this.journalSystem = bdbJournalSystem;
+        this.journalSystem.setJournalObservable(starMgrJournalObservable);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
@@ -138,7 +154,9 @@ public class StarMgrServer {
         com.staros.util.Config.DEFAULT_FS_TYPE = "";
 
         // use tablet_sched_disable_balance
+        // TODO: shard check will be bound to a different Config var
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_GROUP_BALANCE_CHECK = Config.tablet_sched_disable_balance;
         // turn on 0 as default worker group id, to be compatible with add/drop backend in FE
         com.staros.util.Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = true;
         // set the same heartbeat configuration to starmgr, but not able to change in runtime.
@@ -155,7 +173,9 @@ public class StarMgrServer {
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            // TODO: shard check will be bound to a different Config var
             com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+            com.staros.util.Config.DISABLE_BACKGROUND_SHARD_GROUP_BALANCE_CHECK = Config.tablet_sched_disable_balance;
             com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
             com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
             com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
@@ -293,6 +313,10 @@ public class StarMgrServer {
         PrometheusRegistryHelper.visitPrometheusRegistry(MetricsSystem.METRIC_REGISTRY, visitor);
     }
 
+    public JournalObservable getStarMgrJournalObservable() {
+        return starMgrJournalObservable;
+    }
+
     public long getMaxJournalId() {
         return getJournalSystem().getJournal().getMaxJournalId();
     }
@@ -311,11 +335,5 @@ public class StarMgrServer {
 
     public void triggerNewImage() {
         journalSystem.getJournalWriter().setForceRollJournal();
-    }
-
-    public void markLeaderTransferred() {
-        if (journalSystem != null) {
-            journalSystem.markLeaderTransferred();
-        }
     }
 }

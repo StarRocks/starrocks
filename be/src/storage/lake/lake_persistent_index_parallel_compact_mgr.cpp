@@ -197,9 +197,8 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
                                                    _merge_base_level, _tablet_mgr, _metadata->id(),
                                                    true /* generate multi outputs*/);
     while (merging_iter->Valid()) {
-        const std::string& cur_key = merging_iter->key().to_string();
-        if (!_seek_range.stop_key.empty() &&
-            options.comparator->Compare(Slice(cur_key), Slice(_seek_range.stop_key)) >= 0) {
+        const Slice cur_key = merging_iter->key();
+        if (!_seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(_seek_range.stop_key)) >= 0) {
             // meet the scan range boundary, quit.
             break;
         }
@@ -380,7 +379,7 @@ Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const Per
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
-                                 block_cache ? block_cache->cache() : nullptr, false));
+                                 block_cache ? block_cache->cache() : nullptr, false, nullptr, metadata, _tablet_mgr));
         RETURN_IF_ERROR(sstable->sample_keys(sample_keys, config::pk_index_sstable_sample_interval_bytes));
     }
     return Status::OK();

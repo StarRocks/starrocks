@@ -149,22 +149,24 @@ public class TransactionMetricRegistry {
             long commitTime = txnState.getCommitTime();
             long publishVersionTime = txnState.getPublishVersionTime();
             long publishVersionFinishTime = txnState.getPublishVersionFinishTime();
+            long readyToFinishTime = txnState.getReadyToFinishTime();
             long finishTime = txnState.getFinishTime();
             updateLatencyMetrics(allTxnGroup.metrics,
-                    prepareTime, commitTime, publishVersionTime, publishVersionFinishTime, finishTime);
+                    prepareTime, commitTime, publishVersionTime, publishVersionFinishTime, readyToFinishTime, finishTime);
             TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
             if (sourceType == null || sourceType.ordinal() >= sourceTypeIndexToGroup.length) {
                 return;
             }
             updateLatencyMetrics(sourceTypeIndexToGroup[sourceType.ordinal()].metrics,
-                    prepareTime, commitTime, publishVersionTime, publishVersionFinishTime, finishTime);
+                    prepareTime, commitTime, publishVersionTime, publishVersionFinishTime, readyToFinishTime, finishTime);
         } catch (Exception e) {
             LOG.debug("failed to update transaction metrics, {}", txnState, e);
         }
     }
 
     private void updateLatencyMetrics(Optional<TransactionMetrics> metricsOptional, long prepareTime, long commitTime,
-                                      long publishVersionTime, long publishVersionFinishTime, long finishTime) {
+                                      long publishVersionTime, long publishVersionFinishTime,
+                                      long readyToFinishTime, long finishTime) {
         TransactionMetrics metrics = metricsOptional.orElse(null);
         if (metrics != null) {
             recordLatencyIfValid(metrics.totalLatencyMs, prepareTime, finishTime);
@@ -172,7 +174,8 @@ public class TransactionMetricRegistry {
             recordLatencyIfValid(metrics.publishLatencyMs, commitTime, finishTime);
             recordLatencyIfValid(metrics.publishScheduleLatencyMs, commitTime, publishVersionTime);
             recordLatencyIfValid(metrics.publishExecuteLatencyMs, publishVersionTime, publishVersionFinishTime);
-            recordLatencyIfValid(metrics.publishAckLatencyMs, publishVersionFinishTime, finishTime);
+            recordLatencyIfValid(metrics.publishCanFinishLatencyMs, publishVersionFinishTime, readyToFinishTime);
+            recordLatencyIfValid(metrics.publishAckLatencyMs, readyToFinishTime, finishTime);
         }
     }
 
@@ -216,6 +219,7 @@ public class TransactionMetricRegistry {
         visitor.visitHistogram(metrics.publishLatencyMs);
         visitor.visitHistogram(metrics.publishScheduleLatencyMs);
         visitor.visitHistogram(metrics.publishExecuteLatencyMs);
+        visitor.visitHistogram(metrics.publishCanFinishLatencyMs);
         visitor.visitHistogram(metrics.publishAckLatencyMs);
     }
 
@@ -238,7 +242,7 @@ public class TransactionMetricRegistry {
         return groups;
     }
 
-    /** Create the six latency histograms with a shared type label for a group. */
+    /** Create latency histograms with a shared type label for a group. */
     private TransactionMetrics buildLatencyMetrics(String groupName) {
         LeaderAwareHistogramMetric totalLatencyMs = createHistogram("txn_total_latency_ms", groupName);
         LeaderAwareHistogramMetric writeLatencyMs = createHistogram("txn_write_latency_ms", groupName);
@@ -246,8 +250,9 @@ public class TransactionMetricRegistry {
         LeaderAwareHistogramMetric publishScheduleLatencyMs = createHistogram("txn_publish_schedule_latency_ms", groupName);
         LeaderAwareHistogramMetric publishExecuteLatencyMs = createHistogram("txn_publish_execute_latency_ms", groupName);
         LeaderAwareHistogramMetric publishAckLatencyMs = createHistogram("txn_publish_ack_latency_ms", groupName);
+        LeaderAwareHistogramMetric publishCanFinishLatencyMs = createHistogram("txn_publish_can_finish_latency_ms", groupName);
         return new TransactionMetrics(totalLatencyMs, writeLatencyMs, publishLatencyMs,
-                publishScheduleLatencyMs, publishExecuteLatencyMs, publishAckLatencyMs);
+                publishScheduleLatencyMs, publishExecuteLatencyMs, publishAckLatencyMs, publishCanFinishLatencyMs);
 
     }
 
@@ -331,7 +336,8 @@ public class TransactionMetricRegistry {
      * <p>The latencies have the following relationship:
      * <ul>
      *   <li>{@code totalLatencyMs = writeLatencyMs + publishLatencyMs}</li>
-     *   <li>{@code publishLatencyMs = publishScheduleLatencyMs + publishExecuteLatencyMs + publishAckLatencyMs}</li>
+    *   <li>{@code publishLatencyMs = publishScheduleLatencyMs + publishExecuteLatencyMs +
+    *   publishCanFinishLatencyMs + publishAckLatencyMs}</li>
      * </ul>
      */
     private static class TransactionMetrics {
@@ -350,19 +356,23 @@ public class TransactionMetricRegistry {
          * when the transaction is marked visible.
          */
         final LeaderAwareHistogramMetric publishAckLatencyMs;
+        /** Histogram for the publish can finish latency, from publish version finish to ready to finish. */
+        final LeaderAwareHistogramMetric publishCanFinishLatencyMs;
 
         public TransactionMetrics(LeaderAwareHistogramMetric totalLatencyMs,
                                   LeaderAwareHistogramMetric writeLatencyMs,
                                   LeaderAwareHistogramMetric publishLatencyMs,
                                   LeaderAwareHistogramMetric publishScheduleLatencyMs,
                                   LeaderAwareHistogramMetric publishExecuteLatencyMs,
-                                  LeaderAwareHistogramMetric publishAckLatencyMs) {
+                                  LeaderAwareHistogramMetric publishAckLatencyMs,
+                                  LeaderAwareHistogramMetric publishCanFinishLatencyMs) {
             this.totalLatencyMs = totalLatencyMs;
             this.writeLatencyMs = writeLatencyMs;
             this.publishLatencyMs = publishLatencyMs;
             this.publishScheduleLatencyMs = publishScheduleLatencyMs;
             this.publishExecuteLatencyMs = publishExecuteLatencyMs;
             this.publishAckLatencyMs = publishAckLatencyMs;
+            this.publishCanFinishLatencyMs = publishCanFinishLatencyMs;
         }
     }
 }

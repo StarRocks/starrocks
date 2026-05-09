@@ -20,13 +20,18 @@ import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPartitionType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -110,6 +115,69 @@ public class DeletePlanTest extends PlanTestBase {
         assertTrue(execPlan.getOutputExprs().size() >= 2, "Should output _file and _pos");
         assertTrue(execPlan.getOutputExprs().get(0).debugString().contains("_file"));
         assertTrue(execPlan.getOutputExprs().get(1).debugString().contains("_pos"));
+    }
+
+    @Test
+    public void testUnpartitionedIcebergDeleteUsesExplicitPipelineSinkDop() throws Exception {
+        int previousSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
+        try {
+            connectContext.getSessionVariable().setPipelineSinkDop(8);
+            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0 where id = 1");
+            FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
+            Assertions.assertEquals(8, instance.getTableSinkDop());
+        } finally {
+            connectContext.getSessionVariable().setPipelineSinkDop(previousSinkDop);
+        }
+    }
+
+    @Test
+    public void testUnpartitionedIcebergDeleteUsesSinkDefaultDopWhenPipelineSinkDopUnset() throws Exception {
+        int previousSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
+        int previousPipelineDop = connectContext.getSessionVariable().getPipelineDop();
+        try {
+            new MockUp<com.starrocks.system.BackendResourceStat>() {
+                @Mock
+                public int getAvgNumCoresOfBe(long warehouseId) {
+                    return 18;
+                }
+            };
+            connectContext.getSessionVariable().setPipelineSinkDop(0);
+            connectContext.getSessionVariable().setPipelineDop(0);
+
+            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0 where id = 1");
+            FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
+            Assertions.assertEquals(6, instance.getTableSinkDop());
+        } finally {
+            connectContext.getSessionVariable().setPipelineSinkDop(previousSinkDop);
+            connectContext.getSessionVariable().setPipelineDop(previousPipelineDop);
+        }
+    }
+
+    @Test
+    public void testPartitionedIcebergDeleteKeepsOriginalPipelineSinkDopBehavior() throws Exception {
+        int previousSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
+        try {
+            connectContext.getSessionVariable().setPipelineSinkDop(0);
+            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.partitioned_db.t1 where id = 1");
+            FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
+            Assertions.assertEquals(0, instance.getTableSinkDop());
+        } finally {
+            connectContext.getSessionVariable().setPipelineSinkDop(previousSinkDop);
+        }
+    }
+
+    @Test
+    public void testIcebergDeleteFallsBackToFragmentDopWhenConnectContextIsMissing() throws Exception {
+        ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0 where id = 1");
+        FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
+        int fragmentDop = execPlan.getTopFragment().getPipelineDop();
+
+        try {
+            ConnectContext.remove();
+            Assertions.assertEquals(fragmentDop, instance.getTableSinkDop());
+        } finally {
+            connectContext.setThreadLocalInfo();
+        }
     }
 
     @Test
@@ -205,5 +273,11 @@ public class DeletePlanTest extends PlanTestBase {
     private static String getDeleteExecPlanString(String originStmt) throws Exception {
         ExecPlan execPlan = getDeleteExecPlan(originStmt);
         return execPlan.getExplainString(TExplainLevel.NORMAL);
+    }
+
+    private static FragmentInstance createFragmentInstance(PlanFragment fragment) {
+        connectContext.setThreadLocalInfo();
+        ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
+        return new FragmentInstance(null, execFragment);
     }
 }

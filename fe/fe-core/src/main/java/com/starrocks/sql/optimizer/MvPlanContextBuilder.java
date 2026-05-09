@@ -42,10 +42,10 @@ public class MvPlanContextBuilder {
 
         // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
         // NPE in the planning.
-        ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
-
         List<MvPlanContext> results = Lists.newArrayList();
-        try (var guard = connectContext.bindScope()) {
+        ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get());
+        ConnectContext connectContext = scope.getContext();
+        try (scope; var guard = connectContext.bindScope()) {
             Optional.ofNullable(doGetOptimizePlan(() -> mvOptimizer.optimize(mv, connectContext), isThrowException))
                     .map(results::add);
 

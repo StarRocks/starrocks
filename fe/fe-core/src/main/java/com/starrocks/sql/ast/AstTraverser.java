@@ -68,6 +68,11 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
     }
 
     @Override
+    public R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return null;
+    }
+
+    @Override
     public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
         if (statement.getInsertStmt() != null) {
             visit(statement.getInsertStmt(), context);

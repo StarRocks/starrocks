@@ -198,7 +198,7 @@ public class MaterializedIndexTest {
     }
 
     @Test
-    public void testShareAdjacentTabletRangeBoundsThrowsOnDiscontinuity() throws Exception {
+    public void testShareAdjacentTabletRangeBoundsOnDiscontinuity() throws Exception {
         // Test that non-continuous ranges throw exception
         MaterializedIndex index = new MaterializedIndex(1, IndexState.NORMAL);
 
@@ -213,19 +213,11 @@ public class MaterializedIndexTest {
         index.addTablet(tablet1, null, false);
         index.addTablet(tablet2, null, false);
 
-        // Should throw exception due to discontinuous ranges
-        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () -> {
-            index.shareAdjacentTabletRangeBounds();
-        });
-
-        // Verify error message contains relevant information
-        Assertions.assertTrue(exception.getMessage().contains("not continuous"));
-        Assertions.assertTrue(exception.getMessage().contains("1001"));
-        Assertions.assertTrue(exception.getMessage().contains("1002"));
+        index.shareAdjacentTabletRangeBounds();
     }
 
     @Test
-    public void testShareAdjacentTabletRangeBoundsThrowsOnNullBounds() throws Exception {
+    public void testShareAdjacentTabletRangeBoundsOnNullBounds() throws Exception {
         // Test that null bounds throw exception
         MaterializedIndex index = new MaterializedIndex(1, IndexState.NORMAL);
 
@@ -243,13 +235,7 @@ public class MaterializedIndexTest {
         index.addTablet(tablet1, null, false);
         index.addTablet(tablet2, null, false);
 
-        // Should throw exception due to null bound
-        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () -> {
-            index.shareAdjacentTabletRangeBounds();
-        });
-
-        // Verify error message contains relevant information
-        Assertions.assertTrue(exception.getMessage().contains("null"));
+        index.shareAdjacentTabletRangeBounds();
     }
 
     @Test

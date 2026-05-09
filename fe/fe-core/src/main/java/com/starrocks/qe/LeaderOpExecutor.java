@@ -49,6 +49,7 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlProxyQueryManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlResultDescriptor;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -60,6 +61,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -137,8 +139,19 @@ public class LeaderOpExecutor {
         try {
             forward();
             if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+                long deadline = System.currentTimeMillis() + waitTimeoutMs;
                 LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
                 ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+                if (RunMode.isSharedDataMode() && result.isSetMaxStarMgrJournalId()) {
+                    // NOTE: It is a known pitfall that when FE journal catch-up consumes the whole waitTimeoutMs,
+                    // remaining becomes 0, and the subsequent StarMgr wait returns immediately because
+                    // JournalObserver.waitForReplay() treats timeoutMs <= 0 as success even if replay is still behind.
+                    int remaining = (int) Math.max(0, deadline - System.currentTimeMillis());
+                    LOG.info("waiting for star mgr journal replay to {}", result.maxStarMgrJournalId);
+                    StarMgrServer.getCurrentState().getStarMgrJournalObservable().waitOn(
+                            result.maxStarMgrJournalId, remaining,
+                            () -> StarMgrServer.getCurrentState().getReplayId());
+                }
             }
 
             if (result.state != null) {
@@ -268,6 +281,49 @@ public class LeaderOpExecutor {
         this.result = result;
     }
 
+    /**
+     * Makes a lightweight Thrift call to the leader FE to retrieve its current maximum
+     * journal ID. This is used by followers to determine what journal position they need
+     * to wait for before validating metadata that was recently written by the leader.
+     * <p>
+     * A minimal {@code SELECT 1} statement is forwarded; the leader always sets
+     * {@code maxJournalId} in the response regardless of whether the query succeeds.
+     *
+     * @return the leader's current max journal ID, or -1 if the value is unavailable
+     */
+    public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+        try {
+            Pair<String, Integer> leaderAddr =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+            if (leaderAddr == null) {
+                return -1;
+            }
+            TNetworkAddress thriftAddr = new TNetworkAddress(leaderAddr.first, leaderAddr.second);
+
+            TMasterOpRequest params = new TMasterOpRequest();
+            params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+            params.setSql("SELECT 1");
+            params.setStmtIdx(0);
+            params.setUser(ctx.getQualifiedUser() != null ? ctx.getQualifiedUser() : "");
+            params.setCatalog(ctx.getCurrentCatalog());
+            params.setDb(ctx.getDatabase() != null ? ctx.getDatabase() : "");
+            params.setStmt_id(ctx.getStmtId());
+            params.setForward_times(1);
+            params.setConnectionId(ctx.getConnectionId());
+
+            int timeoutMs = ctx.getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+            TMasterOpResult leaderResult = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    thriftAddr,
+                    timeoutMs,
+                    client -> client.forward(params));
+            return leaderResult != null && leaderResult.isSetMaxJournalId() ? leaderResult.maxJournalId : -1;
+        } catch (Exception e) {
+            LOG.warn("Failed to fetch leader max journal id: {}", e.getMessage());
+            return -1;
+        }
+    }
+
     public TMasterOpRequest createTMasterOpRequest(ConnectContext ctx, int forwardTimes) {
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
@@ -285,6 +341,8 @@ public class LeaderOpExecutor {
         params.setForward_times(forwardTimes);
         params.setSession_id(ctx.getSessionId().toString());
         params.setConnectionId(ctx.getConnectionId());
+
+        params.setUser_groups(new ArrayList<>(ctx.getGroups()));
 
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);

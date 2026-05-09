@@ -91,7 +91,6 @@ http://be_ip:be_http_port/mem_tracker?type=update&upper_level=4
 be.conf
 
 l0_max_mem_usage = (一些小于 104857600 的值，默认是 104857600)
-skip_pk_preload = true
 
 // 存算一体集群
 transaction_apply_worker_count = (一些小于 CPU 核心数的值，默认是 CPU 核心数)

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # VARIANT
 
-Since version 4.0, StarRocks supports the VARIANT data type for querying semi-structured data from Iceberg tables in Parquet format. This article introduces the basic concepts of VARIANT, and how StarRocks queries VARIANT-type data and processes it through variant functions.
+:::important
+The VARIANT type is supported only for tables in Iceberg Catalog. It is not supported by StarRocks native tables.
+:::
+
+From v4.1 onwards, StarRocks supports the VARIANT data type for querying semi-structured data from Iceberg tables in Parquet format. This article introduces the basic concepts of VARIANT, and how StarRocks queries VARIANT-type data and processes it through VARIANT functions.
 
 ## What is VARIANT
 
@@ -23,7 +27,6 @@ StarRocks supports querying VARIANT-type data from Iceberg tables stored in Parq
 Example of querying an Iceberg table with VARIANT columns:
 
 ```SQL
-
 -- Query a table with VARIANT columns
 SELECT
     id,
@@ -33,7 +36,7 @@ FROM iceberg_catalog.db.table_with_variants;
 
 ### Extracting Values from VARIANT Data
 
-StarRocks provides several functions to extract typed values from VARIANT data:
+StarRocks provides several functions to extract typed values from VARIANT data.
 
 Example 1: Extract primitive values using typed getter functions.
 

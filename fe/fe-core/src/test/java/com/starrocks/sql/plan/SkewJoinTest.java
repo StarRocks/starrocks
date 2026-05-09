@@ -391,7 +391,7 @@ public class SkewJoinTest extends PlanTestBase {
                     if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
                         return ColumnStatistic.builder() //
                                 .setNullsFraction(0.3) // NULL skew
-                                .setHistogram(new Histogram(List.of(), Map.of("a", 400L, "b", 200L))) // MCV skew
+                                .setHistogram(new Histogram(List.of(), Map.of("11", 400L, "22", 200L))) // MCV skew
                                 .build();
                     }
 
@@ -418,10 +418,10 @@ public class SkewJoinTest extends PlanTestBase {
             assertCContains(plan, "IS NULL THEN");
 
             // In this case, the MCV should be selected since:
-            //  - 0.3 null fractions * 1337 rows < 400 rows (a) + 300 rows (b)
+            //  - 0.3 null fractions * 1337 rows < 400 rows (11) + 200 rows (22)
             assertCContains(plan, """
                       5:Project
-                      |  <slot 9> : ['a','b']
+                      |  <slot 9> : [11,22]
                     """);
         } finally {
             // Restore threshold

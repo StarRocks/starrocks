@@ -198,6 +198,13 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
 }
 
 void SystemMetrics::update() {
+    // Use try_lock to avoid blocking concurrent callers since metrics collection
+    // is best-effort and the data will be refreshed on the next collection cycle.
+    std::unique_lock lock(_update_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return;
+    }
+
     update_memory_metrics();
 
     _update_cpu_metrics();
@@ -285,6 +292,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("ordinal_index_mem_bytes", &_memory_metrics->ordinal_index_mem_bytes);
     registry->register_metric("bitmap_index_mem_bytes", &_memory_metrics->bitmap_index_mem_bytes);
     registry->register_metric("bloom_filter_index_mem_bytes", &_memory_metrics->bloom_filter_index_mem_bytes);
+    registry->register_metric("builtin_inverted_index_mem_bytes", &_memory_metrics->builtin_inverted_index_mem_bytes);
     registry->register_metric("segment_zonemap_mem_bytes", &_memory_metrics->segment_zonemap_mem_bytes);
     registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
@@ -379,6 +387,7 @@ void SystemMetrics::update_memory_metrics() {
     SET_MEM_METRIC_VALUE(ordinal_index_mem_tracker, ordinal_index_mem_bytes)
     SET_MEM_METRIC_VALUE(bitmap_index_mem_tracker, bitmap_index_mem_bytes)
     SET_MEM_METRIC_VALUE(bloom_filter_index_mem_tracker, bloom_filter_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(builtin_inverted_index_mem_tracker, builtin_inverted_index_mem_bytes)
     SET_MEM_METRIC_VALUE(segment_zonemap_mem_tracker, segment_zonemap_mem_bytes)
     SET_MEM_METRIC_VALUE(short_key_index_mem_tracker, short_key_index_mem_bytes)
     SET_MEM_METRIC_VALUE(compaction_mem_tracker, compaction_mem_bytes)

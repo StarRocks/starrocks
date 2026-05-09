@@ -102,7 +102,6 @@ import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -236,6 +235,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 
+    // Only used in `INSERT INTO target_table SELECT ... FROM files()`.
+    // When set to true, pushes down the target table schema to files() for schema inference.
+    public static final String PROPERTIES_ENABLE_PUSH_DOWN_SCHEMA = "enable_push_down_schema";
+
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
@@ -290,6 +293,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
     // If true, just return the repair plan without executing it
     public static final String PROPERTIES_DRY_RUN = "dry_run";
+    // Show at most `limit` missing data files per tablet
+    public static final String PROPERTIES_MAX_MISSING_DATA_FILES_TO_SHOW = "max_missing_data_files_to_show";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -383,7 +388,11 @@ public class PropertyAnalyzer {
 
         } else if (hasCoolDownTTL) {
             if (!hasMedium) {
-                throw new AnalysisException("Invalid data property. storage medium property is not found");
+                if (inferredDataProperty != null && Config.tablet_sched_storage_cooldown_second > 0) {
+                    storageMedium = inferredDataProperty.getStorageMedium();
+                } else {
+                    throw new AnalysisException("Invalid data property. storage medium property is not found");
+                }
             }
             if (storageMedium == TStorageMedium.HDD) {
                 throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");
@@ -714,14 +723,18 @@ public class PropertyAnalyzer {
         String refreshMode = null;
         if (properties != null && properties.containsKey(PROPERTIES_MV_REFRESH_MODE)) {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
+            MaterializedView.RefreshMode parsed;
             try {
-                MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode + ". Only " +
-                        EnumUtils.getEnumList(MaterializedView.RefreshMode.class).stream()
-                                .map(MaterializedView.RefreshMode::name)
-                                .collect(Collectors.joining(", ")) +
-                        " are supported.");
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            // AUTO is intentionally not exposed to users; the implementation is preserved
+            // internally for future revival.
+            if (parsed == MaterializedView.RefreshMode.AUTO) {
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
             }
             properties.remove(PROPERTIES_MV_REFRESH_MODE);
         }
@@ -1113,6 +1126,23 @@ public class PropertyAnalyzer {
             return Boolean.parseBoolean(val);
         }
         return defaultVal;
+    }
+
+    /**
+     * Looks up {@code property} in {@code properties}, parses its value as a strict boolean
+     * (throws {@link SemanticException} for any value other than "true"/"false"), removes the
+     * key from the map, and returns the result. Returns {@code defaultValue} if the key is absent.
+     */
+    public static boolean analyzeBooleanPropStrictly(Map<String, String> properties,
+            String property, boolean defaultValue) throws SemanticException {
+        if (properties == null) {
+            return defaultValue;
+        }
+        String value = properties.remove(property);
+        if (value == null) {
+            return defaultValue;
+        }
+        return parseBooleanStrictly(property, value);
     }
 
     public static boolean analyzeEnablePersistentIndex(Map<String, String> properties) {
@@ -1658,10 +1688,11 @@ public class PropertyAnalyzer {
         return TCompactionStrategy.DEFAULT;
     }
 
-    // Analyze lake_compaction_max_parallel property
-    // Returns the max parallel value (default 3, 0 means disabled)
+    // Analyze lake_compaction_max_parallel table property.
+    // Returns the max parallel value (default from Config.lake_compaction_max_parallel_default;
+    // 0 means parallel lake compaction is disabled).
     public static int analyzeLakeCompactionMaxParallel(Map<String, String> properties) throws AnalysisException {
-        int defaultValue = 3;
+        int defaultValue = Config.lake_compaction_max_parallel_default;
         if (properties != null && properties.containsKey(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
             String value = properties.get(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
             properties.remove(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
@@ -1927,7 +1958,7 @@ public class PropertyAnalyzer {
                     throw new AnalysisException(": random distribution does not support 'colocate_with'");
                 }
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
-                        db, materializedView, colocateGroup, false /* expectLakeTable */);
+                        db, materializedView, colocateGroup, false /* afterTabletCreation */);
             }
 
             // enable_query_rewrite
@@ -2133,4 +2164,5 @@ public class PropertyAnalyzer {
         }
         return ret;
     }
+
 }

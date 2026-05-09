@@ -93,16 +93,17 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         List<HyperQueryJob> queryJobs;
         if (statisticsTypes.isEmpty()) {
             if (analyzeType == StatsConstants.AnalyzeType.FULL) {
-                queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
-                            partitionIdList, splitSize, isManualJob);
+                queryJobs = HyperQueryJob.createFullQueryJobs(analyzeStatus.getId(), context, db,
+                        table, columnNames, columnTypes, partitionIdList, splitSize, isManualJob);
             } else {
-                PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties, partitionTabletRowCounts);
-                queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
-                        partitionIdList, splitSize, sampler, isManualJob);
+                PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties,
+                        partitionTabletRowCounts);
+                queryJobs = HyperQueryJob.createSampleQueryJobs(analyzeStatus.getId(), context, db, table,
+                        columnNames, columnTypes, partitionIdList, splitSize, sampler, isManualJob);
             }
         } else {
-            queryJobs = HyperQueryJob.createMultiColumnQueryJobs(context, db, table, columnGroups, analyzeType,
-                    statisticsTypes, properties);
+            queryJobs = HyperQueryJob.createMultiColumnQueryJobs(analyzeStatus.getId(), context, db, table,
+                    columnGroups, analyzeType, statisticsTypes, properties);
         }
 
         long queryTotals = 0;
@@ -110,12 +111,14 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         long insertFailures = 0;
 
         for (int i = 0; i < queryJobs.size(); i++) {
+            checkCancelled(analyzeStatus);
             // Calculate and set remaining timeout for this query job
             calculateAndSetRemainingTimeout(context, analyzeStatus);
 
             HyperQueryJob queryJob = queryJobs.get(i);
             try {
                 queryJob.queryStatistics();
+                checkCancelled(analyzeStatus);
                 rowsBuffer.addAll(queryJob.getStatisticsData());
                 sqlBuffer.addAll(queryJob.getStatisticsValueSQL());
 
@@ -157,6 +160,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private void flushInsertStatisticsData(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        checkCancelled(analyzeStatus);
         if (rowsBuffer.isEmpty()) {
             return;
         }
@@ -165,6 +169,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         int maxRetryTimes = 5;
         StatementBase insertStmt = createInsertStmt();
         do {
+            checkCancelled(analyzeStatus);
             // Calculate and set remaining timeout for this insert task
             calculateAndSetRemainingTimeout(context, analyzeStatus);
 

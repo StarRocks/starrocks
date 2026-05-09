@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -367,12 +368,13 @@ public:
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout = true;
 
         // timeout check
         if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
             return false;
         }
+
+        bool all_ready = true;
         // check if all the remote RFs are ready.
         for (auto* rf_desc : _global_rf_descriptors) {
             if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
@@ -381,9 +383,10 @@ public:
             if (rf_waiting_set != nullptr) {
                 rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
             }
-            _all_global_rf_ready_or_timeout = false;
+            all_ready = false;
         }
-        return !_all_global_rf_ready_or_timeout;
+        _all_global_rf_ready_or_timeout = _all_global_rf_ready_or_timeout || all_ready;
+        return !all_ready;
     }
 
     // return true if either dependencies_block or local_rf_block return true, which means that the current driver
@@ -481,6 +484,12 @@ public:
                 return false;
             }
             mark_precondition_ready();
+            // In the event scheduler, we avoid calling check_short_circuit inside check_is_ready.
+            // Because check_short_circuit may trigger cascading recursive calls such as set_finished.
+            // It will increase scheduler complexity (like call set finished in unknown thread).
+            // Instead, we directly return true after the precondition block state changes.
+            // The check is performed in driver::process.
+            return true;
         }
 
         // OUTPUT_FULL
@@ -649,7 +658,7 @@ protected:
 
     std::atomic<bool> _is_operator_cancelled{false};
 
-    std::unique_ptr<PipelineTimerTask> _global_rf_timer;
+    std::shared_ptr<PipelineTimerTask> _global_rf_timer;
 
     std::atomic<bool> _local_prepare_is_done{false};
 

@@ -1,0 +1,122 @@
+-- name: test_basic_txn_commit_operations @sequential
+-- Test basic transaction stream load commit related operations (no channel, no multi)
+-- Note: BEGIN and LOAD are redirected to BE in this mode
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+-- 1. Begin transaction (basic mode - redirected to BE)
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+-- 2. Load data (basic mode - redirected to BE)
+[UC]shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '1,alice' -XPUT ${url}/api/transaction/load
+
+-- 3. First commit
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 4. Double commit
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 5. Load after commit
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '2,bob' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 6. Rollback after commit
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+
+-- 7. Verify data was committed
+select * from table1 order by id;
+
+-- 8. Begin with same label after commit
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+drop database db_${uuid0};
+
+-- name: test_basic_txn_rollback_operations @sequential
+-- Test basic transaction stream load rollback related operations (no channel, no multi)
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+-- 1. Begin transaction
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+-- 2. Load data
+[UC]shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '1,alice' -XPUT ${url}/api/transaction/load
+
+-- 3. First rollback
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+
+-- 4. Double rollback
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+
+-- 5. Load after rollback
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '2,bob' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 6. Commit after rollback
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 7. Verify data was not committed
+select count(*) from table1;
+
+-- 8. Begin with same label after rollback
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+drop database db_${uuid0};
+
+-- name: test_basic_txn_edge_cases @sequential
+-- Test empty transactions and operations without begin (no channel, no multi)
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+-- 1. Load without begin
+shell: curl -s --location-trusted -u root: -H "label:no_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 2. Commit without begin
+shell: curl -s --location-trusted -u root: -H "label:no_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 3. Rollback without begin
+shell: curl -s --location-trusted -u root: -H "label:no_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+
+-- 4. Empty transaction commit: begin -> commit (no load)
+shell: curl -s --location-trusted -u root: -H "label:empty_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:empty_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 5. Empty transaction rollback: begin -> rollback (no load)
+shell: curl -s --location-trusted -u root: -H "label:empty_rollback_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:empty_rollback_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+
+-- 6. Double Begin: begin -> begin (same label, transaction still active)
+shell: curl -s --location-trusted -u root: -H "label:double_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:double_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:double_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+
+-- 7. Verify table is still empty
+select count(*) from table1;
+
+drop database db_${uuid0};

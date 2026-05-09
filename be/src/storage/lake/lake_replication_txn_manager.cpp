@@ -14,24 +14,99 @@
 
 #include "storage/lake/lake_replication_txn_manager.h"
 
+#include <atomic>
+#include <mutex>
+
+#include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "common/config.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/Types_constants.h"
+#include "gen_cpp/Types_types.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
 #include "replication_txn_manager.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/segment_stream_converter.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/dynamic_cache.h"
+#include "util/threadpool.h"
 #include "util/trace.h"
 #include "vacuum.h"
 
 namespace starrocks::lake {
+namespace {
+// Backlog guard for shared REPLICATE_SNAPSHOT thread pool.
+// Parallel copy is disabled when queue depth exceeds num_threads * this factor
+// to avoid adding more pressure to an already saturated pool.
+constexpr int kParallelCopyMaxQueuePerThread = 8;
+} // namespace
+
+#ifdef USE_STAROS
+std::string convert_s3_path_to_starlet_uri(std::string_view s3_path, int64_t shard_id) {
+    // S3 URI format: s3://bucket/path...
+    // Starlet URI format: staros://shard_id/path...
+    // We need to replace "s3://bucket/" with "staros://shard_id/"
+    std::string_view path = s3_path;
+    if (path.find("s3://") == 0) {
+        // Remove "s3://" prefix
+        path.remove_prefix(5);
+        // Find the first "/" after bucket name and skip the bucket part
+        size_t first_slash_pos = path.find('/');
+        if (first_slash_pos != std::string_view::npos) {
+            path.remove_prefix(first_slash_pos + 1);
+        } else {
+            path = std::string_view();
+        }
+        // Build starlet URI: staros://shard_id/path...
+        return build_starlet_uri(shard_id, path);
+    }
+
+    // Not a valid S3 path - log warning
+    LOG(WARNING) << "S3 path does not start with 's3://': " << s3_path;
+    return build_starlet_uri(shard_id, path);
+}
+#endif // USE_STAROS
+
+std::string remove_last_path_component(const std::string& path) {
+    // Find the last "/" which separates the directory name (meta or data)
+    size_t last_slash = path.find_last_of('/');
+    if (last_slash == std::string::npos) {
+        return path;
+    }
+
+    // Get the directory name (meta or data)
+    std::string dir_name = path.substr(last_slash + 1);
+
+    // Get the path before the directory name
+    std::string base_path = path.substr(0, last_slash);
+
+    // Find the second-to-last "/"
+    size_t second_last_slash = base_path.find_last_of('/');
+    if (second_last_slash == std::string::npos) {
+        return path;
+    }
+
+    // Remove the component between second_last_slash and last_slash
+    return base_path.substr(0, second_last_slash + 1) + dir_name;
+}
+
+std::string remove_db_id_component(const std::string& path, int64_t db_id) {
+    std::string db_pattern = "/db" + std::to_string(db_id) + "/";
+    size_t pos = path.find(db_pattern);
+    if (pos == std::string::npos) {
+        return path;
+    }
+    // Remove "db{db_id}/" but keep the "/" before it
+    return path.substr(0, pos + 1) + path.substr(pos + db_pattern.length());
+}
 
 Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request) {
     auto src_tablet_id = request.src_tablet_id;
@@ -47,12 +122,21 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     auto txn_id = request.transaction_id;
     auto virtual_tablet_id = request.virtual_tablet_id;
 
+    // Check if FE provides full path for S3 storage type
+    // - has_full_path=true: S3 storage type, FE provides full S3 path (supports partitioned prefix)
+    // - has_full_path=false: Non-S3 storage type (OSS/Azure/HDFS/GFS), use RemoteStarletLocationProvider
+    bool has_full_path = request.__isset.src_partition_full_path && !request.src_partition_full_path.empty();
+    std::string src_partition_full_path = has_full_path ? request.src_partition_full_path : "";
+
     LOG(INFO) << "Start to replicate lake remote storage, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
               << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
               << ", src_table_id: " << src_table_id << ", src_partition_id: " << src_partition_id
               << ", visible_version: " << target_visible_version << ", data_version: " << data_version
-              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version;
+              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version
+              << ", has_full_path: " << has_full_path
+              << (has_full_path ? ", src_partition_full_path: " + src_partition_full_path : "");
 
+    // step 1: validate request and locate source tablet metadata/files.
     std::vector<Version> missed_versions;
     for (auto v = data_version + 1; v <= src_visible_version; ++v) {
         missed_versions.emplace_back(v, v);
@@ -65,33 +149,66 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         return Status::Corruption("No missing version");
     }
 
-#if !defined(BE_TEST) && defined(USE_STAROS)
-    auto src_meta_dir =
-            _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
-    auto src_data_dir =
-            _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
-    // `shared_src_fs` is used to access storage of src cluster
-    auto shared_src_fs = new_fs_starlet(virtual_tablet_id);
-    if (shared_src_fs == nullptr) {
-        return Status::Corruption("Failed to create virtual starlet filesystem");
+    std::string src_meta_dir;
+    std::string src_data_dir;
+    std::shared_ptr<FileSystem> shared_src_fs;
+    TabletMetadataPtr src_tablet_meta;
+
+#ifdef USE_STAROS
+    if (has_full_path) {
+        // S3 storage type: FE provides full S3 path (supports partitioned prefix feature)
+        // Use S3 raw path mode - starlet will use the path as-is without normalize_path
+        if (src_partition_full_path.find("s3://") != 0) {
+            return Status::InvalidArgument(
+                    fmt::format("Full path must be S3 type (start with 's3://'), got: {}", src_partition_full_path));
+        }
+        std::string src_partition_starlet_uri = convert_s3_path_to_starlet_uri(src_partition_full_path, src_tablet_id);
+
+        // Append metadata and segment directory names
+        src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);
+        src_data_dir = join_path(src_partition_starlet_uri, kSegmentDirectoryName);
+
+        VLOG(3) << "S3 storage: converted S3 full path to starlet URI, original: " << src_partition_full_path
+                << ", starlet_uri: " << src_partition_starlet_uri << ", meta_dir: " << src_meta_dir
+                << ", data_dir: " << src_data_dir;
+
+        // Create filesystem with S3 raw path mode enabled
+        shared_src_fs = new_fs_starlet(virtual_tablet_id, true /* use_raw_path */);
+        if (shared_src_fs == nullptr) {
+            return Status::Corruption("Failed to create virtual starlet filesystem");
+        }
+
+        ASSIGN_OR_RETURN(src_tablet_meta,
+                         try_build_source_tablet_meta_with_fallback(src_tablet_id, src_visible_version, src_db_id,
+                                                                    txn_id, src_meta_dir, src_data_dir, shared_src_fs));
+    } else {
+        // Non-S3 storage type (OSS/Azure/HDFS/GFS): use RemoteStarletLocationProvider
+        // Use normal mode - starlet will use normalize_path to combine sys.root with relative path
+        src_meta_dir = _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                         src_partition_id);
+        src_data_dir = _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                        src_partition_id);
+
+        LOG(INFO) << "Non-S3 storage: using RemoteStarletLocationProvider, meta_dir: " << src_meta_dir
+                  << ", data_dir: " << src_data_dir;
+
+        // Create filesystem with normal mode (no S3 raw path)
+        shared_src_fs = new_fs_starlet(virtual_tablet_id, false /* use_raw_path */);
+        if (shared_src_fs == nullptr) {
+            return Status::Corruption("Failed to create virtual starlet filesystem");
+        }
+        ASSIGN_OR_RETURN(src_tablet_meta,
+                         build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
     }
-    ASSIGN_OR_RETURN(auto src_tablet_meta,
-                     build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
 #else
-    auto src_meta_dir = "test_lake_replication/meta";
-    auto src_data_dir = "test_lake_replication/data";
-    auto shared_src_fs_st_or = FileSystem::CreateSharedFromString(src_data_dir);
-    if (!shared_src_fs_st_or.ok()) {
-        return Status::Corruption("Failed to create virtual starlet filesystem");
-    }
-    auto shared_src_fs = shared_src_fs_st_or.value();
-    ASSIGN_OR_RETURN(auto src_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
+    return Status::NotSupported("Lake replication remote storage requires build with shared-data support!");
 #endif
 
     VLOG(3) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
             << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
             << ", tablet_id: " << target_tablet_id;
+
+    // step 2: build target metadata and file mappings.
 
     // `file_locations` is the mapping between source and target file locations,
     // it contains all files that need to replicate from source to target storage
@@ -139,9 +256,32 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     // Track which segments have size changes
     std::unordered_map<std::string, size_t> segment_size_changes;
 
+    // step 3: prepare copy mode and build per-file copy tasks.
     MonotonicStopWatch watch;
     watch.start();
-    size_t total_file_size = 0;
+    std::atomic<size_t> total_file_size{0};
+
+    ThreadPool* repl_pool = get_replicate_file_thread_pool();
+    bool use_parallel = should_use_parallel_copy(filename_map.size(), repl_pool);
+    std::mutex mu;
+    std::mutex* shared_mutex = nullptr;
+    FileConverterCreatorFunc active_file_converters = file_converters;
+    if (use_parallel) {
+        LOG(INFO) << "Start parallel file copy, file_count: " << filename_map.size() << ", txn_id: " << txn_id
+                  << ", tablet_id: " << target_tablet_id << ", pool num_threads: " << repl_pool->num_threads()
+                  << ", pool active_threads: " << repl_pool->active_threads()
+                  << ", pool queued_tasks: " << repl_pool->num_queued_tasks();
+        shared_mutex = &mu;
+        active_file_converters = [&file_converters, &mu](
+                                         const std::string& file_name,
+                                         uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+            std::lock_guard lock(mu);
+            return file_converters(file_name, file_size);
+        };
+    }
+
+    std::vector<ReplicationTask> tasks;
+    tasks.reserve(filename_map.size());
     for (const auto& pair : filename_map) {
         const auto& src_file_name = pair.first;
         auto src_file_location = join_path(src_data_dir, src_file_name);
@@ -150,58 +290,112 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             return Status::Corruption("Found invalid file location, src file location: " + src_file_location);
         }
         const auto& target_file_location = it->second;
-        LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
-                  << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
-
-        // Create trace for this file replication
-        scoped_refptr<Trace> file_trace(new Trace);
-        ADOPT_TRACE(file_trace.get());
-        TRACE("Start replicate file, txn_id: $0, tablet_id: $1, src: $2, target: $3", txn_id, target_tablet_id,
-              src_file_location, target_file_location);
-        TRACE_COUNTER_INCREMENT("txn_id", txn_id);
-        TRACE_COUNTER_INCREMENT("tablet_id", target_tablet_id);
-
-        size_t final_file_size = 0;
-        auto start_ts = butil::gettimeofday_us();
-        if (is_segment(src_file_name)) {
-            // For segment files, use download_lake_segment_file which supports schema conversion
-            // via SegmentStreamConverter when column_unique_id_map is not empty.
-            // file_size might be available in segment_name_to_size_map
-            auto src_file_size = segment_name_to_size_map[src_file_name];
-            RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
-                    src_file_location, src_file_name, src_file_size, shared_src_fs, file_converters, &final_file_size));
-            // Update the segment size map with the actual converted file size
-            if (final_file_size > 0 && final_file_size != src_file_size) {
-                const auto& target_file_name = pair.second.first;
-                segment_size_changes[target_file_name] = final_file_size;
-                LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
-                          << ", target_file: " << target_file_name << ", original size: " << src_file_size
-                          << ", final size: " << final_file_size;
-            }
-        } else {
-            // For non-segment files (.del, .sst, .delvec, .cols), use streaming copy with encryption support.
-            // These files are typically small, so streaming copy is efficient and avoids an extra
-            // remote IO call to get file size (which would increase object storage IOPS cost).
-            WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-            if (config::enable_transparent_data_encryption) {
-                // Apply encryption info from filename_map to ensure file content matches metadata
-                opts.encryption_info = pair.second.second.info;
-            }
-            ASSIGN_OR_RETURN(final_file_size, fs::copy_file(src_file_location, shared_src_fs, target_file_location,
-                                                            nullptr, opts, 1024 * 1024));
-            // Track this file for cleanup on failure, similar to how segment files are tracked via file_converters
-            files_to_delete.push_back(target_file_location);
+        size_t src_file_size = 0;
+        auto size_it = segment_name_to_size_map.find(src_file_name);
+        if (size_it != segment_name_to_size_map.end()) {
+            src_file_size = size_it->second;
         }
-        total_file_size += final_file_size;
-        auto cost = butil::gettimeofday_us() - start_ts;
-        auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
-        TRACE("Finished replicate file, final_size: $0, cost_us: $1", final_file_size, cost);
+        bool is_seg = is_segment(src_file_name);
+        const auto& target_file_name = pair.second.first;
+        FileEncryptionInfo encryption_info;
+        if (config::enable_transparent_data_encryption) {
+            encryption_info = pair.second.second.info;
+        }
 
-        if (is_slow) {
-            LOG(INFO) << "Finished replicate src file: " << src_file_location << ", target: " << target_file_location
-                      << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
-                      << ", cost(s): " << cost / 1000. / 1000. << "\n"
-                      << ",trace: " << file_trace->MetricsAsJSON();
+        tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
+                            is_seg, encryption_info]() -> Status {
+            // Fast cancel: check right before each file copy starts.
+            if (txn_id < get_master_info().min_active_txn_id) {
+                LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
+                             << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+                             << ", min_active_txn_id: " << get_master_info().min_active_txn_id
+                             << ", src_file: " << src_file_name;
+                return Status::Aborted("Lake replication cancelled, transaction is aborted");
+            }
+            TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_lake_remote_storage::before_copy", nullptr);
+
+            LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
+                      << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
+
+            size_t final_file_size = 0;
+            auto start_ts = butil::gettimeofday_us();
+            if (is_seg) {
+                TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
+                                         &final_file_size);
+                if (final_file_size == 0) {
+                    RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
+                            src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
+                            &final_file_size));
+                }
+                if (final_file_size > 0 && final_file_size != src_file_size) {
+                    if (shared_mutex != nullptr) {
+                        std::lock_guard lock(*shared_mutex);
+                        segment_size_changes[target_file_name] = final_file_size;
+                    } else {
+                        segment_size_changes[target_file_name] = final_file_size;
+                    }
+                    LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
+                              << ", target_file: " << target_file_name << ", original size: " << src_file_size
+                              << ", final size: " << final_file_size;
+                }
+            } else {
+                WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+                if (config::enable_transparent_data_encryption) {
+                    opts.encryption_info = encryption_info;
+                }
+                int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+                TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                         &final_file_size);
+                if (final_file_size == 0) {
+                    ASSIGN_OR_RETURN(final_file_size,
+                                     copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                      target_file_location, opts, max_retry));
+                }
+                if (shared_mutex != nullptr) {
+                    std::lock_guard lock(*shared_mutex);
+                    files_to_delete.push_back(target_file_location);
+                } else {
+                    files_to_delete.push_back(target_file_location);
+                }
+            }
+
+            total_file_size.fetch_add(final_file_size, std::memory_order_relaxed);
+            auto cost = butil::gettimeofday_us() - start_ts;
+            auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
+            if (is_slow) {
+                LOG(INFO) << "Finished replicate src file: " << src_file_location
+                          << ", target: " << target_file_location << ", txn_id: " << txn_id
+                          << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
+                          << ", cost(s): " << cost / 1000. / 1000.;
+            }
+            return Status::OK();
+        });
+    }
+    // step 4: execute tasks and collect copy metrics.
+    // Follow the ThreadPoolToken(CONCURRENT) + wait() pattern used in txn_manager.cpp.
+    if (use_parallel) {
+        auto token = repl_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        std::vector<Status> task_results(tasks.size());
+        for (size_t i = 0; i < tasks.size(); i++) {
+            auto st =
+                    token->submit_func([&task_results, i, task = std::move(tasks[i])]() { task_results[i] = task(); });
+            if (!st.ok()) {
+                task_results[i] = std::move(st);
+            }
+        }
+        token->wait();
+        for (const auto& r : task_results) {
+            if (!r.ok()) {
+                LOG(WARNING) << "Parallel file copy failed, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+                             << ", pool num_threads: " << repl_pool->num_threads()
+                             << ", pool active_threads: " << repl_pool->active_threads()
+                             << ", pool queued_tasks: " << repl_pool->num_queued_tasks() << ", error: " << r;
+                return r;
+            }
+        }
+    } else {
+        for (const auto& task : tasks) {
+            RETURN_IF_ERROR(task());
         }
     }
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
@@ -210,9 +404,11 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
     LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
-              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, txn_id: " << txn_id
+              << ", cost: " << total_time_sec << "s, rate: " << copy_rate
+              << "MB/s, parallel: " << (use_parallel ? "true" : "false") << ", txn_id: " << txn_id
               << ", tablet_id: " << target_tablet_id;
 
+    // step 5: update metadata and write txn log.
     // Update segment sizes in tablet_metadata if there are any changes
     if (!segment_size_changes.empty()) {
         RETURN_IF_ERROR(update_tablet_metadata_segment_sizes(copied_target_tablet_meta, segment_size_changes));
@@ -241,20 +437,164 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     return Status::OK();
 }
 
+ThreadPool* LakeReplicationTxnManager::get_replicate_file_thread_pool() {
+    if (_replicate_file_thread_pool != nullptr) {
+        return _replicate_file_thread_pool;
+    }
+    auto* agent_srv = ExecEnv::GetInstance()->agent_server();
+    if (agent_srv == nullptr) {
+        return nullptr;
+    }
+    _replicate_file_thread_pool = agent_srv->get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
+    return _replicate_file_thread_pool;
+}
+
+bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool) {
+    if (thread_pool == nullptr) {
+        return false;
+    }
+    const int min_file_count = std::max(0, config::lake_replication_parallel_copy_min_file_count);
+    if (min_file_count == 0) {
+        return false;
+    }
+    if (file_count < static_cast<size_t>(min_file_count)) {
+        return false;
+    }
+    const int num_threads = thread_pool->num_threads();
+    if (num_threads <= 0) {
+        return false;
+    }
+    return thread_pool->num_queued_tasks() <= num_threads * kParallelCopyMaxQueuePerThread;
+}
+
+StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
+        const std::string& src_file_location, const std::shared_ptr<FileSystem>& shared_src_fs,
+        const std::string& target_file_location, const WritableFileOptions& opts, int max_retry) {
+    ASSIGN_OR_RETURN(auto expected_size, shared_src_fs->get_file_size(src_file_location));
+
+    const size_t buff_size = std::max<size_t>(
+            std::min<size_t>(expected_size, config::lake_replication_read_buffer_size), 1 * 1024 * 1024);
+
+    max_retry = std::max(1, max_retry);
+    Status copy_status;
+    size_t final_file_size = 0;
+    for (int retry = 0; retry < max_retry; ++retry) {
+        auto res = fs::copy_file(src_file_location, shared_src_fs, target_file_location, nullptr, opts, buff_size);
+        if (!res.ok()) {
+            copy_status = res.status();
+            LOG(WARNING) << "Failed to copy file " << src_file_location << " to " << target_file_location
+                         << ", retry=" << retry << ", error: " << copy_status;
+            continue;
+        }
+        final_file_size = *res;
+        TEST_SYNC_POINT_CALLBACK("lake_replication_non_segment_copy_size", &final_file_size);
+        if (static_cast<int64_t>(final_file_size) == static_cast<int64_t>(expected_size)) {
+            return final_file_size;
+        }
+        copy_status = Status::Corruption(fmt::format("File size mismatch after copy: expected={}, actual={}, src={}",
+                                                     expected_size, final_file_size, src_file_location));
+        LOG(WARNING) << copy_status.message() << ", retry=" << retry;
+    }
+    return copy_status;
+}
+
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
         int64_t src_tablet_id, int64_t version, const std::string& meta_dir,
         const std::shared_ptr<FileSystem>& shared_src_fs) {
     LOG(INFO) << "Lake replicate storage task, building source tablet meta for tablet: " << src_tablet_id
-              << ", version: " << version;
+              << ", version: " << version << ", meta_dir: " << meta_dir;
+
+#ifdef BE_TEST
+    TabletMetadataPtr injected_meta = nullptr;
+    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                             static_cast<void*>(&injected_meta));
+    if (injected_meta != nullptr) {
+        return injected_meta;
+    }
+#endif
+
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
     auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
     if (!src_tablet_meta_or.ok()) {
-        LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
-                     << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or;
+        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
         return src_tablet_meta_or;
     }
     return src_tablet_meta_or.value();
+}
+
+StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_meta_with_fallback(
+        int64_t src_tablet_id, int64_t version, int64_t src_db_id, TTransactionId txn_id, std::string& src_meta_dir,
+        std::string& src_data_dir, const std::shared_ptr<FileSystem>& shared_src_fs) {
+    // Strategy: Try current format first, then fallback to legacy formats on NotFound error.
+    const std::string original_meta_dir = src_meta_dir;
+    const std::string original_data_dir = src_data_dir;
+
+    // Attempt 1: Try current path format
+    auto result = build_source_tablet_meta(src_tablet_id, version, src_meta_dir, shared_src_fs);
+    if (result.ok()) {
+        return result;
+    }
+
+    // If error is not NotFound, return immediately
+    if (!result.status().is_not_found()) {
+        LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                     << ", src_tablet_id: " << src_tablet_id << ", error: " << result.status();
+        return result;
+    }
+
+    LOG(INFO) << "Source tablet meta not found with current path format, trying legacy format without db_id"
+              << ", src_meta_dir: " << src_meta_dir << ", txn_id: " << txn_id;
+
+    // Attempt 2: Try legacy format without db_id (keep partition_id)
+    // Example: db56764/56970/63453/meta -> 56970/63453/meta
+    std::string legacy_meta_dir = remove_db_id_component(original_meta_dir, src_db_id);
+    std::string legacy_data_dir = remove_db_id_component(original_data_dir, src_db_id);
+
+    result = build_source_tablet_meta(src_tablet_id, version, legacy_meta_dir, shared_src_fs);
+    if (result.ok()) {
+        LOG(INFO) << "Source tablet meta found with legacy format (without db_id)"
+                  << ", updated meta_dir: " << legacy_meta_dir << ", data_dir: " << legacy_data_dir
+                  << ", txn_id: " << txn_id;
+        src_meta_dir = legacy_meta_dir;
+        src_data_dir = legacy_data_dir;
+        return result;
+    }
+
+    // If error is not NotFound, return immediately
+    if (!result.status().is_not_found()) {
+        LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                     << ", src_tablet_id: " << src_tablet_id << ", legacy_meta_dir: " << legacy_meta_dir
+                     << ", error: " << result.status();
+        return result;
+    }
+
+    LOG(INFO) << "Source tablet meta not found with legacy format without db_id, "
+              << "trying very old format without db_id and partition_id"
+              << ", legacy_meta_dir: " << legacy_meta_dir << ", txn_id: " << txn_id;
+
+    // Attempt 3: Try very old format without db_id and partition_id
+    // Remove partition_id from legacy1 path
+    // Example: 56970/63453/meta -> 56970/meta
+    std::string very_old_meta_dir = remove_last_path_component(legacy_meta_dir);
+    std::string very_old_data_dir = remove_last_path_component(legacy_data_dir);
+
+    result = build_source_tablet_meta(src_tablet_id, version, very_old_meta_dir, shared_src_fs);
+    if (result.ok()) {
+        LOG(INFO) << "Source tablet meta found with very old format (without db_id and partition_id)"
+                  << ", updated meta_dir: " << very_old_meta_dir << ", data_dir: " << very_old_data_dir
+                  << ", txn_id: " << txn_id;
+        src_meta_dir = very_old_meta_dir;
+        src_data_dir = very_old_data_dir;
+        return result;
+    }
+
+    // All attempts failed, return the last error
+    LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta after all fallback attempts"
+                 << ", version: " << version << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id
+                 << ", error: " << result.status();
+    return result;
 }
 
 Status LakeReplicationTxnManager::build_existed_filename_uuids_map(

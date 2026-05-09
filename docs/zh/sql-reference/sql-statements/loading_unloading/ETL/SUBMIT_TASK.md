@@ -21,7 +21,7 @@ displayed_sidebar: docs
 
 您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
 
-您可以使用 [DROP TASK](DROP_TASK.md) 删除异步任务。
+您可以使用 [ALTER TASK](ALTER_TASK.md) 修改异步任务，或使用 [DROP TASK](DROP_TASK.md) 删除异步任务。
 
 ## 语法
 
@@ -54,6 +54,14 @@ AS insert into t2 select * from t1;
 | schedule_start     | 否      | 定时任务的开始时间。                                                                           |
 | schedule_interval  | 否      | 定时任务的执行间隔，最小间隔为 10 秒。                                                           |
 | etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../INSERT.md) |
+
+## 返回值
+
+- `TaskName`：任务的名称。
+- `Status`：任务的状态。有效值：
+  - `SUBMITTED`：任务已提交。
+  - `REJECTED`：任务已被拒绝。
+  - `FAILED`：任务已失败。
 
 ## 使用说明
 

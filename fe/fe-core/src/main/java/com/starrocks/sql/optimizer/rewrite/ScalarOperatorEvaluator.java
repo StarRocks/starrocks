@@ -216,6 +216,10 @@ public enum ScalarOperatorEvaluator {
             if (invoker.isMetaFunction) {
                 throw new StarRocksPlannerException(ErrorType.USER_ERROR, ExceptionUtils.getRootCauseMessage(e));
             }
+            if ((e instanceof InvocationTargetException) && e.getCause() != null &&
+                    e.getCause().getClass().equals(StarRocksPlannerException.class)) {
+                throw (StarRocksPlannerException) e.getCause();
+            }
         }
         return root;
     }

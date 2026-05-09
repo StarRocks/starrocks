@@ -447,6 +447,36 @@ public class RangePartitionInfo extends PartitionInfo {
         return null;
     }
 
+    public long getEnclosingPartitionId(Map<ColumnId, Column> schema,
+                                        SingleRangePartitionDesc desc,
+                                        boolean isTemp) throws DdlException {
+        PartitionKeyDesc partKeyDesc = desc.getPartitionKeyDesc();
+        if (!partKeyDesc.hasLowerValues()) {
+            return -1;
+        }
+        try {
+            List<Column> partitionColumns = getPartitionColumns(schema);
+            PartitionKey lowKey = PartitionKey.createPartitionKey(partKeyDesc.getLowerValues(), partitionColumns);
+            PartitionKey upperKey;
+            if (partKeyDesc.isMax()) {
+                upperKey = PartitionKey.createInfinityPartitionKey(partitionColumns, true);
+            } else {
+                upperKey = PartitionKey.createPartitionKey(partKeyDesc.getUpperValues(), partitionColumns);
+            }
+            Range<PartitionKey> newRange = Range.closedOpen(lowKey, upperKey);
+
+            Map<Long, Range<PartitionKey>> tmpMap = isTemp ? idToTempRange : idToRange;
+            for (Map.Entry<Long, Range<PartitionKey>> entry : tmpMap.entrySet()) {
+                if (entry.getValue().encloses(newRange)) {
+                    return entry.getKey();
+                }
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException("Invalid range value format: " + e.getMessage());
+        }
+        return -1;
+    }
+
     private void setRangeInternal(long partitionId, boolean isTemp, Range<PartitionKey> range) {
         if (isTemp) {
             idToTempRange.put(partitionId, range);

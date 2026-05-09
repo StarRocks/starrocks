@@ -87,7 +87,9 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
             }
 
             const auto& value = bound.values[i];
-            if (value.variant_type == TVariantType::NULL_VALUE) {
+            if (value.variant_type == TVariantType::MINIMUM || value.variant_type == TVariantType::MAXIMUM) {
+                return Status::InvalidArgument("MINIMUM/MAXIMUM variant is not supported in range bound");
+            } else if (value.variant_type == TVariantType::NULL_VALUE) {
                 column->append_nulls(1);
             } else if (value.variant_type == TVariantType::NORMAL_VALUE && value.__isset.value) {
                 auto type_info = get_type_info(*type_desc);

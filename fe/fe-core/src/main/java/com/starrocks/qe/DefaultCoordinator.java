@@ -96,6 +96,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -749,7 +750,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private boolean isInternalCancelError(String errMsg) {
-        return errMsg.equals(FeConstants.LIMIT_REACH_ERROR) || errMsg.equals(FeConstants.QUERY_FINISHED_ERROR);
+        return errMsg.startsWith(FeConstants.LIMIT_REACH_ERROR) || errMsg.startsWith(FeConstants.QUERY_FINISHED_ERROR);
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
@@ -1075,6 +1076,8 @@ public class DefaultCoordinator extends Coordinator {
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
+        clearExternalResources();
+
         if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             String errorMsg = String.format("[reason=%s] [msg=%s]", cancelReason, queryStatus.getErrorMsg());
             connectContext.getState().setError(errorMsg);
@@ -1095,6 +1098,17 @@ public class DefaultCoordinator extends Coordinator {
                 if (!unFinishedInstanceIds.isEmpty()) {
                     LOG.info("query: {} has unfinished instances: {}", connectContext.queryId, unFinishedInstanceIds);
                 }
+            }
+        }
+    }
+
+    @Override
+    public void clearExternalResources() {
+        for (ScanNode scanNode : jobSpec.getScanNodes()) {
+            try {
+                scanNode.clear();
+            } catch (Exception e) {
+                LOG.warn("clear scan code failed for {}", scanNode.getClass().getSimpleName(), e);
             }
         }
     }
@@ -1430,7 +1444,16 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public boolean isEnableLoadProfile() {
-        return connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile();
+        // For stream loads sent directly to CN the ConnectContext is created with
+        // empty session variables, so also honor enable_profile on the JobSpec's
+        // query options — StreamLoadPlanner sets it when the table's
+        // enable_load_profile property is on, and JobSpec.fromSyncStreamLoadSpec
+        // propagates it into the coordinator's query options.
+        if (connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile()) {
+            return true;
+        }
+        TQueryOptions queryOptions = jobSpec.getQueryOptions();
+        return queryOptions != null && queryOptions.isSetEnable_profile() && queryOptions.isEnable_profile();
     }
 
     /**

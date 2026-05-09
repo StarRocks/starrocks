@@ -181,12 +181,7 @@ public class LeaderImpl {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status;
-            if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                status = new TStatus(TStatusCode.LEADER_TRANSFERRED);
-            } else {
-                status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            }
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
             LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
@@ -417,6 +412,7 @@ public class LeaderImpl {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
+                createReplicaTask.markSendSucceeded();
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
                 LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
                         tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
