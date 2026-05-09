@@ -127,7 +127,7 @@ public class RoutineLoadTaskSchedulerTest {
 
         RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
         Deencapsulation.setField(routineLoadTaskScheduler, "needScheduleTasksQueue", routineLoadTaskInfoQueue);
-        routineLoadTaskScheduler.runAfterCatalogReady();
+        routineLoadTaskScheduler.runAfterLeaseValid();
 
         // The task was submitted to the thread pool waiting for execution, it could be some delay the task didn't get
         // executed at all when main thread thought the testing is done.

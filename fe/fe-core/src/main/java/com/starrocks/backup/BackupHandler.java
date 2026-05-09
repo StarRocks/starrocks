@@ -63,7 +63,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
@@ -115,7 +115,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
-public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
+public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
@@ -150,7 +150,9 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     private GlobalStateMgr globalStateMgr;
 
     public BackupHandler() {
-        // for persist
+        // for persist - LeaderDaemon requires a name; the worker thread is never started for
+        // the deserialization-only instance (start() requires globalStateMgr to be non-null).
+        super("backup-handler", 3000L);
     }
 
     public BackupHandler(GlobalStateMgr globalStateMgr) {
@@ -210,7 +212,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (!isInit) {
             if (!init()) {
                 return;
@@ -221,6 +223,15 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             job.setGlobalStateMgr(globalStateMgr);
             job.run();
         }
+    }
+
+    @Override
+    protected void onStopped() {
+        // dbIdToBackupOrRestoreJob is persistent state (saved/loaded via image and replayed
+        // through the editlog) - the next leader resumes those jobs from the same map. Only
+        // drop the per-leader-session init flag so the new leader re-validates backup/restore
+        // tmp directories before resuming jobs.
+        isInit = false;
     }
 
     // handle create repository stmt

@@ -20,7 +20,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,7 +49,7 @@ import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 /**
  * Manages batch write operations.
  */
-public class BatchWriteMgr extends FrontendDaemon {
+public class BatchWriteMgr extends LeaderDaemon {
 
     private static final Logger LOG = LoggerFactory.getLogger(BatchWriteMgr.class);
 
@@ -89,9 +89,32 @@ public class BatchWriteMgr extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         setInterval(Config.merge_commit_gc_check_interval_ms);
         cleanupInactiveJobs();
+    }
+
+    @Override
+    protected void onStopped() {
+        // mergeCommitJobs and the per-table backend-assigner registrations are leader-session
+        // bookkeeping: BE coordinators are picked again when the next leader sees the next
+        // request. Drop the registrations so a new leader does not inherit assignments made
+        // against a sealed editlog. threadPoolExecutor / coordinatorBackendAssigner are not
+        // shut down here because they are owned by this singleton across leader sessions.
+        lock.writeLock().lock();
+        try {
+            for (MergeCommitJob job : mergeCommitJobs.values()) {
+                try {
+                    coordinatorBackendAssigner.unregisterBatchWrite(job.getId());
+                } catch (Throwable t) {
+                    LOG.warn("unregister batch write {} failed", job.getId(), t);
+                }
+            }
+            mergeCommitJobs.clear();
+            MergeCommitMetricRegistry.getInstance().setJobNum(0);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**

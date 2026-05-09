@@ -43,7 +43,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
@@ -73,7 +73,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * The scheduler will be blocked in step3 till the queue receive a new task
  */
-public class RoutineLoadTaskScheduler extends FrontendDaemon {
+public class RoutineLoadTaskScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadTaskScheduler.class);
 
@@ -100,12 +100,24 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         try {
             process();
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of RoutineLoadTaskScheduler", e);
         }
+    }
+
+    @Override
+    protected void onStopped() {
+        // The task queue holds RoutineLoadTaskInfo refs that are leader-session bookkeeping;
+        // RoutineLoadMgr re-divides routine load jobs into tasks when the next leader activates.
+        // The slot watermark is reset so the next leader re-queries BE slot capacity.
+        needScheduleTasksQueue.clear();
+        lastBackendSlotUpdateTime = -1;
+        // scheduledExecutorService and threadPool are not shut down here - they are owned by
+        // this singleton and live across leader sessions; in-flight submissions complete on
+        // their own. Tier 3 may revisit this once executors become re-creatable.
     }
 
     private void process() throws InterruptedException {

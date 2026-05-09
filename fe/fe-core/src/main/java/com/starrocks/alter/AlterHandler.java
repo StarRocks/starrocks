@@ -41,7 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
@@ -64,7 +64,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
-public abstract class AlterHandler extends FrontendDaemon {
+public abstract class AlterHandler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
     protected ConcurrentMap<Long, AlterJobV2> alterJobsV2 = Maps.newConcurrentMap();
 
@@ -190,10 +190,17 @@ public abstract class AlterHandler extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         clearExpireFinishedOrCancelledAlterJobsV2();
         setInterval(Config.alter_scheduler_interval_millisecond);
     }
+
+    // alterJobsV2 is persistent (saved/loaded via image and replayed on followers via editlog),
+    // so it must NOT be cleared on demotion - the next leader resumes those jobs from the same
+    // map. The owned 'executor' thread pool also stays alive across leader sessions; in-flight
+    // AlterReplicaTask submissions complete on their own. Subclasses can override onStopped()
+    // to drop derived caches (e.g. tableNotFinalStateJobMap, lastRecycleBinCheckTime) that are
+    // recomputable from alterJobsV2 / cluster state.
 
     @Override
     public synchronized void start() {

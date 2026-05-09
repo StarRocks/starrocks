@@ -1558,8 +1558,10 @@ public class UtFrameUtils {
 
     public static void stopBackgroundSchemaChangeHandler(long timeoutMs) throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
-        schemaChangeHandler.setStop();
-        schemaChangeHandler.interrupt();
+        // LeaderDaemon's setStop() already interrupts the worker; stopGracefully joins up to
+        // timeoutMs and runs onStopped(). If the worker did not exit in time, fall through
+        // to the polling loop below so the existing TimeoutException contract is preserved.
+        schemaChangeHandler.stopGracefully(timeoutMs);
         long endTime = System.currentTimeMillis() + timeoutMs;
         while (schemaChangeHandler.isRunning()) {
             if (System.currentTimeMillis() > endTime) {

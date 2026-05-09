@@ -33,11 +33,14 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -495,5 +498,36 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         assertFalse(result2.isOk());
         assertEquals(TStatusCode.INVALID_ARGUMENT, result2.getStatus().getStatus_code());
         assertTrue(result2.getStatus().getError_msgs().get(0).contains("does not match"));
+    }
+
+    @Test
+    public void testOnStoppedClearsLeaderSessionState() throws Exception {
+        // mergeCommitJobs holds in-flight merge-commit jobs created on this leader. After
+        // demotion the next leader picks fresh coordinator backends per table, so leftover
+        // entries here would otherwise confuse those decisions. The owned threadPoolExecutor
+        // is intentionally NOT shut down by onStopped() because LeaderDaemon.start() is
+        // idempotent and the executor field is final - that lifecycle is left to Tier 3.
+        @SuppressWarnings("unchecked")
+        Map<BatchWriteId, MergeCommitJob> jobs = (Map<BatchWriteId, MergeCommitJob>)
+                FieldUtils.readField(batchWriteMgr, "mergeCommitJobs", true);
+
+        StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {
+            {
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "1");
+                put(HTTP_FORMAT, "json");
+            }
+        });
+        // Seed one job through the public API so the registration with
+        // CoordinatorBackendAssigner mirrors production usage.
+        RequestCoordinatorBackendResult seeded = batchWriteMgr.requestCoordinatorBackends(
+                tableId1, params, new UserIdentity("root", "%"));
+        if (seeded.isOk()) {
+            assertEquals(1, jobs.size(), "precondition: a merge-commit job is registered");
+        }
+
+        MethodUtils.invokeMethod(batchWriteMgr, true, "onStopped");
+
+        assertTrue(jobs.isEmpty(), "mergeCommitJobs must be cleared on demotion");
     }
 }

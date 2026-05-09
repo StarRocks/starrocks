@@ -165,7 +165,7 @@ public class BackupHandlerTest {
     @Test
     public void testInit() {
         BackupHandler handler = new BackupHandler(GlobalStateMgr.getCurrentState());
-        handler.runAfterCatalogReady();
+        handler.runAfterLeaseValid();
 
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
         Assertions.assertTrue(backupDir.exists());

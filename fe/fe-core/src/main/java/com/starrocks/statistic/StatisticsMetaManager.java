@@ -26,7 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.AutoInferUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
@@ -76,7 +76,7 @@ import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.JsonType.JSON;
 
-public class StatisticsMetaManager extends FrontendDaemon {
+public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
@@ -575,7 +575,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // To make UT pass, some UT will create database and table
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
         while (!checkDatabaseExist()) {

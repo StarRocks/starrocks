@@ -51,7 +51,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
@@ -86,7 +86,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 import static java.lang.Math.max;
 
-public class CatalogRecycleBin extends FrontendDaemon implements Writable, MemoryTrackable {
+public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
 
     private final Map<Long, RecycleDatabaseInfo> idToDatabase;
@@ -1218,7 +1218,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         long currentTimeMs = System.currentTimeMillis();
         // Must follow the partition -> table -> db order for two reasons:
         // 1. Avoid dangling references: partition(table) should be erased before its parent table(db).
