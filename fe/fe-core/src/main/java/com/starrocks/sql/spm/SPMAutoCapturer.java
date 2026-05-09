@@ -51,7 +51,7 @@ public class SPMAutoCapturer extends LeaderDaemon {
     private ConnectContext connect;
 
     public SPMAutoCapturer() {
-        super("spm-auto-capturer", GlobalVariable.spmCaptureIntervalSeconds * 100L);
+        super("spm-auto-capturer", GlobalVariable.spmCaptureIntervalSeconds * 1000L);
     }
 
     @Override
@@ -66,7 +66,7 @@ public class SPMAutoCapturer extends LeaderDaemon {
     protected void runAfterLeaseValid() {
         // Pick up runtime changes to spm_capture_interval_seconds so operators can retune the
         // pace without restarting the leader.
-        setInterval(GlobalVariable.spmCaptureIntervalSeconds * 100L);
+        setInterval(GlobalVariable.spmCaptureIntervalSeconds * 1000L);
         if (!GlobalVariable.enableSPMCapture) {
             return;
         }
