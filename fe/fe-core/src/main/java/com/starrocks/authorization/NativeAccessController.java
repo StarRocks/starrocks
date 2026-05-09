@@ -113,14 +113,18 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkViewAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        Preconditions.checkNotNull(tableName.getDb());
         checkObjectTypeAction(context, privilegeType, ObjectType.VIEW,
-                Arrays.asList(tableName.getDb(), tableName.getTbl()));
+                Arrays.asList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
     public void checkAnyActionOnView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context, ObjectType.VIEW, Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        Preconditions.checkNotNull(tableName.getDb());
+        checkAnyActionOnObject(context, ObjectType.VIEW, Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
@@ -129,23 +133,39 @@ public class NativeAccessController implements AccessController {
     }
 
     @Override
+    public void checkAnyActionOnAnyView(ConnectContext context, String catalog, String db) throws AccessDeniedException {
+        checkAnyActionOnView(context, new TableName(catalog, db, "*"));
+    }
+
+    @Override
     public void checkMaterializedViewAction(ConnectContext context, TableName tableName,
                                             PrivilegeType privilegeType) throws AccessDeniedException {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        Preconditions.checkNotNull(tableName.getDb());
         checkObjectTypeAction(context, privilegeType,
                 ObjectType.MATERIALIZED_VIEW,
-                Arrays.asList(tableName.getDb(), tableName.getTbl()));
+                Arrays.asList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
     public void checkAnyActionOnMaterializedView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context, ObjectType.MATERIALIZED_VIEW, Arrays.asList(tableName.getDb(), tableName.getTbl()));
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        Preconditions.checkNotNull(tableName.getDb());
+        checkAnyActionOnObject(context, ObjectType.MATERIALIZED_VIEW,
+                Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
     public void checkAnyActionOnAnyMaterializedView(ConnectContext context, String db)
             throws AccessDeniedException {
         checkAnyActionOnMaterializedView(context, new TableName(db, "*"));
+    }
+
+    @Override
+    public void checkAnyActionOnAnyMaterializedView(ConnectContext context, String catalog, String db)
+            throws AccessDeniedException {
+        checkAnyActionOnMaterializedView(context, new TableName(catalog, db, "*"));
     }
 
     @Override

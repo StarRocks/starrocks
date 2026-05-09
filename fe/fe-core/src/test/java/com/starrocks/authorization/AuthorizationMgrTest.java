@@ -1682,6 +1682,101 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void testGrantViewExternalCatalog(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog("test_catalog");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user ext_view_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("ext_view_user", "%");
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // verify no access initially
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_view"), PrivilegeType.SELECT));
+
+        // grant SELECT on ALL VIEWS in db
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "grant SELECT on all views in database " + DB_NAME + " to ext_view_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        manager.grant(grantStmt);
+
+        // verify access now works
+        setCurrentUserAndRoles(ctx, user);
+        Authorizer.checkViewAction(ctx,
+                new TableName("test_catalog", DB_NAME, "some_view"), PrivilegeType.SELECT);
+
+        // also verify checkAnyActionOnView and checkAnyActionOnOrInDb
+        Authorizer.checkAnyActionOnView(ctx,
+                new TableName("test_catalog", DB_NAME, "some_view"));
+        Authorizer.checkAnyActionOnOrInDb(ctx, "test_catalog", DB_NAME);
+
+        // revoke
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "revoke SELECT on all views in database " + DB_NAME + " from ext_view_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        manager.revoke(revokeStmt);
+
+        // verify no access after revoke
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_view"), PrivilegeType.SELECT));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
+    }
+
+    @Test
+    public void testGrantMaterializedViewExternalCatalog(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog("test_catalog");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user ext_mv_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("ext_mv_user", "%");
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // verify no access initially
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkMaterializedViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_mv"), PrivilegeType.SELECT));
+
+        // grant SELECT on ALL MATERIALIZED VIEWS in db
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "grant SELECT on all materialized views in database " + DB_NAME + " to ext_mv_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        manager.grant(grantStmt);
+
+        // verify access now works
+        setCurrentUserAndRoles(ctx, user);
+        Authorizer.checkMaterializedViewAction(ctx,
+                new TableName("test_catalog", DB_NAME, "some_mv"), PrivilegeType.SELECT);
+        Authorizer.checkAnyActionOnMaterializedView(ctx,
+                new TableName("test_catalog", DB_NAME, "some_mv"));
+
+        // revoke
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "revoke SELECT on all materialized views in database " + DB_NAME + " from ext_mv_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        manager.revoke(revokeStmt);
+
+        // verify no access after revoke
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkMaterializedViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_mv"), PrivilegeType.SELECT));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
+    }
+
+    @Test
     public void testGrantBrief() throws Exception {
         ctx.setDatabase("db");
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
