@@ -811,7 +811,7 @@ ColumnIteratorOptions make_idg_iter_opts(RandomAccessFile* read_file, OlapReader
 // Probe records NGRAMBF: has_ngram_bloom_filter_index() flips true even when
 // the segment footer carries no BF metadata.
 TEST_F(ColumnReaderWriterTest, idg_probe_sets_ngram_bf_flag) {
-    auto col = numeric_data<TYPE_INT>(0);
+    auto col = numeric_data<TYPE_INT>(10000);
     const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
     auto segment = create_dummy_segment(fname);
     ColumnMetaPB meta;
@@ -843,7 +843,7 @@ TEST_F(ColumnReaderWriterTest, idg_probe_sets_ngram_bf_flag) {
 
 // Probe records original BF: has_original_bloom_filter_index() flips true.
 TEST_F(ColumnReaderWriterTest, idg_probe_sets_original_bf_flag) {
-    auto col = numeric_data<TYPE_INT>(0);
+    auto col = numeric_data<TYPE_INT>(10000);
     const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
     auto segment = create_dummy_segment(fname);
     ColumnMetaPB meta;
@@ -875,7 +875,7 @@ TEST_F(ColumnReaderWriterTest, idg_probe_sets_original_bf_flag) {
 // Probe ignores entries whose col_unique_id does not match. Both flags stay
 // false.
 TEST_F(ColumnReaderWriterTest, idg_probe_skips_wrong_column) {
-    auto col = numeric_data<TYPE_INT>(0);
+    auto col = numeric_data<TYPE_INT>(10000);
     const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
     auto segment = create_dummy_segment(fname);
     ColumnMetaPB meta;
@@ -908,7 +908,7 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skips_wrong_column) {
 // Loader returns an error: probe swallows it (init() must still succeed),
 // neither flag is set.
 TEST_F(ColumnReaderWriterTest, idg_probe_tolerates_loader_error) {
-    auto col = numeric_data<TYPE_INT>(0);
+    auto col = numeric_data<TYPE_INT>(10000);
     const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
     auto segment = create_dummy_segment(fname);
     ColumnMetaPB meta;
@@ -937,7 +937,7 @@ TEST_F(ColumnReaderWriterTest, idg_probe_tolerates_loader_error) {
 // Negative col_unique_id (non-lake / pre-IDG path) skips the probe entirely.
 // Loader is never called.
 TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
-    auto col = numeric_data<TYPE_INT>(0);
+    auto col = numeric_data<TYPE_INT>(10000);
     const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
     auto segment = create_dummy_segment(fname);
     ColumnMetaPB meta;
