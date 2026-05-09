@@ -45,9 +45,9 @@ TEST(AgentMetricsTest, InstallRegistersEngineRequestMetrics) {
     MetricRegistry registry("test_registry");
     metrics.install(&registry);
 
-    metrics.create_tablet_requests_total.increment(3);
+    metrics.report_disk_requests_total.increment(3);
     assert_metric_value(&registry, "engine_requests_total",
-                        MetricLabels().add("type", "create_tablet").add("status", "total"), "3");
+                        MetricLabels().add("type", "report_disk").add("status", "total"), "3");
 
     metrics.report_task_requests_failed.increment(4);
     assert_metric_value(&registry, "engine_requests_total",

@@ -102,13 +102,7 @@ void AgentMetrics::install(MetricRegistry* registry) {
     registry->register_metric("engine_requests_total", MetricLabels().add("type", #type).add("status", #status), \
                               &metric)
 
-    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, total, create_tablet_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, failed, create_tablet_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(drop_tablet, total, drop_tablet_requests_total);
-
-    REGISTER_ENGINE_REQUEST_METRIC(report_all_tablets, total, report_all_tablets_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(report_all_tablets, failed, report_all_tablets_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(report_tablet, total, report_tablet_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(report_tablet, failed, report_tablet_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(report_disk, total, report_disk_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(report_disk, failed, report_disk_requests_failed);
@@ -117,8 +111,6 @@ void AgentMetrics::install(MetricRegistry* registry) {
 
     REGISTER_ENGINE_REQUEST_METRIC(schema_change, total, schema_change_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(schema_change, failed, schema_change_requests_failed);
-    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, total, create_rollup_requests_total);
-    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, failed, create_rollup_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(clone, total, clone_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(clone, failed, clone_requests_failed);
 
