@@ -24,13 +24,6 @@
 #include <unordered_set>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/hash/crc32c.h"
-#include "base/testutil/sync_point.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
->>>>>>> 170d1c02de ([BugFix] Fix tablet merge correctness for split→compaction→merge (#72350))
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
@@ -62,6 +55,8 @@
 #include "storage/tablet_schema.h"
 #include "testutil/sync_point.h"
 #include "util/crc32c.h"
+#include "util/defer_op.h"
+#include "util/uid_util.h"
 
 namespace {
 
