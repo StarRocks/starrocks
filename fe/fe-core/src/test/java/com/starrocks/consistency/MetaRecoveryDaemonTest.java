@@ -31,10 +31,14 @@ import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 public class MetaRecoveryDaemonTest {
     @BeforeAll
@@ -181,5 +185,24 @@ public class MetaRecoveryDaemonTest {
         }
         Assertions.assertFalse(metaRecoveryDaemon.checkTabletReportCacheUp(timeMs + 1000L));
         Assertions.assertTrue(metaRecoveryDaemon.checkTabletReportCacheUp(timeMs - 1000L));
+    }
+
+    @Test
+    public void testOnStoppedClearsUnRecoveredPartitions() throws Exception {
+        // unRecoveredPartitions is leader-session diagnostic state surfaced via the proc node;
+        // the next leader rebuilds it from scratch, so it must not survive demotion.
+        MetaRecoveryDaemon recovery = new MetaRecoveryDaemon();
+        @SuppressWarnings("unchecked")
+        Set<MetaRecoveryDaemon.UnRecoveredPartition> partitions =
+                (Set<MetaRecoveryDaemon.UnRecoveredPartition>) FieldUtils.readField(
+                        recovery, "unRecoveredPartitions", true);
+        partitions.add(new MetaRecoveryDaemon.UnRecoveredPartition("d", "t", "p", 1L, "stale"));
+        partitions.add(new MetaRecoveryDaemon.UnRecoveredPartition("d", "t", "p2", 2L, "stale2"));
+        Assertions.assertEquals(2, partitions.size());
+
+        MethodUtils.invokeMethod(recovery, true, "onStopped");
+
+        Assertions.assertTrue(partitions.isEmpty(),
+                "unRecoveredPartitions must be cleared when leader-only daemon stops");
     }
 }

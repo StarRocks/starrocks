@@ -20,7 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import org.apache.logging.log4j.LogManager;
@@ -28,7 +28,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class DatabaseQuotaRefresher extends FrontendDaemon {
+public class DatabaseQuotaRefresher extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(DatabaseQuotaRefresher.class);
 
     public DatabaseQuotaRefresher() {
@@ -36,7 +36,7 @@ public class DatabaseQuotaRefresher extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         checkAndMayUpdateInterval();
         updateAllDatabaseUsedDataQuota();
     }
