@@ -139,10 +139,26 @@ Follow these steps to restore the cluster with the cluster snapshot.
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
+   Add the nodes to the cluster.
+
+   ```SQL
+   -- Add the Follower node:
+   ALTER SYSTEM ADD FOLLOWER "<follower_host>:<follower_edit_log_port>";
+   
+   -- Add the Observer node:
+   ALTER SYSTEM ADD OBSERVER "<observer_host>:<observer_edit_log_port>";
+   ```
+
 4. Start CN nodes **after cleaning the `storage_root_path` directories**.
 
    ```Bash
    ./be/bin/start_cn.sh --daemon
+   ```
+
+   Add the node to the cluster.
+
+   ```SQL
+   ALTER SYSTEM ADD COMPUTE NODE "<cn_host>:<cn_heartbeat_service_port>";
    ```
 
 If you have modified **cluster_snapshot.yaml** in the step 1, the node and storage volumes will be re-configured in the new cluster according to the information in the file.
