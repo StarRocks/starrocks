@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.resources
 import logging
+import re
 from typing import Any, List, Tuple
 
 from lark import Lark, Token, Transformer, v_args
@@ -105,6 +106,7 @@ class DataTypeTransformer(Transformer):
 _grammar_text = None
 # For singleton pattern
 _data_type_parser = None
+_TYPE_COMMENT_PATTERN = re.compile(r"\s+COMMENT\s+'(?:''|[^'])*'", flags=re.IGNORECASE)
 
 
 def _get_grammar_text() -> str:
@@ -136,7 +138,11 @@ def parse_data_type(type_str: str) -> Any:
     Returns:
         A SQLAlchemy type object.
     """
-    return get_data_type_parser().parse(type_str)
+    # Reflection can return nested types with inline SQL field comments
+    # (e.g. `... value varchar COMMENT '' ...`), which are not part of the
+    # datatype grammar and would otherwise break parsing.
+    normalized_type_str = _TYPE_COMMENT_PATTERN.sub("", type_str)
+    return get_data_type_parser().parse(normalized_type_str)
 
 
 # --- Materialized View Refresh Clause Parser ---
