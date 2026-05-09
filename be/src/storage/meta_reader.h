@@ -138,12 +138,26 @@ public:
 private:
     Status _init_return_column_iterators();
     Status _collect(const std::string& name, ColumnId cid, Column* column, LogicalType type);
+<<<<<<< HEAD
+=======
+    Status _collect_virtual(const std::string& name, const std::string_view col_name, Column* column, LogicalType type);
+    StatusOr<const TabletColumn*> _get_tablet_column(ColumnId cid) const;
+    StatusOr<ColumnReader*> _get_column_reader(ColumnId cid) const;
+    bool _is_missing_default_column(const TabletColumn& column) const;
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
     Status _collect_count(ColumnId cid, Column* column, LogicalType type);
     Status _collect_rows(Column* column, LogicalType type);
     Status _collect_flat_json(ColumnId cid, Column* column);
+<<<<<<< HEAD
+=======
+    Status _collect_column_size(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type);
+    Status _append_default_column_value(ColumnId cid, Column* column);
+    Status _collect_count_for_default_column(ColumnId cid, Column* column);
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
     StatusOr<SegmentSharedPtr> _get_dcg_segment(uint32_t ucid);
@@ -153,6 +167,7 @@ private:
                                                                        ColumnAccessPath* path);
     SegmentSharedPtr _segment;
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
+    std::vector<bool> _is_default_value_column_by_cid;
     const SegmentMetaCollecterParams* _params = nullptr;
     std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;

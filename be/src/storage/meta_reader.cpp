@@ -231,6 +231,21 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_
     return nullptr;
 }
 
+StatusOr<const TabletColumn*> SegmentMetaCollecter::_get_tablet_column(ColumnId cid) const {
+    const auto& schema = _params->tablet_schema;
+    RETURN_IF(cid >= schema->num_columns(), Status::InvalidArgument("Invalid cid: " + std::to_string(cid)));
+    return &schema->column(cid);
+}
+
+StatusOr<ColumnReader*> SegmentMetaCollecter::_get_column_reader(ColumnId cid) const {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    return const_cast<ColumnReader*>(_segment->column_with_uid(tablet_column->unique_id()));
+}
+
+bool SegmentMetaCollecter::_is_missing_default_column(const TabletColumn& column) const {
+    return !column.is_extended() && _segment->is_default_column(column);
+}
+
 Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
     RandomAccessFileOptions ropts;
@@ -241,16 +256,17 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 
     auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);
+    _is_default_value_column_by_cid.assign(max_cid + 1, false);
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
+                ASSIGN_OR_RETURN(const TabletColumn* col, _get_tablet_column(cid));
                 ColumnIteratorOptions iter_opts;
-                const TabletColumn& col = _params->tablet_schema->column(cid);
                 std::string dcg_filename;
                 FileEncryptionInfo dcg_encryption_info;
                 ASSIGN_OR_RETURN(auto col_iter,
-                                 _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, nullptr));
+                                 _new_dcg_column_iterator(*col, &dcg_filename, &dcg_encryption_info, nullptr));
                 if (col_iter != nullptr) {
                     // Find the column in delta column group
                     _column_iterators[cid] = std::move(col_iter);
@@ -261,7 +277,9 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                     iter_opts.read_file = dcg_file.get();
                     _column_files[cid] = std::move(dcg_file);
                 } else {
-                    ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, nullptr));
+                    bool is_default_column = _is_missing_default_column(*col);
+                    ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(*col, nullptr));
+                    _is_default_value_column_by_cid[cid] = is_default_column;
                     iter_opts.read_file = _read_file.get();
                 }
                 iter_opts.check_dict_encoding = true;
@@ -280,7 +298,18 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
     }
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
+<<<<<<< HEAD
         RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i], _params->field_type[i]));
+=======
+        ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(_params->cids[i]));
+        auto field_name = _params->fields[i];
+        auto field_type = _params->field_type[i];
+        if (tablet_column->is_virtual_column()) {
+            RETURN_IF_ERROR(_collect_virtual(field_name, tablet_column->name(), (*dsts)[i], field_type));
+        } else {
+            RETURN_IF_ERROR(_collect(field_name, _params->cids[i], (*dsts)[i], field_type));
+        }
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
     }
     return Status::OK();
 }
@@ -335,13 +364,18 @@ std::string append_read_name(const ColumnReader* col_reader) {
 }
 
 Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
-    const ColumnReader* col_reader = _segment->column(cid);
-    if (col_reader == nullptr) {
-        return Status::NotFound("don't found column");
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (!is_semi_type(tablet_column->type())) {
+        return Status::InternalError("column type mismatch");
     }
 
-    if (!is_semi_type(col_reader->column_type())) {
-        return Status::InternalError("column type mismatch");
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            column->append_datum(DatumArray());
+            return Status::OK();
+        }
+        return Status::NotFound("column not found");
     }
 
     if (col_reader->sub_readers() == nullptr || col_reader->sub_readers()->size() < 1) {
@@ -361,13 +395,38 @@ Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
 
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, LogicalType type) {
-    if (!_column_iterators[cid]) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (cid >= _column_iterators.size() || !_column_iterators[cid]) {
         return Status::InvalidArgument("Invalid Collect Params.");
     }
+<<<<<<< HEAD
+=======
+    if (tablet_column->type() == TYPE_VARCHAR || tablet_column->type() == TYPE_ARRAY) {
+        RETURN_IF_ERROR(_collect_dict_for_column(_column_iterators[cid].get(), cid, column));
+    } else if (tablet_column->type() == TYPE_JSON) {
+        RETURN_IF_ERROR(_collect_dict_for_flatjson(cid, column));
+    } else {
+        return Status::InvalidArgument("unsupported column type: " + type_to_string(tablet_column->type()));
+    }
+    return {};
+}
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
 
     std::vector<Slice> words;
+<<<<<<< HEAD
     if (!_column_iterators[cid]->all_page_dict_encoded()) {
         return Status::GlobalDictError("no global dict");
+=======
+    if (!column_iter->all_page_dict_encoded()) {
+        ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+        // For JSON data, the schema may be heterogeneous, meaning that some segments might not contain the dictionary column,
+        // but a global dictionary could still be present and usable.
+        if (!tablet_column->is_extended()) {
+            return Status::GlobalDictError("no global dict");
+        } else {
+            return Status::OK();
+        }
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
     } else {
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
@@ -409,6 +468,46 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SegmentMetaCollecter::_collect_dict_for_flatjson(ColumnId cid, Column* column) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (tablet_column->type() != TYPE_JSON) {
+        return Status::InvalidArgument("not a flat json column");
+    }
+    ASSIGN_OR_RETURN(auto column_reader, _get_column_reader(cid));
+    if (column_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            return Status::OK();
+        }
+        return Status::NotFound(fmt::format("column not found: {}", tablet_column->name()));
+    }
+    RETURN_IF(column_reader->sub_readers() == nullptr, Status::OK());
+
+    auto& sub_readers = *column_reader->sub_readers();
+    for (auto& sub_reader : sub_readers) {
+        if (sub_reader->column_type() == TYPE_VARCHAR) {
+            ASSIGN_OR_RETURN(auto source_iter, sub_reader->new_iterator());
+            ColumnIteratorOptions iter_opts;
+            iter_opts.check_dict_encoding = true;
+            iter_opts.read_file = _read_file.get();
+            iter_opts.stats = &_stats;
+            RETURN_IF_ERROR(source_iter->init(iter_opts));
+
+            Status st = (_collect_dict_for_column(source_iter.get(), cid, column));
+            if (st.is_global_dict_error()) {
+                // ignore
+            } else if (!st.ok()) {
+                return st;
+            }
+            VLOG(2) << "collect_dict_for_flatjson: " << sub_reader->name();
+        }
+    }
+
+    return {};
+}
+
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
 Status SegmentMetaCollecter::_collect_max(ColumnId cid, Column* column, LogicalType type) {
     return __collect_max_or_min<true>(cid, column, type);
 }
@@ -417,14 +516,50 @@ Status SegmentMetaCollecter::_collect_min(ColumnId cid, Column* column, LogicalT
     return __collect_max_or_min<false>(cid, column, type);
 }
 
+Status SegmentMetaCollecter::_append_default_column_value(ColumnId cid, Column* column) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (_segment->num_rows() == 0) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+    if (!tablet_column->has_default_value()) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+
+    ASSIGN_OR_RETURN(auto column_iter, _segment->new_column_iterator_or_default(*tablet_column, nullptr));
+    ColumnIteratorOptions iter_opts;
+    RETURN_IF_ERROR(column_iter->init(iter_opts));
+
+    size_t n = 1;
+    return column_iter->next_batch(&n, column);
+}
+
+Status SegmentMetaCollecter::_collect_count_for_default_column(ColumnId cid, Column* column) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (!tablet_column->has_default_value() && !tablet_column->is_nullable()) {
+        return Status::InternalError(
+                fmt::format("invalid nonexistent column({}) without default value.", tablet_column->name()));
+    }
+
+    bool is_null_default = !tablet_column->has_default_value();
+    column->append_datum(int64_t(is_null_default ? 0 : _segment->num_rows()));
+    return Status::OK();
+}
+
 template <bool is_max>
 Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, LogicalType type) {
-    if (cid >= _segment->num_columns()) {
-        return Status::NotFound("");
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr && _is_missing_default_column(*tablet_column)) {
+        return _append_default_column_value(cid, column);
     }
+<<<<<<< HEAD
     const ColumnReader* col_reader = _segment->column(cid);
+=======
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
-        return Status::NotFound("");
+        return Status::NotFound("segment zone map not found");
     }
     if (col_reader->column_type() != type) {
         return Status::InternalError("column type mismatch");
@@ -458,8 +593,12 @@ Status SegmentMetaCollecter::_collect_rows(Column* column, LogicalType type) {
 }
 
 Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, LogicalType type) {
-    if (!_column_iterators[cid]) {
-        return Status::InvalidArgument("Invalid Collect Params.");
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (cid < _is_default_value_column_by_cid.size() && _is_default_value_column_by_cid[cid]) {
+        return _collect_count_for_default_column(cid, column);
+    }
+    if (cid >= _column_iterators.size() || !_column_iterators[cid]) {
+        return Status::InvalidArgument(fmt::format("Invalid Collect Params. column: {}", tablet_column->name()));
     }
 
     uint32_t num_rows = _segment->num_rows();
@@ -471,4 +610,75 @@ Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, Logica
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, LogicalType type) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            column->append_datum(int64_t(0));
+            return Status::OK();
+        }
+        return Status::NotFound("column not found: " + std::to_string(cid));
+    }
+
+    size_t total_mem_footprint = _collect_column_size_recursive(col_reader);
+    column->append_datum(int64_t(total_mem_footprint));
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type) {
+    // Compressed size estimation: sum of data page sizes via ordinal index ranges
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            column->append_datum(int64_t(0));
+            return Status::OK();
+        }
+        return Status::NotFound("column not found: " + std::to_string(cid));
+    }
+
+    int64_t total = _collect_column_compressed_size_recursive(col_reader);
+    column->append_datum(total);
+    return Status::OK();
+}
+
+size_t SegmentMetaCollecter::_collect_column_size_recursive(ColumnReader* col_reader) {
+    size_t total_mem_footprint = col_reader->total_mem_footprint();
+
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total_mem_footprint += _collect_column_size_recursive(sub_reader.get());
+        }
+    }
+
+    return total_mem_footprint;
+}
+
+int64_t SegmentMetaCollecter::_collect_column_compressed_size_recursive(ColumnReader* col_reader) {
+    OlapReaderStatistics stats;
+    IndexReadOptions opts;
+    opts.use_page_cache = false;
+    opts.read_file = _read_file.get();
+    opts.stats = &stats;
+
+    Status status = col_reader->load_ordinal_index(opts);
+    if (!status.ok()) {
+        return 0; // Return 0 on error, caller should handle the error
+    }
+
+    int64_t total = col_reader->data_page_footprint();
+
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total += _collect_column_compressed_size_recursive(sub_reader.get());
+        }
+    }
+
+    return total;
+}
+
+>>>>>>> 149e174b5a ([Enhancement] support meta scan for schema change (#72901))
 } // namespace starrocks
