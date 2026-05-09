@@ -139,68 +139,18 @@ jobs:
           rm -f  "${{ steps.run_ut.outputs.RES_LOG }}"   || true
           rm -rf ${{ github.workspace }}/*
 
-  # ─── Deploy StarRocks cluster (for SQL-Tester) ───────────────────────────
-  deploy:
-    name: DEPLOY SR
+  # ─── Deploy SR + SQL-Tester + Teardown (single job, same runner) ─────────
+  sql-tester-review:
+    name: SQL-TESTER REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_SQL_TESTER == 'true' }}
     runs-on: [self-hosted, normal]
     env:
-      BRANCH:     ${{ needs.prepare.outputs.BRANCH }}
-      PR_NUMBER:  ${{ needs.prepare.outputs.COMMIT_SHA }}
-    outputs:
-      FE_NODE:           ${{ steps.deploy.outputs.fe }}
-      BE_NODE:           ${{ steps.deploy.outputs.be }}
-      CLUSTER_NAME:      ${{ steps.deploy.outputs.cluster_name }}
-      DEPLOY_CONF_FILE:  ${{ steps.deploy.outputs.deploy_conf_file }}
-    steps:
-      - name: Apply for ECS & Deploy SR
-        id: deploy
-        timeout-minutes: 30
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
-          ./bin/elastic-cluster.sh --template ci-admit --linuxdistro ubuntu
-          # Save conf to shared path so teardown (on any runner) can find the instance IDs
-          conf_name="/var/local/env/${GITHUB_RUN_ID}-weekly-review-starrocks_deploy.conf"
-          cp conf/starrocks_deploy.conf "${conf_name}"
-          echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
-          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
-          _base="oss://starrocks-ci-release/${BRANCH}/Release/inspection/pr/ubuntu"
-          # Sort by modification time (line starts with date), take latest BE to get the commit SHA
-          LATEST_SHA=$(${_oss} ls "${_base}/" | grep "\-BE\.tar\.gz" | sort -r | head -1 | awk '{print $NF}' | grep -oE '[a-f0-9]{40}')
-          [[ -z "${LATEST_SHA}" ]] && echo "::error::No inspection package found for branch ${BRANCH}" && exit 1
-          SHORT_SHA=${LATEST_SHA:0:7}
-          BE_OUTPUT_TAR="${_base}/${LATEST_SHA}/be/StarRocks-${SHORT_SHA}-BE.tar.gz"
-          FE_OUTPUT_TAR="${_base}/${LATEST_SHA}/fe/StarRocks-${SHORT_SHA}-FE.tar.gz"
-          echo "Inspection commit: ${LATEST_SHA}"
-          echo "BE: ${BE_OUTPUT_TAR}"
-          echo "FE: ${FE_OUTPUT_TAR}"
-          export BE_OUTPUT_TAR FE_OUTPUT_TAR LINUX_DISTRO=ubuntu
-          ./bin/deploy-cluster.sh -c ci-admit
-          echo "cluster_name=ci-admit" >> $GITHUB_OUTPUT
-
-      - name: Clean ENV
-        if: always()
-        run: rm -rf ${{ github.workspace }}/*
-
-  # ─── SQL-Tester ──────────────────────────────────────────────────────────
-  sql-tester-review:
-    name: SQL-TESTER REVIEW
-    needs: [prepare, deploy]
-    if: >
-      needs.prepare.outputs.RUN_SQL_TESTER == 'true' &&
-      needs.deploy.result == 'success'
-    runs-on: [self-hosted, normal]
-    env:
       BRANCH:        ${{ needs.prepare.outputs.BRANCH }}
       PR_NUMBER:     ${{ needs.prepare.outputs.COMMIT_SHA }}
-      FE_NODE:       ${{ needs.deploy.outputs.FE_NODE }}
-      BE_NODE:       ${{ needs.deploy.outputs.BE_NODE }}
-      CLUSTER_NAME:  ${{ needs.deploy.outputs.CLUSTER_NAME }}
       WEEKLY_REVIEW: 'true'
     outputs:
-      sql_oss_path:   ${{ steps.run.outputs.sql_oss_path }}
-      MYSQL_ECI_ID:   ${{ steps.run.outputs.MYSQL_ECI_ID }}
+      sql_oss_path: ${{ steps.run.outputs.sql_oss_path }}
     steps:
       - name: Clean Workspace
         run: rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
@@ -215,11 +165,36 @@ jobs:
           git checkout ${BRANCH}
           git reset ${PR_NUMBER} --hard
 
-      - name: Run SQL-Tester (inspection mode)
-        id: run
-        timeout-minutes: 360
+      - name: Apply for ECS & Deploy SR
+        id: deploy
+        timeout-minutes: 30
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          ./bin/elastic-cluster.sh --template ci-admit --linuxdistro ubuntu
+          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
+          _base="oss://starrocks-ci-release/${BRANCH}/Release/inspection/pr/ubuntu"
+          # Sort by modification time (line starts with date), take latest BE to get the commit SHA
+          LATEST_SHA=$(${_oss} ls "${_base}/" | grep "\-BE\.tar\.gz" | sort -r | head -1 | awk '{print $NF}' | grep -oE '[a-f0-9]{40}')
+          [[ -z "${LATEST_SHA}" ]] && echo "::error::No inspection package found for branch ${BRANCH}" && exit 1
+          SHORT_SHA=${LATEST_SHA:0:7}
+          BE_OUTPUT_TAR="${_base}/${LATEST_SHA}/be/StarRocks-${SHORT_SHA}-BE.tar.gz"
+          FE_OUTPUT_TAR="${_base}/${LATEST_SHA}/fe/StarRocks-${SHORT_SHA}-FE.tar.gz"
+          echo "Inspection commit: ${LATEST_SHA}"
+          echo "BE: ${BE_OUTPUT_TAR}"
+          echo "FE: ${FE_OUTPUT_TAR}"
+          export BE_OUTPUT_TAR FE_OUTPUT_TAR LINUX_DISTRO=ubuntu
+          ./bin/deploy-cluster.sh -c ci-admit
+
+      - name: Run SQL-Tester (inspection mode)
+        id: run
+        if: steps.deploy.outcome == 'success'
+        timeout-minutes: 360
+        env:
+          FE_NODE:      ${{ steps.deploy.outputs.fe }}
+          BE_NODE:      ${{ steps.deploy.outputs.be }}
+          CLUSTER_NAME: ci-admit
+        run: |
+          cd ci-tool && source lib/init.sh
 
           # Compute the OSS path used by run-sql-tester.sh in IS_INSPECTION mode
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
@@ -229,38 +204,21 @@ jobs:
 
           ./bin/run-sql-tester.sh
 
-      - name: Clean ENV
-        if: always()
-        run: rm -rf ${{ github.workspace }}/*
-
-  # ─── Teardown cluster ────────────────────────────────────────────────────
-  teardown:
-    name: TEARDOWN
-    needs: [prepare, deploy, sql-tester-review]
-    if: always() && needs.deploy.result != 'skipped'
-    runs-on: [self-hosted, normal]
-    env:
-      BRANCH:           ${{ needs.prepare.outputs.BRANCH }}
-      PR_NUMBER:        ${{ needs.prepare.outputs.COMMIT_SHA }}
-      DEPLOY_CONF_FILE: ${{ needs.deploy.outputs.DEPLOY_CONF_FILE }}
-    steps:
       - name: Backup logs
+        if: always()
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/backup_log_cores.sh || true
 
       - name: Clean MySQL ECI
-        if: always() && needs.sql-tester-review.outputs.MYSQL_ECI_ID != ''
-        run: eci rm ${{ needs.sql-tester-review.outputs.MYSQL_ECI_ID }} || true
+        if: always() && steps.run.outputs.MYSQL_ECI_ID != ''
+        run: eci rm ${{ steps.run.outputs.MYSQL_ECI_ID }} || true
 
       - name: Delete ECS cluster
         if: always()
         run: |
           cd ci-tool && source lib/init.sh
-          # Restore instance conf from shared path so --delete finds the right instance IDs
-          [[ -f "${DEPLOY_CONF_FILE}" ]] && cp "${DEPLOY_CONF_FILE}" conf/starrocks_deploy.conf
           ./bin/elastic-cluster.sh --delete || true
-          rm -f "${DEPLOY_CONF_FILE}" || true
 
       - name: Clean ENV
         if: always()
