@@ -1655,10 +1655,7 @@ public class GlobalStateMgr {
      */
     void stopLeaderOnlyDaemonThreads() {
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
-        // Reverse of startLeaderOnlyDaemonThreads(): the most recently activated daemons
-        // wind down first, and heartbeatMgr - which was started very early and whose RPC
-        // responses are consumed by reportHandler - is stopped last so reportHandler is no
-        // longer producing/consuming when its own peers are torn down.
+        // Stop in the reverse order of startLeaderOnlyDaemonThreads().
         stopOne("tabletCollector", () -> tabletCollector.stopGracefully(timeoutMs));
         stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
         stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));
