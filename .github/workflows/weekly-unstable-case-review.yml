@@ -197,6 +197,19 @@ jobs:
       sql_oss_path:   ${{ steps.run.outputs.sql_oss_path }}
       MYSQL_ECI_ID:   ${{ steps.run.outputs.MYSQL_ECI_ID }}
     steps:
+      - name: Clean Workspace
+        run: rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout target branch and commit
+        run: |
+          git checkout ${BRANCH}
+          git reset ${PR_NUMBER} --hard
+
       - name: Run SQL-Tester (inspection mode)
         id: run
         timeout-minutes: 360
