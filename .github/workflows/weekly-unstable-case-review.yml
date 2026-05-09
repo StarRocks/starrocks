@@ -139,20 +139,32 @@ jobs:
           rm -f  "${{ steps.run_ut.outputs.RES_LOG }}"   || true
           rm -rf ${{ github.workspace }}/*
 
-  # ─── Deploy StarRocks cluster (for SQL-Tester) ───────────────────────────
-  deploy:
-    name: DEPLOY SR
+  # ─── Deploy SR + SQL-Tester + Teardown (single job, same runner) ─────────
+  sql-tester-review:
+    name: SQL-TESTER REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_SQL_TESTER == 'true' }}
     runs-on: [self-hosted, normal]
     env:
-      BRANCH:     ${{ needs.prepare.outputs.BRANCH }}
-      PR_NUMBER:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+      BRANCH:        ${{ needs.prepare.outputs.BRANCH }}
+      PR_NUMBER:     ${{ needs.prepare.outputs.COMMIT_SHA }}
+      WEEKLY_REVIEW: 'true'
     outputs:
-      FE_NODE:      ${{ steps.deploy.outputs.fe }}
-      BE_NODE:      ${{ steps.deploy.outputs.be }}
-      CLUSTER_NAME: ${{ steps.deploy.outputs.cluster_name }}
+      sql_oss_path: ${{ steps.run.outputs.sql_oss_path }}
     steps:
+      - name: Clean Workspace
+        run: rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout target branch and commit
+        run: |
+          git checkout ${BRANCH}
+          git reset ${PR_NUMBER} --hard
+
       - name: Apply for ECS & Deploy SR
         id: deploy
         timeout-minutes: 30
@@ -172,36 +184,17 @@ jobs:
           echo "FE: ${FE_OUTPUT_TAR}"
           export BE_OUTPUT_TAR FE_OUTPUT_TAR LINUX_DISTRO=ubuntu
           ./bin/deploy-cluster.sh -c ci-admit
-          echo "cluster_name=ci-admit" >> $GITHUB_OUTPUT
 
-      - name: Clean ENV
-        if: always()
-        run: rm -rf ${{ github.workspace }}/*
-
-  # ─── SQL-Tester ──────────────────────────────────────────────────────────
-  sql-tester-review:
-    name: SQL-TESTER REVIEW
-    needs: [prepare, deploy]
-    if: >
-      needs.prepare.outputs.RUN_SQL_TESTER == 'true' &&
-      needs.deploy.result == 'success'
-    runs-on: [self-hosted, normal]
-    env:
-      BRANCH:        ${{ needs.prepare.outputs.BRANCH }}
-      PR_NUMBER:     ${{ needs.prepare.outputs.COMMIT_SHA }}
-      FE_NODE:       ${{ needs.deploy.outputs.FE_NODE }}
-      BE_NODE:       ${{ needs.deploy.outputs.BE_NODE }}
-      CLUSTER_NAME:  ${{ needs.deploy.outputs.CLUSTER_NAME }}
-      WEEKLY_REVIEW: 'true'
-    outputs:
-      sql_oss_path:   ${{ steps.run.outputs.sql_oss_path }}
-      MYSQL_ECI_ID:   ${{ steps.run.outputs.MYSQL_ECI_ID }}
-    steps:
       - name: Run SQL-Tester (inspection mode)
         id: run
+        if: steps.deploy.outcome == 'success'
         timeout-minutes: 360
+        env:
+          FE_NODE:      ${{ steps.deploy.outputs.fe }}
+          BE_NODE:      ${{ steps.deploy.outputs.be }}
+          CLUSTER_NAME: ci-admit
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          cd ci-tool && source lib/init.sh
 
           # Compute the OSS path used by run-sql-tester.sh in IS_INSPECTION mode
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
@@ -211,28 +204,15 @@ jobs:
 
           ./bin/run-sql-tester.sh
 
-      - name: Clean ENV
-        if: always()
-        run: rm -rf ${{ github.workspace }}/*
-
-  # ─── Teardown cluster ────────────────────────────────────────────────────
-  teardown:
-    name: TEARDOWN
-    needs: [prepare, deploy, sql-tester-review]
-    if: always() && needs.deploy.result == 'success'
-    runs-on: [self-hosted, normal]
-    env:
-      BRANCH:    ${{ needs.prepare.outputs.BRANCH }}
-      PR_NUMBER: ${{ needs.prepare.outputs.COMMIT_SHA }}
-    steps:
       - name: Backup logs
+        if: always()
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/backup_log_cores.sh || true
 
       - name: Clean MySQL ECI
-        if: always() && needs.sql-tester-review.outputs.MYSQL_ECI_ID != ''
-        run: eci rm ${{ needs.sql-tester-review.outputs.MYSQL_ECI_ID }} || true
+        if: always() && steps.run.outputs.MYSQL_ECI_ID != ''
+        run: eci rm ${{ steps.run.outputs.MYSQL_ECI_ID }} || true
 
       - name: Delete ECS cluster
         if: always()
