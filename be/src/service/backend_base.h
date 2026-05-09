@@ -36,7 +36,6 @@
 
 #include <ctime>
 #include <map>
-#include <memory>
 
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
@@ -45,7 +44,6 @@
 namespace starrocks {
 
 class ExecEnv;
-class ThriftServer;
 class TAgentResult;
 class TAgentTaskRequest;
 class TAgentPublishRequest;
@@ -67,10 +65,6 @@ public:
     explicit BackendServiceBase(ExecEnv* exec_env);
 
     ~BackendServiceBase() override = default;
-
-    // NOTE: now we do not support multiple backend in one process
-    template <class Service>
-    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, int port);
 
     // Agent service
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override {

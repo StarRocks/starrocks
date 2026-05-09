@@ -34,11 +34,14 @@
 
 #pragma once
 
+#include <memory>
+
 #include "service/backend_base.h"
 
 namespace starrocks {
 
 class AgentServer;
+class ThriftServer;
 
 // This class just forward rpc requests to actual handlers, used
 // to bind multiple services on single port.
@@ -47,6 +50,8 @@ public:
     explicit BackendService(ExecEnv* exec_env);
 
     ~BackendService() override;
+
+    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, int port);
 
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
 

@@ -76,6 +76,10 @@ DEFAULT_CHANGED_FULL_CHECK_PATHS = {
 }
 EXEC_ENV_INCLUDE_PATTERN = re.compile(r'#include\s*[<"]runtime/exec_env\.h[>"]')
 EXEC_ENV_SINGLETON_PATTERN = re.compile(r"\bExecEnv::GetInstance\s*\(")
+SERVICE_LAYERING_REMEDIATION = (
+    "Keep Service as the shared service layer and ServiceBE as the BE-specific top layer; move the dependency upward "
+    "or include generated RPC/proto types directly."
+)
 
 
 @dataclass(frozen=True)
@@ -302,6 +306,42 @@ def apply_baseline(violations: Violations, baseline: dict[str, set[tuple[str, st
         target_link_violations=_filter_violations(violations.target_link_violations, baseline["target_link_violations"]),
         test_link_violations=_filter_violations(violations.test_link_violations, baseline["test_link_violations"]),
     )
+
+
+def check_service_layering(repo_root: Path) -> list[Violation]:
+    violations: list[Violation] = []
+    src_root = repo_root / "be/src"
+    if not src_root.exists():
+        return violations
+    for file_path in sorted(path for path in src_root.rglob("*") if path.is_file() and path.suffix in CODE_EXTENSIONS):
+        rel_path = file_path.relative_to(repo_root).as_posix()
+        in_service = rel_path.startswith("be/src/service/")
+        in_service_be = rel_path.startswith("be/src/service/service_be/")
+        for include_path in _parse_all_includes(file_path):
+            if in_service and not in_service_be and (
+                include_path.startswith("service/service_be/") or include_path.startswith("service_be/")
+            ):
+                violations.append(
+                    Violation(
+                        module="service",
+                        path=rel_path,
+                        edge=include_path,
+                        detail="shared Service code must not include ServiceBE",
+                        remediation=SERVICE_LAYERING_REMEDIATION,
+                    )
+                )
+                continue
+            if not in_service and (include_path.startswith("service/") or include_path.startswith("service_be/")):
+                violations.append(
+                    Violation(
+                        module="service",
+                        path=rel_path,
+                        edge=include_path,
+                        detail="non-service production code must not include top-level Service headers",
+                        remediation=SERVICE_LAYERING_REMEDIATION,
+                    )
+                )
+    return violations
 
 
 def collect_owned_files(module: ModuleSpec, cmake_state: CMakeState, repo_root: Path | None) -> set[str]:
@@ -562,17 +602,19 @@ def _companion_headers(repo_root: Path, source_path: Path) -> set[str]:
     return companions
 
 
-def _parse_internal_includes(path: Path) -> list[str]:
+def _parse_all_includes(path: Path) -> list[str]:
     includes: list[str] = []
     pattern = re.compile(r'^\s*#include\s*[<"]([^">]+)[">]')
     for line in path.read_text().splitlines():
         match = pattern.match(line)
         if match is None:
             continue
-        include_path = match.group(1)
-        if _is_internal_include(include_path):
-            includes.append(include_path)
+        includes.append(match.group(1))
     return includes
+
+
+def _parse_internal_includes(path: Path) -> list[str]:
+    return [include_path for include_path in _parse_all_includes(path) if _is_internal_include(include_path)]
 
 
 def _is_internal_include(include_path: str) -> bool:
@@ -706,6 +748,8 @@ def main(argv: list[str] | None = None) -> int:
 
     violations = collect_violations(repo_root, manifest, cmake_state, selected_modules=selected_modules)
     violations = apply_baseline(violations, baseline)
+    violations.include_violations.extend(check_service_layering(repo_root))
+    violations.include_violations.sort(key=lambda item: (item.module, item.path, item.edge))
     if not violations.is_empty():
         _print_violations(violations)
         return 1

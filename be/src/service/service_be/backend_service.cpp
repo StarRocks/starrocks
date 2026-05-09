@@ -35,8 +35,13 @@
 
 #include "backend_service.h"
 
+#include <memory>
+
 #include "agent/agent_server.h"
 #include "agent/task_worker_pool.h"
+#include "common/config_network_fwd.h"
+#include "common/logging.h"
+#include "common/util/thrift_server.h"
 #include "runtime/exec_env.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -47,6 +52,16 @@ BackendService::BackendService(ExecEnv* exec_env)
         : BackendServiceBase(exec_env), _agent_server(exec_env->agent_server()) {}
 
 BackendService::~BackendService() = default;
+
+std::unique_ptr<ThriftServer> BackendService::create(ExecEnv* exec_env, int port) {
+    auto handler = std::make_shared<BackendService>(exec_env);
+    auto processor = std::make_shared<BackendServiceProcessor>(handler);
+
+    LOG(INFO) << "StarRocksInternalService has started listening port on " << port;
+    // TODO: May be rename be_service_threads to thrift_service_threads ?
+    return std::make_unique<ThriftServer>("BackendService", processor, port, exec_env->metrics(),
+                                          config::be_service_threads);
+}
 
 void BackendService::get_tablet_stat(TTabletStatResult& result) {
     StorageEngine::instance()->tablet_manager()->get_tablet_stat(&result);
