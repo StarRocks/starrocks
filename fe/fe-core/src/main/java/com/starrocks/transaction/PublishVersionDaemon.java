@@ -1124,8 +1124,21 @@ public class PublishVersionDaemon extends LeaderDaemon {
             long rpcEndMs = System.currentTimeMillis();
             long totalMs = rpcEndMs - submitTimeMs;
             if (totalMs >= 3000) {
-                LOG.warn("Slow publishPartition txn={} partition={} table={} total_ms={} executor_acquire_ms={} " +
-                                "lock_wait_ms={} fe_prep_ms={} rpc_ms={}",
+                // Per-partition publishPartition phase breakdown for slow outliers.
+                // total = executor_queue + db_lock_wait + fe_prep + rpc, where:
+                //   executor_queue = CompletableFuture submit -> lambda entry
+                //                    (publish-executor scheduling delay / queue depth)
+                //   db_lock_wait   = lambda entry -> lockTablesWithIntensiveDbLock acquired
+                //   fe_prep        = lock acquired -> first BRPC issued
+                //                    (OlapTable lookup, shadow tablet collection, txnInfo build)
+                //   rpc            = publishLogVersion + publishLakePartition BRPC round-trip
+                // Complementary to the txn-level summary in TransactionState.toString:
+                // that one is wall-clock across all partitions running in parallel;
+                // this is per-partition and only fires when one partition crosses
+                // the threshold, so it can attribute which partition / which phase
+                // dominated when the txn-level "publish rpc cost" is large.
+                LOG.warn("Slow publishPartition: txn={} partition={} table={}, total={}ms " +
+                                "(executor_queue={}ms + db_lock_wait={}ms + fe_prep={}ms + rpc={}ms)",
                         txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
                         totalMs, lambdaEntryMs - submitTimeMs,
                         lockAcquiredMs - lambdaEntryMs, rpcStartMs - lockAcquiredMs, rpcEndMs - rpcStartMs);
