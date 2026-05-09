@@ -5,6 +5,7 @@ Use this directory for repo-local execution plans that agents can read, update, 
 ## Active Plans
 
 - [Harness Engineering Roadmap](active/2026-03-27-harness-engineering-roadmap.md)
+- [IVM CREATE-time Trial Rewrite](active/2026-05-09-ivm-create-time-trial-rewrite.md)
 
 ## Templates
 
