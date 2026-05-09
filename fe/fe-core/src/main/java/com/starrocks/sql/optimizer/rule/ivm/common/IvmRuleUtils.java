@@ -52,6 +52,7 @@ public class IvmRuleUtils {
         return false;
     }
 
+
     public static String structureDigest(OptExpression root) {
         StringBuilder sb = new StringBuilder();
         buildStructureDigest(root, sb);
