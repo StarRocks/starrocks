@@ -658,33 +658,36 @@ public class StatisticUtils {
     public static Type getQueryStatisticsColumnType(Table table, String column) {
         // Try the full column name first so that columns with dots in their
         // names (e.g. "customer.is_verified_email") resolve correctly.
-        // If a table has both a literal column "a.b" AND a struct column "a"
-        // with field "b", the literal column takes priority.
         Column directMatch = table.getColumn(column);
         if (directMatch != null) {
             return directMatch.getType();
         }
 
-        String[] parts = column.split("\\.");
-        Preconditions.checkState(parts.length >= 1);
-        Column base = table.getColumn(parts[0]);
-        if (base == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
+        // Scan progressively longer prefixes at each "." to find the base column,
+        // mirroring the approach in quoting(Table, String). This handles base
+        // column names that themselves contain dots (e.g. column "customer.profile"
+        // of type STRUCT<city VARCHAR> queried as "customer.profile.city").
+        int start = 0;
+        int end;
+        while ((end = column.indexOf(".", start)) > 0) {
+            String prefix = column.substring(0, end);
+            Column base = table.getColumn(prefix);
+            if (base != null) {
+                Type type = base.getType();
+                String[] fieldParts = column.substring(end + 1).split("\\.");
+                for (String fieldName : fieldParts) {
+                    if (type.isStructType()) {
+                        StructField field = ((StructType) type).getField(fieldName);
+                        type = field.getType();
+                    }
+                }
+                return type;
+            }
+            start = end + 1;
         }
 
-        Type baseColumnType = base.getType();
-        for (int i = 1; i < parts.length; i++) {
-            if (baseColumnType.isStructType()) {
-                StructType baseStructType = (StructType) baseColumnType;
-                StructField field = baseStructType.getField(parts[i]);
-                if (field.getType().isStructType()) {
-                    baseColumnType = field.getType();
-                } else {
-                    return field.getType();
-                }
-            }
-        }
-        return baseColumnType;
+        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
+        return null;
     }
 
     // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,

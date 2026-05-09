@@ -148,6 +148,42 @@ class StatisticUtilsTest extends PlanTestBase {
     }
 
     @Test
+    void testGetQueryStatisticsColumnTypeDottedStructColumn() {
+        Table table = Mockito.mock(Table.class);
+        StructType structType = new StructType(List.of(
+                new StructField("city", VarcharType.VARCHAR)
+        ));
+        Column structCol = Mockito.mock(Column.class);
+        Mockito.when(structCol.getType()).thenReturn(structType);
+        Mockito.when(table.getColumn("customer.profile.city")).thenReturn(null);
+        Mockito.when(table.getColumn("customer")).thenReturn(null);
+        Mockito.when(table.getColumn("customer.profile")).thenReturn(structCol);
+
+        Type result = StatisticUtils.getQueryStatisticsColumnType(table, "customer.profile.city");
+        Assertions.assertEquals(VarcharType.VARCHAR, result);
+    }
+
+    @Test
+    void testGetQueryStatisticsColumnTypeDottedNestedStructColumn() {
+        Table table = Mockito.mock(Table.class);
+        StructType innerStruct = new StructType(List.of(
+                new StructField("zip", VarcharType.VARCHAR)
+        ));
+        StructType outerStruct = new StructType(List.of(
+                new StructField("address", innerStruct)
+        ));
+        Column structCol = Mockito.mock(Column.class);
+        Mockito.when(structCol.getType()).thenReturn(outerStruct);
+        Mockito.when(table.getColumn("customer.profile.address.zip")).thenReturn(null);
+        Mockito.when(table.getColumn("customer")).thenReturn(null);
+        Mockito.when(table.getColumn("customer.profile")).thenReturn(structCol);
+        Mockito.when(table.getColumn("customer.profile.address")).thenReturn(null);
+
+        Type result = StatisticUtils.getQueryStatisticsColumnType(table, "customer.profile.address.zip");
+        Assertions.assertEquals(VarcharType.VARCHAR, result);
+    }
+
+    @Test
     void testGetQueryStatisticsColumnTypeNotFound() {
         Table table = Mockito.mock(Table.class);
         Mockito.when(table.getColumn(Mockito.anyString())).thenReturn(null);
