@@ -273,6 +273,13 @@ public class IVMAnalyzer {
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
         ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
+            // Distinct flag is dropped by the combinator rewrite below, so incremental
+            // refresh would silently state_union plain state and produce wrong values.
+            if (aggFuncExpr.isDistinct()) {
+                throw new SemanticException(
+                        "IVMAnalyzer does not support distinct aggregate functions, but got: %s",
+                        aggFuncExpr.toString());
+            }
             String aggFuncName = aggFuncExpr.getFunctionName();
             // build intermediate aggregate function
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
