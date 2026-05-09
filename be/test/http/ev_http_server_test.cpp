@@ -125,12 +125,10 @@ TEST_F(EvHttpServerTest, single_worker_uses_shared_fd) {
     server->join();
 }
 
-// Two servers cannot bind to the same port simultaneously — even with
-// SO_REUSEPORT enabled, the second server's `_bind()` call (which sets
-// SO_REUSEADDR but not SO_REUSEPORT yet on this fd) competes with the
-// first. We use this case to also validate that `_real_port`
-// auto-assignment (port=0) keeps producing distinct ports across
-// servers, so the SO_REUSEPORT path doesn't accidentally collide ports.
+// Validates that two SO_REUSEPORT-enabled EvHttpServers asking for `port=0`
+// each get a kernel-assigned port that does not collide with the other —
+// the auto-assignment path must not accidentally fold s2 into s1's
+// reuseport group at the same port.
 TEST_F(EvHttpServerTest, port_auto_assignment_distinct) {
     auto s1 = make_server(2);
     auto s2 = make_server(2);
@@ -139,6 +137,25 @@ TEST_F(EvHttpServerTest, port_auto_assignment_distinct) {
     EXPECT_NE(s1->get_real_port(), s2->get_real_port());
     EXPECT_GT(s1->get_real_port(), 0);
     EXPECT_GT(s2->get_real_port(), 0);
+
+    // Round-trip a request against each server before tearing down. Without
+    // it stop() can race with worker startup: event_base_loopbreak() called
+    // before the worker's event_base_loop() starts iterating is dropped,
+    // because libevent resets event_break to 0 on every loop entry. Once
+    // the listener is then shutdown(), accept() returns EINVAL on every
+    // wake and the loop spins (caught by the gtest 5-minute timeout). The
+    // request guarantees the worker has entered dispatch before we stop.
+    auto warm = [](EvHttpServer* server) {
+        HttpClient client;
+        std::string url = "http://127.0.0.1:" + std::to_string(server->get_real_port()) + "/echo";
+        ASSERT_OK(client.init(url));
+        client.set_method(GET);
+        std::string resp;
+        ASSERT_OK(client.execute(&resp));
+    };
+    warm(s1.get());
+    warm(s2.get());
+
     s1->stop();
     s2->stop();
     s1->join();
