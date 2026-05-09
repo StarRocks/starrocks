@@ -21,10 +21,10 @@
 #include <unordered_map>
 #include <utility>
 
-#include "base/hash/hash_util.hpp"
 #include "common/logging.h"
 #include "common/status.h"
 #include "storage/lake/meta_file.h"
+#include "util/hash_util.hpp"
 
 namespace starrocks::lake::detail {
 
