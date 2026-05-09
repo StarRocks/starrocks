@@ -93,8 +93,10 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -579,7 +581,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
-            distributionSpec = DistributionSpec.createAnyDistributionSpec();
+            RangeDistributionSpec rangeSpec = DistributionSpecHelper
+                    .buildRangeDistributionSpecSkeleton(olapTable, columnMetaToColRefMap);
+            distributionSpec = rangeSpec != null
+                    ? rangeSpec
+                    : DistributionSpec.createAnyDistributionSpec();
         } else {
             throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
         }
@@ -1380,14 +1386,19 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             commonType = leftType;
         }
 
-        Type[] argTypes = new Type[] {leftType, rightType};
+        ScalarOperator leftCasted = leftType.equals(commonType)
+                ? leftOp : foldCast(new CastOperator(commonType, leftOp, true));
+        ScalarOperator rightCasted = rightType.equals(commonType)
+                ? rightOp : foldCast(new CastOperator(commonType, rightOp, true));
+
+        Type[] argTypes = new Type[] {commonType, commonType};
         com.starrocks.catalog.Function coalesceFunction =
                 com.starrocks.sql.ast.expression.ExprUtils.getBuiltinFunction(
                         FunctionSet.COALESCE, argTypes,
                         com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         return new CallOperator(FunctionSet.COALESCE, commonType,
-                Lists.newArrayList(leftOp, rightOp), coalesceFunction);
+                Lists.newArrayList(leftCasted, rightCasted), coalesceFunction);
     }
 
     /**

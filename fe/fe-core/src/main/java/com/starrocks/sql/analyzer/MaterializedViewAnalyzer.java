@@ -67,6 +67,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -115,8 +116,8 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
@@ -181,8 +182,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.KUDU,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
-                    Table.TableType.HIVE_VIEW,
-                    Table.TableType.ICEBERG_VIEW);
+                    Table.TableType.HIVE_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -215,6 +215,15 @@ public class MaterializedViewAnalyzer {
 
             if (table.isView()) {
                 continue;
+            }
+
+            // Check if the table is an Iceberg table with partition evolution
+            if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                if (icebergTable.getNativeTable().specs().size() > 1) {
+                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                            table.getName() + " has done partition evolution", tableNameInfo.getPos());
+                }
             }
 
             if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
@@ -291,13 +300,37 @@ public class MaterializedViewAnalyzer {
         }
     }
 
+    /** {@code pair.second} for schema columns not produced by any query expression (storage-filled). */
+    private static final int NO_QUERY_OUTPUT = -1;
+
     @VisibleForTesting
     protected static List<Integer> getQueryOutputIndices(List<Pair<Column, Integer>> mvColumnPairs) {
         return Streams
                 .mapWithIndex(mvColumnPairs.stream(), (pair, idx) -> Pair.create(pair.second, (int) idx))
+                .filter(p -> p.first != NO_QUERY_OUTPUT)
                 .sorted(Comparator.comparingInt(x -> x.first))
                 .map(x -> x.second)
                 .collect(Collectors.toList());
+    }
+
+    private static Column createAutoIncrementRowIdColumn() {
+        Column col = new Column(IvmOpUtils.COLUMN_ROW_ID, IntegerType.BIGINT, false);
+        col.setIsKey(true);
+        col.setIsAllowNull(false);
+        col.setIsHidden(true);
+        col.setIsAutoIncrement(true);
+        return col;
+    }
+
+    /** Move/prepend {@code __ROW_ID__} to the head of the sort-keys list. */
+    private static List<String> prependRowIdToKeys(List<String> existing) {
+        List<String> result = Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID);
+        if (existing != null) {
+            existing.stream()
+                    .filter(k -> !IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(k))
+                    .forEach(result::add);
+        }
+        return result;
     }
 
     static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -380,10 +413,9 @@ public class MaterializedViewAnalyzer {
                     Analyzer.analyze(queryStatement, context);
                     statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
                     statement.setQueryStatement(queryStatement);
-                    // use primary key as default keys type for ivm
-                    if (result.needRetractableSink()) {
-                        statement.setKeysType(KeysType.PRIMARY_KEYS);
-                    }
+                    // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
+                    statement.setKeysType(KeysType.PRIMARY_KEYS);
+                    statement.setRowIdStrategy(result.rowIdStrategy());
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
                 } else {
                     // if not ivm, set query statement directly
@@ -420,8 +452,13 @@ public class MaterializedViewAnalyzer {
             // set the columns into createMaterializedViewStatement
             List<ColWithComment> colWithComments = statement.getColWithComments();
             List<String> keyCols = statement.getSortKeys();
+            if (statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT) {
+                // AUTO_INCREMENT __ROW_ID__ is the PK; force it to be the leading sort key.
+                keyCols = prependRowIdToKeys(keyCols);
+                statement.setSortKeys(keyCols);
+            }
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
-                    queryStatement, colWithComments, keyCols);
+                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyCols);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
 
@@ -442,6 +479,9 @@ public class MaterializedViewAnalyzer {
             // change `queryStatement.getQueryRelation`'s outputs at the same time.
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
             for (Pair<Column, Integer> pair : mvColumnPairs) {
+                if (pair.second == NO_QUERY_OUTPUT) {
+                    continue;   // AUTO_INCREMENT column: storage fills it, no query expr
+                }
                 Preconditions.checkState(pair.second < outputExpressions.size());
                 columnExprMap.put(pair.first, outputExpressions.get(pair.second));
             }
@@ -624,6 +664,7 @@ public class MaterializedViewAnalyzer {
          * from creating materialized view statement.
          */
         private List<Pair<Column, Integer>> genMaterializedViewColumns(KeysType keysType,
+                                                                       RowIdStrategy rowIdStrategy,
                                                                        QueryStatement queryStatement,
                                                                        List<ColWithComment> colWithComments,
                                                                        List<String> keyCols) {
@@ -652,12 +693,12 @@ public class MaterializedViewAnalyzer {
                     colName = colWithComments.get(i).getColName();
                 }
                 Column column = new Column(colName, type, colNullable);
-                if (TvrOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {
+                if (IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {
                     column.setIsKey(true);
                     column.setIsAllowNull(false);
                     column.setIsHidden(true);
                 }
-                if (colName.startsWith(TvrOpUtils.COLUMN_AGG_STATE_PREFIX)) {
+                if (colName.startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX)) {
                     column.setIsHidden(true);
                 }
                 if (colWithComments != null) {
@@ -668,6 +709,13 @@ public class MaterializedViewAnalyzer {
                     column.setAggregationType(aggregateType, true);
                 }
                 mvColumns.add(column);
+            }
+
+            // Append the storage-filled __ROW_ID__. Final position is decided by the reorder step
+            // below (caller has already put __ROW_ID__ at the head of keyCols).
+            // QUERY_COMPUTED MVs already have __ROW_ID__ from the loop above (IVMAnalyzer adds it).
+            if (rowIdStrategy == RowIdStrategy.AUTO_INCREMENT) {
+                mvColumns.add(createAutoIncrementRowIdColumn());
             }
 
             // set duplicate key, when sort key is set, it is dup key col.
@@ -683,11 +731,13 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
-            // Reorder the MV columns according to sort-key
+            // pair.second is the column's query-output position; appended AUTO_INCREMENT columns
+            // use NO_QUERY_OUTPUT since they don't come from the query.
             Map<String, Pair<Column, Integer>> columnMap = new HashMap<>();
             for (int i = 0; i < mvColumns.size(); i++) {
                 Column col = mvColumns.get(i);
-                if (columnMap.putIfAbsent(col.getName(), Pair.create(col, i)) != null) {
+                int queryOutputIdx = col.isAutoIncrement() ? NO_QUERY_OUTPUT : i;
+                if (columnMap.putIfAbsent(col.getName(), Pair.create(col, queryOutputIdx)) != null) {
                     throw new SemanticException("Duplicate column name '" + col.getName() + "'");
                 }
             }
@@ -1669,8 +1719,9 @@ public class MaterializedViewAnalyzer {
             stmt.setTableRef(tableRef);
             Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, stmt.getCatalogName(),
                     stmt.getDbName(), stmt.getMvName());
-            // Check mv dependency
-            if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null) {
+            // Check mv dependency (skipped for FORCE drop: recovery path for stuck sync MV build)
+            if (!stmt.isForceDrop() && context.getSessionVariable().isEnableDropTableCheckMvDependency()
+                    && mvTable != null) {
                 Set<MvId> relatedMvIds = mvTable.getRelatedMaterializedViews();
                 if (!relatedMvIds.isEmpty()) {
                     Set<String> relatedMvNames = Sets.newHashSet();
@@ -1743,6 +1794,20 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
                         "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
                         + " ACTIVE; ", tableRef.getPos());
+            }
+            boolean hasSpecifiedPartitions = statement.getPartitionRangeDesc() != null
+                    || statement.getPartitionListDesc() != null;
+            MaterializedView.RefreshMode refreshMode = mv.getRefreshMode();
+            if (hasSpecifiedPartitions && refreshMode.isIncrementalOrAuto()) {
+                throw new SemanticException("Partition refresh is not supported for materialized views with " +
+                        "refresh_mode=" + refreshMode.name() + ". Please refresh the whole materialized view instead.",
+                        tableRef.getPos());
+            }
+            if (statement.isForceRefresh() && refreshMode.isIncrementalOrAuto()) {
+                throw new SemanticException("FORCE refresh is not supported for materialized views with " +
+                        "refresh_mode=" + refreshMode.name() +
+                        ". Please drop and re-create the materialized view instead.",
+                        tableRef.getPos());
             }
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (statement.getPartitionRangeDesc() != null) {

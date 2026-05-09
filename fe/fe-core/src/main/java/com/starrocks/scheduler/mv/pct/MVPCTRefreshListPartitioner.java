@@ -122,11 +122,14 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
                 LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            throw new LockTimeoutException("Failed to lock database: " + db.getFullName() + " in syncPartitionsForList");
+            throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
+                    "failed to acquire read lock on database %s within %d ms when syncing list partitions",
+                    db.getFullName(), mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
         PartitionDiffResult result;
         try {
+            differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
             result = differ.computePartitionDiff(null);
             if (result == null) {
                 logger.warn("compute list partition diff failed, result is null");
@@ -523,8 +526,9 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
                         mvContext.getCtx(), database, mv.getName(), addPartitionClause);
             } catch (Exception e) {
-                throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                        database.getFullName(), mv.getName());
+                throw new DmlException("Materialized view %s.%s refresh failed: " +
+                        "failed to add list partition, db: %s, cause: %s",
+                        e, database.getFullName(), mv.getName(), database.getFullName(), e.getMessage());
             }
             Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
         }

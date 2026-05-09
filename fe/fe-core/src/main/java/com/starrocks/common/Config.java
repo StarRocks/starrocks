@@ -215,12 +215,9 @@ public class Config extends ConfigBase {
     public static boolean internal_log_json_format = false;
 
     /**
-     * dump_log_dir:
-     * This specifies FE dump log dir.
-     * Dump log fe.dump.log contains all dump information which query has Exception
-     * <p>
      * dump_log_roll_num:
-     * Maximal FE log files to be kept within a dump_log_roll_interval.
+     * Maximal FE dump log files to be kept within a dump_log_roll_interval.
+     * fe.dump.log is written to sys_log_dir (same directory as fe.log).
      * <p>
      * dump_log_modules:
      * Dump information for an abnormal query.
@@ -238,8 +235,6 @@ public class Config extends ConfigBase {
      * 120s    120 seconds
      */
     @ConfField
-    public static String dump_log_dir = Config.STARROCKS_HOME_DIR + "/log";
-    @ConfField
     public static int dump_log_roll_num = 10;
     @ConfField
     public static String[] dump_log_modules = {"query"};
@@ -247,6 +242,30 @@ public class Config extends ConfigBase {
     public static String dump_log_roll_interval = "DAY";
     @ConfField
     public static String dump_log_delete_age = "7d";
+
+    /**
+     * plan_log_roll_num:
+     * Maximal FE plan log files to be kept within a plan_log_roll_interval.
+     * fe.plan.log is written to sys_log_dir (same directory as fe.log).
+     * <p>
+     * plan_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * plan_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 mins
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static int plan_log_roll_num = 10;
+    @ConfField
+    public static String plan_log_roll_interval = "DAY";
+    @ConfField
+    public static String plan_log_delete_age = "7d";
 
     /**
      * big_query_log_dir:
@@ -341,12 +360,58 @@ public class Config extends ConfigBase {
     public static int log_cleaner_check_interval_second = 300;
 
     /**
-     * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
-     * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
-     * in the query detail when enable_collect_query_detail_info is true.
+     * @deprecated Use {@code log_plan_on_query_failure} instead.
+     * Previously controlled whether the COSTS plan was written inline to fe.log on RpcException/BE crash.
+     * Plan logging is now unified under log_plan_on_query_failure and written to fe.plan.log.
      */
     @ConfField(mutable = true)
+    @Deprecated
     public static boolean log_plan_cancelled_by_crash_be = true;
+
+    /**
+     * When enabled, the COSTS plan of failed queries will be written to fe.plan.log.
+     * Which failure types are logged is controlled by {@code plan_log_failure_types}.
+     */
+    @ConfField(mutable = true)
+    public static boolean log_plan_on_query_failure = false;
+
+    /**
+     * When enabled, a full query dump (JSON with table metadata, statistics, plan, etc.)
+     * of failed queries will be written to fe.dump.log for offline replay and diagnosis.
+     * Which failure types trigger the dump is controlled by {@code plan_log_failure_types}.
+     * Note: enabling this causes DumpInfo to be collected for every query, which adds overhead.
+     * Default is false. Enable only when diagnosing persistent query failures.
+     */
+    @ConfField(mutable = true)
+    public static boolean dump_query_on_failure = false;
+
+    /**
+     * Comma-separated list of query failure types that trigger plan logging to fe.plan.log.
+     * Only effective when {@code log_plan_on_query_failure} is true.
+     * Valid values (from QueryState.ErrType):
+     *   ANALYSIS_ERR  - SQL analysis / semantic errors (usually user mistakes, low diagnostic value)
+     *   BLACKLISTED   - query rejected by SQL blacklist
+     *   IGNORE_ERR    - silently ignored errors (e.g. KILL statement)
+     *   INTERNAL_ERR  - internal errors, BE crashes, RPC failures
+     *   IO_ERR        - client connection lost
+     *   EXEC_TIME_OUT - query execution timeout
+     *   UNKNOWN       - unclassified errors
+     * Default logs only execution-side failures that are worth investigating.
+     */
+    @ConfField(mutable = true)
+    public static String[] plan_log_failure_types = {"INTERNAL_ERR", "UNKNOWN"};
+
+    /**
+     * Error message keywords that trigger plan/dump logging regardless of {@code plan_log_failure_types}.
+     * When the error message of a failed query contains any of the listed substrings (case-insensitive),
+     * the query plan is written to fe.plan.log and (if enabled) a dump is written to fe.dump.log.
+     * This is useful for catching specific known-bad patterns (e.g. "OOM", "deadlock", "tablet not found")
+     * without broadening the failure-type filter.
+     * Empty by default (keyword matching disabled).
+     * Example: plan_log_error_keywords = OOM, tablet not found, deadlock
+     */
+    @ConfField(mutable = true)
+    public static String[] plan_log_error_keywords = {};
 
     /**
      * In high-concurrency scenarios, the logging of register and unregister query ID can become a bottleneck.
@@ -954,6 +1019,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
 
+    // BRPC connection pool retry wait time (ms).
+    // When a connection pool exception occurs (e.g. SYN packet loss), the retry will wait
+    // this amount of time before attempting to reconnect. Default is 10ms.
+    @ConfField(mutable = true)
+    public static int brpc_connection_pool_retry_wait_time_ms = 10;
+
     @ConfField(mutable = true)
     public static int brpc_send_plan_fragment_timeout_ms = 60000;
 
@@ -1055,8 +1126,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 
+    @ConfField(mutable = true, comment = "Shared-data only. When true, FE tells each BE " +
+            "to elect a per-partition coordinator for combined_txn_log collection, " +
+            "fixing silent txn log loss on incremental-only channels where sender 0 " +
+            "is absent. Safe to leave at the default: the flag is carried on every " +
+            "OpenRequest as an optional proto field, so BEs older than this fix " +
+            "(which don't know about the field) simply ignore it and fall back to " +
+            "the legacy 'sender 0 collects all' rule — BE is always upgraded before " +
+            "FE, so by the time FE emits `true` the BEs are already guaranteed to " +
+            "honor it. Flip to false only as a runtime kill-switch if the new path " +
+            "is ever suspected of regressing.")
+    public static boolean lake_enable_per_partition_coordinator_txn_log = true;
+
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
+
+    @ConfField(mutable = true, comment = "Max retry times for failed create tablet tasks in shared-data mode. " +
+            "Only explicitly failed tasks are retried (not timeouts). Set 0 to disable retry.")
+    public static int lake_create_tablet_max_retries = 1;
 
     /**
      * The thrift server max worker threads
@@ -1258,10 +1345,12 @@ public class Config extends ConfigBase {
     public static int max_broker_load_job_concurrency = 5;
 
     /**
-     * Push down target table schema to files() in `insert from files()`
+     * Push down target table column types to files() in `insert from files()`.
+     * Only rewrites types of columns that already exist in the inferred files schema.
+     * For full schema push-down (column names + types), use the insert property "enable_push_down_schema".
      */
-    @ConfField(mutable = true)
-    public static boolean files_enable_insert_push_down_schema = true;
+    @ConfField(mutable = true, aliases = {"files_enable_insert_push_down_schema"})
+    public static boolean files_enable_insert_push_down_column_type = true;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -2106,6 +2195,17 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
     /**
+     * The DN pattern for direct bind authentication for authentication_ldap_simple.
+     * Use ${USER} as a placeholder for the username.
+     * e.g. "uid=${USER},ou=People,dc=example,dc=com"
+     * Multiple patterns can be separated by semicolon, e.g. "uid=${USER},ou=A,dc=com;uid=${USER},ou=B,dc=com"
+     * When set, the system will skip the search step and directly bind with the constructed DN.
+     */
+    @ConfField(mutable = true, comment = "DN pattern for direct bind authentication; " +
+            "use ${USER} as username placeholder, multiple patterns separated by semicolon")
+    public static String authentication_ldap_simple_bind_dn_pattern = "";
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
@@ -2461,7 +2561,7 @@ public class Config extends ConfigBase {
             "the partition_id filter will be skipped to avoid performance overhead. Default 1000.")
     public static int statistic_load_max_partition_filter_num = 1000;
 
-    @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
+    @ConfField(mutable = true, comment = "Synchronously load statistics (may cause query delay)")
     public static boolean enable_sync_statistics_load = false;
 
     /**
@@ -2980,7 +3080,8 @@ public class Config extends ConfigBase {
     /**
      * fe sync with star mgr meta interval in seconds
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "The interval in seconds at which StarMgrMetaSyncer runs periodical" +
+            " metadata synchronization between FE and StarMgr in a shared-data cluster.")
     public static long star_mgr_meta_sync_interval_sec = 600L;
 
     /**
@@ -3352,6 +3453,16 @@ public class Config extends ConfigBase {
                     "When the compaction score exceeds this value, ingestion will be rejected.\n" +
                     "A value of 0 represents no limit.")
     public static long lake_compaction_score_upper_bound = 2000;
+
+    /**
+     * The maximum number of versions per batch when fetching tablet metadata during lake tablet repair.
+     * The batch size starts from 5 and doubles each iteration until reaching this maximum.
+     * Larger batch sizes allow the BE-side file existence cache to deduplicate more
+     * object storage accesses across versions.
+     * If set to a value less than 5, it will be clamped to 5 at runtime.
+     */
+    @ConfField(mutable = true)
+    public static long lake_repair_metadata_fetch_max_version_batch_size = 160L;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -3754,6 +3865,13 @@ public class Config extends ConfigBase {
     public static boolean enable_show_external_catalog_privilege = true;
 
     /**
+     * Whether information_schema.tables for external catalogs is allowed to
+     * access external metadata service to get full metadata.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_external_catalog_information_schema_tables_access_full_metadata = false;
+
+    /**
      * Loading or compaction must be stopped for primary_key_disk_schedule_time
      * seconds before it can be scheduled
      */
@@ -3797,6 +3915,21 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_materialized_view_concurrent_prepare = true;
+
+    /**
+     * Force refresh materialized view regardless of whether base tables have changed or not.
+     * This is useful for external tables where MV cannot accurately detect changes.
+     * Use a bitmap to control which partition types are affected:
+     * - 0: disabled (default), keep current behavior
+     * - 1: force refresh non-partitioned MV
+     * - 2: force refresh range partitioned MV
+     * - 4: force refresh list partitioned MV
+     * Combine values (e.g., 7 = 1+2+4) to force refresh multiple types.
+     */
+    @ConfField(mutable = true, comment = "Force refresh MV regardless of base table changes. " +
+            "0: disabled (default), 1: non-partitioned, 2: range partitioned, 4: list partitioned. " +
+            "Combine values for multiple types.")
+    public static int mv_refresh_force_partition_type = 0;
 
     /**
      * Checking the connectivity of port opened by FE,
@@ -3974,6 +4107,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int lake_remove_partition_thread_num = 8;
 
+    /**
+     * The remove process of lake table has been unified with partition erase process.
+     * So this config is not needed, will be removed in the future.
+     */
+    @Deprecated
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
 
@@ -4205,13 +4343,17 @@ public class Config extends ConfigBase {
      * Tablet splitting and merging will make tablet size around this value.
      */
     @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
-    public static long tablet_reshard_target_size = 1024L * 1024L * 1024L;
+    public static long tablet_reshard_target_size = 10L * 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
     public static int tablet_reshard_max_split_count = 1024;
+
+    @ConfField(mutable = true, comment = "Whether to enable tablet merge in tablet reshard. " +
+            "Only takes effect for tables in clusters with run_mode=shared_data.")
+    public static boolean tablet_reshard_enable_tablet_merge = false;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale
@@ -4220,11 +4362,18 @@ public class Config extends ConfigBase {
     public static boolean enable_trace_historical_node = false;
 
     /**
-     * The size of the thread pool for deploy serialization.
+     * The max size of the thread pool for deploy serialization.
      * If set to -1, it means same as cpu core number.
+     * Values smaller than cpu core number are treated as cpu core number.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int deploy_serialization_thread_pool_size = -1;
+
+    /**
+     * The min size (core pool size) of the thread pool for deploy serialization.
+     */
+    @ConfField(mutable = true)
+    public static int deploy_serialization_min_thread_pool_size = 1;
 
     /**
      * The size of the queue for deploy serialization thread pool.

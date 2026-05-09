@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # 通用监控指标
@@ -548,6 +549,45 @@ displayed_sidebar: docs
 - 单位：个
 - 类型：累计值
 - 描述：该资源组中报错的查询任务的数量
+
+### Catalog 类型查询指标
+
+这些指标提供按 Catalog 类型维度的查询可观测性。每个指标都包含 `catalog_type` 标签，
+取值范围：`default`、`hive`、`iceberg`、`jdbc`、`deltalake`、`hudi`、`paimon`、`odps`、`kudu`、`elasticsearch`。
+
+`default` 表示 StarRocks 内部表（OLAP/Cloud Native）。
+
+| 指标 | 类型 | 单位 | 描述 |
+|------|------|------|------|
+| `starrocks_fe_catalog_query_total` | Counter | 请求数 | 按 Catalog 类型统计的总查询数 |
+| `starrocks_fe_catalog_query_success` | Counter | 请求数 | 按 Catalog 类型统计的成功查询数 |
+| `starrocks_fe_catalog_query_err` | Counter | 请求数 | 按 Catalog 类型统计的失败查询数 |
+| `starrocks_fe_catalog_query_timeout` | Counter | 请求数 | 按 Catalog 类型统计的超时查询数 |
+| `starrocks_fe_catalog_query_analysis_err` | Counter | 请求数 | 按 Catalog 类型统计的分析错误查询数 |
+| `starrocks_fe_catalog_query_internal_err` | Counter | 请求数 | 按 Catalog 类型统计的内部错误查询数 |
+| `starrocks_fe_catalog_query_err_rate` | Gauge | QPS | 按 Catalog 类型统计的错误率 |
+| `starrocks_fe_catalog_query_timeout_rate` | Gauge | QPS | 按 Catalog 类型统计的超时率 |
+| `starrocks_fe_catalog_query_analysis_err_rate` | Gauge | QPS | 按 Catalog 类型统计的分析错误率 |
+| `starrocks_fe_catalog_query_internal_err_rate` | Gauge | QPS | 按 Catalog 类型统计的内部错误率 |
+| `starrocks_fe_catalog_query_latency_ms` | Histogram | ms | 按 Catalog 类型统计的查询延迟 |
+| `starrocks_fe_catalog_slow_query` | Counter | 请求数 | 按 Catalog 类型统计的慢查询数 |
+| `starrocks_be_catalog_query_scan_bytes` | Counter | 字节 | 按 Catalog 类型统计的扫描字节数 |
+| `starrocks_be_catalog_query_scan_rows` | Counter | 行 | 按 Catalog 类型统计的扫描行数 |
+| `starrocks_be_catalog_files_scan_num_bytes_read` | Counter | 字节 | 按 Catalog 类型统计的文件扫描读取字节数 |
+| `starrocks_be_catalog_files_scan_num_rows_return` | Counter | 行 | 按 Catalog 类型统计的文件扫描返回行数 |
+
+**Prometheus 查询示例：**
+
+```promql
+# Hive Catalog 的总查询数
+starrocks_fe_catalog_query_total{catalog_type="hive"}
+
+# 所有 Catalog 类型的错误率对比
+starrocks_fe_catalog_query_err_rate
+
+# 仅外部表的扫描字节数（排除 default）
+starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
+```
 
 ### starrocks_fe_meta_log_count
 
@@ -2029,6 +2069,22 @@ displayed_sidebar: docs
 - 类型：Summary
 - 描述：等待 merge commit 导入完成的耗时。
 
+### Iceberg 查询 FE 指标
+
+#### iceberg_time_travel_query_total
+
+- 单位：个
+- 类型：累积值
+- 标签：分类序列包含 `time_travel_type`，取值为 `branch`、`tag`、`snapshot` 或 `timestamp`。
+- 描述：Iceberg time travel 查询总数。无标签序列对每条 time travel 查询只计一次；带标签序列按查询中使用到的 time travel 类型分别计数。`snapshot` 表示 `FOR VERSION AS OF <snapshot_id>`，`branch` 和 `tag` 表示 `FOR VERSION AS OF <reference_name>`，`timestamp` 表示 `FOR TIMESTAMP AS OF ...`。
+
+#### iceberg_metadata_table_query_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`metadata_table`（`refs`、`history`、`metadata_log_entries`、`snapshots`、`manifests`、`files`、`partitions` 或 `properties`）
+- 描述：访问 Iceberg metadata table 的 SQL 查询总数。每次查询都会按照实际访问的 metadata table 类型记录到对应的 `metadata_table` 标签下。
+
 ### Iceberg 删除 FE 指标
 
 #### iceberg_delete_total
@@ -2136,6 +2192,46 @@ displayed_sidebar: docs
 - 类型：累积值
 - 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
 - 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。
+
+### Hive 写入 FE 指标
+
+#### hive_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert` 或 `overwrite`）
+- 描述：目标表为 Hive 的 `INSERT` 或 `INSERT OVERWRITE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分两种操作类型。
+
+#### hive_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分两种操作类型。
+
+#### hive_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的写入总字节数。表示写入到 Hive 表的数据文件总大小。`write_type` 区分两种操作类型。
+
+#### hive_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的写入总行数。表示写入到 Hive 表的行数。`write_type` 区分两种操作类型。
+
+#### hive_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）写入的数据文件总数。表示写入到 Hive 表的数据文件个数。`write_type` 区分两种操作类型。
 
 ### DataCache BE 指标
 

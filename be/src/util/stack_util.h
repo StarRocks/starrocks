@@ -29,6 +29,7 @@ namespace starrocks {
 std::string get_stack_trace();
 
 std::vector<int> get_thread_id_list();
+std::string get_thread_name(int tid);
 bool install_stack_trace_sighandler();
 std::string get_stack_trace_for_thread(int tid, int timeout_ms);
 std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeout_ms);

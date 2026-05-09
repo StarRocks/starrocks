@@ -38,6 +38,7 @@
 
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
+#include "util/metrics/catalog_scan_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -62,6 +63,10 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_replica_duration_us);
 
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
+
     REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
@@ -79,7 +84,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(delta_writer_commit_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
-    REGISTER_STARROCKS_METRIC(delta_writer_pk_preload_duration_us);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_replica_duration_us);
     REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
 
@@ -118,6 +122,9 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_total);
     REGISTER_STARROCKS_METRIC(pk_index_sst_read_error_total);
     REGISTER_STARROCKS_METRIC(pk_index_sst_write_error_total);
+
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
 
     // clone
     _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
@@ -298,6 +305,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
     }
 
     _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
+    _catalog_scan_metrics = std::make_unique<CatalogScanMetrics>(&_metrics);
 
 #ifndef __APPLE__
     if (init_jvm_metrics) {

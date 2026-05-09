@@ -21,8 +21,10 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -36,9 +38,21 @@ public abstract class PartitionDiffer {
     // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
     protected final MVTimelinessArbiter.QueryRewriteParams queryRewriteParams;
 
+    // Pinned ranges keyed by Table.getTableIdentifier(). Empty means no pinning.
+    protected Map<String, TvrVersionRange> pinnedRangeByTableIdentifier = Collections.emptyMap();
+
     public PartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         this.mv = mv;
         this.queryRewriteParams = queryRewriteParams;
+    }
+
+    public void setPinnedRanges(Map<String, TvrVersionRange> pinnedRangeByTableIdentifier) {
+        this.pinnedRangeByTableIdentifier = pinnedRangeByTableIdentifier == null
+                ? Collections.emptyMap() : pinnedRangeByTableIdentifier;
+    }
+
+    protected TvrVersionRange pinnedRangeFor(Table table) {
+        return pinnedRangeByTableIdentifier.get(table.getTableIdentifier());
     }
 
     /**

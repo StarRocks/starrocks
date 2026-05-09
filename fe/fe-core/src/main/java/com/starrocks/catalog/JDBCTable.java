@@ -122,6 +122,20 @@ public class JDBCTable extends Table {
         return connectInfo.get(connectInfoKey);
     }
 
+    public String getJdbcUri() {
+        if (!Strings.isNullOrEmpty(resourceName)) {
+            JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
+                    .getResource(resourceName);
+            return resource != null ? resource.getProperty(JDBCResource.URI) : null;
+        }
+        return connectInfo != null ? connectInfo.get(JDBCResource.URI) : null;
+    }
+
+    public boolean isMySQLCompatible() {
+        String uri = getJdbcUri();
+        return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
+    }
+
     private void validate(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of jdbc table, they are: table and resource");

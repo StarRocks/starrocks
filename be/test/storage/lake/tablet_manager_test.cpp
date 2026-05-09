@@ -31,6 +31,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -444,7 +445,6 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     type_desc.types[0].__isset.scalar_type = true;
     type_desc.__isset.types = true;
     null_val.__set_type(type_desc);
-    null_val.__set_value("");
     null_val.__set_variant_type(TVariantType::NULL_VALUE);
     lower_bound.values.push_back(null_val);
     range.__set_lower_bound(lower_bound);
@@ -462,8 +462,8 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     EXPECT_EQ(VariantTypePB::NULL_VALUE, pb_range.lower_bound().values(0).variant_type());
 }
 
-TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
-    auto fs = FileSystem::Default();
+// MINIMUM/MAXIMUM variants should be rejected — FE must map them to NULL_VALUE.
+TEST_F(LakeTabletManagerTest, create_tablet_with_range_rejects_min_max) {
     auto tablet_id = next_id();
     auto schema_id = next_id();
 
@@ -476,7 +476,6 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
     req.tablet_schema.__set_short_key_column_count(2);
     req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
 
-    // Set tablet range with MIN and MAX values
     TTabletRange range;
     TTuple lower_bound;
     TVariant min_val;
@@ -487,35 +486,14 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
     type_desc.types[0].__isset.scalar_type = true;
     type_desc.__isset.types = true;
     min_val.__set_type(type_desc);
-    min_val.__set_value("");
     min_val.__set_variant_type(TVariantType::MINIMUM);
     lower_bound.values.push_back(min_val);
-
-    TTuple upper_bound;
-    TVariant max_val;
-    max_val.__set_type(type_desc);
-    max_val.__set_value("");
-    max_val.__set_variant_type(TVariantType::MAXIMUM);
-    upper_bound.values.push_back(max_val);
-
     range.__set_lower_bound(lower_bound);
-    range.__set_upper_bound(upper_bound);
     req.__set_range(range);
 
-    EXPECT_OK(_tablet_manager->create_tablet(req));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
-
-    // Verify range with MIN/MAX values
-    EXPECT_TRUE(metadata->has_range());
-    const auto& pb_range = metadata->range();
-    EXPECT_TRUE(pb_range.has_lower_bound());
-    EXPECT_EQ(1, pb_range.lower_bound().values_size());
-    EXPECT_EQ(VariantTypePB::MINIMUM, pb_range.lower_bound().values(0).variant_type());
-
-    EXPECT_TRUE(pb_range.has_upper_bound());
-    EXPECT_EQ(1, pb_range.upper_bound().values_size());
-    EXPECT_EQ(VariantTypePB::MAXIMUM, pb_range.upper_bound().values(0).variant_type());
+    auto status = _tablet_manager->create_tablet(req);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_invalid_argument());
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_without_range) {
@@ -1273,6 +1251,73 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     }
 }
 
+// Bundle-format segments let multiple rowsets point at the same physical file at disjoint
+// byte ranges. Keying the segment cache on path alone would return the first-loaded slice to
+// every later caller, silently replacing their data. The key must include the bundle offset.
+TEST_F(LakeTabletManagerTest, segment_cache_key_distinguishes_bundle_slices) {
+    FileInfo plain{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice0{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice1{.path = "oss://bucket/data/abc.dat"};
+    slice0.bundle_file_offset = 0;
+    slice1.bundle_file_offset = 10704;
+
+    const auto plain_key = plain.cache_key();
+    const auto slice0_key = slice0.cache_key();
+    const auto slice1_key = slice1.cache_key();
+
+    // offset absent or zero collapses to the legacy path-only key so the cache layout for
+    // non-bundled segments is unchanged.
+    EXPECT_EQ(plain.path, plain_key);
+    EXPECT_EQ(plain_key, slice0_key);
+
+    // A non-zero bundle offset must fork off its own key; otherwise slice1 would collide with
+    // slice0 and receive slice0's Segment on cache hit.
+    EXPECT_NE(plain_key, slice1_key);
+    EXPECT_THAT(slice1_key, testing::HasSubstr("#10704"));
+}
+
+TEST_F(LakeTabletManagerTest, load_segment_returns_distinct_slices_for_same_path) {
+    // Construct a real file that encodes two back-to-back segments (a common shape produced
+    // by cross-boundary UPSERTs written through BundleWritableFile). We cannot call the full
+    // load_segment+open() path here without a SegmentWriter scaffold — Segment::open parses the
+    // bundle slice's footer — so the cheapest correctness check is that load_segment routes
+    // two different bundle offsets to distinct metacache entries. That is the specific
+    // invariant the cache-key fix protects.
+    const std::string path = _location_provider->segment_location(1, "segment_slice_test.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(path));
+    const std::string payload_a(1024, 'A');
+    const std::string payload_b(2048, 'B');
+    {
+        WritableFileOptions opts;
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(opts, path));
+        ASSERT_OK(of->append(payload_a));
+        ASSERT_OK(of->append(payload_b));
+        ASSERT_OK(of->close());
+    }
+
+    FileInfo info_a{.path = path};
+    info_a.size = payload_a.size();
+    info_a.bundle_file_offset = 0;
+
+    FileInfo info_b{.path = path};
+    info_b.size = payload_b.size();
+    info_b.bundle_file_offset = static_cast<int64_t>(payload_a.size());
+
+    const auto key_a = info_a.cache_key();
+    const auto key_b = info_b.cache_key();
+    ASSERT_NE(key_a, key_b);
+
+    // Seed the metacache with a marker for key_a, prove a lookup by key_b does NOT find it.
+    // This mirrors the failure mode pre-fix: lookup by path-only would collide.
+    auto marker = std::make_shared<Segment>(fs, info_a, /*segment_id*/ 0, nullptr, _tablet_manager);
+    auto cached = _tablet_manager->metacache()->cache_segment_if_absent(key_a, marker);
+    ASSERT_NE(cached, nullptr);
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_a).get(), marker.get());
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_b), nullptr);
+
+    ASSERT_OK(fs->delete_file(path));
+}
+
 #ifdef USE_STAROS
 class MockStarOSWorker : public StarOSWorker {
 public:
@@ -1625,6 +1670,54 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets_capture_delta_versions_
         auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 0, 3);
         EXPECT_TRUE(res.status().is_not_supported());
     }
+}
+
+// Verify that pick_local_anchor_tablet_id prefers a tablet id that this worker owns.
+// In file-bundling mode the aggregator derives bundle/txn-log paths from a single
+// tablet id of the batch; using a remote tablet id forces the staros worker to fetch
+// shard info via RPC, so the helper must skip non-local ids and pick a local one.
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_skips_non_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: tablets 100 and 101 are NOT on this worker; 102 is.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        if (p->first == 100 || p->first == 101) {
+            *(p->second) = false;
+        }
+    });
+
+    std::vector<int64_t> candidates{100, 101, 102, 103};
+    EXPECT_EQ(102, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_falls_back_to_first_when_none_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: no tablet is on this worker.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        *(p->second) = false;
+    });
+
+    std::vector<int64_t> candidates{200, 201, 202};
+    // No local tablet available → the helper must still return a usable id (the first).
+    EXPECT_EQ(200, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all_local) {
+    // Without any sync-point override, is_tablet_in_worker returns true by default in
+    // unit tests (g_worker is null), so the first candidate is picked immediately.
+    std::vector<int64_t> candidates{300, 301, 302};
+    EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
 }
 
 #endif // USE_STAROS

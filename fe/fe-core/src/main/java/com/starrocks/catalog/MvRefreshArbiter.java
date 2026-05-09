@@ -22,12 +22,15 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.UnsupportedException;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -201,5 +204,57 @@ public class MvRefreshArbiter {
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         }
         return baseTableUpdateInfo;
+    }
+
+    /**
+     * Check if any partitions have been deleted from the base table.
+     * For MVs with external tables, if partitions that were previously refreshed no longer exist
+     * in the base table, the MV needs a full refresh.
+     *
+     * @param mv the materialized view
+     * @param baseTableInfo the base table info
+     * @param table the base table
+     * @return true if partitions have been deleted from the base table, false otherwise
+     */
+    public static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table) {
+        // Only check for external tables (Iceberg, Hive, etc.)
+        if (table.isNativeTableOrMaterializedView()) {
+            return false;
+        }
+
+        try {
+            // Get current partitions from the base table
+            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
+            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
+                    traits.getPartitionNameWithPartitionInfo();
+
+            // Get the partitions that were previously refreshed
+            Map<String, MaterializedView.BasePartitionInfo> versionMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo);
+
+            if (MapUtils.isEmpty(versionMap)) {
+                return false;
+            }
+
+            // Check if any previously refreshed partitions no longer exist
+            Set<String> currentPartitions = latestPartitionInfo.keySet();
+            for (String refreshedPartition : versionMap.keySet()) {
+                if (!currentPartitions.contains(refreshedPartition)) {
+                    logMVPrepare(mv, String.format(
+                            "Base table partition %s has been deleted, need refresh totally.", refreshedPartition));
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // If we can't determine partition info (e.g., connector doesn't support partition metadata APIs),
+            // skip the deleted partition check rather than forcing a refresh. This avoids regressing MV rewrite
+            // for connectors that don't implement full partition metadata support.
+            LOG.debug("Cannot check for deleted partitions for table {}.{}.{}, skipping check: {}",
+                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName(),
+                    e.getMessage());
+            return false;
+        }
+
+        return false;
     }
 }

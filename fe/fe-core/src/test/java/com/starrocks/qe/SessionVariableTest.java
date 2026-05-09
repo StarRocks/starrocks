@@ -13,6 +13,9 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.thrift.TBinaryEncodingFormat;
+import com.starrocks.thrift.TBinaryEncodingLevel;
+import com.starrocks.thrift.TQueryOptions;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -126,5 +129,39 @@ public class SessionVariableTest {
 
         sessionVariable.setMVPlanner(false);
         Assertions.assertFalse(sessionVariable.isMVPlanner());
+    }
+
+    @Test
+    public void testBinaryEncodingDefaultsAndToThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.HEX, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.NESTED, queryOptions.getBinary_encoding_level());
+    }
+
+    @Test
+    public void testBinaryEncodingSettersNormalizeAndValidate() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        sessionVariable.setBinaryEncodingFormat("BASE64");
+        sessionVariable.setBinaryEncodingLevel("ALL");
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+        Assertions.assertEquals("base64", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("all", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.BASE64, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.ALL, queryOptions.getBinary_encoding_level());
+
+        sessionVariable.setBinaryEncodingFormat(null);
+        sessionVariable.setBinaryEncodingLevel(null);
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingFormat("invalid"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingLevel("invalid"));
     }
 }

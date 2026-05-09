@@ -79,10 +79,6 @@ ThreadPool* vacuum_thread_pool(ExecEnv* env) {
     return get_thread_pool(env, TTaskType::RELEASE_SNAPSHOT);
 }
 
-ThreadPool* get_tablet_stats_thread_pool(ExecEnv* env) {
-    return get_thread_pool(env, TTaskType::UPDATE_TABLET_META_INFO);
-}
-
 int get_num_publish_queued_tasks(void*) {
 #ifndef BE_TEST
     auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
@@ -241,9 +237,13 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 // Splitting tablet
                 const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
                 task_num += splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_count = splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_index = 0;
                 for (auto new_tablet_id : splitting_tablet_info.new_tablet_ids()) {
                     publish_tablet_infos.emplace_back(lake::PublishTabletInfo::SPLITTING_TABLET,
-                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id);
+                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id, split_count,
+                                                      split_index);
+                    split_index++;
                 }
             } else if (resharding_tablet_info.has_merging_tablet_info()) {
                 // Merging tablets
@@ -510,10 +510,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
-    if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txns=" << get_txn_ids_string(request) << ". cost=" << cost << "us\n"
-                  << trace->DumpToString();
-    } else if (is_slow) {
+    if (is_slow) {
         LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
@@ -1116,9 +1113,10 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-    auto thread_pool = get_tablet_stats_thread_pool(_env);
+    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("thread pool is null");
+        cntl->SetFailed("lake metadata fetch thread pool is null");
         return;
     }
     // The magic number "10" is just a random chosen number, feel free to change it if you have a better choice.
@@ -1162,23 +1160,26 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     for (const auto& rowset : (*tablet_metadata)->rowsets()) {
                         int64_t num_deletes = 0;
                         if (is_pk_tablet) {
-                            if (accurate_mode) {
+                            if (rowset.has_range()) {
+                                // Rowset went through a reshard (split or merge-back). Shared delvec
+                                // cardinality reflects the parent's full delete set, not this child's
+                                // share, so reading delvec would over-subtract. Use the pre-scaled
+                                // num_dels written by tablet_splitter / tablet_merger / tablet_reshard_helper.
+                                num_deletes = rowset.has_num_dels() ? rowset.num_dels() : 0;
+                            } else if (accurate_mode) {
                                 // Accurate mode (default): fetch delete vectors from object storage.
-                                // NOTE!! Each segment incurs a remote metadata read - expensive for large tablets.
+                                // Reuses the already-loaded tablet metadata to avoid repeated loads per segment.
                                 num_deletes = static_cast<int64_t>(
-                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
-                            } else {
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
+                            } else if (rowset.has_num_dels()) {
                                 // Approximate mode: prefer the pre-stored num_dels field in rowset
                                 // metadata. This avoids additional I/O while still providing a reasonable estimate.
                                 // Rows deleted but not yet compacted may be slightly overcounted.
-                                if (rowset.has_num_dels()) {
-                                    num_deletes = rowset.num_dels();
-                                } else {
-                                    // Fallback for old metadata without num_dels.
-                                    num_deletes =
-                                            static_cast<int64_t>(_tablet_mgr->update_mgr()->get_rowset_num_deletes(
-                                                    tablet_id, version, rowset));
-                                }
+                                num_deletes = rowset.num_dels();
+                            } else {
+                                // Fallback for old metadata without num_dels.
+                                num_deletes = static_cast<int64_t>(
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
                             }
                         }
                         // For non-PK tablets, num_deletes stays 0: they have no delete vectors.
@@ -1677,18 +1678,30 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
 
 // Check missing files, like segment, delete vector, pk index sst, cols file
 static Status check_missing_files(const TabletMetadata& metadata, const lake::TabletManager* tablet_mgr,
-                                  ::starrocks::TabletMetadataEntry* entry) {
+                                  ::starrocks::TabletMetadataEntry* entry,
+                                  std::unordered_set<std::string>& known_existing_files,
+                                  std::unordered_set<std::string>& known_missing_files) {
     std::unordered_set<std::string> missing_files;
     std::shared_ptr<FileSystem> fs = nullptr;
     auto check_file = [&](const std::string& path, const std::string& filename) -> Status {
+        if (known_existing_files.count(filename)) {
+            return Status::OK();
+        }
+        if (known_missing_files.count(filename)) {
+            missing_files.emplace(filename);
+            return Status::OK();
+        }
         if (fs == nullptr) {
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(path));
         }
         auto st = fs->path_exists(path);
         if (st.is_not_found()) {
+            known_missing_files.emplace(filename);
             missing_files.emplace(filename);
         } else if (!st.ok()) {
             return st;
+        } else {
+            known_existing_files.emplace(filename);
         }
         return Status::OK();
     };
@@ -1755,9 +1768,10 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         Status::InvalidArgument("max_version should be >= min_version").to_protobuf(response->mutable_status());
         return;
     }
-    auto thread_pool = get_tablet_stats_thread_pool(_env);
+    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_metadatas:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
-        Status::ServiceUnavailable("tablet stats thread pool is null").to_protobuf(response->mutable_status());
+        Status::ServiceUnavailable("lake metadata fetch thread pool is null").to_protobuf(response->mutable_status());
         return;
     }
 
@@ -1782,6 +1796,12 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
                 [&, tablet_id, max_version, min_version, tablet_result] {
                     DeferOp defer([&] { latch.count_down(); });
 
+                    // Cache file existence check results across versions to avoid redundant
+                    // object storage accesses. Higher versions are built on lower versions,
+                    // so files in higher versions are very likely present in lower versions too.
+                    std::unordered_set<std::string> known_existing_files;
+                    std::unordered_set<std::string> known_missing_files;
+
                     // get tablet metadatas within the specified version range
                     for (int64_t version = max_version; version >= min_version; --version) {
                         // don't fill meta cache to avoid polluting the cache
@@ -1794,7 +1814,8 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
                             entry->mutable_metadata()->CopyFrom(*tablet_metadata);
 
                             if (enable_check_missing_files) {
-                                auto check_st = check_missing_files(*tablet_metadata, _tablet_mgr, entry);
+                                auto check_st = check_missing_files(*tablet_metadata, _tablet_mgr, entry,
+                                                                    known_existing_files, known_missing_files);
                                 if (!check_st.ok()) {
                                     check_st.to_protobuf(tablet_result->mutable_status());
                                     return;

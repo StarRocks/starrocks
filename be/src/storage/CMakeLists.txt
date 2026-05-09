@@ -102,6 +102,7 @@ set(STORAGE_FILES
     rowset/data_sample.cpp
     rowset/dict_page.cpp
     rowset/segment.cpp
+    rowset/segment_file_info.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp

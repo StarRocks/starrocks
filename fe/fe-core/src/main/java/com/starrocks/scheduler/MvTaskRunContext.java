@@ -15,9 +15,12 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PartitionNameSetMap;
@@ -27,6 +30,31 @@ import java.util.Map;
 import java.util.Set;
 
 public class MvTaskRunContext extends TaskRunContext {
+    public static class MVRefreshRuntimeState {
+        private final Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = Maps.newHashMap();
+
+        // Pinned TvrVersionRange per base table, keyed by Table.getTableIdentifier() (stable across
+        // connector getTable() calls, unlike tableId for external tables).
+        private final Map<String, TvrVersionRange> pinnedTvrMap = Maps.newHashMap();
+
+        public Map<Long, BaseTableSnapshotInfo> getSnapshotBaseTables() {
+            return snapshotBaseTables;
+        }
+
+        public void replaceSnapshotBaseTables(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+            this.snapshotBaseTables.clear();
+            this.snapshotBaseTables.putAll(snapshotBaseTables);
+        }
+
+        public Map<String, TvrVersionRange> getPinnedTvrMap() {
+            return pinnedTvrMap;
+        }
+
+        public void reset() {
+            snapshotBaseTables.clear();
+            pinnedTvrMap.clear();
+        }
+    }
 
     // all the RefBaseTable's partition name to its intersected materialized view names.
     //baseTable -> basePartition -> mvPartitions
@@ -51,9 +79,14 @@ public class MvTaskRunContext extends TaskRunContext {
     private ExecPlan execPlan = null;
 
     private int partitionTTLNumber = TableProperty.INVALID;
+    private final MVRefreshRuntimeState refreshRuntimeState = new MVRefreshRuntimeState();
 
     public MvTaskRunContext(TaskRunContext context) {
         super(context);
+    }
+
+    public MVRefreshRuntimeState getRefreshRuntimeState() {
+        return refreshRuntimeState;
     }
 
     public Map<Table, PCellSetMapping> getRefBaseTableMVIntersectedPartitions() {

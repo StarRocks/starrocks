@@ -52,6 +52,7 @@ set(UTIL_FILES
   mem_info.cpp
   metrics.cpp
   metrics/file_scan_metrics.cpp
+  metrics/catalog_scan_metrics.cpp
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp
@@ -123,6 +124,7 @@ set(UTIL_FILES
   llm_cache.cpp
   llm_query_service.cpp
   variant.cpp
+  uuid_generator.cpp
 )
 
 ADD_BE_LIB(Util

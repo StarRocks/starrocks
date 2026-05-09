@@ -212,7 +212,7 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                     + "  1:Project\n"
                     + "  |  output columns:\n"
                     + "  |  1 <-> [1: k, BIGINT, false]\n"
-                    + "  |  12 <-> [6: v5, struct<a int(11), b struct<a array<bigint(20)>>>, true].b.a[false]\n"
+                    + "  |  12 <-> [6: v5, struct<`a` int(11), `b` struct<`a` array<bigint(20)>>>, true].b.a[false]\n"
                     + "  |  cardinality: 1");
             assertContains(plan, "ColumnAccessPath: [/v5/b/a]");
         }
@@ -305,13 +305,14 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                     + "  |  1 <-> [1: k, BIGINT, false]\n"
                     + "  |  11 <-> cardinality[([2: v1, ARRAY<BIGINT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
                     + "true; result nullable: true]\n"
-                    + "  |  12 <-> cardinality[([6: v5, struct<a int(11), b struct<a array<bigint(20)>>>, true].b.a[true]); "
+                    + "  |  12 <-> cardinality[([6: v5, struct<`a` int(11), `b` "
+                    + "struct<`a` array<bigint(20)>>>, true].b.a[true]); "
                     + "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n"
                     + "  |  13 <-> cardinality[([7: v6, MAP<INT,INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
                     + "true; result nullable: true]\n"
                     + "  |  cardinality: 1");
             assertContains(plan, "     Pruned type: 2 <-> [ARRAY<BIGINT>]\n" +
-                    "     Pruned type: 6 <-> [struct<a int(11), b struct<a array<bigint(20)>>>]\n" +
+                    "     Pruned type: 6 <-> [struct<`a` int(11), `b` struct<`a` array<bigint(20)>>>]\n" +
                     "     Pruned type: 7 <-> [MAP<INT,INT>]\n" +
                     "     ColumnAccessPath: [/v1/OFFSET, /v5/b/a/OFFSET, /v6/OFFSET]");
         }

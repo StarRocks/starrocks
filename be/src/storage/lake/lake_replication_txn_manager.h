@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <vector>
+
 #include "common/status.h"
 #include "fs/encryption.h"
 #include "gen_cpp/AgentService_types.h"
@@ -26,6 +30,7 @@ struct FileEncryptionPair;
 struct WritableFileOptions;
 class TabletMetadataPB;
 class FileSystem;
+class ThreadPool;
 } // namespace starrocks
 
 using starrocks::FileConverterCreatorFunc;
@@ -35,6 +40,8 @@ class TabletManager;
 
 class LakeReplicationTxnManager {
 public:
+    using ReplicationTask = std::function<Status()>;
+
     explicit LakeReplicationTxnManager(lake::TabletManager* tablet_manager)
             : _tablet_manager(tablet_manager)
 #ifdef USE_STAROS
@@ -98,8 +105,15 @@ public:
                                                              const std::string& target_file_location,
                                                              const WritableFileOptions& opts, int max_retry);
 
+    // Decide whether to use parallel copy for current tablet files.
+    static bool should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool);
+
 private:
+    ThreadPool* get_replicate_file_thread_pool();
+
     TabletManager* _tablet_manager;
+    // Non-owning pointer managed by AgentServer.
+    ThreadPool* _replicate_file_thread_pool = nullptr;
 #ifdef USE_STAROS
     // Used for non-S3 storage types to construct relative paths
     // S3 storage type uses full path provided by FE instead

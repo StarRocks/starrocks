@@ -34,6 +34,56 @@ protected:
     ObjectPool _pool;
 };
 
+class MockNullPhysicalReader : public ColumnReader {
+public:
+    MockNullPhysicalReader() : ColumnReader(nullptr) {}
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        for (uint64_t i = range.begin(); i < range.end(); ++i) {
+            dst->as_mutable_raw_ptr()->append_datum(kNullDatum);
+        }
+        return Status::OK();
+    }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
+    void set_need_parse_levels(bool need_parse_levels) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {}
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+};
+
+class MockPredicatePhysicalReader : public ColumnReader {
+public:
+    MockPredicatePhysicalReader() : ColumnReader(nullptr) {}
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        return Status::OK();
+    }
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
+        return true;
+    }
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
+        row_ranges->add(Range<uint64_t>(3, 7));
+        return true;
+    }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
+    void set_need_parse_levels(bool need_parse_levels) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {}
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+};
+
 // ==================== Basic read_range tests ====================
 
 TEST_F(IcebergRowIdReaderTest, TestReadRangeWithoutFilter) {
@@ -327,53 +377,146 @@ TEST_F(IcebergRowIdReaderTest, TestPageIndexFilterIsNotNull) {
     ASSERT_FALSE(result.value());
 }
 
-// ==================== FixedValueColumnReader for row lineage fallback ====================
+// ==================== Row lineage fallback readers ====================
 
-TEST_F(IcebergRowIdReaderTest, TestFixedValueColumnReaderForNullRowId) {
-    // When first_row_id is unavailable (late materialization on pre-v3 files),
-    // a FixedValueColumnReader with kNullDatum is used.
-    auto reader = std::make_unique<FixedValueColumnReader>(kNullDatum);
-    ASSERT_TRUE(reader->prepare().ok());
+TEST_F(IcebergRowIdReaderTest, TestRowIdReaderWithoutFirstRowIdReturnsNull) {
+    IcebergRowIdReader reader(std::nullopt);
+    ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 5);
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
 
-    ASSERT_TRUE(reader->read_range(range, nullptr, column).ok());
+    ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 5);
     for (int i = 0; i < 5; i++) {
         ASSERT_TRUE(column->get(i).is_null());
     }
 }
 
-TEST_F(IcebergRowIdReaderTest, TestFixedValueColumnReaderForSequenceNumber) {
-    // When the Parquet file has no physical _last_updated_sequence_number column,
-    // a FixedValueColumnReader with the file-level dataSequenceNumber is used.
-    int64_t sequence_number = 42;
-    auto reader = std::make_unique<FixedValueColumnReader>(Datum(sequence_number));
-    ASSERT_TRUE(reader->prepare().ok());
+TEST_F(IcebergRowIdReaderTest, TestRowIdPredicateFiltersDelegateWhenFallbackCannotChangeValues) {
+    IcebergRowIdReader reader(std::make_unique<MockPredicatePhysicalReader>(), std::nullopt);
+    ASSERT_TRUE(reader.prepare().ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_BIGINT);
+    Datum eq_val(static_cast<int64_t>(10));
+    ColumnPredicate* eq_pred = _pool.add(new_column_eq_predicate_from_datum(type_info, 0, eq_val));
+    std::vector<const ColumnPredicate*> predicates = {eq_pred};
+
+    auto row_group = reader.row_group_zone_map_filter(predicates, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(row_group.ok());
+    ASSERT_TRUE(row_group.value());
+
+    SparseRange<uint64_t> row_ranges;
+    auto page_index = reader.page_index_zone_map_filter(predicates, &row_ranges, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(page_index.ok());
+    ASSERT_TRUE(page_index.value());
+    ASSERT_EQ(1, row_ranges.size());
+    ASSERT_EQ(3, row_ranges[0].begin());
+    ASSERT_EQ(7, row_ranges[0].end());
+}
+
+TEST_F(IcebergRowIdReaderTest, TestRowIdPredicateFiltersStayConservativeWhenFallbackCanChangeValues) {
+    IcebergRowIdReader reader(std::make_unique<MockPredicatePhysicalReader>(), 100);
+    ASSERT_TRUE(reader.prepare().ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_BIGINT);
+    Datum eq_val(static_cast<int64_t>(10));
+    ColumnPredicate* eq_pred = _pool.add(new_column_eq_predicate_from_datum(type_info, 0, eq_val));
+    std::vector<const ColumnPredicate*> predicates = {eq_pred};
+
+    auto row_group = reader.row_group_zone_map_filter(predicates, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(row_group.ok());
+    ASSERT_FALSE(row_group.value());
+
+    SparseRange<uint64_t> row_ranges;
+    auto page_index = reader.page_index_zone_map_filter(predicates, &row_ranges, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(page_index.ok());
+    ASSERT_FALSE(page_index.value());
+    ASSERT_TRUE(row_ranges.empty());
+}
+
+TEST_F(IcebergRowIdReaderTest, TestSequenceNumberReaderWithoutPhysicalColumnUsesFallbackValue) {
+    IcebergLastUpdatedSequenceNumberReader reader(Datum(static_cast<int64_t>(42)));
+    ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 5);
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
 
-    ASSERT_TRUE(reader->read_range(range, nullptr, column).ok());
+    ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 5);
     for (int i = 0; i < 5; i++) {
         ASSERT_EQ(column->get(i).get_int64(), 42);
     }
 }
 
-TEST_F(IcebergRowIdReaderTest, TestFixedValueColumnReaderWithFilter) {
-    int64_t sequence_number = 99;
-    auto reader = std::make_unique<FixedValueColumnReader>(Datum(sequence_number));
-    ASSERT_TRUE(reader->prepare().ok());
+TEST_F(IcebergRowIdReaderTest, TestSequenceNumberReaderWithoutFallbackReturnsNull) {
+    IcebergLastUpdatedSequenceNumberReader reader(kNullDatum);
+    ASSERT_TRUE(reader.prepare().ok());
+
+    Range<uint64_t> range(0, 4);
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+
+    ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
+    ASSERT_EQ(column->size(), 4);
+    for (size_t i = 0; i < column->size(); i++) {
+        ASSERT_TRUE(column->get(i).is_null());
+    }
+}
+
+TEST_F(IcebergRowIdReaderTest, TestSequenceNumberPredicateFiltersDelegateWhenFallbackCannotChangeValues) {
+    IcebergLastUpdatedSequenceNumberReader reader(std::make_unique<MockPredicatePhysicalReader>(), false, kNullDatum);
+    ASSERT_TRUE(reader.prepare().ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_BIGINT);
+    Datum eq_val(static_cast<int64_t>(10));
+    ColumnPredicate* eq_pred = _pool.add(new_column_eq_predicate_from_datum(type_info, 0, eq_val));
+    std::vector<const ColumnPredicate*> predicates = {eq_pred};
+
+    auto row_group = reader.row_group_zone_map_filter(predicates, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(row_group.ok());
+    ASSERT_TRUE(row_group.value());
+
+    SparseRange<uint64_t> row_ranges;
+    auto page_index = reader.page_index_zone_map_filter(predicates, &row_ranges, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(page_index.ok());
+    ASSERT_TRUE(page_index.value());
+    ASSERT_EQ(1, row_ranges.size());
+    ASSERT_EQ(3, row_ranges[0].begin());
+    ASSERT_EQ(7, row_ranges[0].end());
+}
+
+TEST_F(IcebergRowIdReaderTest, TestSequenceNumberPredicateFiltersStayConservativeWhenFallbackCanChangeValues) {
+    IcebergLastUpdatedSequenceNumberReader reader(std::make_unique<MockPredicatePhysicalReader>(), true,
+                                                  Datum(static_cast<int64_t>(99)));
+    ASSERT_TRUE(reader.prepare().ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_BIGINT);
+    Datum eq_val(static_cast<int64_t>(10));
+    ColumnPredicate* eq_pred = _pool.add(new_column_eq_predicate_from_datum(type_info, 0, eq_val));
+    std::vector<const ColumnPredicate*> predicates = {eq_pred};
+
+    auto row_group = reader.row_group_zone_map_filter(predicates, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(row_group.ok());
+    ASSERT_FALSE(row_group.value());
+
+    SparseRange<uint64_t> row_ranges;
+    auto page_index = reader.page_index_zone_map_filter(predicates, &row_ranges, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(page_index.ok());
+    ASSERT_FALSE(page_index.value());
+    ASSERT_TRUE(row_ranges.empty());
+}
+
+TEST_F(IcebergRowIdReaderTest, TestSequenceNumberReaderWithFilter) {
+    IcebergLastUpdatedSequenceNumberReader reader(Datum(static_cast<int64_t>(99)));
+    ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 4);
     Filter filter = {true, false, true, false};
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
 
-    ASSERT_TRUE(reader->read_range(range, &filter, column).ok());
-    // FixedValueColumnReader fills all rows in range (filter is applied later by caller)
+    ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
+    // Reserved field readers fill all rows in range; caller applies filter afterwards.
     ASSERT_EQ(column->size(), 4);
     for (size_t i = 0; i < column->size(); i++) {
         ASSERT_EQ(column->get(i).get_int64(), 99);
@@ -433,6 +576,35 @@ TEST_F(IcebergRowIdReaderTest, TestLargeFirstRowId) {
     ASSERT_EQ(column->get(0).get_int64(), large_first_row_id);
     ASSERT_EQ(column->get(1).get_int64(), large_first_row_id + 1);
     ASSERT_EQ(column->get(2).get_int64(), large_first_row_id + 2);
+}
+
+TEST_F(IcebergRowIdReaderTest, TestNullPhysicalRowIdFallsBackToInheritance) {
+    IcebergRowIdReader reader(std::make_unique<MockNullPhysicalReader>(), std::optional<int64_t>(500));
+    ASSERT_TRUE(reader.prepare().ok());
+
+    Range<uint64_t> range(0, 3);
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
+
+    ASSERT_EQ(column->size(), 3);
+    ASSERT_EQ(column->get(0).get_int64(), 500);
+    ASSERT_EQ(column->get(1).get_int64(), 501);
+    ASSERT_EQ(column->get(2).get_int64(), 502);
+}
+
+TEST_F(IcebergRowIdReaderTest, TestNullPhysicalSequenceNumberFallsBackToInheritance) {
+    IcebergLastUpdatedSequenceNumberReader reader(std::make_unique<MockNullPhysicalReader>(), true,
+                                                  Datum(static_cast<int64_t>(42)));
+    ASSERT_TRUE(reader.prepare().ok());
+
+    Range<uint64_t> range(0, 3);
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
+
+    ASSERT_EQ(column->size(), 3);
+    ASSERT_EQ(column->get(0).get_int64(), 42);
+    ASSERT_EQ(column->get(1).get_int64(), 42);
+    ASSERT_EQ(column->get(2).get_int64(), 42);
 }
 
 } // namespace starrocks::parquet

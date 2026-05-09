@@ -31,8 +31,8 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -232,7 +232,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         Identifier identifier = new Identifier(databaseName, tableName);
         updatePartitionInfo(databaseName, tableName);
         if (this.partitionInfos.get(identifier) == null) {
@@ -277,7 +278,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             String fieldName = field.name();
             DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true, field.description());
+            Column column = new Column(fieldName, fieldType, type.isNullable(), field.description());
             fullSchema.add(column);
         }
         String comment = "";
@@ -722,7 +723,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                 builder.setNullsFraction(0);
             }
 
-            builder.setAverageRowSize(colStats.nullCount().isPresent() ? colStats.nullCount().getAsLong() : 1);
+            builder.setAverageRowSize(colStats.avgLen().isPresent()
+                    ? colStats.avgLen().getAsLong() : column.getType().getTypeSize());
 
             if (colStats.distinctCount().isPresent()) {
                 builder.setDistinctValuesCount(colStats.distinctCount().getAsLong());

@@ -865,8 +865,12 @@ template <typename T>
 void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     T start = _offsets[idx];
     T len = _offsets[idx + 1] - start;
-    const uint8_t* base = _data_base();
-    buf->push_string(reinterpret_cast<const char*>(base + start), len);
+    const char* base = reinterpret_cast<const char*>(_data_base());
+    if (_is_binary_type) {
+        buf->push_binary(base + start, len);
+    } else {
+        buf->push_string(base + start, len);
+    }
 }
 
 template <typename T>

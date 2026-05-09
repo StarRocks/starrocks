@@ -23,6 +23,7 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/range.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/seek_range.h"
 
@@ -91,9 +92,12 @@ public:
     // if the segment is empty, it wouln't add this iterator to iterator list
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
-    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(const Schema& schema, int64_t version,
-                                                                                  const MetaFileBuilder* builder,
-                                                                                  OlapReaderStatistics* stats);
+    // |rowid_range_per_segment|: if non-null, rowid_range_per_segment[i] specifies the row range
+    // to scan for the i-th segment. If the pointer at index i is null, the entire segment is scanned.
+    // The vector size must equal num_segments() if provided.
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
+            const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
+            const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 

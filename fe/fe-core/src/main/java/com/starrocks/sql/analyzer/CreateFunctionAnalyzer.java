@@ -14,24 +14,33 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.udf.StorageHandler;
+import com.starrocks.common.udf.StorageHandlerFactory;
 import com.starrocks.common.util.UDFInternalClassLoader;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
@@ -48,11 +57,8 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
-import java.net.URL;
 import java.net.URLClassLoader;
-import java.net.URLConnection;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.Permission;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -61,33 +67,99 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class CreateFunctionAnalyzer {
+
+    private String objectFile;
+
+    private String md5sum;
+
+    private String isolation;
+
+    private CloudConfiguration cloudConfiguration;
+
     public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
         if (!Config.enable_udf) {
             throw new SemanticException(
                     "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf");
         }
+        loadFunctionProperties(stmt);
         analyzeCommon(stmt, context);
-        String langType = stmt.getLangType();
 
-        if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
-            String checksum = computeMd5(stmt);
-            analyzeJavaUDFClass(stmt, checksum, context);
-        } else if (CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(langType)) {
-            analyzePython(stmt, context);
-        } else {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown lang type");
+        if (stmt.isBuildFunctionMode()) {
+            // build function
+            analyzeExpression(stmt, context);
+        } else if (stmt.isUdfFunctionMode()) {
+            String langType = stmt.getLangType();
+
+            if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
+                String checksum = computeMd5(stmt);
+                analyzeJavaUDFClass(stmt, checksum, context);
+            } else if (CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(langType)) {
+                analyzePython(stmt, context);
+            } else {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown lang type");
+            }
         }
-        // build function
+    }
+
+    private void analyzeExpression(CreateFunctionStmt stmt, ConnectContext context) {
+        Expr expr = stmt.getExpr();
+        FunctionArgsDef def = stmt.getArgsDef();
+        Preconditions.checkState(def.getArgTypes().length == def.getArgNames().size());
+
+        Map<String, Type> argsMap = Maps.newHashMap();
+        for (int i = 0; i < def.getArgNames().size(); i++) {
+            String name = def.getArgNames().get(i);
+            if (argsMap.containsKey(name)) {
+                throw new SemanticException("Duplicate argument name %s in function args", name);
+            }
+            argsMap.put(name, def.getArgTypes()[i]);
+        }
+        ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
+            if (!argsMap.containsKey(slotRef.getColName())) {
+                throw new SemanticException("Cannot find argument %s in function args", slotRef.getColName());
+            }
+            slotRef.setType(argsMap.get(slotRef.getColName()));
+        });
+
+        FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(
+                stmt.getFunctionRef(),
+                stmt.getFunctionRef().isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                        : context.getDatabase());
+        FunctionArgsDef argsDef = stmt.getArgsDef();
+
+        String viewSql = AstToSQLBuilder.toSQLWithCredential(expr);
+        Function function = new SqlFunction(functionName, argsDef.getArgTypes(), expr.getType(),
+                argsDef.getArgNames().toArray(new String[0]), viewSql);
+        stmt.setFunction(function);
+    }
+
+    private void loadFunctionProperties(CreateFunctionStmt stmt) {
+        this.objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        this.md5sum = stmt.getProperties().get(CreateFunctionStmt.MD5_CHECKSUM);
+        this.isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
+        this.cloudConfiguration = setupCredential(stmt.getProperties());
     }
 
     private void analyzeCommon(CreateFunctionStmt stmt, ConnectContext context) {
         FunctionRef functionRef = stmt.getFunctionRef();
         FunctionArgsDef argsDef = stmt.getArgsDef();
-        TypeDef returnType = stmt.getReturnType();
         String defaultDb = functionRef.isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB : context.getDatabase();
         FunctionRefAnalyzer.analyzeFunctionRef(functionRef, defaultDb);
         FunctionRefAnalyzer.analyzeArgsDef(argsDef);
-        TypeDefAnalyzer.analyze(returnType);
+
+        TypeDef returnType = stmt.getReturnType();
+        if (returnType != null) {
+            TypeDefAnalyzer.analyze(returnType);
+        }
+    }
+
+    private CloudConfiguration setupCredential(Map<String, String> properties) {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return cloudConfiguration;
+        }
+        return null;
     }
 
     public String computeMd5(CreateFunctionStmt stmt) {
@@ -98,35 +170,22 @@ public class CreateFunctionAnalyzer {
             return checksum;
         }
 
-        Map<String, String> properties = stmt.getProperties();
-
-        String objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
         if (Strings.isNullOrEmpty(objectFile)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "No 'object_file' in properties");
         }
-
-        try {
-            URL url = new URL(objectFile);
-            URLConnection urlConnection = url.openConnection();
-            InputStream inputStream = urlConnection.getInputStream();
-
+        try (StorageHandler handler = StorageHandlerFactory.create(cloudConfiguration);
+                InputStream inputStream = handler.openStream(objectFile)) {
             MessageDigest digest = MessageDigest.getInstance("MD5");
             byte[] buf = new byte[4096];
-            int bytesRead = 0;
-            do {
-                bytesRead = inputStream.read(buf);
-                if (bytesRead < 0) {
-                    break;
-                }
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buf)) >= 0) {
                 digest.update(buf, 0, bytesRead);
-            } while (true);
-
+            }
             checksum = Hex.encodeHexString(digest.digest());
-        } catch (IOException | NoSuchAlgorithmException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "cannot to compute object's checksum", e);
+        } catch (Exception e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "cannot compute object's checksum " + e.getMessage());
         }
 
-        String md5sum = properties.get(CreateFunctionStmt.MD5_CHECKSUM);
         if (md5sum != null && !md5sum.equalsIgnoreCase(checksum)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "library's checksum is not equal with input, checksum=" + checksum);
@@ -142,14 +201,13 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "No '" + CreateFunctionStmt.SYMBOL_KEY + "' in properties");
         }
-        String objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
 
         JavaUDFInternalClass handleClass = new JavaUDFInternalClass();
         JavaUDFInternalClass stateClass = new JavaUDFInternalClass();
 
         try {
-            System.setSecurityManager(new UDFSecurityManager(UDFInternalClassLoader.class));
-            try (URLClassLoader classLoader = new UDFInternalClassLoader(objectFile)) {
+            try (URLClassLoader classLoader = UDFInternalClassLoader.create(objectFile, cloudConfiguration)) {
+                System.setSecurityManager(new UDFSecurityManager(UDFInternalClassLoader.class));
                 handleClass.setClazz(classLoader.loadClass(className));
                 handleClass.collectMethods();
 
@@ -161,13 +219,15 @@ public class CreateFunctionAnalyzer {
 
             } catch (IOException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Failed to load object_file: " + objectFile, e);
+                        "Failed to load object_file: " + stmt.getProperties().get(CreateFunctionStmt.FILE_KEY) + 
+                        "," + e.getMessage());
             } catch (ClassNotFoundException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Class '" + className + "' not found in object_file :" + objectFile, e);
+                        "Class '" + className + "' not found in object_file :" +
+                                stmt.getProperties().get(CreateFunctionStmt.FILE_KEY) + "," + e.getMessage());
             } catch (Exception e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "other exception when load class. exception:", e);
+                        "other exception when load class. exception:" + e.getMessage());
             }
         } finally {
             System.setSecurityManager(null);
@@ -210,12 +270,11 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
-
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
+                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation),
+                cloudConfiguration);
         function.setChecksum(checksum);
         return function;
     }
@@ -326,12 +385,15 @@ public class CreateFunctionAnalyzer {
 
         checkStarrocksJarUdafStateClass(stmt, mainClass, udafStateClass);
         checkStarrocksJarUdafClass(stmt, mainClass, udafStateClass);
+        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
         AggregateFunction.AggregateFunctionBuilder builder =
                 AggregateFunction.AggregateFunctionBuilder.createUdfBuilder(TFunctionBinaryType.SRJAR);
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
-                .symbolName(mainClass.getCanonicalName());
+                .symbolName(mainClass.getCanonicalName())
+                .setIsolationType(!"shared".equalsIgnoreCase(isolation))
+                .cloudConfiguration(cloudConfiguration);
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;
@@ -365,6 +427,7 @@ public class CreateFunctionAnalyzer {
         tableFunction.setChecksum(checksum);
         tableFunction.setLocation(new HdfsURI(objectFile));
         tableFunction.setSymbolName(mainClass.getCanonicalName());
+        tableFunction.setCloudConfiguration(cloudConfiguration);
         return tableFunction;
     }
 
@@ -590,13 +653,10 @@ public class CreateFunctionAnalyzer {
         }
         String symbol = properties.get(CreateFunctionStmt.SYMBOL_KEY);
         String inputType = properties.getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
-        String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        String objectFile = properties.getOrDefault(CreateFunctionStmt.FILE_KEY, "inline");
 
         if (isInline && !StringUtils.equalsIgnoreCase(objectFile, "inline")) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "inline function file should be 'inline'");
-        }
-        if (isInline) {
-            objectFile = "inline";
         }
 
         if (!inputType.equalsIgnoreCase("arrow") && !inputType.equalsIgnoreCase("scalar")) {
@@ -609,7 +669,6 @@ public class CreateFunctionAnalyzer {
                         : context.getDatabase());
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
 
         ScalarFunction.ScalarFunctionBuilder scalarFunctionBuilder =
                 ScalarFunction.ScalarFunctionBuilder.createUdfBuilder(TFunctionBinaryType.PYTHON);

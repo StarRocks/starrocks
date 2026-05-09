@@ -46,6 +46,46 @@ ALTER TABLE nested_complex ADD COLUMN complex_struct STRUCT<
 SELECT * FROM nested_complex ORDER BY id;
 
 -- ====================================================================================
+-- SECTION 2.5: Explicitly Declared Type vs Column Type Mismatch (typed literals)
+-- Tests where the typed literal explicitly declares a different type from the column,
+-- requiring implicit casting (e.g., SMALLINT literal → BIGINT column).
+-- ====================================================================================
+
+CREATE TABLE type_cast_defaults (
+    id INT NOT NULL
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1", "fast_schema_evolution" = "true");
+
+INSERT INTO type_cast_defaults (id) VALUES (1), (2);
+
+-- MAP<BIGINT, BIGINT> column with map<smallint, smallint> literal (SMALLINT → BIGINT upcast)
+ALTER TABLE type_cast_defaults ADD COLUMN m_bigint MAP<BIGINT, BIGINT>
+  DEFAULT map<smallint, smallint>{1: 2, 3: 4};
+
+-- MAP<INT, INT> column with map<tinyint, tinyint> literal (TINYINT → INT upcast)
+ALTER TABLE type_cast_defaults ADD COLUMN m_int MAP<INT, INT>
+  DEFAULT map<tinyint, tinyint>{10: 20, 30: 40};
+
+-- MAP<INT, DOUBLE> column with map<int, float> literal (FLOAT → DOUBLE upcast for values)
+ALTER TABLE type_cast_defaults ADD COLUMN m_int_double MAP<INT, DOUBLE>
+  DEFAULT map<int, float>{1: 1.5, 2: 2.5};
+
+-- MAP<BIGINT, DOUBLE> column with map<smallint, float> literal (both key and value upcast)
+ALTER TABLE type_cast_defaults ADD COLUMN m_mixed MAP<BIGINT, DOUBLE>
+  DEFAULT map<smallint, float>{1: 1.5, 2: 2.5};
+
+-- ARRAY<BIGINT> column with array<int> literal (INT → BIGINT upcast)
+ALTER TABLE type_cast_defaults ADD COLUMN a_bigint ARRAY<BIGINT>
+  DEFAULT array<int>[100, 200, 300];
+
+-- ARRAY<DOUBLE> column with array<float> literal (FLOAT → DOUBLE upcast)
+ALTER TABLE type_cast_defaults ADD COLUMN a_double ARRAY<DOUBLE>
+  DEFAULT array<float>[1.5, 2.5, 3.5];
+
+SELECT * FROM type_cast_defaults ORDER BY id;
+
+-- ====================================================================================
 -- SECTION 3: MAP with STRUCT - Field Order Preservation Test
 -- ====================================================================================
 CREATE TABLE map_struct_order (

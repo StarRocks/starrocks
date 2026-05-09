@@ -49,9 +49,11 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -307,7 +309,11 @@ public class Utils {
             ComputeNodePB computeNodePB = new ComputeNodePB();
             computeNodePB.setHost(entry.getKey().getHost());
             computeNodePB.setBrpcPort(entry.getKey().getBrpcPort());
-    
+            // Record the node id so that the aggregator-selection step later can prefer
+            // an aggregator that already owns at least one tablet in the batch. Without
+            // the id we cannot match compute-node PBs back to ComputeNode objects.
+            computeNodePB.setId(entry.getKey().getId());
+
             computeNodes.add(computeNodePB);
             publishReqs.add(singleReq);
         }
@@ -336,14 +342,15 @@ public class Utils {
                                                           Map<Long, Double> compactionScores,
                                                           Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
-        sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null, tabletRowNum);
+        sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
+                tabletRowNum);
     }
 
     public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
                                                           long baseVersion, ComputeResource computeResource,
                                                           Map<Long, Double> compactionScores,
                                                           Map<Long, TabletRange> tabletRanges,
-                                                          Map<Long, Long> tabletRowNum) 
+                                                          Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (computeResource == null || !warehouseManager.isResourceAvailable(computeResource)) {
@@ -354,9 +361,12 @@ public class Utils {
             computeResource = warehouseManager.getBackgroundComputeResource();
         }
 
-        // choose one aggregator
-        LakeAggregator lakeAggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(computeResource);
+        // Prefer an aggregator that already owns at least one tablet in this batch so that
+        // on the BE side the "first tablet id" used to derive bundle file paths can be
+        // resolved locally via the staros worker cache (no extra get-shard-info RPC).
+        // The compute-node ids are embedded in the request (see createSubRequestForAggregatePublish).
+        Set<ComputeNode> candidateAggregatorNodes = collectCandidateAggregatorNodes(request);
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node for handle aggregate publish version");
         }
@@ -391,6 +401,27 @@ public class Utils {
         } catch (Exception e) {
             throw new RpcException(aggregatorNode.getHost(), e.getMessage());
         }
+    }
+
+    // Collect the ComputeNodes that own at least one tablet in the aggregate request, so
+    // the aggregator picker can prefer a node whose local staros worker cache already has
+    // the tablet shard info.
+    private static Set<ComputeNode> collectCandidateAggregatorNodes(AggregatePublishVersionRequest request) {
+        Set<ComputeNode> candidates = new HashSet<>();
+        if (request == null || request.getComputeNodes() == null) {
+            return candidates;
+        }
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (ComputeNodePB pb : request.getComputeNodes()) {
+            if (pb == null || pb.getId() == null) {
+                continue;
+            }
+            ComputeNode node = clusterInfo.getBackendOrComputeNode(pb.getId());
+            if (node != null) {
+                candidates.add(node);
+            }
+        }
+        return candidates;
     }
 
     public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,

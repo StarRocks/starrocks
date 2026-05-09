@@ -366,6 +366,8 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("merge_commit", instance);
     assert_threadpool_metrics_register("exec_state_report", instance);
     assert_threadpool_metrics_register("priority_exec_state_report", instance);
+    assert_threadpool_metrics_register("automatic_partition", instance);
+    assert_threadpool_metrics_register("lake_metadata_fetch", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));
@@ -379,7 +381,6 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_commit_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_duration_us"));
-    ASSERT_NE(nullptr, instance->get_metric("delta_writer_pk_preload_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_replica_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_txn_commit_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_finalize_duration_us"));

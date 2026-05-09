@@ -22,7 +22,23 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 
+namespace starrocks {
+class TabletSchema;
+class TabletMetadataPB;
+class SlotDescriptor;
+namespace lake {
+class TabletManager;
+}
+} // namespace starrocks
+
 namespace starrocks::connector {
+
+// Check if all PK columns are in the selected slots. Used by CACHE SELECT to
+// decide whether to warm up persistent index SST files.
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots);
+
+// Warm up persistent index SST files for cloud-native PK tables.
+Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr);
 
 class LakeConnector final : public Connector {
 public:
@@ -223,8 +239,7 @@ public:
     Status init(ObjectPool* pool, RuntimeState* state) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
-    // always enable shared scan for cloud native table
-    bool always_shared_scan() const override { return true; }
+    bool always_shared_scan() const override { return false; }
 
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,

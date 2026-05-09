@@ -81,7 +81,8 @@ public class IndicesProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> indexInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = olapTable.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             result.setNames(TITLE_NAMES);
             for (MaterializedIndex materializedIndex : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
@@ -97,7 +98,7 @@ public class IndicesProcDir implements ProcDirInterface {
             }
 
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         // sort by index id
@@ -135,8 +136,13 @@ public class IndicesProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index id format: " + indexIdStr);
         }
 
+        // Take per-table READ: partition.getIndex reads PhysicalPartition.idToVisibleIndex
+        // / idToShadowIndex, which are plain HashMaps. A concurrent schema change
+        // (IX + table WRITE) can race with this get, so the lock pins the table while
+        // we resolve the index reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = olapTable.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             MaterializedIndex materializedIndex = partition.getIndex(indexId);
             if (materializedIndex == null) {
@@ -148,7 +154,7 @@ public class IndicesProcDir implements ProcDirInterface {
                 return new LocalTabletsProcDir(db, olapTable, materializedIndex);
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 

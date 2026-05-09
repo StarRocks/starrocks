@@ -132,7 +132,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return normal.listPartitionNames(databaseName, tableName, requestContext);
     }
 
@@ -221,6 +222,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return normal.getPartitions(table, partitionNames);
+    }
+
+    @Override
+    public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                             ConnectorMetadataRequestContext requestContext) {
+        return normal.getPartitions(table, partitionNames, requestContext);
     }
 
     @Override

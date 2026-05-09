@@ -22,8 +22,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -57,6 +61,9 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.parquet.Strings;
 import org.assertj.core.util.Sets;
 import org.junit.jupiter.api.Assertions;
@@ -181,6 +188,54 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assertions.assertNotNull(expr);
         Assertions.assertEquals(2, optimizer.getContext().getCandidateMvs().size());
+
+        starRocksAssert.dropMaterializedView("mv_1");
+        starRocksAssert.dropMaterializedView("mv_2");
+    }
+
+    @Test
+    public void testPreprocessMvSkipsOnlyMvWhoseCopyLockFails() throws Exception {
+        executeInsertSql(connectContext, "insert into t0 values(10, 20, 30)");
+        starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
+                "as select v1, v2, sum(v3) as total from t0 group by v1, v2");
+        starRocksAssert.withMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
+                "as select v1, sum(total) as total from mv_1 group by v1");
+        refreshMaterializedView("test", "mv_1");
+        refreshMaterializedView("test", "mv_2");
+
+        MaterializedView mv1 = getMv("test", "mv_1");
+        long mv1DbId = mv1.getDbId();
+        long mv1TableId = mv1.getId();
+        new MockUp<Locker>() {
+            @Mock
+            public boolean tryLockTableWithIntensiveDbLock(Invocation invocation, Long dbId, Long tableId,
+                                                           LockType lockType, long timeout, java.util.concurrent.TimeUnit unit) {
+                if (lockType == LockType.READ && mv1DbId == dbId && mv1TableId == tableId) {
+                    return false;
+                }
+                return invocation.proceed(dbId, tableId, lockType, timeout, unit);
+            }
+        };
+
+        String sql = "select v1, sum(v3) from t0 group by v1";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        QueryStatement query = (QueryStatement) stmt;
+
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                .transformWithSelectLimit(query.getQueryRelation());
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
+        Set<OlapTable> queryTables = MvUtils.getAllTables(logicalPlan.getRoot()).stream()
+                .filter(OlapTable.class::isInstance)
+                .map(OlapTable.class::cast)
+                .collect(Collectors.toSet());
+        optimizerContext.setQueryTables(queryTables);
+        Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+        OptExpression expr = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
+        Assertions.assertNotNull(expr);
+        Assertions.assertEquals(1, optimizer.getContext().getCandidateMvs().size());
+        Assertions.assertEquals("mv_2", optimizer.getContext().getCandidateMvs().iterator().next().getMv().getName());
 
         starRocksAssert.dropMaterializedView("mv_1");
         starRocksAssert.dropMaterializedView("mv_2");
@@ -1610,6 +1665,39 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     long id2 = mv2.getId();
                     int expectedOrder = Long.compare(id1, id2);
                     Assertions.assertEquals(expectedOrder, compareResult);
+                });
+    }
+
+    @Test
+    public void testRewriteRejectedForIncrementalMv() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_rewrite_imv distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_rewrite_imv");
+                    // IVMAnalyzer rejects INCREMENTAL on non-Iceberg, so set the property directly.
+                    mv.getTableProperty().setMvRefreshMode("incremental");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertTrue(result.getReason().contains("refresh_mode=INCREMENTAL"),
+                            "expected reason to mention INCREMENTAL, got: " + result.getReason());
+                });
+    }
+
+    @Test
+    public void testRewriteRejectedForAutoMv() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_rewrite_auto distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_rewrite_auto");
+                    mv.getTableProperty().setMvRefreshMode("auto");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertTrue(result.getReason().contains("refresh_mode=AUTO"),
+                            "expected reason to mention AUTO, got: " + result.getReason());
                 });
     }
 

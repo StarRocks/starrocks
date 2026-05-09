@@ -27,6 +27,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -62,6 +63,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1290,6 +1292,205 @@ public class TabletRepairHelperTest {
                 db, table, Lists.newArrayList("p1"), LakeTabletStatus.NORMAL, BinaryType.NE, 5, WarehouseComputeResource.DEFAULT);
         Assertions.assertEquals(1, result.size());
         Assertions.assertEquals("12", result.get(0).get(0));
+    }
+
+    @Test
+    public void testGetValidTabletMetadatasBatchSizeGrowth() {
+        // Test that batch version num starts at 5 and doubles each iteration.
+        // Use a wide version range: maxVersion=100, minVersion=1 (100 versions total).
+        // Only return valid metadata for tablet11 at version 1 (the very last batch),
+        // so the loop iterates many times and we can observe batch size growth.
+        long wideMaxVersion = 100L;
+        long wideMinVersion = 1L;
+
+        PhysicalPartitionInfo wideInfo = new PhysicalPartitionInfo(physicalPartitionId1,
+                Lists.newArrayList(tabletId11),
+                Sets.newHashSet(tabletId11), nodeToTablets, wideMaxVersion, wideMinVersion);
+
+        // Record the (maxVersion, minVersion) of each RPC call to verify batch growth
+        List<long[]> rpcBatches = new ArrayList<>();
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                rpcBatches.add(new long[] {request.maxVersion, request.minVersion});
+
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+
+                // Only return valid metadata when the batch includes version 1
+                if (request.minVersion <= 1) {
+                    tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, 1L, null));
+                }
+
+                response.tabletResults = Lists.newArrayList(tr1);
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        long savedMaxBatch = Config.lake_repair_metadata_fetch_max_version_batch_size;
+        try {
+            Config.lake_repair_metadata_fetch_max_version_batch_size = 160L;
+
+            Map<Long, TabletMetadataPB> result = Deencapsulation.invoke(TabletRepairHelper.class,
+                    "getValidTabletMetadatas", wideInfo, false);
+
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result.containsKey(tabletId11));
+            Assertions.assertEquals(1L, result.get(tabletId11).version);
+
+            // Verify batch sizes: should be 5, 10, 20, 40, 80, ...
+            // Batch 1: [100, 96], size=5
+            // Batch 2: [95, 86],  size=10
+            // Batch 3: [85, 66],  size=20
+            // Batch 4: [65, 26],  size=40
+            // Batch 5: [25, 1],   size=25 (clamped by minVersion, but versionBatchSize=80)
+            Assertions.assertTrue(rpcBatches.size() >= 2, "Should have multiple batches");
+
+            // First batch should have size 5
+            long firstBatchSize = rpcBatches.get(0)[0] - rpcBatches.get(0)[1] + 1;
+            Assertions.assertEquals(5, firstBatchSize, "First batch should have size 5");
+
+            // Second batch should have size 10 (doubled)
+            long secondBatchSize = rpcBatches.get(1)[0] - rpcBatches.get(1)[1] + 1;
+            Assertions.assertEquals(10, secondBatchSize, "Second batch should have size 10");
+
+            // Third batch should have size 20
+            if (rpcBatches.size() > 2) {
+                long thirdBatchSize = rpcBatches.get(2)[0] - rpcBatches.get(2)[1] + 1;
+                Assertions.assertEquals(20, thirdBatchSize, "Third batch should have size 20");
+            }
+
+            // Fourth batch should have size 40
+            if (rpcBatches.size() > 3) {
+                long fourthBatchSize = rpcBatches.get(3)[0] - rpcBatches.get(3)[1] + 1;
+                Assertions.assertEquals(40, fourthBatchSize, "Fourth batch should have size 40");
+            }
+        } finally {
+            Config.lake_repair_metadata_fetch_max_version_batch_size = savedMaxBatch;
+        }
+    }
+
+    @Test
+    public void testGetValidTabletMetadatasBatchSizeCappedByConfig() {
+        // Test that batch size is capped by lake_repair_metadata_fetch_max_version_batch_size.
+        // Set max to 10, so batch sizes should be: 5, 10, 10, 10, ...
+        long wideMaxVersion = 50L;
+        long wideMinVersion = 1L;
+
+        PhysicalPartitionInfo wideInfo = new PhysicalPartitionInfo(physicalPartitionId1,
+                Lists.newArrayList(tabletId11),
+                Sets.newHashSet(tabletId11), nodeToTablets, wideMaxVersion, wideMinVersion);
+
+        List<long[]> rpcBatches = new ArrayList<>();
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                rpcBatches.add(new long[] {request.maxVersion, request.minVersion});
+
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+
+                if (request.minVersion <= 1) {
+                    tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, 1L, null));
+                }
+
+                response.tabletResults = Lists.newArrayList(tr1);
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        long savedMaxBatch = Config.lake_repair_metadata_fetch_max_version_batch_size;
+        try {
+            Config.lake_repair_metadata_fetch_max_version_batch_size = 10L;
+
+            Map<Long, TabletMetadataPB> result = Deencapsulation.invoke(TabletRepairHelper.class,
+                    "getValidTabletMetadatas", wideInfo, false);
+
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result.containsKey(tabletId11));
+
+            // First batch: size 5
+            long firstBatchSize = rpcBatches.get(0)[0] - rpcBatches.get(0)[1] + 1;
+            Assertions.assertEquals(5, firstBatchSize, "First batch should have size 5");
+
+            // Second batch: size 10 (doubled from 5, capped at max 10)
+            long secondBatchSize = rpcBatches.get(1)[0] - rpcBatches.get(1)[1] + 1;
+            Assertions.assertEquals(10, secondBatchSize, "Second batch should have size 10");
+
+            // Third batch: size 10 (stays at max 10)
+            if (rpcBatches.size() > 2) {
+                long thirdBatchSize = rpcBatches.get(2)[0] - rpcBatches.get(2)[1] + 1;
+                Assertions.assertEquals(10, thirdBatchSize, "Third batch should stay at max size 10");
+            }
+
+            // All subsequent batches should also be 10
+            for (int i = 3; i < rpcBatches.size() - 1; i++) {
+                long batchSize = rpcBatches.get(i)[0] - rpcBatches.get(i)[1] + 1;
+                Assertions.assertEquals(10, batchSize, "Batch " + i + " should be capped at max size 10");
+            }
+        } finally {
+            Config.lake_repair_metadata_fetch_max_version_batch_size = savedMaxBatch;
+        }
+    }
+
+    @Test
+    public void testGetValidTabletMetadatasEarlyExitWithGrowingBatch() {
+        // Test that when valid metadata is found early, the loop exits without growing batch further.
+        long wideMaxVersion = 50L;
+        long wideMinVersion = 1L;
+
+        PhysicalPartitionInfo wideInfo = new PhysicalPartitionInfo(physicalPartitionId1,
+                Lists.newArrayList(tabletId11),
+                Sets.newHashSet(tabletId11), nodeToTablets, wideMaxVersion, wideMinVersion);
+
+        List<long[]> rpcBatches = new ArrayList<>();
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                rpcBatches.add(new long[] {request.maxVersion, request.minVersion});
+
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+
+                // Return valid metadata in the first batch
+                tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, request.maxVersion, null));
+
+                response.tabletResults = Lists.newArrayList(tr1);
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        Map<Long, TabletMetadataPB> result = Deencapsulation.invoke(TabletRepairHelper.class,
+                "getValidTabletMetadatas", wideInfo, false);
+
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.containsKey(tabletId11));
+        // Should exit after just 1 batch since valid metadata was found for all tablets
+        Assertions.assertEquals(1, rpcBatches.size(), "Should exit after first batch when all tablets found");
     }
 
 }

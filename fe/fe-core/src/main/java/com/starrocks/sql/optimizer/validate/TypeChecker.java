@@ -16,15 +16,20 @@ package com.starrocks.sql.optimizer.validate;
 
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -107,6 +112,47 @@ public class TypeChecker implements PlanValidator.Checker {
         public Void visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
             PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) optExpression.getOp();
             checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit(), operator.hasRemovedDistinctFunc());
+            visit(optExpression, context);
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalHashJoin(OptExpression optExpression, Void context) {
+            PhysicalHashJoinOperator operator = (PhysicalHashJoinOperator) optExpression.getOp();
+            ScalarOperator onPredicate = operator.getOnPredicate();
+            if (onPredicate != null) {
+                ColumnRefSet leftColumns = optExpression.inputAt(0).getOutputColumns();
+                ColumnRefSet rightColumns = optExpression.inputAt(1).getOutputColumns();
+                List<BinaryPredicateOperator> eqPredicates =
+                        JoinHelper.getEqualsPredicate(leftColumns, rightColumns, Utils.extractConjuncts(onPredicate));
+                for (BinaryPredicateOperator predicate : eqPredicates) {
+                    ScalarOperator left = predicate.getChild(0);
+                    ScalarOperator right = predicate.getChild(1);
+                    ColumnRefSet leftUsed = left.getUsedColumns();
+                    ColumnRefSet rightUsed = right.getUsedColumns();
+                    // Normalize operand order so "left" always belongs to left child and "right" to right child.
+                    // For example, `right.c1 = left.c1` should be swapped to `left.c1 = right.c1`.
+                    if (leftColumns.containsAll(rightUsed) && rightColumns.containsAll(leftUsed)) {
+                        ScalarOperator tmp = left;
+                        left = right;
+                        right = tmp;
+                        ColumnRefSet tmpSet = leftUsed;
+                        leftUsed = rightUsed;
+                        rightUsed = tmpSet;
+                    }
+                    // Skip predicates that still don't map cleanly to left/right children
+                    // (e.g. mixed columns `left.c1+right.c2=right.c3`).
+                    if (!leftColumns.containsAll(leftUsed) || !rightColumns.containsAll(rightUsed)) {
+                        continue;
+                    }
+                    if (!left.getType().matchesType(right.getType())) {
+                        throw new StarRocksPlannerException(
+                                String.format("%s hash join equal predicate type mismatch: left %s, right %s, predicate: %s",
+                                        PREFIX, left.getType(), right.getType(), predicate),
+                                ErrorType.USER_ERROR);
+                    }
+                }
+            }
             visit(optExpression, context);
             return null;
         }
