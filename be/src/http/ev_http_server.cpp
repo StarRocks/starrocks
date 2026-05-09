@@ -127,36 +127,50 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
-// Create a TCP listening socket with SO_REUSEPORT, bound to `point`. Returns
-// -1 on any failure (and `errno` is set). When SO_REUSEPORT is set on every
-// listener for the same {addr, port}, the kernel load-balances new
-// connections across them — workers no longer thundering-herd on a single
-// shared listen fd's accept queue lock.
+// Open a TCP listener bound to `point`, optionally placed in the kernel's
+// SO_REUSEPORT group. SO_REUSEPORT must be set on every participating fd
+// *before* bind() — Linux's man socket(7) is explicit, and the kernel only
+// inserts the fd into the reuseport hash via inet_reuseport_add_sock() at
+// bind() time. setsockopt() after bind() merely flips sk_reuseport without
+// joining the group, so the next bind() to the same port from another fd
+// gets EADDRINUSE.
 //
-// Delegates the bind+listen to `butil::tcp_listen()` (the same helper used
-// by `_bind()` for the primary `_server_fd`); we only have to set
-// `SO_REUSEPORT` on the returned fd. Calling `setsockopt(SO_REUSEPORT)` on a
-// socket that is already bound + listening is a no-op for the local kernel
-// state but is the documented way to opt this fd into the reuseport group
-// (see Linux man socket(7) and kernel `inet_reuseport_add_sock`).
-static int listen_with_reuseport(const butil::EndPoint& point) {
-#ifndef SO_REUSEPORT
-    errno = ENOTSUP;
-    return -1;
-#else
-    int fd = butil::tcp_listen(point);
+// Mirrors butil::tcp_listen()'s SO_REUSEADDR + listen(65535) defaults so the
+// primary listener behaves identically to the brpc helper it replaces.
+// Returns the listening fd, or -1 with errno set on failure.
+static int open_listen_socket(const butil::EndPoint& point, bool reuse_port) {
+    struct sockaddr_storage serv_addr;
+    socklen_t serv_addr_size = 0;
+    if (butil::endpoint2sockaddr(point, &serv_addr, &serv_addr_size) != 0) {
+        return -1;
+    }
+    int fd = ::socket(serv_addr.ss_family, SOCK_STREAM, 0);
     if (fd < 0) {
         return -1;
     }
     int yes = 1;
-    if (::setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) != 0) {
+    bool ok = (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == 0);
+#ifdef SO_REUSEPORT
+    if (ok && reuse_port) {
+        ok = (::setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) == 0);
+    }
+#else
+    (void)reuse_port;
+#endif
+    if (ok) {
+        ok = (::bind(fd, reinterpret_cast<struct sockaddr*>(&serv_addr), serv_addr_size) == 0);
+    }
+    if (ok) {
+        // Match butil::tcp_listen's backlog; kernel still caps at somaxconn.
+        ok = (::listen(fd, 65535) == 0);
+    }
+    if (!ok) {
         int saved = errno;
         ::close(fd);
         errno = saved;
         return -1;
     }
     return fd;
-#endif
 }
 
 EvHttpServer::EvHttpServer(int port, int num_workers) : _port(port), _num_workers(num_workers), _real_port(0) {
@@ -183,20 +197,17 @@ Status EvHttpServer::start() {
 
     // Resolve the bind endpoint once, on the main thread, for per-worker
     // SO_REUSEPORT listeners. _bind() has already populated _real_port (incl.
-    // the port==0 auto-assign case). On platforms without SO_REUSEPORT or
-    // when endpoint resolution fails, every worker silently falls back to
-    // the shared-fd accept path (no functional change vs the legacy
-    // behaviour).
+    // the port==0 auto-assign case) and decided whether SO_REUSEPORT is in
+    // effect on _server_fd. Workers only attempt their own listener when
+    // _bind() succeeded in joining the reuseport group; otherwise they share
+    // _server_fd, matching the pre-PR legacy behaviour.
     butil::EndPoint listen_point;
-    bool reuseport_enabled = false;
-#ifdef SO_REUSEPORT
-    if (butil::str2endpoint(_host.c_str(), _real_port, &listen_point) == 0) {
-        reuseport_enabled = true;
-    } else {
+    bool reuseport_enabled = _reuseport_enabled;
+    if (reuseport_enabled && butil::str2endpoint(_host.c_str(), _real_port, &listen_point) != 0) {
         LOG(WARNING) << "Failed to resolve listen endpoint " << _host << ":" << _real_port
                      << " for SO_REUSEPORT mode; falling back to shared-fd accept";
+        reuseport_enabled = false;
     }
-#endif
 
     for (int i = 0; i < _num_workers; ++i) {
         auto worker = [this, listen_point, reuseport_enabled, i]() {
@@ -233,7 +244,7 @@ Status EvHttpServer::start() {
             // contention seen in perf when be_http_num_workers is large).
             int worker_fd = _server_fd;
             if (reuseport_enabled && i > 0) {
-                int new_fd = listen_with_reuseport(listen_point);
+                int new_fd = open_listen_socket(listen_point, /*reuse_port=*/true);
                 if (new_fd < 0) {
                     LOG(WARNING) << "Worker " << i << ": SO_REUSEPORT listen failed, "
                                  << "falling back to shared fd: " << errno_to_string(errno);
@@ -325,14 +336,22 @@ Status EvHttpServer::_bind() {
         ss << "convert address failed, host=" << _host << ", port=" << _port;
         return Status::InternalError(ss.str());
     }
-    // reuse_addr arg is removed in brpc 0.9.7 and use gflag instead.
-    // default reuse_addr is true and reuse_port is false.
-    _server_fd = butil::tcp_listen(point);
+    // SO_REUSEPORT must be set on the primary listener before bind() so the
+    // kernel adds it to the reuseport group; secondary worker listeners then
+    // bind to the same {addr, port} successfully and the kernel load-balances
+    // accept() across them. Only opt in when there is more than one worker —
+    // a single-worker server has nothing to load-balance with.
+    bool want_reuse_port = false;
+#ifdef SO_REUSEPORT
+    want_reuse_port = (_num_workers > 1);
+#endif
+    _server_fd = open_listen_socket(point, want_reuse_port);
     if (_server_fd < 0) {
         std::stringstream ss;
         ss << "Failed to listen port. port: " << _port << ", error: " << errno_to_string(errno);
         return Status::InternalError(ss.str());
     }
+    _reuseport_enabled = want_reuse_port;
     if (_port == 0) {
         struct sockaddr_in addr;
         socklen_t socklen = sizeof(addr);
@@ -343,22 +362,6 @@ Status EvHttpServer::_bind() {
     } else {
         _real_port = _port;
     }
-#ifdef SO_REUSEPORT
-    // Mark _server_fd as SO_REUSEPORT before any worker tries to bind another
-    // listener to the same {addr, real_port}. The kernel only permits multiple
-    // listening sockets on the same address when *all* of them carry
-    // SO_REUSEPORT — without setting it on the primary fd, every worker's
-    // bind() would fail with EADDRINUSE. setsockopt failure here is benign:
-    // workers will detect the mismatch and individually fall back to sharing
-    // _server_fd.
-    {
-        int yes = 1;
-        if (::setsockopt(_server_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) != 0) {
-            LOG(WARNING) << "Failed to set SO_REUSEPORT on primary listener; per-worker listen sockets "
-                         << "will be skipped: " << errno_to_string(errno);
-        }
-    }
-#endif
     res = butil::make_non_blocking(_server_fd);
     if (res < 0) {
         std::stringstream ss;
