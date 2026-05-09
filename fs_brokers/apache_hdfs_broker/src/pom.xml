@@ -51,6 +51,7 @@ under the License.
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.57.v20241219</jetty.version>
         <io.netty.version>4.1.133.Final</io.netty.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
     </properties>
 
     <profiles>
@@ -108,6 +109,22 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
             <dependency>
                 <groupId>commons-cli</groupId>
