@@ -446,44 +446,53 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .setQuerySource(QueryDetail.QuerySource.MV.name())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
 
-        // set tvr target mvid
+        // Scope the IVM session variables to this method only. The same ConnectContext
+        // is reused by MVHybridRefreshProcessor.switchToPCTRefresh on IVM failure, so
+        // leaking enable_ivm_refresh=true into the PCT retry would make IvmRewriter run
+        // on a non-IVM plan and fail at convergence — defeating the AUTO fallback.
+        boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
+        String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
         ctx.getSessionVariable().setTvrTargetMvid(GsonUtils.GSON.toJson(mv.getMvId()));
+        try {
+            final Set<Table> baseTables = snapshotBaseTables.values()
+                    .stream()
+                    .map(BaseTableSnapshotInfo::getBaseTable)
+                    .collect(Collectors.toSet());
+            changeDefaultConnectContextIfNeeded(ctx, baseTables);
 
-        final Set<Table> baseTables = snapshotBaseTables.values()
-                .stream()
-                .map(BaseTableSnapshotInfo::getBaseTable)
-                .collect(Collectors.toSet());
-        changeDefaultConnectContextIfNeeded(ctx, baseTables);
-
-        InsertStmt insertStmt = null;
-        try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
-            // generate insert statement from defined query
-            insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition());
-        }
-
-        PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
-        if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
-        }
-        try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
-            // analyze the insert statement
-            try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
-                analyzeInsertStmt(insertStmt);
-                // build the insert plan
-                insertStmt = buildInsertPlan(insertStmt);
-                ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+            InsertStmt insertStmt = null;
+            try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
+                // generate insert statement from defined query
+                insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition());
             }
-        } finally {
-            locker.unlock();
-        }
 
-        try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
-            ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
-            ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
-            mvContext.setExecPlan(execPlan);
+            PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
+            if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+                throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
+            }
+            try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
+                // analyze the insert statement
+                try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
+                    analyzeInsertStmt(insertStmt);
+                    // build the insert plan
+                    insertStmt = buildInsertPlan(insertStmt);
+                    ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+                }
+            } finally {
+                locker.unlock();
+            }
+
+            try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
+                ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
+                ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                mvContext.setExecPlan(execPlan);
+            }
+            return insertStmt;
+        } finally {
+            ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
+            ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
         }
-        return insertStmt;
     }
 
     private void analyzeInsertStmt(InsertStmt insertStmt) throws AnalysisException {
