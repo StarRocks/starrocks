@@ -243,28 +243,28 @@ TEST_F(BackendMetricsTest, Normal) {
     }
     // engine request
     {
-        agent_metrics->create_tablet_requests_total.increment(15);
+        storage_metrics->create_tablet_requests_total.increment(15);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "create_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("15", metric->to_string().c_str());
     }
     {
-        agent_metrics->drop_tablet_requests_total.increment(16);
+        storage_metrics->drop_tablet_requests_total.increment(16);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "drop_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("16", metric->to_string().c_str());
     }
     {
-        agent_metrics->report_all_tablets_requests_total.increment(17);
+        storage_metrics->report_all_tablets_requests_total.increment(17);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "report_all_tablets").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("17", metric->to_string().c_str());
     }
     {
-        agent_metrics->report_tablet_requests_total.increment(18);
+        storage_metrics->report_tablet_requests_total.increment(18);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "report_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
@@ -278,7 +278,7 @@ TEST_F(BackendMetricsTest, Normal) {
         ASSERT_STREQ("19", metric->to_string().c_str());
     }
     {
-        agent_metrics->create_rollup_requests_total.increment(20);
+        storage_metrics->create_rollup_requests_total.increment(20);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "create_rollup").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
