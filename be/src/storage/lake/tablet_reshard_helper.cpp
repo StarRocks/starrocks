@@ -283,6 +283,161 @@ StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRan
     return result_pb;
 }
 
+// Compare lower-bound positions between two ranges. Unbounded lower (-∞) is
+// smallest; otherwise compare values, then prefer included over excluded as
+// the smaller (it covers the boundary point).
+static int compare_lower_position(const TabletRange& a, const TabletRange& b) {
+    if (a.is_minimum() && b.is_minimum()) return 0;
+    if (a.is_minimum()) return -1;
+    if (b.is_minimum()) return 1;
+    int c = a.lower_bound().compare(b.lower_bound());
+    if (c != 0) return c;
+    if (a.lower_bound_included() == b.lower_bound_included()) return 0;
+    return a.lower_bound_included() ? -1 : 1;
+}
+
+// True iff |first| (with first.lower <= second.lower) extends to or past
+// |second|.lower without leaving a gap. Caller guarantees the ordering.
+static bool first_meets_second(const TabletRange& first, const TabletRange& second) {
+    if (first.is_maximum()) return true; // first covers everything to the right
+    if (second.is_minimum())
+        return true; // second covers everything to the left,
+                     //   which forces first.lower == -∞ too
+    int c = first.upper_bound().compare(second.lower_bound());
+    if (c < 0) return false; // strict gap
+    if (c > 0) return true;  // overlap
+    return first.upper_bound_included() || second.lower_bound_included();
+}
+
+bool ranges_are_contiguous(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
+    TabletRange lhs;
+    if (!lhs.from_proto(lhs_pb).ok()) return false;
+    TabletRange rhs;
+    if (!rhs.from_proto(rhs_pb).ok()) return false;
+    if (lhs.is_empty() || rhs.is_empty()) return false;
+
+    const TabletRange* first = &lhs;
+    const TabletRange* second = &rhs;
+    if (compare_lower_position(lhs, rhs) > 0) std::swap(first, second);
+    return first_meets_second(*first, *second);
+}
+
+StatusOr<std::vector<TabletRangePB>> sort_and_merge_adjacent_ranges(std::vector<TabletRangePB> ranges) {
+    std::vector<TabletRange> tr;
+    tr.reserve(ranges.size());
+    for (const auto& r : ranges) {
+        TabletRange tmp;
+        RETURN_IF_ERROR(tmp.from_proto(r));
+        if (!tmp.is_empty()) {
+            tr.push_back(std::move(tmp));
+        }
+    }
+
+    std::sort(tr.begin(), tr.end(),
+              [](const TabletRange& a, const TabletRange& b) { return compare_lower_position(a, b) < 0; });
+
+    std::vector<TabletRange> merged;
+    for (auto& cur : tr) {
+        if (merged.empty()) {
+            merged.push_back(std::move(cur));
+            continue;
+        }
+        auto& last = merged.back();
+        if (first_meets_second(last, cur)) {
+            // Overlap or touch with compatible included → merge via union.
+            last = last.union_with(cur);
+        } else {
+            merged.push_back(std::move(cur));
+        }
+    }
+
+    std::vector<TabletRangePB> result;
+    result.reserve(merged.size());
+    for (const auto& r : merged) {
+        result.emplace_back();
+        r.to_proto(&result.back());
+    }
+    return result;
+}
+
+StatusOr<std::vector<TabletRangePB>> compute_disjoint_gaps_within(
+        const TabletRangePB& bound_pb, const std::vector<TabletRangePB>& sorted_disjoint_children) {
+    TabletRange bound;
+    RETURN_IF_ERROR(bound.from_proto(bound_pb));
+    if (bound.is_empty()) return std::vector<TabletRangePB>{};
+
+    // Clip each child to within bound; drop empty post-clip.
+    std::vector<TabletRange> children;
+    children.reserve(sorted_disjoint_children.size());
+    for (const auto& c_pb : sorted_disjoint_children) {
+        TabletRange c;
+        RETURN_IF_ERROR(c.from_proto(c_pb));
+        if (c.is_empty()) continue;
+        ASSIGN_OR_RETURN(auto clipped, c.intersect(bound));
+        if (!clipped.is_empty()) {
+            children.push_back(std::move(clipped));
+        }
+    }
+
+    std::vector<TabletRangePB> result;
+
+    // Walk gap = [running_lower, child.lower); after last child, gap to bound.upper.
+    // running_* tracks the next-gap left edge. Initial value = bound's lower.
+    VariantTuple running_lower = bound.lower_bound();
+    bool running_lower_included = bound.is_minimum() ? false : bound.lower_bound_included();
+    bool running_lower_unbounded = bound.is_minimum();
+
+    auto emit_gap = [&](const VariantTuple& upper, bool upper_included, bool upper_unbounded) -> Status {
+        TabletRangePB pb;
+        if (!running_lower_unbounded) {
+            running_lower.to_proto(pb.mutable_lower_bound());
+            pb.set_lower_bound_included(running_lower_included);
+        }
+        if (!upper_unbounded) {
+            upper.to_proto(pb.mutable_upper_bound());
+            pb.set_upper_bound_included(upper_included);
+        }
+        TabletRange tr;
+        RETURN_IF_ERROR(tr.from_proto(pb));
+        if (!tr.is_empty()) {
+            result.push_back(std::move(pb));
+        }
+        return Status::OK();
+    };
+
+    for (const auto& child : children) {
+        // Left side of gap: [running_lower, child.lower) with flipped included.
+        if (!child.is_minimum()) {
+            RETURN_IF_ERROR(emit_gap(child.lower_bound(), !child.lower_bound_included(), false));
+        }
+        // Advance: if child reaches +∞, no further gap is possible.
+        if (child.is_maximum()) {
+            return result;
+        }
+        running_lower = child.upper_bound();
+        running_lower_included = !child.upper_bound_included();
+        running_lower_unbounded = false;
+    }
+
+    // Final gap: [running_lower, bound.upper].
+    RETURN_IF_ERROR(emit_gap(bound.upper_bound(), bound.is_maximum() ? false : bound.upper_bound_included(),
+                             bound.is_maximum()));
+    return result;
+}
+
+StatusOr<std::vector<TabletRangePB>> compute_non_contributed_ranges(
+        const std::vector<TabletRangePB>& sorted_disjoint_children) {
+    TabletRangePB unbounded; // empty PB is treated as (-∞, +∞)
+    return compute_disjoint_gaps_within(unbounded, sorted_disjoint_children);
+}
+
+const TabletRangePB& effective_child_local_range(const RowsetMetadataPB& rowset, const TabletMetadataPB& ctx_metadata) {
+    static const TabletRangePB kUnbounded;
+    if (rowset.has_range()) return rowset.range();
+    if (ctx_metadata.has_range()) return ctx_metadata.range();
+    return kUnbounded;
+}
+
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range) {
     DCHECK(rowset != nullptr);
     if (!rowset->has_range()) {
