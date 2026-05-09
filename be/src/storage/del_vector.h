@@ -51,6 +51,13 @@ public:
 
     void init(int64_t version, const uint32_t* data, size_t length);
 
+    // OR-in |src| with this delvec's bitmap. If this delvec is empty, becomes a
+    // copy of |src|. Updates version + stats. Skips the rowid-vector
+    // round-trip that init(uint32_t*, size) requires; meaningful when |src|
+    // covers a large run of rowids (e.g. a synthesized gap delvec from tablet
+    // merge across compacted children).
+    void union_with(int64_t version, const Roaring& src);
+
     std::string save() const;
 
     void save_to(std::string* str) const;
