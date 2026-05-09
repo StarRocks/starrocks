@@ -1122,9 +1122,6 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_non_s3_type_rejected
     EXPECT_TRUE(status.is_invalid_argument()) << status;
     EXPECT_NE(std::string::npos, status.message().find("Full path must be S3 type"));
 }
-<<<<<<< HEAD
-=======
-
 // Test Case 6: Fast cancel - when min_active_txn_id > txn_id, replication should abort
 // before copying any files.
 TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_copy) {
@@ -1293,10 +1290,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     // The status should NOT be Aborted (it should be some other error from file copy)
     EXPECT_FALSE(status.is_aborted()) << "Should not abort when min_active_txn_id <= txn_id, status: " << status;
 }
->>>>>>> 108edf781a ([UT] Fix LakeReplicationRemoteStorageTest unit test failures (#70368))
 #endif // USE_STAROS
 
-        INSTANTIATE_TEST_SUITE_P(SharedDataReplicationTxnManagerTest, SharedDataReplicationTxnManagerTest,
-                                 testing::Values(KeysType::DUP_KEYS, KeysType::AGG_KEYS, KeysType::PRIMARY_KEYS));
+INSTANTIATE_TEST_SUITE_P(SharedDataReplicationTxnManagerTest, SharedDataReplicationTxnManagerTest,
+                         testing::Values(KeysType::DUP_KEYS, KeysType::AGG_KEYS, KeysType::PRIMARY_KEYS));
 
 } // namespace starrocks::lake
