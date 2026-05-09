@@ -207,7 +207,7 @@ jobs:
       - name: Backup logs
         if: always()
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          cd ci-tool && source lib/init.sh
           ./bin/backup_log_cores.sh || true
 
       - name: Clean MySQL ECI
