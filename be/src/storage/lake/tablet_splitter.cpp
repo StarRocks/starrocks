@@ -18,7 +18,6 @@
 #include <fmt/format.h>
 
 #include <algorithm>
-#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -59,6 +58,50 @@ Status SegmentSplitInfo::load_sort_key_samples(const SegmentMetadataPB& segment_
 // ================================================================================
 
 namespace {
+
+// Returns true if the first n DatumVariants of `a` and `b` are not all equal.
+// Used to detect a colocate-prefix transition between two adjacent candidate
+// ranges in the greedy split loop.
+bool colocate_prefix_differs(const VariantTuple& a, const VariantTuple& b, int32_t n) {
+    DCHECK_GE(static_cast<int32_t>(a.size()), n);
+    DCHECK_GE(static_cast<int32_t>(b.size()), n);
+    for (int32_t i = 0; i < n; ++i) {
+        if (a[i].compare(b[i]) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Returns true iff every position from `colocate_column_count` onward is NULL —
+// i.e. `t` has the canonical (k, NULL, ..., NULL) shape that FE produces from a
+// colocate-range bound via expandToFullSortKey.
+bool is_canonical_tuple(const VariantTuple& t, int32_t colocate_column_count) {
+    for (size_t i = colocate_column_count; i < t.size(); ++i) {
+        if (!t[i].value().is_null()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Build a canonical colocate boundary tuple by copying the leading
+// `colocate_column_count` positions from `source` and NULL-padding the rest. `source`
+// supplies both the prefix values and the column types for the trailing positions.
+VariantTuple build_canonical_boundary(const VariantTuple& source, int32_t colocate_column_count) {
+    DCHECK_GE(static_cast<int32_t>(source.size()), colocate_column_count);
+    VariantTuple canonical;
+    canonical.reserve(source.size());
+    for (int32_t i = 0; i < colocate_column_count; ++i) {
+        canonical.append(source[i]);
+    }
+    Datum null_datum;
+    null_datum.set_null();
+    for (size_t i = colocate_column_count; i < source.size(); ++i) {
+        canonical.emplace(source[i].type(), null_datum);
+    }
+    return canonical;
+}
 
 struct RangeInfo {
     VariantTuple min;
@@ -183,7 +226,8 @@ void distribute_segment_to_ranges(const SegmentSplitInfo& segment, std::vector<R
 StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
                                                             int32_t target_split_count, int64_t target_value_per_split,
                                                             bool use_num_rows, bool track_sources,
-                                                            const TabletRange* tablet_range) {
+                                                            const TabletRange* tablet_range,
+                                                            int32_t colocate_column_count) {
     RangeSplitResult result;
 
     if (segments.empty() || target_split_count <= 1) {
@@ -191,13 +235,14 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     }
 
     // Step 1: Collect all unique boundary points (including sort-key samples) and sort them.
-    auto comparator = [](const VariantTuple* a, const VariantTuple* b) { return a->compare(*b) < 0; };
-    std::set<const VariantTuple*, decltype(comparator)> ordered_boundaries(comparator);
+    // Owned VariantTuples (not pointers) so step 1b can insert synthesized canonical
+    // colocate boundaries that don't exist in any segment.
+    std::vector<VariantTuple> ordered_boundary_values;
     for (const auto& segment : segments) {
-        ordered_boundaries.insert(&segment.min_key);
-        ordered_boundaries.insert(&segment.max_key);
+        ordered_boundary_values.push_back(segment.min_key);
+        ordered_boundary_values.push_back(segment.max_key);
         for (const auto& sample : segment.sort_key_samples) {
-            ordered_boundaries.insert(&sample);
+            ordered_boundary_values.push_back(sample);
         }
     }
     // Insert tablet_range bounds so any ordered_range that previously straddled a
@@ -210,28 +255,53 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     // num_rows is summed into one of the new splits.
     if (tablet_range != nullptr) {
         if (!tablet_range->is_minimum()) {
-            ordered_boundaries.insert(&tablet_range->lower_bound());
+            ordered_boundary_values.push_back(tablet_range->lower_bound());
         }
         if (!tablet_range->is_maximum()) {
-            ordered_boundaries.insert(&tablet_range->upper_bound());
+            ordered_boundary_values.push_back(tablet_range->upper_bound());
         }
     }
+    std::sort(ordered_boundary_values.begin(), ordered_boundary_values.end());
+    ordered_boundary_values.erase(std::unique(ordered_boundary_values.begin(), ordered_boundary_values.end()),
+                                  ordered_boundary_values.end());
 
-    if (ordered_boundaries.size() < 2) {
+    // Step 1b: when colocate-aware, synthesize canonical (k, NULL, ..., NULL) tuples at every
+    // observed colocate-prefix transition so candidate ranges are pre-split at canonical
+    // boundaries. Keeps the post-pass stats walk accurate when the greedy loop picks a
+    // canonical boundary.
+    if (colocate_column_count > 0 && ordered_boundary_values.size() >= 2) {
+        std::vector<VariantTuple> with_canonical;
+        with_canonical.reserve(ordered_boundary_values.size() * 2);
+        for (size_t i = 0; i < ordered_boundary_values.size(); ++i) {
+            if (i > 0 && colocate_prefix_differs(ordered_boundary_values[i - 1], ordered_boundary_values[i],
+                                                 colocate_column_count)) {
+                VariantTuple canonical = build_canonical_boundary(ordered_boundary_values[i], colocate_column_count);
+                // canonical > prev is guaranteed (canonical's prefix matches curr's, which is
+                // > prev's prefix when prefix-differs is true). Only the upper guard is real:
+                // canonical can equal curr when curr already has the (k, NULL...) shape.
+                DCHECK_GT(canonical.compare(ordered_boundary_values[i - 1]), 0);
+                if (canonical.compare(ordered_boundary_values[i]) <= 0) {
+                    with_canonical.push_back(std::move(canonical));
+                }
+            }
+            with_canonical.push_back(ordered_boundary_values[i]);
+        }
+        ordered_boundary_values = std::move(with_canonical);
+        ordered_boundary_values.erase(std::unique(ordered_boundary_values.begin(), ordered_boundary_values.end()),
+                                      ordered_boundary_values.end());
+    }
+
+    if (ordered_boundary_values.size() < 2) {
         return result;
     }
 
     // Step 2: Build ordered ranges between adjacent boundary points.
     std::vector<RangeInfo> ordered_ranges;
-    ordered_ranges.reserve(ordered_boundaries.size());
-    const VariantTuple* last_boundary = nullptr;
-    for (const auto* boundary : ordered_boundaries) {
-        if (last_boundary != nullptr) {
-            auto& range_info = ordered_ranges.emplace_back();
-            range_info.min = *last_boundary;
-            range_info.max = *boundary;
-        }
-        last_boundary = boundary;
+    ordered_ranges.reserve(ordered_boundary_values.size());
+    for (size_t i = 1; i < ordered_boundary_values.size(); ++i) {
+        auto& range_info = ordered_ranges.emplace_back();
+        range_info.min = ordered_boundary_values[i - 1];
+        range_info.max = ordered_boundary_values[i];
     }
 
     if (ordered_ranges.empty()) {
@@ -354,6 +424,13 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
                     break;
                 }
                 if (tablet_range != nullptr && !tablet_range->strictly_contains(candidate_ranges[j]->max)) {
+                    break;
+                }
+                // When colocate-aware, stop the advance once `boundary` is already a canonical
+                // colocate boundary placed by step 1b. Walking past it would force FE to
+                // classify the split as Level 2 even though the data clearly crosses a
+                // prefix transition.
+                if (colocate_column_count > 0 && is_canonical_tuple(*boundary, colocate_column_count)) {
                     break;
                 }
                 boundary = &candidate_ranges[j]->max;
@@ -552,10 +629,22 @@ void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& ancho
 // is expected to fall back to identical-tablet publish; only new_tablet_ids(0)
 // is consumed in that case, and FE is responsible for reclaiming the remaining
 // preallocated tablet ids.
+//
+// colocate_column_count > 0 enables colocate-aware boundary canonicalization (see
+// calculate_range_split_boundaries). A malformed FE that sends colocate_column_count
+// larger than the sort-key arity returns Status::InvalidArgument here, which triggers
+// the same identical-tablet fallback as "no boundaries" — preserves the publish loop
+// instead of hard-failing.
 Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
-                               int32_t split_count, std::vector<TabletRangeInfo>* split_ranges) {
+                               int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
+                               int32_t colocate_column_count) {
     if (split_count < 2) {
         return Status::InvalidArgument("Invalid split count, it is less than 2");
+    }
+    if (colocate_column_count < 0 || colocate_column_count > tablet_metadata->schema().sort_key_idxes_size()) {
+        return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}, sort key arity is {}",
+                                                   colocate_column_count,
+                                                   tablet_metadata->schema().sort_key_idxes_size()));
     }
 
     std::vector<SegmentSplitInfo> segments;
@@ -592,9 +681,10 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
     }
     int64_t avg_num_rows = std::max<int64_t>(1, total_num_rows / split_count);
 
-    ASSIGN_OR_RETURN(auto split_result, calculate_range_split_boundaries(segments, split_count, avg_num_rows,
-                                                                         /*use_num_rows=*/true,
-                                                                         /*track_sources=*/true, &tablet_range));
+    ASSIGN_OR_RETURN(auto split_result,
+                     calculate_range_split_boundaries(segments, split_count, avg_num_rows,
+                                                      /*use_num_rows=*/true,
+                                                      /*track_sources=*/true, &tablet_range, colocate_column_count));
 
     if (split_result.boundaries.empty()) {
         return Status::InvalidArgument("Not enough split ranges available");
@@ -676,8 +766,10 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
 
     std::vector<TabletRangeInfo> split_ranges;
+    // colocate_column_count is carried at the txn level (single split job = single txn) since
+    // every SplittingTabletInfoPB in the same job would carry the same value. See lake_types.proto.
     Status status = get_tablet_split_ranges(tablet_manager, old_tablet_metadata, splitting_tablet.new_tablet_ids_size(),
-                                            &split_ranges);
+                                            &split_ranges, txn_info.colocate_column_count());
     if (!status.ok()) {
         g_tablet_reshard_split_fallback_total << 1;
         LOG(WARNING) << "Failed to get tablet split ranges, will not split this tablet: " << old_tablet_metadata->id()

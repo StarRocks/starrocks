@@ -16,8 +16,14 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.PlacementPolicy;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishResult;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishState;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeMgr;
+import com.starrocks.catalog.ColocateRangeUtils;
+import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -28,7 +34,10 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Range;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.Utils;
@@ -38,6 +47,7 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -46,8 +56,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -267,7 +279,13 @@ public class SplitTabletJob extends TabletReshardJob {
             return;
         }
 
-        // 2. Add the new versions of materialized index to catalog
+        // Splice any canonical colocate-boundary new tablets into ColocateRangeMgr and mark
+        // the group unstable. Legacy / buggy BE outputs that straddle an existing boundary
+        // log a warning and still mark unstable so the scan-time alignment guard catches
+        // transient mis-alignment.
+        applyColocateRangeSplitResult();
+
+        // 3. Add the new versions of materialized index to catalog
         addNewMaterializedIndexes();
 
         // 3. Get end transaction id
@@ -530,6 +548,12 @@ public class SplitTabletJob extends TabletReshardJob {
             txnInfo.commitTime = stateStartedTimeMs / 1000;
             txnInfo.txnType = TxnTypePB.TXN_TABLET_RESHARD;
             txnInfo.gtid = gtid;
+            // Carry the table's colocate column count once at the txn level (single split job =
+            // single txn). 0 = non-colocate range table, BE keeps pre-P3 splitter behavior.
+            ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+            ColocateTableIndex.GroupId rangeGroupId = idx.getRangeColocateGroupId(tableId);
+            txnInfo.colocateColumnCount = rangeGroupId == null
+                    ? 0 : idx.getGroupSchema(rangeGroupId).getColocateColumnCount();
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
@@ -541,6 +565,104 @@ public class SplitTabletJob extends TabletReshardJob {
         } catch (Exception e) {
             LOG.warn("Failed to publish version for tablet reshard job {}. ", this, e);
             throw new TabletReshardException("Failed to publish version: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Splice any canonical colocate-boundary new tablets produced by this split into
+     * {@link ColocateRangeMgr} and mark the group unstable. Skipped for non-range-colocate
+     * tables.
+     *
+     * <p>Three distinct triggers fire applyRangeSplitResult:
+     * <ul>
+     * <li><b>New canonical boundary</b>: a new tablet's lower bound has the canonical
+     *     {@code (k, NULL...)} shape AND that prefix is not yet a boundary in
+     *     {@link ColocateRangeMgr}. Splice + mark unstable.</li>
+     * <li><b>Old tablet straddles an existing boundary</b>: indicates retry-after-partial-commit
+     *     (boundary was already journaled but mark-unstable was lost). The splice is idempotent;
+     *     the mark-unstable record is re-emitted.</li>
+     * <li><b>Non-canonical crossing</b>: a buggy / colocate-unaware BE produced a child whose
+     *     range straddles an existing boundary without canonicalizing. Log a warning, mark
+     *     unstable so the scan-time alignment guard fails closed.</li>
+     * </ul>
+     */
+    private void applyColocateRangeSplitResult() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        if (groupId == null) {
+            return;
+        }
+        long grpId = groupId.grpId;
+        int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+        List<ColocateRange> currentRanges = colocateTableIndex.getColocateRangeMgr().getColocateRanges(grpId);
+
+        Set<Tuple> canonicalLowers = new LinkedHashSet<>();
+        boolean oldStradlesBoundary = false;
+        boolean nonCanonicalCrossing = false;
+
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
+            OlapTable olapTable = lockedTable.get();
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+
+            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+                PhysicalPartition physicalPartition = olapTable
+                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+                if (physicalPartition == null) {
+                    continue;
+                }
+                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                        .getReshardingIndexes().values()) {
+                    MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                    MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+                    for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                        SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
+                        if (splittingTablet == null || splittingTablet.isIdenticalTablet()) {
+                            continue;
+                        }
+                        Tablet oldTablet = oldIndex == null ? null
+                                : oldIndex.getTablet(splittingTablet.getOldTabletId());
+                        if (oldTablet != null && oldTablet.getRange() != null
+                                && !ColocateRangeUtils.isContainedInOwningColocateRange(
+                                        oldTablet.getRange().getRange(),
+                                        currentRanges, sortKeyColumns, colocateColumnCount)) {
+                            oldStradlesBoundary = true;
+                        }
+                        for (Long newTabletId : splittingTablet.getNewTabletIds()) {
+                            Tablet newTablet = newIndex.getTablet(newTabletId);
+                            if (newTablet == null || newTablet.getRange() == null) {
+                                continue;
+                            }
+                            Range<Tuple> newRange = newTablet.getRange().getRange();
+                            boolean canonicalLow = ColocateRangeUtils.hasCanonicalLowerBound(
+                                    newRange, sortKeyColumns, colocateColumnCount);
+                            if (canonicalLow) {
+                                canonicalLowers.add(newRange.getLowerBound());
+                            } else if (!ColocateRangeUtils.isContainedInOwningColocateRange(
+                                    newRange, currentRanges, sortKeyColumns, colocateColumnCount)) {
+                                LOG.warn("New tablet {} range {} crosses an existing ColocateRange boundary "
+                                        + "in colocate group {}; marking group unstable. Verify FE↔BE versions.",
+                                        newTabletId, newRange, grpId);
+                                nonCanonicalCrossing = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        boolean hasNewCanonical = canonicalLowers.stream().anyMatch(lower ->
+                !ColocateRangeMgr.hasBoundaryAt(currentRanges,
+                        new Tuple(lower.getValues().subList(0, colocateColumnCount))));
+        if (!hasNewCanonical && !oldStradlesBoundary && !nonCanonicalCrossing) {
+            return;
+        }
+        try {
+            colocateTableIndex.applyRangeSplitResult(grpId, canonicalLowers, colocateColumnCount,
+                    () -> GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
+                            dbId, tableId, 0L, 0L, PlacementPolicy.PACK));
+        } catch (DdlException e) {
+            throw new TabletReshardException(
+                    "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
         }
     }
 

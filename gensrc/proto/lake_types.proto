@@ -412,6 +412,16 @@ message TxnInfoPB {
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
     repeated PUniqueId load_ids = 8;
+    // Number of leading sort-key columns that participate in the table's range
+    // colocate group. Only used by tablet split (TXN_TABLET_RESHARD with split
+    // direction). 0 (default) = legacy / non-colocate-aware split. BE uses this
+    // to prefer canonical colocate-prefix boundaries over within-prefix data-
+    // distribution candidates; FE classifies the resulting tablet ranges as
+    // Level 1 (new ColocateRange) vs Level 2 (intra-colocate).
+    // Carried at the txn level (not per SplittingTabletInfoPB) because the value
+    // is table-level metadata: every SplittingTabletInfoPB in one txn would
+    // carry the same value.
+    optional int32 colocate_column_count = 9;
 }
 
 message SplittingTabletInfoPB {

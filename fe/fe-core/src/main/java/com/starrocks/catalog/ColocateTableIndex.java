@@ -46,6 +46,8 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.proto.PlacementPolicy;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Range;
+import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ColocatePropertyInfo;
 import com.starrocks.common.util.LogUtil;
@@ -511,6 +513,26 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    /**
+     * Returns the table's {@link GroupId} iff the table participates in a range-colocate group,
+     * or {@code null} otherwise. Wraps the {@code isColocateTable + getGroup + isRangeColocateGroup}
+     * triple under a single read lock.
+     */
+    @javax.annotation.Nullable
+    public GroupId getRangeColocateGroupId(long tableId) {
+        readLock();
+        try {
+            GroupId groupId = table2Group.get(tableId);
+            if (groupId == null) {
+                return null;
+            }
+            ColocateGroupSchema schema = group2Schema.get(groupId);
+            return (schema != null && schema.isRangeColocate()) ? groupId : null;
+        } finally {
+            readUnlock();
+        }
+    }
+
     public boolean isGroupExist(GroupId groupId) {
         readLock();
         try {
@@ -754,6 +776,124 @@ public class ColocateTableIndex implements Writable {
             writeUnlock();
         }
     }
+
+    /**
+     * Mark every {@link GroupId} that shares the given colocate {@code grpId} as unstable.
+     * Range colocate groups are keyed in {@link ColocateRangeMgr} by {@code grpId} alone, so a
+     * range-mgr mutation in one database affects every peer database that joined the same group;
+     * marking only the caller's own GroupId would leave peer DBs claiming "stable" while their
+     * tablets are mid-migration, allowing colocate joins to run against an unaligned layout.
+     */
+    public void markAllGroupsWithSameGrpIdUnstable(long grpId, boolean needEditLog) {
+        writeLock();
+        try {
+            // markGroupUnstable / isGroupUnstable re-acquire the lock; ReentrantReadWriteLock
+            // is reentrant for the same thread.
+            group2Schema.keySet().stream()
+                    .filter(g -> Objects.equals(g.grpId, grpId))
+                    .collect(Collectors.toList())
+                    .forEach(peer -> markGroupUnstable(peer, needEditLog));
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Returns true iff any {@link GroupId} sharing the given colocate {@code grpId} is unstable.
+     */
+    public boolean isAnyGroupWithSameGrpIdUnstable(long grpId) {
+        readLock();
+        try {
+            return group2Schema.keySet().stream()
+                    .filter(g -> Objects.equals(g.grpId, grpId))
+                    .anyMatch(this::isGroupUnstable);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Splice canonical-lower-bound boundaries into the colocate range manager and mark all peer
+     * GroupIds unstable. Idempotent on retry: if all observed boundaries already exist (e.g. a
+     * prior leader committed {@code OP_COLOCATE_RANGE_UPDATE} but crashed before
+     * {@code OP_COLOCATE_MARK_UNSTABLE_V2}), no new range update is journaled but the
+     * mark-unstable record is still emitted.
+     *
+     * @param packShardGroupSupplier called once per missing boundary to allocate a new PACK
+     *                               shard group; the same {@link ThrowingSupplier} pattern as
+     *                               other catalog → StarOS code paths so {@code DdlException}
+     *                               flows naturally.
+     */
+    public void applyRangeSplitResult(long grpId, Set<Tuple> observedCanonicalLowers,
+                                      int colocateColumnCount,
+                                      ThrowingSupplier<Long> packShardGroupSupplier) throws DdlException {
+        writeLock();
+        try {
+            List<ColocateRange> currentRanges = colocateRangeMgr.getColocateRanges(grpId);
+            List<ColocateRange> newRanges = spliceMissingBoundaries(
+                    currentRanges, observedCanonicalLowers, colocateColumnCount, packShardGroupSupplier);
+            if (!newRanges.equals(currentRanges)) {
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
+                        ColocateRangePersistInfo.create(grpId, newRanges),
+                        wal -> colocateRangeMgr.setColocateRanges(grpId, newRanges));
+            }
+            markAllGroupsWithSameGrpIdUnstable(grpId, /* needEditLog */ true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Splice missing canonical boundaries into a working copy of {@code currentRanges}.
+     * Returns the working copy; if no boundary was missing the returned list is
+     * {@code equals()} to the input so the caller can skip the journal write.
+     *
+     * <p>The supplier is invoked only when a boundary actually needs allocation.
+     */
+    private List<ColocateRange> spliceMissingBoundaries(List<ColocateRange> currentRanges,
+                                                        Set<Tuple> observedCanonicalLowers,
+                                                        int colocateColumnCount,
+                                                        ThrowingSupplier<Long> packShardGroupSupplier)
+            throws DdlException {
+        if (observedCanonicalLowers.isEmpty()) {
+            return currentRanges;
+        }
+        List<ColocateRange> working = new ArrayList<>(currentRanges);
+        for (Tuple canonicalLower : observedCanonicalLowers) {
+            Tuple prefix = new Tuple(canonicalLower.getValues().subList(0, colocateColumnCount));
+            int idx = ColocateRangeMgr.indexOf(working, prefix);
+            if (idx < 0) {
+                // Prefix not covered — defensive; ColocateRangeMgr's contiguity invariant
+                // makes this unreachable in production.
+                continue;
+            }
+            if (ColocateRangeMgr.hasBoundaryAt(working, prefix)) {
+                // Boundary already present — idempotent skip.
+                continue;
+            }
+            ColocateRange owner = working.get(idx);
+            long newPackShardGroupId;
+            try {
+                newPackShardGroupId = packShardGroupSupplier.get();
+            } catch (DdlException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new DdlException("Failed to allocate PACK shard group: " + e.getMessage(), e);
+            }
+            ColocateRange leftPart = new ColocateRange(
+                    Range.of(owner.getRange().getLowerBound(), prefix,
+                            owner.getRange().isLowerBoundIncluded(), false),
+                    owner.getShardGroupId());
+            ColocateRange rightPart = new ColocateRange(
+                    Range.of(prefix, owner.getRange().getUpperBound(),
+                            true, owner.getRange().isUpperBoundIncluded()),
+                    newPackShardGroupId);
+            working.set(idx, leftPart);
+            working.add(idx + 1, rightPart);
+        }
+        return working;
+    }
+
 
     // only for test
     public void clear() {

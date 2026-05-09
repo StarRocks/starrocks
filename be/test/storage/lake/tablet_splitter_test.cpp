@@ -594,4 +594,124 @@ TEST(TabletSplitterTest, tablet_range_total_invariant_across_split_counts) {
 // they can be reused by the planned cross-publish (P2) refactor without
 // re-introducing a private split-only header.
 
+namespace {
+
+// Build a 2-column key tuple (k1, k2). Used for colocate-aware splitter tests.
+static VariantTuple make_two_int_tuple(int64_t k1, int64_t k2) {
+    VariantTuple tuple;
+    tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(k1)));
+    tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(k2)));
+    return tuple;
+}
+
+static SegmentSplitInfo make_two_col_seg(int64_t lo_k1, int64_t lo_k2, int64_t hi_k1, int64_t hi_k2, int64_t num_rows,
+                                         int64_t data_size, uint32_t source_id) {
+    SegmentSplitInfo s;
+    s.min_key = make_two_int_tuple(lo_k1, lo_k2);
+    s.max_key = make_two_int_tuple(hi_k1, hi_k2);
+    s.num_rows = num_rows;
+    s.data_size = data_size;
+    s.source_id = source_id;
+    return s;
+}
+
+} // namespace
+
+// Three disjoint segments with three distinct k1 values produce candidate
+// ranges between every adjacent pair. With colocate_col_count=1 and a 2-way
+// split, the chosen boundary lands at a k1 transition; canonicalization
+// rewrites the boundary to (right_k1, NULL).
+TEST(TabletSplitterTest, colocate_aware_split_picks_canonical_boundary) {
+    std::vector<SegmentSplitInfo> segs = {make_two_col_seg(/*lo*/ 100, 1, /*hi*/ 100, 999, 100, 1000, /*source_id=*/1),
+                                          make_two_col_seg(/*lo*/ 200, 1, /*hi*/ 200, 999, 100, 1000, /*source_id=*/2),
+                                          make_two_col_seg(/*lo*/ 300, 1, /*hi*/ 300, 999, 100, 1000, /*source_id=*/3)};
+
+    ASSIGN_OR_ABORT(auto result,
+                    calculate_range_split_boundaries(segs, /*target_split_count=*/2, /*target_value_per_split=*/150,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true,
+                                                     /*tablet_range=*/nullptr, /*colocate_column_count=*/1));
+    ASSERT_EQ(1, result.boundaries.size());
+    const auto& b = result.boundaries[0];
+    ASSERT_EQ(2u, b.size());
+    // First column = the right neighbor's k1 (200 or 300, depending on greedy choice).
+    EXPECT_FALSE(b[0].value().is_null()) << "colocate-prefix position must be non-null";
+    // Second column must be NULL (canonical NULL filler).
+    EXPECT_TRUE(b[1].value().is_null()) << "trailing positions must be NULL after canonicalization";
+}
+
+// When all data lives within a single colocate prefix value, the splitter has
+// no transition to canonicalize and falls back to the within-key boundary.
+// The resulting boundary's leading column equals the prefix and trailing
+// columns hold real (non-null) values.
+TEST(TabletSplitterTest, colocate_aware_split_falls_back_within_prefix) {
+    // Two non-overlapping segments, both with k1=100, separated by k2.
+    std::vector<SegmentSplitInfo> segs = {
+            make_two_col_seg(/*lo*/ 100, 1, /*hi*/ 100, 100, 100, 1000, /*source_id=*/1),
+            make_two_col_seg(/*lo*/ 100, 200, /*hi*/ 100, 300, 100, 1000, /*source_id=*/2)};
+
+    ASSIGN_OR_ABORT(auto result,
+                    calculate_range_split_boundaries(segs, /*target_split_count=*/2, /*target_value_per_split=*/100,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true,
+                                                     /*tablet_range=*/nullptr, /*colocate_column_count=*/1));
+    ASSERT_EQ(1, result.boundaries.size());
+    const auto& b = result.boundaries[0];
+    ASSERT_EQ(2u, b.size());
+    // No prefix transition → no canonicalization → trailing position is non-null.
+    EXPECT_FALSE(b[1].value().is_null()) << "within-prefix split must keep the actual k2 boundary";
+}
+
+// colocate_column_count == 0 must reproduce pre-P3 behavior exactly: no
+// canonicalization, boundaries are unchanged data tuples.
+TEST(TabletSplitterTest, colocate_column_count_zero_unchanged) {
+    std::vector<SegmentSplitInfo> segs = {make_two_col_seg(/*lo*/ 100, 1, /*hi*/ 100, 100, 100, 1000, /*source_id=*/1),
+                                          make_two_col_seg(/*lo*/ 200, 1, /*hi*/ 200, 100, 100, 1000, /*source_id=*/2)};
+
+    ASSIGN_OR_ABORT(auto result_with_colocate,
+                    calculate_range_split_boundaries(segs, /*target_split_count=*/2, /*target_value_per_split=*/100,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true,
+                                                     /*tablet_range=*/nullptr, /*colocate_column_count=*/1));
+    ASSIGN_OR_ABORT(auto result_default,
+                    calculate_range_split_boundaries(segs, /*target_split_count=*/2, /*target_value_per_split=*/100,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true,
+                                                     /*tablet_range=*/nullptr, /*colocate_col_count=*/0));
+
+    ASSERT_EQ(1, result_default.boundaries.size());
+    ASSERT_EQ(1, result_with_colocate.boundaries.size());
+    // Default-mode boundary's trailing column is non-null (came from a real key).
+    EXPECT_FALSE(result_default.boundaries[0][1].value().is_null());
+    // Colocate-aware boundary's trailing column IS null (synthesized NULL filler).
+    EXPECT_TRUE(result_with_colocate.boundaries[0][1].value().is_null());
+}
+
+// Regression for the prefix-straddling-segment case. A single segment whose key range crosses a
+// colocate-prefix transition must have its rows distributed across LEFT and RIGHT child groups
+// when the split lands on a canonical boundary inside the segment, rather than being assigned
+// wholly to the right child by the post-pass `range->max.compare(boundary)` walk.
+TEST(TabletSplitterTest, colocate_aware_split_keeps_stats_consistent_across_prefix_boundary) {
+    // s1 spans prefix 100..300 (single segment crossing two prefix transitions).
+    // s2 sits at prefix 400 to drive a 2-way split.
+    std::vector<SegmentSplitInfo> segs = {make_two_col_seg(/*lo*/ 100, 0, /*hi*/ 300, 50, 200, 2000, /*source_id=*/1),
+                                          make_two_col_seg(/*lo*/ 400, 0, /*hi*/ 400, 999, 100, 1000, /*source_id=*/2)};
+    ASSIGN_OR_ABORT(auto result,
+                    calculate_range_split_boundaries(segs, /*target_split_count=*/2, /*target_value_per_split=*/150,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true,
+                                                     /*tablet_range=*/nullptr, /*colocate_column_count=*/1));
+    ASSERT_EQ(1, result.boundaries.size());
+    // Boundary must be canonical so FE classifies the split as Level 1.
+    EXPECT_TRUE(result.boundaries[0][1].value().is_null())
+            << "boundary trailing column must be NULL after canonicalization";
+    // Σ children must equal Σ inputs.
+    int64_t total_rows = result.range_num_rows[0] + result.range_num_rows[1];
+    int64_t total_bytes = result.range_data_sizes[0] + result.range_data_sizes[1];
+    EXPECT_EQ(300, total_rows);
+    EXPECT_EQ(3000, total_bytes);
+    // The straddling-segment's rows must be partly attributed to the LEFT child — the bug was
+    // assigning them entirely to RIGHT when the canonical boundary sorts before range->max.
+    auto left_it = result.range_source_stats[0].find(1);
+    ASSERT_NE(result.range_source_stats[0].end(), left_it)
+            << "rows from the prefix-crossing segment must contribute to the LEFT child";
+    EXPECT_GT(left_it->second.first, 0);
+    EXPECT_GT(left_it->second.second, 0);
+}
+
 } // namespace starrocks::lake

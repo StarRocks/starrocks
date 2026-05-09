@@ -1863,6 +1863,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info);
     }
 
+    /**
+     * WAL-applier overload: the supplied applier runs after the journal record is durable,
+     * so the in-memory mutation matches the persisted state on both leader and follower.
+     * Used by the SplitTabletJob post-publish path so the ColocateRangeMgr update is
+     * sequenced with the same semantics as markGroupUnstable.
+     */
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info, walApplier);
+    }
+
     public void logHeartbeat(HbPackage hbPackage) {
         logJsonObject(OperationType.OP_HEARTBEAT_V2, hbPackage);
     }
