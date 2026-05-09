@@ -32,6 +32,8 @@ ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 
+target_link_libraries(ServiceBE PUBLIC Service)
+
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     set(STARROCKS_BE_MAIN_FILES
@@ -49,6 +51,7 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     # set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)
 
     target_link_libraries(starrocks_be
+        ServiceBE
         ${STARROCKS_LINK_LIBS}
         )
     STARROCKS_FORCE_LOAD_LIBS(starrocks_be Exprs ExprCore)

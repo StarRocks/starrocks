@@ -371,7 +371,7 @@ add_subdirectory(spill)
 add_subdirectory(staros_integration)
 
 if (APPLE)
-    set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/src/service/macos_link_stubs.cpp)
+    set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
@@ -383,7 +383,7 @@ else()
 endif ()
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
-TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
+TARGET_LINK_LIBRARIES(starrocks_test ServiceBE ${TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test Exprs ExprCore)
 
 

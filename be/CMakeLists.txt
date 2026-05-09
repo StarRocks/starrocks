@@ -548,8 +548,6 @@ set(STARROCKS_LINK_LIBS
     Storage
     Rowset
     Runtime
-    Service
-    ServiceBE
     Types
     Udf
     Util

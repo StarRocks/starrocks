@@ -188,7 +188,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         thrift_port = config::thrift_port;
         LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
     }
-    auto thrift_server = BackendService::create<BackendService>(exec_env, thrift_port);
+    auto thrift_server = BackendService::create(exec_env, thrift_port);
 
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
