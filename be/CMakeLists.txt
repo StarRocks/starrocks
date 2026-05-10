@@ -555,7 +555,6 @@ set(STARROCKS_LINK_LIBS
     Webserver
     TestUtil
     Tools
-    Geo
     orc
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
@@ -568,6 +567,7 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IOCore>
     StarOSIntegration
+    Geo
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
     $<TARGET_FILE:Gutil>

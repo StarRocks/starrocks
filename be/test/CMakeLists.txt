@@ -249,8 +249,6 @@ set(EXEC_FILES
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
-        ./geo/geo_types_test.cpp
-        ./geo/wkt_parse_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/http_metrics_test.cpp
         ./http/http_client_test.cpp
@@ -366,6 +364,7 @@ add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(http)
+add_subdirectory(geo)
 add_subdirectory(cache)
 add_subdirectory(spill)
 add_subdirectory(staros_integration)
