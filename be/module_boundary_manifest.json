@@ -159,6 +159,51 @@
       "remediation": "Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem."
     },
     {
+      "id": "io",
+      "doc_label": "IO",
+      "summary": "Runtime-aware IO adapters above IOCore/FSCore for buffering, compression, cache-backed reads, async file output, current S3 streams, and formatted output while follow-up PRs move concrete FS/format ownership to narrower modules.",
+      "owned_targets": ["IO"],
+      "allowed_include_prefixes": ["io/", "cache/", "fs/", "runtime/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": [
+        "formats/",
+        "storage/",
+        "exec/",
+        "connector/",
+        "service/",
+        "http/action/",
+        "agent/",
+        "util/"
+      ],
+      "forbidden_includes": [
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": [
+        "IOCore",
+        "Cache",
+        "FSCore",
+        "RuntimeCore",
+        "TypesCore",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": ["io_adapter_test"],
+      "allowed_test_link_deps": [
+        "IO",
+        "Cache",
+        "RuntimeCore",
+        "FSCore",
+        "IOCore",
+        "TypesCore",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "remediation": "Keep IO limited to stream adapters over IOCore/FSCore/RuntimeCore/Cache during this migration; move concrete filesystem implementations to FileSystem and format serialization to Formats in follow-up PRs."
+    },
+    {
       "id": "spillcore",
       "doc_label": "SpillCore",
       "summary": "Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.",

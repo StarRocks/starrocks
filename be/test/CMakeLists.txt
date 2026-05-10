@@ -264,7 +264,6 @@ set(EXEC_FILES
         ./io/formatted_output_stream_file_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
-        ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./exec/data_sinks/arrow_result_writer_test.cpp
@@ -580,7 +579,6 @@ SET(DW_TEST_FILES
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
     list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
-    list(APPEND DW_TEST_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
