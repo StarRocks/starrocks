@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "gen_cpp/AgentService_types.h"
+#include "storage/lake/schema_change.h"
+
 #include <memory>
 #include <string>
 
@@ -410,6 +413,74 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_nullable_column_handles_nulls) {
     ASSERT_EQ(1, op.segment_entries_size());
     EXPECT_EQ(_c3_uid, op.segment_entries(0).entry().keys(0).col_unique_id());
     EXPECT_GT(op.segment_entries(0).entry().file_size(), 0);
+}
+
+// Wrapper: drive the full do_process_add_index_only(TAlterTabletReqV2) path
+// that schema_change.cpp exposes. Unlike the run_*_happy_path tests above
+// that call AddIndexSchemaChange::run() directly, this exercises the
+// SchemaChangeHandler dispatcher: column-name → unique_id translation,
+// txn_log assembly, and put_txn_log on success. Closes the schema_change.cpp
+// success-branch coverage gap (lines 665-733).
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_happy_path) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({"c1"});
+    request.__set_indexes_to_add({ix});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    // The handler writes a TxnLog with op_add_index when the fast path
+    // succeeds; verify it lands by reading the txn log back.
+    ASSIGN_OR_ABORT(auto txn_log,
+                    _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
+                                                  /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    EXPECT_EQ(1, txn_log->op_add_index().new_indexes_size());
+    EXPECT_EQ(1, txn_log->op_add_index().segment_entries_size());
+    EXPECT_EQ(version, txn_log->op_add_index().alter_version());
+}
+
+// Wrapper failure path: the request references a column name that does not
+// exist on the tablet schema. SchemaChangeHandler must surface InternalError
+// (per the do-NOT-fall-back-to-legacy guard) without going through any
+// segment-rewrite path.
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_unknown_column) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({"missing_col"});
+    request.__set_indexes_to_add({ix});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(request);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
 }
 
 // Build BITMAP and NGRAMBF together on the same .idx. Both keys end up on
