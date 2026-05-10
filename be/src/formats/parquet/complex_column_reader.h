@@ -389,6 +389,14 @@ public:
     // is BINARY/VARBINARY (whose Parquet min/max reflects byte-order, not semantic value order).
     // Array segments are not supported (shredded paths are object-key-only).
     const ColumnReader* filterable_typed_value_reader_for_path(const VariantPath& path) const;
+    // Returns the typed_value ColumnReader (mutable) for the given path if the node is SCALAR kind.
+    // Unlike filterable_typed_value_reader_for_path, this does NOT exclude BINARY/VARBINARY types;
+    // it is used for dict-filter promotion where the type check is delegated to the reader itself.
+    // Returns nullptr if the path is absent or the node is not SCALAR kind.
+    ColumnReader* scalar_typed_value_reader_for_path(const VariantPath& path);
+    // Returns true if all requested shredded paths are scalar typed-value leaves and the base
+    // payload (metadata + value columns) can be skipped entirely for this row group.
+    bool skip_base_payload() const { return _skip_base_payload; }
     // Returns the typed_value read type for the given parsed variant path.
     // The returned descriptor reflects the shredded leaf's physical typed_value encoding,
     // not the virtual slot's target type.
@@ -399,6 +407,13 @@ public:
     bool fallback_values_all_null_in_row_group_for_path(const VariantPath& path, uint64_t rg_num_rows) const;
 
 private:
+    struct TopLevelSkipFlags {
+        bool skip_payload = false;
+        bool skip_metadata = false;
+    };
+
+    TopLevelSkipFlags _compute_top_level_skip_flags() const;
+
     // Fast-path read when _skip_base_payload is true.
     // Returns true if the fast path handled the read completely.
     // Returns false if fallback rows were detected; shredded fields are already populated and the
@@ -469,6 +484,78 @@ private:
     VariantColumnReader* _source;
     VariantPath _leaf_path;
     TypeDescriptor _virtual_slot_type;
+};
+
+// A thin read-through proxy for a shredded variant typed_value leaf ColumnReader.
+// Used when a virtual variant column is promoted to Phase 2 (with dict filter support),
+// bypassing the full VariantColumn construction path.  The underlying reader is non-owning:
+// it is owned by the ShreddedFieldNode inside the parent VariantColumnReader.
+class VariantTypedValueProxy final : public ColumnReader {
+public:
+    explicit VariantTypedValueProxy(ColumnReader* reader)
+            : ColumnReader(reader->get_column_parquet_field()), _reader(reader) {}
+
+    // No-op: the underlying reader is already prepared by the parent VariantColumnReader.
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        return _reader->read_range(range, filter, dst);
+    }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
+        _reader->get_levels(def_levels, rep_levels, num_levels);
+    }
+
+    void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
+
+    void set_can_lazy_decode(bool can_lazy_decode) override { _reader->set_can_lazy_decode(can_lazy_decode); }
+
+    bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                const std::vector<std::string>& sub_field_path, const size_t& layer) override {
+        return _reader->try_to_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer);
+    }
+
+    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
+                                              const size_t& layer) override {
+        return _reader->rewrite_conjunct_ctxs_to_predicate(is_group_filtered, sub_field_path, layer);
+    }
+
+    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                              const size_t& layer) override {
+        return _reader->filter_dict_column(column, filter, sub_field_path, layer);
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override { return _reader->fill_dst_column(dst, src); }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {
+        _reader->collect_column_io_range(ranges, end_offset, types, active);
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        _reader->select_offset_index(range, rg_first_row);
+    }
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
+        return _reader->row_group_zone_map_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
+    }
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
+        return _reader->page_index_zone_map_filter(predicates, row_ranges, pred_relation, rg_first_row, rg_num_rows);
+    }
+
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
+        return _reader->row_group_bloom_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
+    }
+
+private:
+    ColumnReader* _reader; // non-owning; owned by ShreddedFieldNode inside VariantColumnReader
 };
 
 } // namespace starrocks::parquet
