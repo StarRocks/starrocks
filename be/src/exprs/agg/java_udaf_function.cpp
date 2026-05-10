@@ -37,7 +37,8 @@ const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
 // This is the expensive part: class loading, method introspection, and stub class generation.
 // The UDAF object instance is NOT created here — it is per-aggregator (see build_udaf_unique_context).
 static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_context(const std::string& libpath,
-                                                                                  const std::string& symbol) {
+                                                                                  const std::string& symbol,
+                                                                                  int num_args) {
     std::string state_cls_name = symbol + "$State";
 
     auto udaf_ctx = std::make_shared<JavaUDAFSharedContext>();
@@ -77,7 +78,7 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     jobject update_method_obj = udaf_ctx->update->method.handle();
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_clazz,
                      udaf_ctx->udf_classloader->genCallStub(stub_clazz_name, udaf_clazz, update_method_obj,
-                                                            ClassLoader::BATCH_SINGLE_UPDATE));
+                                                            ClassLoader::BATCH_SINGLE_UPDATE, num_args));
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_method,
                      analyzer->get_method_object(udaf_ctx->update_stub_clazz.clazz(), stub_method_name));
 
@@ -140,14 +141,14 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
         // we adopt the cache key consisting of the function id and the number of arguments, since for non-group-by aggregation,
         // AggBatchCallStub instance in cached JavaUDAFUniqueContext instance depends on the number of arguments.
         int64_t cache_key = (-id) | (static_cast<int64_t>(num_args) << 52);
-        ASSIGN_OR_RETURN(auto result, func_cache->load_cacheable_java_udf(
-                                              cache_key, url, checksum, TFunctionBinaryType::SRJAR,
-                                              [&symbol](const std::string& libpath) -> StatusOr<std::any> {
-                                                  ASSIGN_OR_RETURN(auto ctx,
-                                                                   build_udaf_shared_context(libpath, symbol));
-                                                  return std::any(std::move(ctx));
-                                              },
-                                              cloud_configuration));
+        ASSIGN_OR_RETURN(auto result,
+                         func_cache->load_cacheable_java_udf(
+                                 cache_key, url, checksum, TFunctionBinaryType::SRJAR,
+                                 [&symbol, num_args](const std::string& libpath) -> StatusOr<std::any> {
+                                     ASSIGN_OR_RETURN(auto ctx, build_udaf_shared_context(libpath, symbol, num_args));
+                                     return std::any(std::move(ctx));
+                                 },
+                                 cloud_configuration));
         if (cache_hit_out != nullptr) {
             *cache_hit_out = result.first;
         }
@@ -159,7 +160,7 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     std::string libpath;
     RETURN_IF_ERROR(
             func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
-    ASSIGN_OR_RETURN(auto shared_ctx, build_udaf_shared_context(libpath, symbol));
+    ASSIGN_OR_RETURN(auto shared_ctx, build_udaf_shared_context(libpath, symbol, num_args));
     return build_udaf_unique_context(std::move(shared_ctx), context);
 }
 

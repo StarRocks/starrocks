@@ -18,6 +18,7 @@
 
 #include "column/column_helper.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 class JavaUDFTest : public testing::Test {
@@ -170,7 +171,8 @@ TEST(GetUdafMethodDescTest, ArrayBranchContinueFix) {
     // Before fix: 4 entries (spurious {TYPE_UNKNOWN,false} from ';')
     ASSERT_EQ(desc.size(), 3);
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
-    EXPECT_EQ(desc[1].type, TYPE_UNKNOWN); // [String array
+    EXPECT_EQ(desc[1].type, TYPE_VARCHAR); // [String array
+    EXPECT_EQ(desc[1].is_array, true);     // [String array
     EXPECT_EQ(desc[2].type, TYPE_INT);     // int
 }
 
@@ -200,7 +202,8 @@ TEST(GetUdafMethodDescTest, UDTFCrashScenarioSignature) {
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     // 1 return + 3 params = 4
     ASSERT_EQ(desc.size(), 4);
-    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return [String
+    EXPECT_EQ(desc[0].type, TYPE_VARCHAR); // return [String
+    EXPECT_EQ(desc[0].is_array, true);     // return [String
     EXPECT_EQ(desc[1].type, TYPE_VARCHAR); // param String
     EXPECT_EQ(desc[2].type, TYPE_ARRAY);   // param List
     EXPECT_EQ(desc[3].type, TYPE_ARRAY);   // param List
