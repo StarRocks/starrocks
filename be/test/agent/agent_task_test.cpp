@@ -27,6 +27,7 @@
 #include "base/utility/defer_op.h"
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -258,6 +259,39 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     Status st = task.execute();
     ASSERT_TRUE(st.is_corruption());
     tablet->set_is_dropping(false);
+}
+
+TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::CREATE));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::ALTER));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::REMOTE_SNAPSHOT));
+}
+
+TEST_F(AgentTaskTest, get_thread_pool_returns_null_for_unsupported_types) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    const int unsupported_types[] = {TTaskType::PUSH, TTaskType::REALTIME_PUSH, TTaskType::EXTERNAL_CLUSTER_SNAPSHOT,
+                                     TTaskType::NUM_TASK_TYPE, -1};
+    for (int type : unsupported_types) {
+        EXPECT_EQ(nullptr, agent_server->get_thread_pool(type)) << type;
+    }
+}
+
+TEST_F(AgentTaskTest, update_thread_pool_size_applies_cpu_scaled_policy) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::UPLOAD);
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_max_threads = thread_pool->max_threads();
+    DeferOp defer([agent_server, original_max_threads]() {
+        agent_server->update_max_thread_by_type(TTaskType::UPLOAD, original_max_threads);
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::UPLOAD, 0);
+
+    ASSERT_EQ(std::max(1, CpuInfo::num_cores()), thread_pool->max_threads());
 }
 
 TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
