@@ -154,7 +154,7 @@ ADD_BE_LIB(ExecJoinCore
 target_link_libraries(ExecJoinCore PUBLIC
     ExecSortingCore
     ExprCore
-    SerdeCore
+    Serde
     RuntimeCore
     ChunkCore
     ColumnCore

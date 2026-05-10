@@ -298,8 +298,6 @@ set(EXEC_FILES
         ./exec/data_sinks/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
-        ./serde/column_array_serde_test.cpp
-        ./serde/protobuf_serde_test.cpp
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp
         ./column/simd_selector_test.cpp
@@ -375,6 +373,7 @@ add_subdirectory(fs)
 add_subdirectory(http)
 add_subdirectory(geo)
 add_subdirectory(cache)
+add_subdirectory(serde)
 add_subdirectory(spill)
 add_subdirectory(staros_integration)
 

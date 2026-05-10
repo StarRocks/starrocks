@@ -524,9 +524,9 @@
         "exec/hash_joiner.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ExecSortingCore", "ExprCore", "SerdeCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_join_core_test"],
-      "allowed_test_link_deps": ["ExecJoinCore", "ExecSortingCore", "ExprCore", "SerdeCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExecJoinCore", "ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
     },
     {
