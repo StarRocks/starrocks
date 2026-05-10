@@ -538,7 +538,12 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 
 > **NOTE**
 >
-> Currently, only non-nested ARRAY and MAP parameter/return types are supported for Scalar UDFs.
+> Scalar UDFs support nested `ARRAY` and `MAP` parameter/return types,
+> for example `ARRAY<ARRAY<INT>>`, `ARRAY<MAP<INT, STRING>>`, and
+> `MAP<INT, ARRAY<STRING>>`. The leaf element type must still be one of
+> the scalar types listed below. Because of Java type erasure, the Java
+> method signature only needs the raw `java.util.List` / `java.util.Map`;
+> StarRocks drives the per-row conversion from the SQL signature.
 
 | SQL TYPE                                       | Java TYPE             |
 | ---------------------------------------------- | --------------------- |

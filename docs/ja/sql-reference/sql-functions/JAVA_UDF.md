@@ -538,7 +538,13 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 > **NOTE**
 >
-> 現在、スカラー UDF でサポートされているのは、ネストされていない ARRAY と MAP パラメータ/リターンタイプのみです。
+> スカラー UDF はネストされた `ARRAY` および `MAP` のパラメータ/リターン
+> タイプをサポートします。例えば `ARRAY<ARRAY<INT>>`、
+> `ARRAY<MAP<INT, STRING>>`、`MAP<INT, ARRAY<STRING>>` などです。
+> 葉ノードの要素型は引き続き下表のスカラー型である必要があります。
+> Java の型消去のため、Java メソッドシグネチャには raw 型の
+> `java.util.List` / `java.util.Map` を指定するだけで十分で、
+> 行ごとの変換は SQL シグネチャに基づいて StarRocks 側で行われます。
 
 | SQL TYPE                                       | Java TYPE             |
 | ---------------------------------------------- | --------------------- |

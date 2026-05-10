@@ -545,7 +545,12 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 > **注意**
 >
-> 当前 Scalar UDF 只支持非嵌套的 ARRAY 和 MAP 的参数/返回类型。
+> Scalar UDF 支持嵌套的 `ARRAY` 和 `MAP` 参数/返回类型,例如
+> `ARRAY<ARRAY<INT>>`、`ARRAY<MAP<INT, STRING>>`、
+> `MAP<INT, ARRAY<STRING>>`。叶子元素类型仍须为下表列出的标量类型。
+> 由于 Java 泛型擦除,Java 方法签名只需声明原始类型
+> `java.util.List` / `java.util.Map`,StarRocks 会根据 SQL 签名
+> 驱动逐行的类型转换。
 
 | SQL TYPE                                       | Java TYPE             |
 | ---------------------------------------------- | --------------------- |
