@@ -20,6 +20,7 @@
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
+#include "fmt/format.h"
 
 namespace starrocks {
 
@@ -86,11 +87,27 @@ private:
 
 class LoadSpillBlockManager {
 public:
-    // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
+    // txn_id: Lake write transaction id. When non-zero (Lake write path), the spill
+    // directory layout becomes <remote_spill_path>/load_spill/<txn_id_hex>/<load_id>/ so that
+    // offline vacuum can reclaim expired spill files by matching the <txn_id_hex> directory
+    // against the cluster-wide min_active_txn_id.
+    // For non-Lake callers (txn_id = 0), the legacy <remote_spill_path>/load_spill/<load_id>/
+    // layout is preserved to keep behaviour backward compatible.
     LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
-                          const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs)
-            : _load_id(load_id), _fragment_instance_id(fragment_instance_id), _fs(std::move(fs)) {
-        _remote_spill_path = remote_spill_path + "/load_spill";
+                          const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs,
+                          bool enable_vacuum_cleanup = false, int64_t txn_id = 0)
+            : _load_id(load_id),
+              _fragment_instance_id(fragment_instance_id),
+              _fs(std::move(fs)),
+              _enable_vacuum_cleanup(enable_vacuum_cleanup),
+              _txn_id(txn_id) {
+        if (txn_id != 0) {
+            // Lake write path: insert <txn_id_hex> layer so that vacuum_load_spill can
+            // identify expired directories by txn_id alone.
+            _remote_spill_path = remote_spill_path + "/load_spill/" + fmt::format("{:016x}", txn_id);
+        } else {
+            _remote_spill_path = remote_spill_path + "/load_spill";
+        }
     }
 
     // Default destructor.
@@ -131,6 +148,8 @@ private:
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
     std::unique_ptr<LoadSpillBlockContainer> _block_container; // Container for blocks.
     bool _initialized = false;                                 // Whether the manager is initialized.
+    bool _enable_vacuum_cleanup = false;                       // Lake-write vacuum cleanup mode.
+    int64_t _txn_id = 0;                                       // Lake write txn id; 0 for non-Lake callers.
 };
 
 } // namespace starrocks

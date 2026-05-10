@@ -28,6 +28,7 @@ namespace starrocks::lake {
 static const char* const kMetadataDirectoryName = "meta";
 static const char* const kTxnLogDirectoryName = "log";
 static const char* const kSegmentDirectoryName = "data";
+static const char* const kLoadSpillDirectoryName = "load_spill";
 
 class LocationProvider {
 public:

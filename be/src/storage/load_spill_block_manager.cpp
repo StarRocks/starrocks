@@ -174,9 +174,12 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     opts.name = "load_spill";
     opts.block_size = block_size;
     opts.force_remote = force_remote;
-    // Defer parent path deletion to LoadSpillBlockManager::~LoadSpillBlockManager(),
-    // so the directory is only removed after all spill files have been cleaned up.
+    // Parent path deletion is handled explicitly by the caller via clear_parent_path(),
+    // so skip it at the block layer to avoid races with files still in use.
     opts.skip_parent_path_deletion = true;
+    // When vacuum cleanup is enabled, per-file deletion is skipped on block release and
+    // will be performed later by the offline vacuum job.
+    opts.skip_file_deletion = _enable_vacuum_cleanup;
     return _block_manager->acquire_block(opts);
 }
 

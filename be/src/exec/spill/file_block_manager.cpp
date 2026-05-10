@@ -29,7 +29,7 @@ class FileBlockContainer {
 public:
     FileBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                        int32_t plan_node_id, std::string plan_node_name, uint64_t id, size_t acquired_size,
-                       bool skip_parent_path_deletion)
+                       bool skip_parent_path_deletion, bool skip_file_deletion)
             : _dir(std::move(dir)),
               _query_id(query_id),
               _fragment_instance_id(fragment_instance_id),
@@ -37,12 +37,30 @@ public:
               _plan_node_name(std::move(plan_node_name)),
               _id(id),
               _acquired_data_size(acquired_size),
-              _skip_parent_path_deletion(skip_parent_path_deletion) {}
+              _skip_parent_path_deletion(skip_parent_path_deletion),
+              _skip_file_deletion(skip_file_deletion) {
+        // Design invariant: when skip_file_deletion = true (Lake write path),
+        // skip_parent_path_deletion MUST also be true. Otherwise the destructor would attempt
+        // to delete the parent directory while the spill file is still present on remote
+        // storage, causing the delete_dir call to fail on non-empty directories and leaving
+        // garbage on the object store.
+        // The caller (currently LoadSpillBlockManager in Lake-vacuum-cleanup mode) already sets
+        // both flags together, so we only need to guard the illegal combination via DCHECK.
+        DCHECK(!_skip_file_deletion || _skip_parent_path_deletion)
+                << "skip_file_deletion requires skip_parent_path_deletion to be true; otherwise "
+                << "the parent directory would be removed while spill files still exist.";
+    }
 
     ~FileBlockContainer() {
         // @TODO we need add a gc thread to delete file
-        TRACE_SPILL_LOG << "delete spill container file: " << path();
-        WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
+        if (!_skip_file_deletion) {
+            TRACE_SPILL_LOG << "delete spill container file: " << path();
+            WARN_IF_ERROR(_dir->fs()->delete_file(path()),
+                          fmt::format("cannot delete spill container file: {}", path()));
+        } else {
+            // Lake write path: file deletion is deferred to offline `vacuum_load_spill`.
+            TRACE_SPILL_LOG << "skip spill container file deletion (deferred to vacuum): " << path();
+        }
         _dir->dec_size(_acquired_data_size);
         if (!_skip_parent_path_deletion) {
             // try to delete related dir, only the last one can success, we ignore the error
@@ -90,7 +108,7 @@ public:
     static StatusOr<FileBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
                                                   const TUniqueId& fragment_instance_id, int32_t plan_node_id,
                                                   const std::string& plan_node_name, uint64_t id, size_t block_size,
-                                                  bool skip_parent_path_deletion);
+                                                  bool skip_parent_path_deletion, bool skip_file_deletion);
 
 private:
     DirPtr _dir;
@@ -108,6 +126,10 @@ private:
     // When true, skip deleting the parent directory in destructor.
     // The caller (e.g. LoadSpillBlockManager) is responsible for cleaning up the parent path.
     bool _skip_parent_path_deletion = false;
+    // When true, skip calling `delete_file(path())` in destructor. Used by Lake write path
+    // (LoadSpillBlockManager with vacuum-cleanup mode) to defer file deletion to the offline
+    // `vacuum_load_spill` job, eliminating S3 DeleteObject calls on the write hot path.
+    bool _skip_file_deletion = false;
 };
 
 Status FileBlockContainer::open() {
@@ -149,9 +171,11 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> FileBlockContainer::get_readab
 StatusOr<FileBlockContainerPtr> FileBlockContainer::create(const DirPtr& dir, const TUniqueId& query_id,
                                                            const TUniqueId& fragment_instance_id, int32_t plan_node_id,
                                                            const std::string& plan_node_name, uint64_t id,
-                                                           size_t block_size, bool skip_parent_path_deletion) {
-    auto container = std::make_shared<FileBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
-                                                          plan_node_name, id, block_size, skip_parent_path_deletion);
+                                                           size_t block_size, bool skip_parent_path_deletion,
+                                                           bool skip_file_deletion) {
+    auto container =
+            std::make_shared<FileBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id, plan_node_name, id,
+                                                 block_size, skip_parent_path_deletion, skip_file_deletion);
     RETURN_IF_ERROR(container->open());
     return container;
 }
@@ -222,7 +246,7 @@ StatusOr<BlockPtr> FileBlockManager::acquire_block(const AcquireBlockOptions& op
     ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));
     ASSIGN_OR_RETURN(auto block_container,
                      get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id, opts.name,
-                                             opts.block_size, opts.skip_parent_path_deletion));
+                                             opts.block_size, opts.skip_parent_path_deletion, opts.skip_file_deletion));
     auto res = std::make_shared<FileBlock>(block_container);
     res->set_is_remote(dir->is_remote());
     return res;
@@ -238,10 +262,11 @@ Status FileBlockManager::release_block(BlockPtr block) {
 
 StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(
         const DirPtr& dir, const TUniqueId& fragment_instance_id, int32_t plan_node_id,
-        const std::string& plan_node_name, size_t block_size, bool skip_parent_path_deletion) {
+        const std::string& plan_node_name, size_t block_size, bool skip_parent_path_deletion, bool skip_file_deletion) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
                     << plan_node_name << ", block size: " << block_size << " bytes"
-                    << ", skip parent path deletion: " << skip_parent_path_deletion;
+                    << ", skip parent path deletion: " << skip_parent_path_deletion
+                    << ", skip file deletion: " << skip_file_deletion;
     uint64_t id = _next_container_id++;
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
     if (_last_created_container_dir != container_dir) {
@@ -250,7 +275,7 @@ StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(
     }
     ASSIGN_OR_RETURN(auto block_container,
                      FileBlockContainer::create(dir, _query_id, fragment_instance_id, plan_node_id, plan_node_name, id,
-                                                block_size, skip_parent_path_deletion));
+                                                block_size, skip_parent_path_deletion, skip_file_deletion));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }

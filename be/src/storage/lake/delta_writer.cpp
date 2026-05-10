@@ -25,6 +25,7 @@
 #include "column/column.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
@@ -406,11 +407,16 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
+                // Pass txn_id to LoadSpillBlockManager so that spill files are placed under
+                // <tablet_root>/load_spill/<txn_id_hex>/<load_id>/, enabling offline vacuum to
+                // reclaim expired directories by comparing the encoded txn_id against the
+                // cluster-wide min_active_txn_id.
                 _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
                         UniqueId(_load_id).to_thrift(),
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
-                        _tablet_manager->tablet_root_location(_tablet_id), nullptr);
+                        _tablet_manager->tablet_root_location(_tablet_id), nullptr,
+                        /*enable_vacuum_cleanup=*/config::lake_enable_vacuum_load_spill, _txn_id);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
@@ -1026,10 +1032,11 @@ void DeltaWriterImpl::close() {
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
-    if (_load_spill_block_mgr != nullptr) {
-        // ignore the return status of clear_parent_path,
-        // because the spill blocks will be cleared by GC later.
-        (void)_load_spill_block_mgr->clear_parent_path();
+    // Cleanup behavior depends on lake_enable_vacuum_load_spill configuration:
+    // - When true: Skip synchronous cleanup, rely on offline vacuum job
+    // - When false: Perform synchronous cleanup via clear_parent_path()
+    if (!config::lake_enable_vacuum_load_spill && _load_spill_block_mgr != nullptr) {
+        WARN_IF_ERROR(_load_spill_block_mgr->clear_parent_path(), "Failed to clear load spill parent path");
     }
     {
         // Take exclusive lock before resetting _flush_token to prevent race with cancel()

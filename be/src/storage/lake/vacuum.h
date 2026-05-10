@@ -64,6 +64,18 @@ StatusOr<int64_t> garbage_file_check(std::string_view root_location);
 Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
                       int64_t* vacuumed_file_size);
 
+// Delete load_spill subdirs under |root_location| whose hex-encoded txn_id is < |min_active_txn_id|.
+// Non-hex names matching the legacy pre-upgrade `load_spill/<uuid>/` layout are also reclaimed;
+// any other entry is skipped with a warning.
+// |*deleted_dirs|, if non-null, is incremented by the number of directories actually removed.
+Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, int64_t* deleted_dirs = nullptr);
+
+// Best-effort cleanup of load_spill/. Centralizes the config gate
+// (config::lake_enable_vacuum_load_spill) and error swallowing so vacuum_impl()
+// and vacuum_full_impl() cannot drift. |vacuumed_files|, if non-null, is
+// incremented by the number of reclaimed top-level load_spill subdirs.
+void try_vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files);
+
 StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
         FileSystem* fs, const std::string& metadata_root_location);
 

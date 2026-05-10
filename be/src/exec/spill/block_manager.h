@@ -127,6 +127,19 @@ struct AcquireBlockOptions {
     // in its destructor. This is used by LoadSpillBlockManager which defers parent path cleanup
     // to its own destructor via clear_parent_path(), ensuring all spill files are removed first.
     bool skip_parent_path_deletion = false;
+    // When true, the FileBlockContainer destructor will skip calling `delete_file(path())`.
+    // This is used by LoadSpillBlockManager in the Lake write path (DeltaWriterImpl), where
+    // per-file deletion on destruction is moved offline to `vacuum_load_spill` to eliminate
+    // S3 DeleteObject API calls on the write hot path. Combined with skip_parent_path_deletion,
+    // the container becomes a pure in-memory handle: it neither deletes files nor parent dirs.
+    // Default `false` preserves the original behavior for query spill / connector write paths.
+    //
+    // Scope: Only consumed by FileBlockManager (remote / S3-like block storage). LogBlockManager
+    // (local disk, multi-block-per-file) ignores this flag because its files are local and the
+    // motivating S3 rate-limit problem does not apply. Callers targeting a HyBirdBlockManager
+    // should therefore understand that this flag only takes effect for blocks routed to the
+    // remote FileBlockManager.
+    bool skip_file_deletion = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.
