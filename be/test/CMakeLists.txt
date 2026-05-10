@@ -354,6 +354,15 @@ if (STARROCKS_JIT_ENABLE)
     set(EXEC_FILES ${EXEC_FILES} ./exprs/jit_cache_test.cpp)
 endif()
 
+add_library(be_test_cxa_throw_wrap INTERFACE)
+if (NOT APPLE)
+    target_sources(be_test_cxa_throw_wrap INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/base/cxa_throw_wrap.cpp)
+endif()
+
+function(target_link_be_test_cxa_throw_wrap TEST_TARGET)
+    target_link_libraries(${TEST_TARGET} be_test_cxa_throw_wrap)
+endfunction()
+
 add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
