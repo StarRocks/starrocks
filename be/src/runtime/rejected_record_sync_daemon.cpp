@@ -370,8 +370,8 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
             // silent kind.
             if (line_bytes > max_bytes) {
                 LOG(WARNING) << "RejectedRecordSyncDaemon: dropping oversized rejected-record line "
-                             << "(" << line_bytes << " bytes > rejected_record_sync_max_batch_bytes "
-                             << max_bytes << ") in " << f
+                             << "(" << line_bytes << " bytes > rejected_record_sync_max_batch_bytes " << max_bytes
+                             << ") in " << f
                              << "; one row will be lost. Inspect the producing load for very wide "
                                 "raw_record columns or raise the byte cap.";
                 _oversized_lines_dropped.fetch_add(1, std::memory_order_relaxed);

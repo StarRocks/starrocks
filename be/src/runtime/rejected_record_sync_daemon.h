@@ -94,9 +94,7 @@ public:
     // raw_record payloads (typically very large BINARY / VARCHAR columns)
     // and either raise `rejected_record_sync_max_batch_bytes` or trim those
     // columns before they reach the writer.
-    int64_t oversized_lines_dropped() const {
-        return _oversized_lines_dropped.load(std::memory_order_relaxed);
-    }
+    int64_t oversized_lines_dropped() const { return _oversized_lines_dropped.load(std::memory_order_relaxed); }
     // Running total of bytes pushed to the FE via successful posts.
     // Useful for dashboards that need to size up the volume of
     // rejected-row traffic a cluster produces.
