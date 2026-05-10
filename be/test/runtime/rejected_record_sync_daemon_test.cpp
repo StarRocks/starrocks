@@ -982,6 +982,62 @@ TEST(RejectedRecordSyncDaemonProcessFilesTest, ByteCapSplitsLongLines) {
     EXPECT_FALSE(std::filesystem::exists(path));
 }
 
+TEST(RejectedRecordSyncDaemonProcessFilesTest, OversizedLineDroppedNotBlocked) {
+    // A single line larger than max_bytes used to bypass the cap (the
+    // "commit before append" guard was gated on batch_rows > 0, so the
+    // first line of a batch could be arbitrarily large) and would then
+    // make the FE Stream Load reject the entire batch. The file would
+    // be left on disk for retry, and the next tick would re-read the
+    // same oversized line and fail again -- effectively blocking every
+    // subsequent well-formed row in the same file until GC drops the
+    // whole file at the retention boundary. Now the daemon drops the
+    // oversized line, bumps a metric, and keeps streaming the rest.
+    TempDir dir;
+    std::string path = dir.path() / "mixed.jsonl";
+    {
+        std::ofstream f(path);
+        f << "{\"id\":\"small1\"}\n";
+        f << std::string(500, 'X') << "\n"; // oversized: 501 bytes > max_bytes=200
+        f << "{\"id\":\"small2\"}\n";
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, std::numeric_limits<int64_t>::max(), /*max_bytes=*/200);
+
+    // Both small rows should reach a commit; the oversized row is
+    // dropped silently from the PUT but visibly via the metric.
+    EXPECT_EQ(1, daemon.oversized_lines_dropped());
+    ASSERT_FALSE(daemon.captured_payloads().empty());
+    std::string all_payloads;
+    for (const auto& p : daemon.captured_payloads()) all_payloads += p;
+    EXPECT_NE(std::string::npos, all_payloads.find("small1"));
+    EXPECT_NE(std::string::npos, all_payloads.find("small2"));
+    // The oversized line itself must NOT have been streamed.
+    EXPECT_EQ(std::string::npos, all_payloads.find(std::string(500, 'X')));
+    // File deletion happens after a successful commit, so the file is
+    // gone -- the small lines did go through.
+    EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, OnlyOversizedLineLeavesFileEmpty) {
+    // Edge: a file containing only an oversized line should still be
+    // deleted (no rows committed but no rows pending either) -- otherwise
+    // the file would loop forever in retry. This pins down the contract:
+    // file lifecycle is "all-readable-lines-handled", not "any-line-PUT".
+    TempDir dir;
+    std::string path = dir.path() / "huge_only.jsonl";
+    {
+        std::ofstream f(path);
+        f << std::string(500, 'X') << "\n";
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, std::numeric_limits<int64_t>::max(), /*max_bytes=*/200);
+
+    EXPECT_EQ(1, daemon.oversized_lines_dropped());
+    // No PUT was issued (nothing to send) but file was consumed.
+    EXPECT_TRUE(daemon.captured_payloads().empty());
+    EXPECT_FALSE(std::filesystem::exists(path));
+}
+
 // ===========================================================================
 // collect_jsonl: error path when root is a file, not a directory
 // recursive_directory_iterator on a regular file fails with an error code,

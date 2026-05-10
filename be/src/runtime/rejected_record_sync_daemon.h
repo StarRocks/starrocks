@@ -86,6 +86,17 @@ public:
     // Per-file transient open failures. These files are kept on disk so
     // the next tick can retry, rather than deleted outright.
     int64_t open_failures() const { return _open_failures.load(std::memory_order_relaxed); }
+    // Lines whose serialized size exceeds `rejected_record_sync_max_batch_bytes`
+    // and were therefore dropped during sync to keep them from blocking the
+    // rest of their file. Each increment represents one rejected row that
+    // never made it to `_statistics_.rejected_records`. Operators with a
+    // non-zero value should investigate the loads producing oversized
+    // raw_record payloads (typically very large BINARY / VARCHAR columns)
+    // and either raise `rejected_record_sync_max_batch_bytes` or trim those
+    // columns before they reach the writer.
+    int64_t oversized_lines_dropped() const {
+        return _oversized_lines_dropped.load(std::memory_order_relaxed);
+    }
     // Running total of bytes pushed to the FE via successful posts.
     // Useful for dashboards that need to size up the volume of
     // rejected-row traffic a cluster produces.
@@ -175,6 +186,7 @@ private:
     std::atomic<int64_t> _sync_failures{0};
     std::atomic<int64_t> _files_dropped_by_gc{0};
     std::atomic<int64_t> _open_failures{0};
+    std::atomic<int64_t> _oversized_lines_dropped{0};
     std::atomic<int64_t> _bytes_flushed{0};
     std::atomic<int64_t> _last_tick_duration_us{0};
     std::atomic<int64_t> _last_http_status{0};

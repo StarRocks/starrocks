@@ -357,6 +357,26 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
                 continue;
             }
             const int64_t line_bytes = static_cast<int64_t>(line.size()) + 1; // +1 for '\n'
+            // A single line that on its own exceeds the byte cap cannot be
+            // shipped at all -- the FE's `streaming_load_max_mb` is at most
+            // as permissive as `max_bytes`, so a PUT carrying just this line
+            // would still be rejected. If we instead let it through, the
+            // commit fails for the whole batch, the file is left for retry,
+            // and the next tick re-reads the same oversized line and fails
+            // again, blocking every other (well-formed) row in the same
+            // file forever. Drop the line, log a WARN, bump the metric, and
+            // keep going so the rest of the file can sync. This is data
+            // loss for that one row -- intentional and observable, not the
+            // silent kind.
+            if (line_bytes > max_bytes) {
+                LOG(WARNING) << "RejectedRecordSyncDaemon: dropping oversized rejected-record line "
+                             << "(" << line_bytes << " bytes > rejected_record_sync_max_batch_bytes "
+                             << max_bytes << ") in " << f
+                             << "; one row will be lost. Inspect the producing load for very wide "
+                                "raw_record columns or raise the byte cap.";
+                _oversized_lines_dropped.fetch_add(1, std::memory_order_relaxed);
+                continue;
+            }
             // Enforce the cap BEFORE appending. A fresh line that would push
             // the accumulator past max_rows or max_bytes commits the current
             // batch first, then joins the new one. This matters for two
