@@ -250,8 +250,6 @@ set(EXEC_FILES
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
-        ./geo/geo_types_test.cpp
-        ./geo/wkt_parse_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/http_metrics_test.cpp
         ./http/http_client_test.cpp
@@ -357,6 +355,15 @@ if (STARROCKS_JIT_ENABLE)
     set(EXEC_FILES ${EXEC_FILES} ./exprs/jit_cache_test.cpp)
 endif()
 
+add_library(be_test_cxa_throw_wrap INTERFACE)
+if (NOT APPLE)
+    target_sources(be_test_cxa_throw_wrap INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/base/cxa_throw_wrap.cpp)
+endif()
+
+function(target_link_be_test_cxa_throw_wrap TEST_TARGET)
+    target_link_libraries(${TEST_TARGET} be_test_cxa_throw_wrap)
+endfunction()
+
 add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
@@ -367,6 +374,7 @@ add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(http)
+add_subdirectory(geo)
 add_subdirectory(cache)
 add_subdirectory(spill)
 add_subdirectory(staros_integration)
