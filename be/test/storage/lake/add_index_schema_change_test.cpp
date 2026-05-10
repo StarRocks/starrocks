@@ -17,7 +17,12 @@
 #include <gtest/gtest.h>
 
 #include "gen_cpp/AgentService_types.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/schema_change.h"
+#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/segment.h"
 
 #include <memory>
 #include <string>
@@ -481,6 +486,90 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_unknown_column) {
     Status st = handler.process_alter_tablet(request);
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+}
+
+// Stub IDG loader returning a caller-provided list. Used by the read-side
+// tests below to point ColumnReader::new_bitmap_index_iterator at the
+// .idx file produced by AddIndexSchemaChange.
+class StubIdgLoaderForReadPath : public IndexDeltaGroupLoader {
+public:
+    explicit StubIdgLoaderForReadPath(IndexDeltaGroupList list) : _list(std::move(list)) {}
+    Status load(const TabletSegmentId&, int64_t, IndexDeltaGroupList* out) override {
+        *out = _list;
+        return Status::OK();
+    }
+
+private:
+    IndexDeltaGroupList _list;
+};
+
+// End-to-end read-side coverage for column_reader.cpp's IDG-backed bitmap
+// iterator path: produce a real .idx file via AddIndexSchemaChange, then
+// open ColumnReader::new_bitmap_index_iterator with idg_loader pointing at
+// that entry. Exercises lines 369-394 (the idg_loader != nullptr branch in
+// new_bitmap_index_iterator) plus lines 397-453 (the
+// _new_idg_backed_bitmap_index_iterator helper that opens the .idx file
+// and constructs an OwningBitmapIndexIterator).
+TEST_F(AddIndexSchemaChangeTest, idg_backed_bitmap_iterator_smoke) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+
+    // 1. Build BITMAP IDG entry on c1 via the fast path, capturing the entry.
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& seg_entry = op.segment_entries(0);
+    ASSERT_GT(seg_entry.entry().file_size(), 0);
+
+    // 2. Reload the published metadata so we can reach the segment file the
+    //    rowset writes pointed at, then open the segment.
+    auto vt2 = versioned_at(base_tablet_id, version);
+    auto meta = vt2.metadata();
+    ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
+    const auto& rowset = meta->rowsets(0);
+    ASSERT_GT(rowset.segments_size(), 0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, rowset.segments(0))};
+    if (rowset.segment_size_size() > 0) seg_fi.size = rowset.segment_size(0);
+    size_t footer_hint = 16 * 1024;
+    ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                LakeIOOptions{.fill_data_cache = false},
+                                                                /*fill_meta_cache=*/true, base_schema));
+    auto* reader_const = segment->column_with_uid(_c1_uid);
+    ASSERT_TRUE(reader_const != nullptr);
+
+    // 3. Wire IDG loader to surface the .idx file we just produced.
+    IndexDeltaGroupEntry entry;
+    entry.index_file = seg_entry.entry().index_file();
+    entry.version = seg_entry.entry().version();
+    entry.keys.push_back({_c1_uid, IndexType::BITMAP});
+    auto loader = std::make_shared<StubIdgLoaderForReadPath>(IndexDeltaGroupList{entry});
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+    ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(seg_fi));
+    IndexReadOptions ix_opts;
+    ix_opts.read_file = rfile->stream().get();
+    ix_opts.stats = &stats;
+    ix_opts.use_page_cache = false;
+    ix_opts.idg_loader = loader;
+    ix_opts.tablet_id = base_tablet_id;
+    ix_opts.segment_id = 0;
+    ix_opts.query_version = version;
+    ix_opts.col_unique_id = _c1_uid;
+
+    // 4. Construct the IDG-backed iterator. Just opening it exercises the
+    //    helper; we don't need to drive a query.
+    BitmapIndexIterator* iter = nullptr;
+    auto* reader = const_cast<ColumnReader*>(reader_const);
+    ASSERT_OK(reader->new_bitmap_index_iterator(ix_opts, &iter));
+    ASSERT_TRUE(iter != nullptr);
+    delete iter;
 }
 
 // Build BITMAP and NGRAMBF together on the same .idx. Both keys end up on
