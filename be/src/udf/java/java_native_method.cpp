@@ -26,7 +26,9 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks {
 
@@ -137,6 +139,12 @@ public:
             return Status::OK();
         } else if constexpr (std::is_same_v<T, double>) {
             *_result = TYPE_DOUBLE;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, DateValue>) {
+            *_result = TYPE_DATE;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, TimestampValue>) {
+            *_result = TYPE_DATETIME;
             return Status::OK();
         }
         return Status::NotSupported("unsupported UDF type");

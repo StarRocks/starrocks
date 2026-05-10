@@ -139,6 +139,131 @@ TEST_F(JavaNativeMethodTest, get_column_logical_type) {
         ASSERT_EQ(TYPE_MAP, JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c.get())));
     }
 }
+
+// DECIMAL columns are FixedLengthColumnBase but not FixedLengthColumn, so the
+// generic visitor overload doesn't match. The dedicated DECIMAL specialization
+// below has to map int32/int64/int128/int256 -> DECIMAL32/64/128/256.
+TEST_F(JavaNativeMethodTest, get_column_logical_type_decimal) {
+    auto env = getJNIEnv();
+    struct Case {
+        LogicalType type;
+        int precision;
+        int scale;
+    };
+    std::vector<Case> decimal_cases = {
+            {TYPE_DECIMAL32, 9, 2},
+            {TYPE_DECIMAL64, 18, 4},
+            {TYPE_DECIMAL128, 38, 10},
+            {TYPE_DECIMAL256, 76, 10},
+    };
+    for (const auto& c : decimal_cases) {
+        auto desc = TypeDescriptor::create_decimalv3_type(c.type, c.precision, c.scale);
+        auto c1 = ColumnHelper::create_column(desc, true);
+        auto c2 = ColumnHelper::create_column(desc, false);
+        auto logical_type_1 = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c1.get()));
+        auto logical_type_2 = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c2.get()));
+        ASSERT_EQ(c.type, logical_type_1);
+        ASSERT_EQ(c.type, logical_type_2);
+    }
+}
+
+// DateColumn / TimestampColumn are FixedLengthColumn<DateValue> and
+// FixedLengthColumn<TimestampValue>. Without explicit handling in the visitor's
+// FixedLengthColumn<T> template, the call falls through to "unsupported UDF
+// type", which is the bug fixed in this commit. Make sure both shapes resolve.
+TEST_F(JavaNativeMethodTest, get_column_logical_type_date_datetime) {
+    auto env = getJNIEnv();
+    for (auto type : {TYPE_DATE, TYPE_DATETIME}) {
+        for (bool nullable : {true, false}) {
+            auto col = ColumnHelper::create_column(TypeDescriptor(type), nullable);
+            auto t = JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(col.get()));
+            EXPECT_EQ(type, t) << "type=" << type << " nullable=" << nullable;
+        }
+    }
+}
+
+// ARRAY<DATE> / ARRAY<DATETIME>: the Java side recurses into the element column
+// to dispatch the per-row write, so the element column must also resolve.
+TEST_F(JavaNativeMethodTest, get_column_logical_type_array_of_date_datetime) {
+    auto env = getJNIEnv();
+    for (auto type : {TYPE_DATE, TYPE_DATETIME}) {
+        TypeDescriptor array_type(TYPE_ARRAY);
+        array_type.children.emplace_back(type);
+        auto col = ColumnHelper::create_column(array_type, true);
+        EXPECT_EQ(TYPE_ARRAY,
+                  JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(col.get())));
+
+        const auto* nullable = down_cast<const NullableColumn*>(col.get());
+        const auto* array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
+        const auto* elements = array_col->elements_column().get();
+        EXPECT_EQ(type, JavaNativeMethods::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(elements)))
+                << "elements of ARRAY<" << type << ">";
+    }
+}
+
+// getAddrs on a DATE / DATETIME column returns the underlying int32 / int64 raw
+// buffer that the Java helper memcpys into. Verify the data pointer matches the
+// FixedLengthColumn raw storage.
+TEST_F(JavaNativeMethodTest, get_addrs_date_datetime) {
+    auto env = getJNIEnv();
+    {
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+        col->resize(8);
+        auto arr = JavaNativeMethods::getAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+        ASSERT_NE(arr, nullptr);
+        jlong results[4];
+        env->GetLongArrayRegion(arr, 0, 4, results);
+        const auto* nullable = down_cast<const NullableColumn*>(col.get());
+        const auto* date_col = down_cast<const DateColumn*>(nullable->data_column().get());
+        EXPECT_EQ(results[0], (jlong)nullable->null_column_data().data());
+        EXPECT_EQ(results[1], (jlong)date_col->immutable_data().data());
+        env->DeleteLocalRef(arr);
+    }
+    {
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+        col->resize(8);
+        auto arr = JavaNativeMethods::getAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
+        ASSERT_NE(arr, nullptr);
+        jlong results[4];
+        env->GetLongArrayRegion(arr, 0, 4, results);
+        const auto* nullable = down_cast<const NullableColumn*>(col.get());
+        const auto* ts_col = down_cast<const TimestampColumn*>(nullable->data_column().get());
+        EXPECT_EQ(results[0], (jlong)nullable->null_column_data().data());
+        EXPECT_EQ(results[1], (jlong)ts_col->immutable_data().data());
+        env->DeleteLocalRef(arr);
+    }
+}
+
+// getAddrs on DECIMAL columns must hand back data, precision, scale (in addition to
+// the null buffer), matching the DECIMAL-aware specialization in GetColumnAddrVisitor.
+TEST_F(JavaNativeMethodTest, get_addrs_decimal) {
+    auto env = getJNIEnv();
+    struct Case {
+        LogicalType type;
+        int precision;
+        int scale;
+    };
+    std::vector<Case> decimal_cases = {
+            {TYPE_DECIMAL32, 9, 2},
+            {TYPE_DECIMAL64, 18, 4},
+            {TYPE_DECIMAL128, 38, 10},
+            {TYPE_DECIMAL256, 76, 10},
+    };
+    for (const auto& c : decimal_cases) {
+        auto desc = TypeDescriptor::create_decimalv3_type(c.type, c.precision, c.scale);
+        auto column = ColumnHelper::create_column(desc, true);
+        column->resize(4);
+        auto arr = JavaNativeMethods::getAddrs(env, nullptr, reinterpret_cast<size_t>(column.get()));
+        ASSERT_NE(arr, nullptr);
+        jlong results[4];
+        env->GetLongArrayRegion(arr, 0, 4, results);
+        const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+        ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
+        ASSERT_EQ(results[2], static_cast<jlong>(c.precision));
+        ASSERT_EQ(results[3], static_cast<jlong>(c.scale));
+        env->DeleteLocalRef(arr);
+    }
+}
 TEST_F(JavaNativeMethodTest, resize) {
     auto env = getJNIEnv();
     // scalar type test

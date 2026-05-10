@@ -196,6 +196,18 @@ public:
     Slice sliceVal(jstring jstr, std::string* buffer);
     jclass string_clazz() { return _string_class; }
     jclass big_decimal_class() { return _big_decimal_class; }
+    jclass local_date_class() { return _local_date_class; }
+    jclass local_datetime_class() { return _local_datetime_class; }
+
+    // Box/unbox a StarRocks DateValue (int32 Julian day) as a java.time.LocalDate.
+    // Round-trips StarRocks's internal Julian-day encoding.
+    jobject newLocalDate(int32_t julian);
+    int32_t valLocalDate(jobject obj);
+
+    // Box/unbox a StarRocks TimestampValue (packed int64: julian << 40 | usOfDay)
+    // as a java.time.LocalDateTime.
+    jobject newLocalDateTime(int64_t packed_timestamp);
+    int64_t valLocalDateTime(jobject obj);
     // replace '.' as '/'
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);
@@ -232,10 +244,18 @@ private:
     jclass _jarrays_class;
     jclass _exception_util_class;
     jclass _big_decimal_class;
+    jclass _local_date_class;
+    jclass _local_datetime_class;
 
     jmethodID _string_construct_with_bytes;
     jmethodID _big_decimal_ctor_string;
     jmethodID _big_decimal_value_of_ll;
+    // java.time.LocalDate.ofEpochDay(long) / java.time.LocalDate.toEpochDay()
+    jmethodID _local_date_of_epoch_day;
+    jmethodID _local_date_to_epoch_day;
+    // UDFHelper.localDateTimeFromPackedTimestamp(long) / packedTimestampFromLocalDateTime(LocalDateTime)
+    jmethodID _local_datetime_from_packed;
+    jmethodID _local_datetime_to_packed;
 
     ListMeta _list_meta;
     MapMeta _map_meta;

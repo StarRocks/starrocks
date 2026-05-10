@@ -563,6 +563,8 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 | DOUBLE                                         | java.lang.Double      |
 | STRING/VARCHAR                                 | java.lang.String      |
 | DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| DATE                                           | java.time.LocalDate   |
+| DATETIME                                       | java.time.LocalDateTime |
 | ARRAY                                          | java.util.List        |
 | Map                                            | java.util.Map         |
 
