@@ -138,9 +138,8 @@ private:
     using ThreadPoolMember = std::unique_ptr<ThreadPool> Impl::*;
 
     struct ThreadPoolSpec {
-        TTaskType::type task_type;
-        ThreadPoolMember pool;
-        ThreadPoolResizePolicy resize_policy;
+        ThreadPoolMember pool = nullptr;
+        ThreadPoolResizePolicy resize_policy = ThreadPoolResizePolicy::RAW;
     };
 
     const ThreadPoolSpec* get_thread_pool_spec(int type) const;
@@ -713,40 +712,33 @@ void AgentServer::Impl::stop_task_worker_pool(TaskWorkerType type) const {
 }
 
 const AgentServer::Impl::ThreadPoolSpec* AgentServer::Impl::get_thread_pool_spec(int type) const {
-    static constexpr ThreadPoolSpec kThreadPoolSpecs[] = {
-            {TTaskType::PUBLISH_VERSION, &Impl::_thread_pool_publish_version, ThreadPoolResizePolicy::RAW},
-            {TTaskType::CLONE, &Impl::_thread_pool_clone, ThreadPoolResizePolicy::CLONE_PER_STORE_PATH},
-            {TTaskType::DROP, &Impl::_thread_pool_drop, ThreadPoolResizePolicy::RAW},
-            {TTaskType::CREATE, &Impl::_thread_pool_create_tablet, ThreadPoolResizePolicy::RAW},
-            {TTaskType::STORAGE_MEDIUM_MIGRATE, &Impl::_thread_pool_storage_medium_migrate,
-             ThreadPoolResizePolicy::RAW},
-            {TTaskType::MAKE_SNAPSHOT, &Impl::_thread_pool_make_snapshot, ThreadPoolResizePolicy::RAW},
-            {TTaskType::RELEASE_SNAPSHOT, &Impl::_thread_pool_release_snapshot, ThreadPoolResizePolicy::RAW},
-            {TTaskType::CHECK_CONSISTENCY, &Impl::_thread_pool_check_consistency, ThreadPoolResizePolicy::RAW},
-            {TTaskType::COMPACTION, &Impl::_thread_pool_compaction, ThreadPoolResizePolicy::RAW},
-            {TTaskType::COMPACTION_CONTROL, &Impl::_thread_pool_compaction_control, ThreadPoolResizePolicy::RAW},
-            {TTaskType::UPDATE_SCHEMA, &Impl::_thread_pool_update_schema, ThreadPoolResizePolicy::RAW},
-            {TTaskType::UPLOAD, &Impl::_thread_pool_upload, ThreadPoolResizePolicy::CPU_SCALED},
-            {TTaskType::DOWNLOAD, &Impl::_thread_pool_download, ThreadPoolResizePolicy::CPU_SCALED},
-            {TTaskType::MOVE, &Impl::_thread_pool_move_dir, ThreadPoolResizePolicy::CPU_SCALED},
-            {TTaskType::UPDATE_TABLET_META_INFO, &Impl::_thread_pool_update_tablet_meta_info,
-             ThreadPoolResizePolicy::RAW},
-            {TTaskType::ALTER, &Impl::_thread_pool_alter_tablet, ThreadPoolResizePolicy::RAW},
-            {TTaskType::CLEAR_TRANSACTION_TASK, &Impl::_thread_pool_clear_transaction, ThreadPoolResizePolicy::RAW},
-            {TTaskType::DROP_AUTO_INCREMENT_MAP, &Impl::_thread_pool_drop_auto_increment_map,
-             ThreadPoolResizePolicy::RAW},
-            {TTaskType::REMOTE_SNAPSHOT, &Impl::_thread_pool_remote_snapshot,
-             ThreadPoolResizePolicy::REPLICATION_CPU_SCALED},
-            {TTaskType::REPLICATE_SNAPSHOT, &Impl::_thread_pool_replicate_snapshot,
-             ThreadPoolResizePolicy::REPLICATION_CPU_SCALED},
+    static const phmap::flat_hash_map<int, ThreadPoolSpec> kThreadPoolSpecs = {
+            {TTaskType::CREATE, {&Impl::_thread_pool_create_tablet}},
+            {TTaskType::DROP, {&Impl::_thread_pool_drop}},
+            {TTaskType::CLONE, {&Impl::_thread_pool_clone, ThreadPoolResizePolicy::CLONE_PER_STORE_PATH}},
+            {TTaskType::STORAGE_MEDIUM_MIGRATE, {&Impl::_thread_pool_storage_medium_migrate}},
+            {TTaskType::MAKE_SNAPSHOT, {&Impl::_thread_pool_make_snapshot}},
+            {TTaskType::RELEASE_SNAPSHOT, {&Impl::_thread_pool_release_snapshot}},
+            {TTaskType::CHECK_CONSISTENCY, {&Impl::_thread_pool_check_consistency}},
+            {TTaskType::UPLOAD, {&Impl::_thread_pool_upload, ThreadPoolResizePolicy::CPU_SCALED}},
+            {TTaskType::DOWNLOAD, {&Impl::_thread_pool_download, ThreadPoolResizePolicy::CPU_SCALED}},
+            {TTaskType::MOVE, {&Impl::_thread_pool_move_dir, ThreadPoolResizePolicy::CPU_SCALED}},
+            {TTaskType::PUBLISH_VERSION, {&Impl::_thread_pool_publish_version}},
+            {TTaskType::CLEAR_TRANSACTION_TASK, {&Impl::_thread_pool_clear_transaction}},
+            {TTaskType::UPDATE_TABLET_META_INFO, {&Impl::_thread_pool_update_tablet_meta_info}},
+            {TTaskType::ALTER, {&Impl::_thread_pool_alter_tablet}},
+            {TTaskType::DROP_AUTO_INCREMENT_MAP, {&Impl::_thread_pool_drop_auto_increment_map}},
+            {TTaskType::COMPACTION, {&Impl::_thread_pool_compaction}},
+            {TTaskType::REMOTE_SNAPSHOT,
+             {&Impl::_thread_pool_remote_snapshot, ThreadPoolResizePolicy::REPLICATION_CPU_SCALED}},
+            {TTaskType::REPLICATE_SNAPSHOT,
+             {&Impl::_thread_pool_replicate_snapshot, ThreadPoolResizePolicy::REPLICATION_CPU_SCALED}},
+            {TTaskType::UPDATE_SCHEMA, {&Impl::_thread_pool_update_schema}},
+            {TTaskType::COMPACTION_CONTROL, {&Impl::_thread_pool_compaction_control}},
     };
 
-    for (const auto& spec : kThreadPoolSpecs) {
-        if (static_cast<int>(spec.task_type) == type) {
-            return &spec;
-        }
-    }
-    return nullptr;
+    auto iter = kThreadPoolSpecs.find(type);
+    return iter == kThreadPoolSpecs.end() ? nullptr : &iter->second;
 }
 
 ThreadPool* AgentServer::Impl::thread_pool_from_spec(const ThreadPoolSpec& spec) const {
