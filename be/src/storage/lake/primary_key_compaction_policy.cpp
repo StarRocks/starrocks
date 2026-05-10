@@ -220,24 +220,59 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     // compact since their inherent IO overhead can only be reduced by compaction.
     // Levels containing deletes are also allowed, since delete vectors must eventually
     // be applied/cleaned up via compaction.
+    //
+    // PR-1' (#72411 design fix): augment the binary level_score gate with two graduated
+    // signals so the gate doesn't get stuck on partitions whose read amplification keeps
+    // climbing while compaction work itself is uneconomical:
+    //   - benefit/cost ratio: estimated segment-count drop per MB rewritten. If the
+    //     ratio is decent (>= lake_pk_compaction_min_benefit_cost_ratio), allow the
+    //     compaction even when the level score is below the absolute threshold.
+    //   - read-pressure emergency override: if the tablet's overall read pressure
+    //     (segment count across all rowsets) exceeds lake_pk_compaction_emergency_score,
+    //     bypass the gate entirely. Hot partitions need to keep up regardless of
+    //     write-amplification cost.
     if (pick_level_ptr->score < config::lake_pk_compaction_min_level_score) {
         bool has_overlap = false;
         bool has_deletes = false;
+        double estimated_benefit_segs = 0.0;
+        double estimated_io_mb = 0.0;
         auto rs_copy = pick_level_ptr->rowsets;
         while (!rs_copy.empty()) {
             const auto& r = rs_copy.top();
             if (r.multi_segment_with_overlapped()) has_overlap = true;
             if (r.delete_bytes() > 0) has_deletes = true;
-            if (has_overlap && has_deletes) break;
+            estimated_benefit_segs += static_cast<double>(r.rowset_meta_ptr->segments_size());
+            estimated_io_mb += r.read_bytes() / (1024.0 * 1024.0);
             rs_copy.pop();
         }
         if (!has_overlap && !has_deletes) {
-            VLOG(2) << strings::Substitute(
-                    "lake PK compaction skipped: tablet=$0 level_score=$1 < threshold=$2 "
-                    "(rowsets=$3, no overlap, no deletes — likely sparse mid-tier)",
-                    tablet_metadata->id(), pick_level_ptr->score, config::lake_pk_compaction_min_level_score,
-                    pick_level_ptr->rowsets.size());
-            return rowset_indexes; // empty -> no compaction this round
+            // Tablet-level read pressure: sum of every rowset's score across all
+            // levels (not just the picked one). High pressure means many fragmented
+            // rowsets, so even uneconomical compactions are worth running to keep
+            // read amplification bounded.
+            double tablet_read_pressure = 0.0;
+            for (const auto& rc : rowset_vec) {
+                tablet_read_pressure += rc.score;
+            }
+            const bool emergency_override =
+                    config::lake_pk_compaction_emergency_score > 0.0 &&
+                    tablet_read_pressure >= config::lake_pk_compaction_emergency_score;
+            const double benefit_cost_ratio =
+                    estimated_benefit_segs / std::max(estimated_io_mb, 1.0);
+            const bool ratio_ok =
+                    config::lake_pk_compaction_min_benefit_cost_ratio > 0.0 &&
+                    benefit_cost_ratio >= config::lake_pk_compaction_min_benefit_cost_ratio;
+            if (!emergency_override && !ratio_ok) {
+                VLOG(2) << strings::Substitute(
+                        "lake PK compaction skipped: tablet=$0 level_score=$1 < threshold=$2 "
+                        "tablet_read_pressure=$3 (emergency=$4) "
+                        "benefit_cost_ratio=$5 (min_ratio=$6) — sparse mid-tier",
+                        tablet_metadata->id(), pick_level_ptr->score,
+                        config::lake_pk_compaction_min_level_score,
+                        tablet_read_pressure, config::lake_pk_compaction_emergency_score,
+                        benefit_cost_ratio, config::lake_pk_compaction_min_benefit_cost_ratio);
+                return rowset_indexes; // empty -> no compaction this round
+            }
         }
     }
 

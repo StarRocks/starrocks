@@ -170,6 +170,8 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // suppress sparse mid-tier base merges that re-write GBs of data with low file-count
 // reduction. Levels containing overlapped rowsets or deletes always compact regardless.
 CONF_mDouble(lake_pk_compaction_min_level_score, "0.0");
+CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.0");
+CONF_mDouble(lake_pk_compaction_emergency_score, "0.0");
 
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");

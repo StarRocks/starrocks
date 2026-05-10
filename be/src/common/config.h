@@ -1350,6 +1350,18 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // suppress sparse mid-tier base merges that re-write GBs of data with low file-count
 // reduction. Levels containing overlapped rowsets or deletes always compact regardless.
 CONF_mDouble(lake_pk_compaction_min_level_score, "0.0");
+// PR-1' (#72411 design fix): minimum benefit/cost ratio (segments-saved per MB rewritten)
+// for accepting a sparse-mid-tier compaction pick. Together with the read-pressure
+// emergency override below, this replaces the binary `min_level_score` gate with a
+// graduated decision: low-pressure partitions skip uneconomical rewrites, high-pressure
+// ones bypass the gate to keep up. Default 0.0 = gate disabled (legacy + min_level_score
+// alone). Recommended 0.005 once production-validated.
+CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.0");
+// PR-1' read-pressure emergency override. When the partition's read_pressure_score
+// (segment count) exceeds this threshold, the gate auto-relaxes proportionally so that
+// hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
+// disable the override (gate always applies). Default 0 keeps legacy behavior.
+CONF_mDouble(lake_pk_compaction_emergency_score, "0.0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
