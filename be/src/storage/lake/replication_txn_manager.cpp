@@ -155,7 +155,8 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
     return tablet.put_txn_slog(txn_log);
 }
 
-Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request) {
+Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request,
+                                                 ThreadPool* replicate_file_thread_pool) {
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
     }
@@ -183,7 +184,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
     ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(request.visible_version));
 
     if (request.src_tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        auto status = _lake_replication_txn_manager->replicate_lake_remote_storage(request);
+        auto status = _lake_replication_txn_manager->replicate_lake_remote_storage(request, replicate_file_thread_pool);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to replicate lake remote file, tablet_id: " << request.tablet_id
                          << ", txn_id: " << request.transaction_id << ", src_tablet_id: " << request.src_tablet_id

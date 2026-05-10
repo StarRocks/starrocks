@@ -619,11 +619,14 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                     TTaskType::REMOTE_SNAPSHOT, all_tasks, get_thread_pool(TTaskType::REMOTE_SNAPSHOT),
                     &TAgentTaskRequest::remote_snapshot_req, run_remote_snapshot_task, &ret_st, _exec_env);
             break;
-        case TTaskType::REPLICATE_SNAPSHOT:
+        case TTaskType::REPLICATE_SNAPSHOT: {
+            auto* replicate_snapshot_pool = get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
             submit_task_batch<ReplicateSnapshotAgentTaskRequest>(
-                    TTaskType::REPLICATE_SNAPSHOT, all_tasks, get_thread_pool(TTaskType::REPLICATE_SNAPSHOT),
-                    &TAgentTaskRequest::replicate_snapshot_req, run_replicate_snapshot_task, &ret_st, _exec_env);
+                    TTaskType::REPLICATE_SNAPSHOT, all_tasks, replicate_snapshot_pool,
+                    &TAgentTaskRequest::replicate_snapshot_req, run_replicate_snapshot_task, &ret_st, _exec_env,
+                    replicate_snapshot_pool);
             break;
+        }
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
             // should not run here

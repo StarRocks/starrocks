@@ -30,7 +30,6 @@ src/service/service_be/starrocks_be.cpp
 src/storage/lake/column_mode_partial_update_handler.cpp
 src/storage/lake/compaction_policy.cpp
 src/storage/lake/lake_persistent_index.cpp
-src/storage/lake/lake_replication_txn_manager.cpp
 src/storage/lake/local_pk_index_manager.cpp
 src/storage/lake/metacache.cpp
 src/storage/lake/rowset.cpp

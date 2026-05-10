@@ -300,7 +300,7 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_no_missing_versions) 
     // virtual tablet
     request.__set_virtual_tablet_id(_virtual_tablet_id);
 
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
     EXPECT_FALSE(status.ok());
 }
 
@@ -900,7 +900,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure)
     });
 
     auto request = build_request(true /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_corruption()) << status;
@@ -916,7 +916,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_full_path_fs_creation_failure) 
     });
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_corruption()) << status;
@@ -934,7 +934,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_meta_build_failure) 
     });
 
     auto request = build_request(true /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     // The filesystem creation succeeds (not nullptr), but reading tablet metadata
     // via the mock filesystem will fail. The error should NOT be
@@ -955,7 +955,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_full_path_meta_build_failure) {
     });
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     // The filesystem creation succeeds (not nullptr), but reading tablet metadata
     // via the mock filesystem will fail. The error should NOT be
@@ -970,7 +970,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_non_s3_type_rejected
     // Manually set a non-S3 full path (e.g., HDFS path)
     request.__set_src_partition_full_path("hdfs://namenode/path/to/data");
 
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_invalid_argument()) << status;
@@ -1013,7 +1013,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
     ASSERT_TRUE(update_master_info(info));
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     // Restore original master info
     (void)update_master_info(original_master_info);
@@ -1073,7 +1073,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
                                           });
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     // Restore original master info
     (void)update_master_info(original_master_info);
@@ -1125,7 +1125,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
                                           [&](void*) { before_copy_invoked = true; });
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     // Restore original master info
     (void)update_master_info(original_master_info);
@@ -1198,7 +1198,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_o
     ASSERT_TRUE(update_master_info(info));
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     (void)update_master_info(original_master_info);
 
@@ -1252,14 +1252,13 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_ope
     Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
     config::lake_replication_parallel_copy_min_file_count = 2;
 
-    // Create thread pool and assign to replication manager
+    // Create thread pool and pass it to replication manager
     std::unique_ptr<ThreadPool> pool;
     ASSERT_OK(ThreadPoolBuilder("lake_repl_test_pool")
                       .set_min_threads(2)
                       .set_max_threads(4)
                       .set_max_queue_size(16)
                       .build(&pool));
-    _replication_txn_manager->_replicate_file_thread_pool = pool.get();
 
     auto original_master_info = get_master_info();
     TMasterInfo info = original_master_info;
@@ -1267,10 +1266,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_ope
     ASSERT_TRUE(update_master_info(info));
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, pool.get());
 
     (void)update_master_info(original_master_info);
-    _replication_txn_manager->_replicate_file_thread_pool = nullptr;
 
     ASSERT_OK(status);
     pool->shutdown();
@@ -1312,7 +1310,6 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
                       .set_max_threads(4)
                       .set_max_queue_size(16)
                       .build(&pool));
-    _replication_txn_manager->_replicate_file_thread_pool = pool.get();
 
     auto original_master_info = get_master_info();
     TMasterInfo info = original_master_info;
@@ -1320,10 +1317,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
     ASSERT_TRUE(update_master_info(info));
 
     auto request = build_request(false /* with_full_path */);
-    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, pool.get());
 
     (void)update_master_info(original_master_info);
-    _replication_txn_manager->_replicate_file_thread_pool = nullptr;
 
     // Parallel copy should fail because download_lake_segment_file fails with mock FS
     EXPECT_FALSE(status.ok());
