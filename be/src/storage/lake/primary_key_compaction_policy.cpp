@@ -254,23 +254,19 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             for (const auto& rc : rowset_vec) {
                 tablet_read_pressure += rc.score;
             }
-            const bool emergency_override =
-                    config::lake_pk_compaction_emergency_score > 0.0 &&
-                    tablet_read_pressure >= config::lake_pk_compaction_emergency_score;
-            const double benefit_cost_ratio =
-                    estimated_benefit_segs / std::max(estimated_io_mb, 1.0);
-            const bool ratio_ok =
-                    config::lake_pk_compaction_min_benefit_cost_ratio > 0.0 &&
-                    benefit_cost_ratio >= config::lake_pk_compaction_min_benefit_cost_ratio;
+            const bool emergency_override = config::lake_pk_compaction_emergency_score > 0.0 &&
+                                            tablet_read_pressure >= config::lake_pk_compaction_emergency_score;
+            const double benefit_cost_ratio = estimated_benefit_segs / std::max(estimated_io_mb, 1.0);
+            const bool ratio_ok = config::lake_pk_compaction_min_benefit_cost_ratio > 0.0 &&
+                                  benefit_cost_ratio >= config::lake_pk_compaction_min_benefit_cost_ratio;
             if (!emergency_override && !ratio_ok) {
                 VLOG(2) << strings::Substitute(
                         "lake PK compaction skipped: tablet=$0 level_score=$1 < threshold=$2 "
                         "tablet_read_pressure=$3 (emergency=$4) "
                         "benefit_cost_ratio=$5 (min_ratio=$6) — sparse mid-tier",
-                        tablet_metadata->id(), pick_level_ptr->score,
-                        config::lake_pk_compaction_min_level_score,
-                        tablet_read_pressure, config::lake_pk_compaction_emergency_score,
-                        benefit_cost_ratio, config::lake_pk_compaction_min_benefit_cost_ratio);
+                        tablet_metadata->id(), pick_level_ptr->score, config::lake_pk_compaction_min_level_score,
+                        tablet_read_pressure, config::lake_pk_compaction_emergency_score, benefit_cost_ratio,
+                        config::lake_pk_compaction_min_benefit_cost_ratio);
                 return rowset_indexes; // empty -> no compaction this round
             }
         }
