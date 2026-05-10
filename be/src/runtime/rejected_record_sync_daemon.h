@@ -133,10 +133,12 @@ protected:
     virtual Status flush_batch(const std::vector<std::string>& files);
 
     // Post a raw JSON Lines payload to the FE `_statistics_.rejected_records`
-    // Stream Load endpoint with `enable_merge_commit=true`. Virtual so
-    // tests can substitute a capturing stub. NOTE: current implementation
-    // returns NotSupported -- the FE Stream Load client wiring is deferred
-    // to a follow-up commit.
+    // Stream Load endpoint with `enable_merge_commit=true`. Issues a PUT
+    // through HttpClient with the internal-trust token header (gated to
+    // this single system table on the FE side) so the daemon never needs
+    // a user-facing credential. Returns OK iff the FE responds with a
+    // successful Stream Load JSON status; otherwise InternalError. Virtual
+    // so tests can substitute a capturing stub.
     virtual Status post_to_stream_load(const std::string& payload);
 
     // Delete files older than rejected_record_local_retention_hours that
