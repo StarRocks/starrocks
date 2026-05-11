@@ -19,7 +19,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
@@ -74,7 +73,8 @@ public class IcebergRowDeltaSink extends DataSink {
     private final String fileFormat;
     private final String tableLocation;
     private final String dataLocation;
-    private final String compressionType;
+    private final String dataCompressionType;
+    private final String deleteCompressionType;
     private final long targetMaxFileSize;
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
@@ -98,10 +98,14 @@ public class IcebergRowDeltaSink extends DataSink {
         this.tableIdentifier = icebergTable.getUUID();
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
-        // Priority: write.delete.parquet.compression-codec > write.parquet.compression-codec > session variable
-        this.compressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION,
-                nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
-                        sessionVariable.getConnectorSinkCompressionCodec()));
+        // Row-delta writes both new data files and new position-delete files, so each
+        // needs its own codec.
+        // Data files: write.parquet.compression-codec > session variable.
+        // Delete files: write.delete.parquet.compression-codec > write.parquet.compression-codec > session variable.
+        String sessionCodec = sessionVariable.getConnectorSinkCompressionCodec();
+        String dataCodec = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, sessionCodec);
+        this.dataCompressionType = dataCodec;
+        this.deleteCompressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION, dataCodec);
         this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
                 sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
     }
@@ -173,8 +177,8 @@ public class IcebergRowDeltaSink extends DataSink {
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(false);
         tIcebergTableSink.setWrite_mode(TIcebergWriteMode.ROW_DELTA);
-        TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
-        tIcebergTableSink.setCompression_type(compression);
+        tIcebergTableSink.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(dataCompressionType));
+        tIcebergTableSink.setDelete_compression_type(PARQUET_COMPRESSION_TYPE_MAP.get(deleteCompressionType));
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);

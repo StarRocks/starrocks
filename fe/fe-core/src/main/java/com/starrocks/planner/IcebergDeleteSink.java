@@ -137,8 +137,10 @@ public class IcebergDeleteSink extends DataSink {
         tIcebergTableSink.setData_location(dataLocation);
         tIcebergTableSink.setFile_format("parquet"); // Delete files are always parquet
         tIcebergTableSink.setIs_static_partition_sink(false);
+        // DeleteSink only emits position-delete files; the codec belongs in the
+        // delete-file slot. `compression_type` is reserved for data files now.
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
-        tIcebergTableSink.setCompression_type(compression);
+        tIcebergTableSink.setDelete_compression_type(compression);
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);

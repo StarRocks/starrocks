@@ -370,6 +370,13 @@ public class UpdatePlanTest extends PlanTestBase {
         assertFalse(tIcebergTableSink.is_static_partition_sink);
         assertNotNull(tIcebergTableSink.getCloud_configuration());
         assertTrue(tIcebergTableSink.getTarget_max_file_size() > 0);
+        // Both codecs must be populated: data files use compression_type, position-delete
+        // files use delete_compression_type. The mock table has no codec properties, so
+        // both fall back to the session default — they should be equal but both set.
+        assertTrue(tIcebergTableSink.isSetCompression_type(),
+                "data-file compression codec must be set");
+        assertTrue(tIcebergTableSink.isSetDelete_compression_type(),
+                "delete-file compression codec must be set");
         // Tuple id from sink must match what the planner attached to the fragment.
         assertTrue(sink.getExplainString("", TExplainLevel.NORMAL).contains("TUPLE ID:"));
     }
