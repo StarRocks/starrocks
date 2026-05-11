@@ -267,6 +267,166 @@ public class PaimonMetadata implements ConnectorMetadata {
         return table;
     }
 
+<<<<<<< HEAD
+=======
+    public Table getView(String dbName, String viewName) {
+        Identifier identifier = new Identifier(dbName, viewName);
+        if (tables.containsKey(identifier)) {
+            return tables.get(identifier);
+        }
+        org.apache.paimon.view.View paimonNativeView;
+        try {
+            paimonNativeView = paimonNativeCatalog.getView(new Identifier(dbName, viewName));
+        } catch (Catalog.ViewNotExistException e) {
+            LOG.error("Paimon view {}.{} does not exist.", dbName, viewName, e);
+            return null;
+        }
+        PaimonView view = getPaimonView(this.catalogName, dbName, viewName, paimonNativeView);
+        tables.put(identifier, view);
+        return view;
+    }
+
+    private PaimonView getPaimonView(String catalogName, String dbName, String viewName, View paimonNativeView) {
+        List<DataField> fields = paimonNativeView.rowType().getFields();
+        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
+        String comment = "";
+        Optional<String> commentOptional = paimonNativeView.comment();
+        if (commentOptional.isPresent()) {
+            comment = commentOptional.get();
+        }
+        String query;
+        if (paimonNativeView.dialects().containsKey(VIEW_DIALECTS_KEY)) {
+            query = paimonNativeView.dialects().get(VIEW_DIALECTS_KEY);
+        } else {
+            query = paimonNativeView.query();
+        }
+        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                catalogName, dbName, viewName, fullSchema, query);
+        view.setComment(comment);
+        return view;
+    }
+
+    @Override
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
+        PaimonTable paimonTable = (PaimonTable) table;
+        Optional<Long> start = startVersion.map(v -> getSnapshotIdFromVersion(paimonTable.getNativeTable(), v));
+        Optional<Long> end = endVersion.map(v -> getSnapshotIdFromVersion(paimonTable.getNativeTable(), v));
+        if (start.isEmpty() && end.isEmpty()) {
+            long snapshotId = -1L;
+            try {
+                Optional<Snapshot> latestSnapshot = paimonTable.getNativeTable().latestSnapshot();
+                if (latestSnapshot.isPresent()) {
+                    snapshotId = latestSnapshot.get().id();
+                }
+            } catch (Exception e) {
+                // System table does not have snapshotId, ignore it.
+                LOG.warn("Cannot get snapshot because {}", e.getMessage());
+            }
+            return TvrTableSnapshot.of(Optional.of(snapshotId));
+        } else {
+            return TvrTableDelta.of(start, end);
+        }
+    }
+
+    public long getSnapshotIdFromVersion(org.apache.paimon.table.Table table, ConnectorTableVersion version) {
+        switch (version.getPointerType()) {
+            case TEMPORAL: //specify timestamp
+                return getSnapshotIdFromTemporalVersion(table, version.getConstantOperator());
+            case VERSION: //specify snapshotId、branch、tag
+                return getTargetSnapshotIdFromVersion(table, version.getConstantOperator());
+            case UNKNOWN:
+            default:
+                throw new StarRocksConnectorException("Unknown version type %s", version.getPointerType());
+        }
+    }
+
+    private long getSnapshotIdFromTemporalVersion(org.apache.paimon.table.Table table, ConstantOperator version) {
+        long snapshotId = -1L;
+        try {
+            if (version.getType() != com.starrocks.type.DateType.DATETIME &&
+                    version.getType() != com.starrocks.type.DateType.DATE &&
+                    version.getType() != com.starrocks.type.VarcharType.VARCHAR) {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.type.DateType.DATETIME);
+            if (timestampVersion.isEmpty()) {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+            LocalDateTime time = timestampVersion.get().getDatetime();
+            long epochMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+            SnapshotManager snapshotManager = ((DataTable) table).snapshotManager();
+            Snapshot snapshot = snapshotManager.earlierOrEqualTimeMills(epochMillis);
+            if (snapshot != null) {
+                snapshotId = snapshot.id();
+            } else {
+                throw new StarRocksConnectorException("No version history table %s at or before %s",
+                        table.fullName(), time);
+            }
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Invalid temporal version [%s]", version, e);
+        }
+        return snapshotId;
+    }
+
+    private long getTargetSnapshotIdFromVersion(org.apache.paimon.table.Table table, ConstantOperator version) {
+        long snapshotId = -1L;
+        //specify snapshotId
+        if (version.getType() == com.starrocks.type.IntegerType.TINYINT ||
+                version.getType() == com.starrocks.type.IntegerType.SMALLINT ||
+                version.getType() == com.starrocks.type.IntegerType.INT ||
+                version.getType() == com.starrocks.type.IntegerType.BIGINT) {
+            snapshotId = version.castTo(com.starrocks.type.IntegerType.BIGINT).get().getBigint();
+            if (!((DataTable) table).snapshotManager().snapshotExists(snapshotId)) {
+                throw new StarRocksConnectorException("%s does not include snapshot: %s",
+                        table.fullName(), snapshotId);
+            }
+            //specify branch、tag
+        } else if (version.getType() == com.starrocks.type.VarcharType.VARCHAR) {
+            String refName = version.getVarchar().toLowerCase();
+            String[] refNameParts = refName.split(":");
+            org.apache.paimon.table.Table paimonTable;
+            if (refNameParts.length == 2 &&
+                    (refNameParts[0].equals("branch") || refNameParts[0].equals("tag"))) {
+                if (refNameParts[0].equals("branch")) {
+                    //if branch, format like branch:b_1, return the latest snapshot of the branch
+                    String[] tableFullName = table.fullName().split("\\.");
+                    Identifier identifier = new Identifier(tableFullName[0], tableFullName[1], refNameParts[1]);
+                    branch.set(identifier.getBranchNameOrDefault());
+                    try {
+                        paimonTable = paimonNativeCatalog.getTable(identifier);
+                    } catch (Catalog.TableNotExistException e) {
+                        throw new StarRocksConnectorException("%s does not include branch: %s",
+                                table.fullName(), refNameParts[1]);
+                    }
+                    snapshotId = paimonTable.latestSnapshot().isPresent() ? paimonTable.latestSnapshot().get().id() : -1L;
+                } else {
+                    //if tag, format like tag:t_1, return the snapshot that the tag referenced
+                    TagManager tagManager =  ((DataTable) table).tagManager();
+                    if (!tagManager.tagExists(refNameParts[1])) {
+                        throw new StarRocksConnectorException("%s does not include tag: %s",
+                                table.fullName(), refNameParts[1]);
+                    }
+                    snapshotId = tagManager.tagObjects().stream()
+                            .filter(p -> p.getValue().equals(refNameParts[1]))
+                            .map(p -> p.getKey().id())
+                            .findFirst()
+                            .get();
+                }
+            } else {
+                throw new StarRocksConnectorException("Please input correct format like branch:branch_name or tag:tag_name");
+            }
+        } else {
+            throw new StarRocksConnectorException("Unsupported type for table version: " + version);
+        }
+
+        return snapshotId;
+    }
+
+>>>>>>> 0340ccd57b ([Enhancement] Avoid redundant latestSnapshot() call in PaimonMetadata#getTableVersionRange (#72892))
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tableName) {
         try {
