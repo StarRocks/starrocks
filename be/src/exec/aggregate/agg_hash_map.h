@@ -1386,7 +1386,11 @@ struct AggHashMapWithCompressedKeyFixedSize
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
-    static constexpr bool supports_inline_state = true;
+    // 1-byte compressed key (cx1) uses SmallFixedSizeHashMap, whose iterator returns a
+    // temporary PPair by value — &iter->second would be a dangling stack pointer, which
+    // breaks inline state. Disable inline state for it; the larger cx4/cx8/cx16 variants
+    // back on phmap::flat_hash_map are safe.
+    static constexpr bool supports_inline_state = !is_no_prefetch_map<HashMap>;
 
     template <class... Args>
     AggHashMapWithCompressedKeyFixedSize(int chunk_size, Args&&... args)
