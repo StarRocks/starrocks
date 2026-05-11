@@ -468,7 +468,7 @@ void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t ti
     if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
         task = down_cast<RFScanWaitTimeout*>(iter->second.get());
     } else {
-        auto timeoutTask = std::make_shared<RFScanWaitTimeout>();
+        auto timeoutTask = std::make_shared<RFScanWaitTimeout>(this);
         task = timeoutTask.get();
         _rf_timeout_tasks.emplace(timeout, timeoutTask);
     }
