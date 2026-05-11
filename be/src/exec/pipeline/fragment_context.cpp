@@ -468,14 +468,9 @@ void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t ti
     if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
         task = down_cast<RFScanWaitTimeout*>(iter->second.get());
     } else {
-<<<<<<< HEAD
-        task = new RFScanWaitTimeout(this);
-        _rf_timeout_tasks.emplace(timeout, task);
-=======
         auto timeoutTask = std::make_shared<RFScanWaitTimeout>();
         task = timeoutTask.get();
         _rf_timeout_tasks.emplace(timeout, timeoutTask);
->>>>>>> 9db4424d96 ([BugFix] Fix PipelineTimerTask stuck in waitUtilFinished (#72058))
     }
     task->add_observer(_runtime_state.get(), observer);
 }
