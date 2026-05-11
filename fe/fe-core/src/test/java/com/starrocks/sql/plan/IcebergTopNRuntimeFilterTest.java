@@ -71,42 +71,6 @@ public class IcebergTopNRuntimeFilterTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testDiagnosticIcebergPlan() throws Exception {
-        int originalAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
-        boolean originalDisableSingleTableStats =
-                connectContext.getSessionVariable().disableTableStatsFromMetadataForSingleTable();
-        try {
-            connectContext.getSessionVariable()
-                    .setNewPlanerAggStage(SessionVariableConstants.AggregationStage.TWO_STAGE.ordinal());
-            connectContext.getSessionVariable().setDisableTableStatsFromMetadataForSingleTable(true);
-
-            String sql = "select id, count(*) as revenue from iceberg0.unpartitioned_db.t0 " +
-                    "group by id order by id desc limit 10";
-            String verbosePlan = getVerboseExplain(sql);
-            System.out.println("=== ICEBERG VERBOSE PLAN (TWO_STAGE) ===");
-            System.out.println(verbosePlan);
-
-            // Also test without TWO_STAGE (AUTO mode) to see what the plan looks like
-            connectContext.getSessionVariable()
-                    .setNewPlanerAggStage(SessionVariableConstants.AggregationStage.AUTO.ordinal());
-            String autoPlan = getVerboseExplain(sql);
-            System.out.println("=== ICEBERG VERBOSE PLAN (AUTO) ===");
-            System.out.println(autoPlan);
-
-            // Also get the non-verbose plan to see TopN phase
-            connectContext.getSessionVariable()
-                    .setNewPlanerAggStage(SessionVariableConstants.AggregationStage.TWO_STAGE.ordinal());
-            String plan = getFragmentPlan(sql);
-            System.out.println("=== ICEBERG FRAGMENT PLAN (TWO_STAGE) ===");
-            System.out.println(plan);
-        } finally {
-            connectContext.getSessionVariable().setNewPlanerAggStage(originalAggStage);
-            connectContext.getSessionVariable()
-                    .setDisableTableStatsFromMetadataForSingleTable(originalDisableSingleTableStats);
-        }
-    }
-
-    @Test
     public void testInternalTableTopNRuntimeFilterStillWorks() throws Exception {
         int originalAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
         try {
