@@ -28,7 +28,6 @@
 #include "runtime/exec_env.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "types/type_descriptor.h"
 
 namespace starrocks::pipeline {
 
@@ -38,14 +37,12 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         query_options.batch_size = 4096;
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
-                                                        &_exec_env->query_execution_services(), _exec_env);
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
         _runtime_state->set_query_ctx(_query_context.get());
         _runtime_state->init_instance_mem_tracker();
 
