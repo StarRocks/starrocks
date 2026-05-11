@@ -41,6 +41,8 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.hive.CatalogNameType;
+import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
@@ -95,6 +97,8 @@ public class MockedBase {
     static CatalogMgr catalogMgr = Mockito.mock(CatalogMgr.class);
     static ConnectorMgr connectorMgr = Mockito.mock(ConnectorMgr.class);
     static MetadataMgr metadataMgr = Mockito.mock(MetadataMgr.class);
+    static ConnectorTableMetadataProcessor connectorTableMetadataProcessor =
+            Mockito.mock(ConnectorTableMetadataProcessor.class);
     static OdpsSplitsInfo odpsSplitsInfo = Mockito.mock(OdpsSplitsInfo.class);
 
     public static void initMock() throws OdpsException, IOException {
@@ -181,6 +185,11 @@ public class MockedBase {
         when(globalStateMgr.getConnectorMgr()).thenReturn(connectorMgr);
         when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
         when(globalStateMgr.getVariableMgr()).thenReturn(variableMgr);
+        when(globalStateMgr.getConnectorTableMetadataProcessor()).thenReturn(connectorTableMetadataProcessor);
+        doNothing().when(connectorTableMetadataProcessor)
+                .registerCacheUpdateProcessor(any(CatalogNameType.class), any());
+        doNothing().when(connectorTableMetadataProcessor)
+                .unRegisterCacheUpdateProcessor(any(CatalogNameType.class));
         when(connectorMgr.getConnector(anyString())).thenReturn(new CatalogConnector(
                 odpsConnector, new InformationSchemaConnector("catalog"), new TableMetaConnector("catalog", "odps")));
         when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
