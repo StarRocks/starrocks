@@ -530,6 +530,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
         return tablet_metadata_or.status();
     }
 
+    // Skip the deep copy when the cached PB already has the right id; set_id below would be a no-op.
+    if (tablet_metadata_or.value()->id() == tablet_id) {
+        return std::move(tablet_metadata_or).value();
+    }
     auto tablet_metadata = std::make_shared<TabletMetadata>(*tablet_metadata_or.value());
     tablet_metadata->set_id(tablet_id);
     return tablet_metadata;
