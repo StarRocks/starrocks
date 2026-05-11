@@ -690,4 +690,131 @@ public class VacuumTest {
             Assertions.assertEquals(50L, fullVacuumResult);
         }
     }
+
+    /**
+     * Verifies that {@link AutovacuumDaemon} lowers the effective {@code minRetainVersion}
+     * down to the minimum pinned version when an in-flight query has pinned an older
+     * version on the same partition. This protects against vacuum deleting .meta files
+     * that in-flight queries still need to read.
+     */
+    @Test
+    public void testVacuumRespectsQueryVersionPin() throws Exception {
+        QueryVersionPinManager pinManager = QueryVersionPinManager.getInstance();
+        pinManager.clear();
+
+        boolean originalEnablePinning = Config.lake_enable_query_version_pinning;
+        Config.lake_enable_query_version_pinning = true;
+
+        try {
+            partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+            Assertions.assertNotNull(partition);
+
+            partition.setVisibleVersion(20L, System.currentTimeMillis());
+            partition.setMinRetainVersion(0L);
+            partition.setMetadataSwitchVersion(0L);
+            partition.setLastSuccVacuumVersion(0L);
+
+            java.util.Map<Long, Long> pinned = new java.util.HashMap<>();
+            pinned.put(partition.getId(), 5L);
+            pinManager.pinVersions("test-inflight-query", pinned);
+
+            final long[] capturedMinRetainVersion = new long[]{-1L};
+
+            VacuumResponse mockResponse = new VacuumResponse();
+            mockResponse.status = new StatusPB();
+            mockResponse.status.statusCode = 0;
+            mockResponse.vacuumedFiles = 0L;
+            mockResponse.vacuumedFileSize = 0L;
+            mockResponse.vacuumedVersion = 5L;
+            mockResponse.extraFileSize = 0L;
+            mockResponse.tabletInfos = new ArrayList<>();
+
+            Future<VacuumResponse> mockFuture = mock(Future.class);
+            when(mockFuture.get()).thenReturn(mockResponse);
+
+            LakeService capturingService = mock(LakeService.class);
+            when(capturingService.vacuum(any(VacuumRequest.class))).thenAnswer(invocation -> {
+                VacuumRequest req = invocation.getArgument(0);
+                capturedMinRetainVersion[0] = req.minRetainVersion;
+                return mockFuture;
+            });
+
+            AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+            try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+                mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt()))
+                        .thenReturn(capturingService);
+                autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
+            }
+
+            Assertions.assertNotEquals(-1L, capturedMinRetainVersion[0],
+                    "Vacuum request was not issued; test setup is wrong");
+            Assertions.assertEquals(5L, capturedMinRetainVersion[0],
+                    "minRetainVersion must be clamped down to the min pinned version");
+        } finally {
+            pinManager.clear();
+            Config.lake_enable_query_version_pinning = originalEnablePinning;
+        }
+    }
+
+    /**
+     * Verifies that when {@code lake_enable_query_version_pinning} is disabled, the
+     * pinned versions from {@link QueryVersionPinManager} are ignored and vacuum uses
+     * the natural {@code minRetainVersion}.
+     */
+    @Test
+    public void testVacuumIgnoresPinWhenFeatureDisabled() throws Exception {
+        QueryVersionPinManager pinManager = QueryVersionPinManager.getInstance();
+        pinManager.clear();
+
+        boolean originalEnablePinning = Config.lake_enable_query_version_pinning;
+        Config.lake_enable_query_version_pinning = false;
+
+        try {
+            partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+            Assertions.assertNotNull(partition);
+            partition.setVisibleVersion(20L, System.currentTimeMillis());
+            partition.setMinRetainVersion(15L);
+            partition.setMetadataSwitchVersion(0L);
+            partition.setLastSuccVacuumVersion(0L);
+
+            java.util.Map<Long, Long> pinned = new java.util.HashMap<>();
+            pinned.put(partition.getId(), 3L);
+            pinManager.pinVersions("test-inflight-query-disabled", pinned);
+
+            final long[] capturedMinRetainVersion = new long[]{-1L};
+
+            VacuumResponse mockResponse = new VacuumResponse();
+            mockResponse.status = new StatusPB();
+            mockResponse.status.statusCode = 0;
+            mockResponse.vacuumedFiles = 0L;
+            mockResponse.vacuumedFileSize = 0L;
+            mockResponse.vacuumedVersion = 10L;
+            mockResponse.extraFileSize = 0L;
+            mockResponse.tabletInfos = new ArrayList<>();
+
+            Future<VacuumResponse> mockFuture = mock(Future.class);
+            when(mockFuture.get()).thenReturn(mockResponse);
+
+            LakeService capturingService = mock(LakeService.class);
+            when(capturingService.vacuum(any(VacuumRequest.class))).thenAnswer(invocation -> {
+                VacuumRequest req = invocation.getArgument(0);
+                capturedMinRetainVersion[0] = req.minRetainVersion;
+                return mockFuture;
+            });
+
+            AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+            try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+                mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt()))
+                        .thenReturn(capturingService);
+                autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
+            }
+
+            Assertions.assertNotEquals(-1L, capturedMinRetainVersion[0]);
+            Assertions.assertNotEquals(3L, capturedMinRetainVersion[0],
+                    "Pinned version must be ignored when lake_enable_query_version_pinning=false");
+        } finally {
+            pinManager.clear();
+            Config.lake_enable_query_version_pinning = originalEnablePinning;
+        }
+    }
 }
