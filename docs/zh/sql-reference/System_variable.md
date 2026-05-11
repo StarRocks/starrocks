@@ -758,8 +758,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **范围**: Session
 * **描述**: 当该变量为 `true` 且该查询会生成 profile 时，会将已执行计划的 `EXPLAIN COSTS` 文本嵌入到 profile 的 `Summary` 段中，键名为 `ExplainPlan`。这样在离线分析 profile 工件（无需访问运行中的集群）时，可以同时查看优化器的基数估算、列统计、谓词下推、Runtime Filter 声明和总体计划代价等信息，便于排查慢查询。
 
-  当 `enable_profile` 为 `true` 时会生成 profile；此外，当 `enable_big_query_profile` 为 `true` 且查询耗时超过 `big_query_profile_threshold` 时也会自动生成 profile。在以上任一情况下都会嵌入计划文本，其它情况下本变量不生效。计划文本仅在生成 profile 时渲染一次，常见情况下只会使 profile 体积增大几十 KB。
-
 * **默认值**: false
 * **类型**: boolean
 
