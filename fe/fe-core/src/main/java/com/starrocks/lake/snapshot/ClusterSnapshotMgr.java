@@ -224,6 +224,20 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return rows;
     }
 
+    /**
+     * Drop every snapshot job inherited from the source cluster's image. The source's history is
+     * not relevant to the target cluster, and any incomplete external job records would otherwise
+     * make {@link ClusterSnapshotJobScheduler#retryPendingCleanup} spin forever (the SV those jobs
+     * reference may not exist in target's storage volume mgr after restore).
+     */
+    public void dropAllInheritedSnapshotJobs() {
+        int dropped = automatedSnapshotJobs.size();
+        automatedSnapshotJobs.clear();
+        if (dropped > 0) {
+            LOG.info("Dropped {} snapshot jobs inherited from source cluster image", dropped);
+        }
+    }
+
     protected void clearFinishedAutomatedClusterSnapshot(String keepSnapshotName) {
         for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.entrySet()) {
             ClusterSnapshotJob job = entry.getValue();

@@ -14,7 +14,9 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
@@ -25,6 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -35,9 +38,15 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class RestoreClusterSnapshotMgr {
     private static final Logger LOG = LogManager.getLogger(RestoreClusterSnapshotMgr.class);
@@ -99,6 +108,13 @@ public class RestoreClusterSnapshotMgr {
         try {
             self.updateFrontends();
             self.updateComputeNodes();
+            if (isExternalSnapshot()) {
+                // Source-image brokers/snapshot-jobs only need scrubbing when source != target.
+                // For in-place restore (source == target) these entries are still valid and
+                // dropping them would erase legitimate brokers and pending automated snapshot jobs.
+                self.dropImageBrokers();
+                self.dropImageSnapshotJobs();
+            }
             self.updateStorageVolumes();
             self.disableAutomatedSnapshot();
         } finally {
@@ -276,51 +292,133 @@ public class RestoreClusterSnapshotMgr {
         }
     }
 
+    /**
+     * Drop every broker inherited from the source cluster's image. Source brokers point at hosts
+     * that target cannot reach, so HeartbeatMgr would otherwise spam Connection-refused warnings
+     * forever. yaml does not currently declare brokers; operators add them post-restore via
+     * {@code ALTER SYSTEM ADD BROKER} if needed.
+     */
+    private void dropImageBrokers() {
+        BrokerMgr brokerMgr = GlobalStateMgr.getCurrentState().getBrokerMgr();
+        for (String name : new ArrayList<>(brokerMgr.getBrokerListMap().keySet())) {
+            try {
+                LOG.info("Drop broker {} inherited from source cluster image", name);
+                brokerMgr.dropAllBroker(name);
+            } catch (DdlException e) {
+                LOG.warn("Failed to drop inherited broker {}", name, e);
+            }
+        }
+    }
+
+    private void dropImageSnapshotJobs() {
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().dropAllInheritedSnapshotJobs();
+    }
+
     private void updateStorageVolumes() throws StarRocksException {
-        if (isExternalSnapshot()) {
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        boolean external = isExternalSnapshot();
+
+        if (external) {
+            // Refuse to leave any image SV pointing at the source bucket; tables bound to such an
+            // SV would silently route writes back into the source cluster's storage.
+            verifyAllImageStorageVolumesAreDeclaredInYaml(storageVolumeMgr);
+
             ClusterSnapshotConfig.StorageVolume snapshotStorageVolume = config.getSnapshotStorageVolume();
-            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
             String snapshotStorageVolumeName = StorageVolumeMgr.BASE_STORAGE_VOLUME;
             if (storageVolumeMgr.getStorageVolumeByName(snapshotStorageVolumeName) == null) {
                 LOG.info("Create snapshot storage volume {}", snapshotStorageVolumeName);
                 storageVolumeMgr.createStorageVolume(snapshotStorageVolumeName, snapshotStorageVolume.getType(),
-                        Collections.singletonList(snapshotStorageVolume.getLocation()), snapshotStorageVolume.getProperties(), 
+                        Collections.singletonList(snapshotStorageVolume.getLocation()), snapshotStorageVolume.getProperties(),
                         Optional.of(true), snapshotStorageVolume.getComment());
             } else {
                 LOG.info("Replace snapshot storage volume {}", snapshotStorageVolumeName);
                 storageVolumeMgr.replaceStorageVolume(snapshotStorageVolumeName, snapshotStorageVolume.getType(),
-                        Collections.singletonList(snapshotStorageVolume.getLocation()), snapshotStorageVolume.getProperties(), 
+                        Collections.singletonList(snapshotStorageVolume.getLocation()), snapshotStorageVolume.getProperties(),
                         snapshotStorageVolume.getComment(), "");
             }
-            storageVolumeMgr.updateBaseStorageVolumeName(snapshotStorageVolumeName);
-        }
-
-        List<ClusterSnapshotConfig.StorageVolume> storageVolumes = config.getStorageVolumes();
-        if (storageVolumes == null) {
-            return;
         }
 
         boolean oldValue = com.staros.util.Config.STARMGR_REPLACE_FILESTORE_ENABLED;
         com.staros.util.Config.STARMGR_REPLACE_FILESTORE_ENABLED = true;
         try {
-            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            List<ClusterSnapshotConfig.StorageVolume> storageVolumes =
+                    config.getStorageVolumes() != null ? config.getStorageVolumes() : Collections.emptyList();
+            String baseStorageVolumeName = external ? StorageVolumeMgr.BASE_STORAGE_VOLUME : "";
             for (ClusterSnapshotConfig.StorageVolume storageVolume : storageVolumes) {
                 if (storageVolume.getName().equalsIgnoreCase(StorageVolumeMgr.BASE_STORAGE_VOLUME)) {
                     continue;
                 }
-                LOG.info("Update storage volume {}", storageVolume.getName());
                 List<String> locations = storageVolume.getLocation() == null ? null
                         : Collections.singletonList(storageVolume.getLocation());
-                String baseStorageVolumeName = "";
-                if (isExternalSnapshot()) {
-                    baseStorageVolumeName = StorageVolumeMgr.BASE_STORAGE_VOLUME;
+                if (storageVolumeMgr.getStorageVolumeByName(storageVolume.getName()) == null) {
+                    LOG.info("Create storage volume {} declared in cluster_snapshot.yaml but absent from "
+                            + "source image", storageVolume.getName());
+                    storageVolumeMgr.createStorageVolume(storageVolume.getName(), storageVolume.getType(),
+                            locations, storageVolume.getProperties(),
+                            Optional.of(true), storageVolume.getComment());
+                } else {
+                    LOG.info("Update storage volume {}", storageVolume.getName());
+                    storageVolumeMgr.replaceStorageVolume(storageVolume.getName(), storageVolume.getType(),
+                            locations, storageVolume.getProperties(), storageVolume.getComment(),
+                            baseStorageVolumeName);
                 }
-                storageVolumeMgr.replaceStorageVolume(storageVolume.getName(), storageVolume.getType(),
-                        locations, storageVolume.getProperties(), storageVolume.getComment(), baseStorageVolumeName);
+            }
+
+            if (external) {
+                // Idempotent: covers create-path SVs above plus any SV the loop did not visit.
+                storageVolumeMgr.updateBaseStorageVolumeName(StorageVolumeMgr.BASE_STORAGE_VOLUME);
             }
         } finally {
             com.staros.util.Config.STARMGR_REPLACE_FILESTORE_ENABLED = oldValue;
         }
+    }
+
+    private void verifyAllImageStorageVolumesAreDeclaredInYaml(StorageVolumeMgr storageVolumeMgr)
+            throws StarRocksException {
+        List<ClusterSnapshotConfig.StorageVolume> yamlSvs =
+                config.getStorageVolumes() != null ? config.getStorageVolumes() : Collections.emptyList();
+        Set<String> declared = yamlSvs.stream()
+                .map(ClusterSnapshotConfig.StorageVolume::getName)
+                .collect(Collectors.toCollection(HashSet::new));
+        declared.add(StorageVolumeMgr.BASE_STORAGE_VOLUME);
+
+        List<String> existing;
+        try {
+            existing = storageVolumeMgr.listStorageVolumeNames();
+        } catch (DdlException e) {
+            throw new StarRocksException("Failed to list storage volumes during BCDR restore", e);
+        }
+        List<String> undeclared = existing.stream()
+                .filter(name -> !declared.contains(name))
+                .sorted()
+                .collect(Collectors.toList());
+        if (undeclared.isEmpty()) {
+            return;
+        }
+        StringBuilder details = new StringBuilder();
+        for (String name : undeclared) {
+            StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(name);
+            details.append("\n  - name: ").append(name);
+            if (sv == null) {
+                details.append(" (no longer present in starmgr)");
+                continue;
+            }
+            details.append("\n    type: ").append(sv.getType());
+            details.append("\n    source_locations: ").append(sv.getLocations());
+            Map<String, String> props = sv.getProperties();
+            if (props != null && !props.isEmpty()) {
+                Map<String, String> masked = new HashMap<>(props);
+                StorageVolume.addMaskForCredential(masked);
+                details.append("\n    source_properties: ").append(masked);
+            }
+        }
+        throw new StarRocksException(String.format(
+                "Cluster snapshot restore aborted: source-cluster image contains storage volumes that "
+                        + "are not declared in cluster_snapshot.yaml.storage_volumes. Each source SV must be "
+                        + "redirected to a target-side location, otherwise tables bound to it would route "
+                        + "writes back into the source bucket and corrupt source data. Add each of the "
+                        + "following SVs to storage_volumes with a target-side location, then re-run "
+                        + "--cluster_snapshot:%s", details));
     }
 
     private void disableAutomatedSnapshot() {
