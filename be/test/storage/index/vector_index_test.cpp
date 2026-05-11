@@ -480,6 +480,21 @@ TEST_F(AdaptiveEfSearchTest, result_clamped_to_int_max) {
     EXPECT_EQ(std::numeric_limits<int>::max(), result);
 }
 
+TEST_F(AdaptiveEfSearchTest, nonfinite_config_falls_back_to_base) {
+    // `vector_adaptive_ef_alpha` / `vector_adaptive_ef_cap` are mutable doubles
+    // and `strtod` accepts "nan"/"inf". A non-finite factor must short-circuit
+    // before the float-to-int cast (which is UB on NaN).
+    config::vector_adaptive_ef_alpha = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+
+    config::vector_adaptive_ef_alpha = std::numeric_limits<double>::infinity();
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+
+    config::vector_adaptive_ef_alpha = 1.0;
+    config::vector_adaptive_ef_cap = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+}
+
 TEST_F(AdaptiveEfSearchTest, respects_max_ef_k_floor) {
     // query_k greater than user_ef: scaling base is query_k.
     // 1M rows, base=100, factor=4.32 -> ef=432 regardless of user_ef=40.

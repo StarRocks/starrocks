@@ -135,9 +135,14 @@ int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows
     if (baseline <= 0 || static_cast<int64_t>(segment_num_rows) <= baseline) {
         return ef_base;
     }
+    // `vector_adaptive_ef_alpha` / `vector_adaptive_ef_cap` are mutable doubles
+    // and `strtod` accepts "nan"/"inf". Validate up front so the formula below
+    // never produces a non-finite value that would make `static_cast<int>` UB.
+    double alpha = config::vector_adaptive_ef_alpha;
+    double cap = config::vector_adaptive_ef_cap;
+    if (!std::isfinite(alpha) || !std::isfinite(cap)) return ef_base;
     double ratio = static_cast<double>(segment_num_rows) / static_cast<double>(baseline);
-    double factor = 1.0 + config::vector_adaptive_ef_alpha * std::log2(ratio);
-    factor = std::min(factor, static_cast<double>(config::vector_adaptive_ef_cap));
+    double factor = std::min(1.0 + alpha * std::log2(ratio), cap);
     if (factor <= 1.0) return ef_base;
     // Clamp before casting to int: float-to-int conversion is UB when the
     // double exceeds the int range. Pathological cap/ef_base combinations
