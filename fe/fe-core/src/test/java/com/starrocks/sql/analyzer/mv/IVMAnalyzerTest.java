@@ -121,6 +121,36 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * {@code COUNT(*)} in an aggregate MV query must be accepted by IVMAnalyzer.
+     *
+     * <p>Regression: until the fix that allows 0-arg count combinators, {@code count(*)}
+     * caused IVM rewrite to fail with {@code No matching function with signature: count_combine()}
+     * because {@code AggStateUtils.isSupportedAggStateFunction} excluded the 0-arg count form
+     * to protect AGG_STATE column DDL — but that DDL path is already blocked by the parser,
+     * so the exclusion was redundant and only blocked IVM.
+     */
+    @Test
+    public void testAggregateQueryWithCountStar() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_count_star "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, COUNT(*) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(),
+                "COUNT(*) aggregate MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "COUNT(*) aggregate MV must yield QUERY_COMPUTED");
+    }
+
+    /**
      * A non-aggregate (scan-only) MV query over an append-only Iceberg table must yield
      * {@link RowIdStrategy#AUTO_INCREMENT}.
      *
