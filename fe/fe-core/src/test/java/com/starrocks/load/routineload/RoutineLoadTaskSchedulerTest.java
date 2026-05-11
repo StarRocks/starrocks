@@ -57,7 +57,11 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class RoutineLoadTaskSchedulerTest {
@@ -288,6 +292,49 @@ public class RoutineLoadTaskSchedulerTest {
             Assertions.assertTrue(e instanceof MetaNotFoundException);
             Assertions.assertEquals("database 1 does not exist", e.getMessage());
             Assertions.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.state);
+        }
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforeScheduledExecutorTerminates() {
+        RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService blockedScheduler = Executors.newSingleThreadScheduledExecutor();
+        blockedScheduler.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedScheduler.shutdown();
+        Deencapsulation.setField(routineLoadTaskScheduler, "scheduledExecutorService", blockedScheduler);
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, routineLoadTaskScheduler::start);
+        } finally {
+            blockedScheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforeThreadPoolTerminates() {
+        RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
+        ThreadPoolExecutor blockedPool = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        Deencapsulation.setField(routineLoadTaskScheduler, "threadPool", blockedPool);
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, routineLoadTaskScheduler::start);
+        } finally {
+            blockedPool.shutdownNow();
         }
     }
 }

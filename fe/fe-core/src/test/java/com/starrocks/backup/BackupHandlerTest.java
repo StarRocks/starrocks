@@ -119,6 +119,16 @@ public class BackupHandlerTest {
 
     private String brokerName = "broker";
 
+    private static class TestBackupHandler extends BackupHandler {
+        TestBackupHandler(GlobalStateMgr globalStateMgr) {
+            super(globalStateMgr);
+        }
+
+        void callOnStopped() {
+            super.onStopped();
+        }
+    }
+
     @BeforeEach
     public void setup() throws Exception {
         UtFrameUtils.setUpForPersistTest();
@@ -169,6 +179,18 @@ public class BackupHandlerTest {
 
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
         Assertions.assertTrue(backupDir.exists());
+    }
+
+    @Test
+    public void testOnStoppedStopsRepositoryMgr() {
+        TestBackupHandler handler = new TestBackupHandler(GlobalStateMgr.getCurrentState());
+        RepositoryMgr repoMgr = handler.getRepoMgr();
+
+        Assertions.assertFalse(repoMgr.isStopped());
+
+        handler.callOnStopped();
+
+        Assertions.assertTrue(repoMgr.isStopped(), "repository ping loop must stop on leader demotion");
     }
 
     @Test
