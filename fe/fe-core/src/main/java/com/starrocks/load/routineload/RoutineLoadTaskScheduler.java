@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -104,6 +105,17 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
+        // Refuse to overlap with a previous worker that did not drain. The previous {@link
+        // #onStopped()} both shutdownNow()s and awaitTermination()s; if a pool is shutdown but
+        // not terminated we still have live workers from the previous leader session.
+        if (scheduledExecutorService.isShutdown() && !scheduledExecutorService.isTerminated()) {
+            throw new IllegalStateException(
+                    "RoutineLoadTaskScheduler scheduledExecutorService has not terminated; refuse to restart");
+        }
+        if (threadPool.isShutdown() && !threadPool.isTerminated()) {
+            throw new IllegalStateException(
+                    "RoutineLoadTaskScheduler threadPool has not terminated; refuse to restart");
+        }
         if (scheduledExecutorService.isShutdown()) {
             scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
         }
@@ -130,11 +142,28 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         needScheduleTasksQueue.clear();
         lastBackendSlotUpdateTime = -1;
         // shutdownNow() interrupts the delay-scheduler / dispatch workers so they exit even
-        // if blocked on metadata locks (which become interruptible in a later PR). We do not
-        // awaitTermination - the demotion drain is bounded and a fresh pool is built by
-        // start() on re-election.
+        // if blocked on metadata locks. Wait boundedly for both pools to actually terminate so
+        // a subsequent start() does not rebuild and run new workers in parallel with the old
+        // ones - that would race on routineLoadManager state and BE slot accounting. If a pool
+        // does not terminate within the timeout, start() will refuse to restart this scheduler.
         scheduledExecutorService.shutdownNow();
         threadPool.shutdownNow();
+        long timeoutMs = Config.leader_demotion_drain_timeout_sec * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        awaitTermination("scheduledExecutorService", scheduledExecutorService, deadline);
+        awaitTermination("threadPool", threadPool, deadline);
+    }
+
+    private static void awaitTermination(String name, java.util.concurrent.ExecutorService pool, long deadlineMs) {
+        long remainingMs = Math.max(1L, deadlineMs - System.currentTimeMillis());
+        try {
+            if (!pool.awaitTermination(remainingMs, TimeUnit.MILLISECONDS)) {
+                LOG.error("RoutineLoadTaskScheduler {} did not terminate within drain timeout", name);
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Interrupted while waiting for RoutineLoadTaskScheduler {} to terminate", name);
+        }
     }
 
     private void process() throws InterruptedException {
@@ -182,23 +211,47 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         if (msg != null) {
             routineLoadTaskInfo.setMsg(msg, true);
         }
-        scheduledExecutorService.schedule(() -> {
-            try {
-                needScheduleTasksQueue.put(routineLoadTaskInfo);
-            } catch (InterruptedException exception) {
-                LOG.warn("put task to queue failed", exception);
-            }
-        }, 1L, TimeUnit.SECONDS);
+        if (isStopped() || scheduledExecutorService.isShutdown()) {
+            LOG.info("RoutineLoadTaskScheduler is stopped, skip delayPutToQueue for task {}",
+                    routineLoadTaskInfo.getId());
+            return;
+        }
+        try {
+            scheduledExecutorService.schedule(() -> {
+                try {
+                    needScheduleTasksQueue.put(routineLoadTaskInfo);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    LOG.warn("put task to queue failed", exception);
+                }
+            }, 1L, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException e) {
+            // Race with onStopped(): scheduler was shut down between the guard above and
+            // schedule(). Safe to drop - the next leader will re-divide the routine load.
+            LOG.info("RoutineLoadTaskScheduler scheduler shut down, drop delayPutToQueue for task {}",
+                    routineLoadTaskInfo.getId());
+        }
     }
 
     private void submitToSchedule(RoutineLoadTaskInfo routineLoadTaskInfo) {
-        threadPool.submit(() -> {
-            try {
-                scheduleOneTask(routineLoadTaskInfo);
-            } catch (Exception e) {
-                LOG.warn("schedule routine load task failed", e);
-            }
-        });
+        if (isStopped() || threadPool.isShutdown()) {
+            LOG.info("RoutineLoadTaskScheduler is stopped, skip submitToSchedule for task {}",
+                    routineLoadTaskInfo.getId());
+            return;
+        }
+        try {
+            threadPool.submit(() -> {
+                try {
+                    scheduleOneTask(routineLoadTaskInfo);
+                } catch (Exception e) {
+                    LOG.warn("schedule routine load task failed", e);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // Race with onStopped(): pool was shut down between the guard above and submit().
+            LOG.info("RoutineLoadTaskScheduler threadPool shut down, drop submitToSchedule for task {}",
+                    routineLoadTaskInfo.getId());
+        }
     }
 
     void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {

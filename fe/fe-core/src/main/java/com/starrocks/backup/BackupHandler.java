@@ -232,6 +232,14 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
         // drop the per-leader-session init flag so the new leader re-validates backup/restore
         // tmp directories before resuming jobs.
         isInit = false;
+        // repoMgr was started by start(); stop its ping loop so it does not keep talking to
+        // remote storage after demotion. The same instance is reused on re-election; its
+        // persisted repo maps remain intact across the stop/start cycle.
+        try {
+            repoMgr.stopGracefully(Config.leader_demotion_drain_timeout_sec * 1000L);
+        } catch (Throwable t) {
+            LOG.warn("stop repoMgr failed", t);
+        }
     }
 
     // handle create repository stmt

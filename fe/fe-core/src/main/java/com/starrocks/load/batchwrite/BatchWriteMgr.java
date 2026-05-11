@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -86,6 +87,13 @@ public class BatchWriteMgr extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
+        // Refuse to overlap with a previous worker that did not drain in onStopped(): if the
+        // pool is shutdown but not yet terminated, in-flight merge-commit submissions from the
+        // previous leader session are still running.
+        if (threadPoolExecutor != null && threadPoolExecutor.isShutdown() && !threadPoolExecutor.isTerminated()) {
+            throw new IllegalStateException(
+                    "BatchWriteMgr threadPoolExecutor has not terminated; refuse to restart");
+        }
         if (threadPoolExecutor == null || threadPoolExecutor.isShutdown()) {
             threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                     Config.merge_commit_executor_threads_num, "merge-commit", true);
@@ -130,9 +138,20 @@ public class BatchWriteMgr extends LeaderDaemon {
             LOG.warn("stop coordinatorBackendAssigner failed", t);
         }
         if (threadPoolExecutor != null && !threadPoolExecutor.isShutdown()) {
-            // shutdownNow() interrupts in-flight merge-commit submissions; we do not
-            // awaitTermination here - the demotion drain is bounded and tasks are leader-only.
+            // shutdownNow() interrupts in-flight merge-commit submissions; wait boundedly so a
+            // subsequent start() does not race a still-alive worker against a freshly created
+            // pool. If termination times out start() will refuse to rebuild.
             threadPoolExecutor.shutdownNow();
+            try {
+                if (!threadPoolExecutor.awaitTermination(
+                        Config.leader_demotion_drain_timeout_sec, TimeUnit.SECONDS)) {
+                    LOG.error("BatchWriteMgr threadPoolExecutor did not terminate within {}s",
+                            Config.leader_demotion_drain_timeout_sec);
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for BatchWriteMgr threadPoolExecutor to terminate");
+            }
         }
     }
 
