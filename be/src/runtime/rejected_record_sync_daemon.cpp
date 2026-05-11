@@ -562,17 +562,19 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // default) with `format=json`.
     client.set_header(HTTP_FORMAT_KEY, "json");
     client.set_header(HTTP_STRIP_OUTER_ARRAY, "false");
-    // Route through the FE's batch-write coordinator so the N concurrent
-    // PUTs that the N-BE cluster issues every tick coalesce into a single
-    // committed transaction on `_statistics_.rejected_records`. Without
-    // this header the load takes the normal stream-load path, producing
-    // one transaction per BE per tick -- ~N x interval^-1 commits a
-    // second under default config -- which is wasteful for a low-volume
-    // bookkeeping table and applies needless PK-table compaction
-    // pressure. The header value is parsed by `StreamLoadHttpHeader`
-    // (FE) as a bool; `LoadAction.execute` dispatches to
-    // `processBatchWriteStreamLoad` when it is true.
-    client.set_header(HTTP_ENABLE_MERGE_COMMIT, "true");
+    // NOTE: an earlier iteration of this code set
+    // `enable_merge_commit: true` here to coalesce concurrent BE PUTs
+    // through the FE BatchWriteMgr. That regressed the load -- BatchWrite
+    // selects a coordinator backend but does not consume the inline
+    // JSON Lines PUT body the same way `processNormalStreamLoad` does,
+    // so the requests redirected to the coordinator with no body and
+    // the table stayed empty. Don't restore that header without first
+    // routing the daemon through the same BatchWrite client / RPC path
+    // that ordinary flexible-batch-write users use, not a raw HTTP PUT.
+    // The normal stream-load path produces one transaction per BE per
+    // tick -- acceptable volume given default `rejected_record_sync_
+    // interval_sec = 30` and the table being a low-volume bookkeeping
+    // sink.
     // The FE 307-redirects large PUTs; opt into 100-continue so curl
     // negotiates before uploading the payload body.
     client.set_header("Expect", "100-continue");
