@@ -51,7 +51,7 @@ public:
         _latch.count_down();
     }
 
-    void unschedule(PipelineTimer* timer);
+    void unschedule_and_wait(PipelineTimer* timer);
 
     void set_tid(TaskId tid) { _tid = tid; }
     TaskId tid() const { return _tid; }
