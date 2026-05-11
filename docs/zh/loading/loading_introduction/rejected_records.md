@@ -150,12 +150,14 @@ WHERE target_database = 'mydb'
 
 `_statistics_.rejected_records` 的查询受内建行访问策略保护：
 
-- **管理员用户**（`root` 或具备管理员权限的角色）能看到全部数据。
-- **非管理员用户**只能看到自己对 `target_database.target_table` 拥有
-  `SELECT` 权限的那些行。没有 SELECT 权限的目标表对应的行会被过滤掉。
+- 内置的 **`root`** 用户能看到表里的全部数据（策略不附加过滤条件）。
+- **其他所有用户** —— 包括持有 `db_admin`、`cluster_admin`、
+  `user_admin`、`security_admin` 等内置 admin 角色的用户 —— 只能看到
+  自己对 `target_database.target_table` 拥有 `SELECT` 权限的那些行。
+  没有 SELECT 权限的目标表对应的行会被过滤掉。
 - 如果策略无法解析或校验目标，则该行会被隐藏（fail-closed）。
 
-运维看板可按需选择：全量可见时使用管理员账号；按权限查看时，把相关
+运维看板可按需选择：全量可见时使用 `root` 账号；按权限查看时，把相关
 目标表的 `SELECT` 权限授予看板使用的角色即可。
 
 ## 当前限制

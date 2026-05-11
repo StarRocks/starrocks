@@ -41,11 +41,18 @@ import java.util.List;
  *
  * <p>Policy semantics:
  * <ul>
- *   <li>{@code root} sees every row (returns {@code null}, i.e. no predicate).</li>
- *   <li>Any other user sees only rows whose
- *       {@code (target_database, target_table)} pair they already have
- *       {@code SELECT} on in the default internal catalog. The policy is
- *       rendered as a compound {@code OR} of per-pair equality conjuncts.</li>
+ *   <li>The built-in {@code root} user (identity equality with
+ *       {@link UserIdentity#ROOT}) sees every row (returns {@code null},
+ *       i.e. no predicate). The check is on the user identity, not
+ *       on whether the current role grants {@code admin_priv}; users
+ *       holding only the built-in admin roles
+ *       ({@code db_admin}, {@code cluster_admin}, {@code user_admin},
+ *       {@code security_admin}) take the next branch.</li>
+ *   <li>Any other user, including admin-role holders, sees only rows
+ *       whose {@code (target_database, target_table)} pair they already
+ *       have {@code SELECT} on in the default internal catalog. The
+ *       policy is rendered as a compound {@code OR} of per-pair
+ *       equality conjuncts.</li>
  *   <li>A user with {@code SELECT} on zero tables, or a query with no
  *       {@link ConnectContext} / no current user, gets a
  *       {@code BoolLiteral(false)} -- fail-closed so a forgotten identity

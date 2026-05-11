@@ -163,11 +163,13 @@ WHERE target_database = 'mydb'
 Access to `_statistics_.rejected_records` is controlled by a built-in
 row access policy:
 
-- **Admin users** (e.g. `root`, or any role with the admin privilege)
-  see all rows.
-- **Non-admin users** see only rows whose `target_database.target_table`
-  they can `SELECT` on. Rows for tables the user has no SELECT privilege
-  on are filtered out of the result set.
+- The built-in **`root`** user sees every row in the table
+  (the policy applies no filter).
+- **All other users** -- including holders of `db_admin`,
+  `cluster_admin`, `user_admin`, and `security_admin` -- see only rows
+  whose `target_database.target_table` they can `SELECT` on. Rows for
+  tables the user has no SELECT privilege on are filtered out of the
+  result set.
 - If the policy cannot resolve or validate the target for a row, that
   row is hidden (fail-closed).
 
