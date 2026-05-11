@@ -38,12 +38,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
-<<<<<<< HEAD
 import com.starrocks.planner.stream.StreamAggNode;
-=======
-import com.starrocks.planner.TupleDescriptor;
-import com.starrocks.planner.TupleId;
->>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
@@ -56,12 +51,9 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
-<<<<<<< HEAD
-import com.starrocks.thrift.TScanRangeParams;
-=======
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TScanRangeLocations;
->>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
+import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
@@ -78,13 +70,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-=======
 import java.util.concurrent.atomic.AtomicInteger;
->>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
+import java.util.stream.Collectors;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -211,7 +200,6 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testBinlogScan() throws Exception {
         PlanFragmentId fragmentId = new PlanFragmentId(0);
         PlanNodeId planNodeId = new PlanNodeId(1);
@@ -317,7 +305,8 @@ public class CoordinatorTest extends PlanTestBase {
         Assertions.assertEquals(1, instances.size());
 
     }
-=======
+
+    @Test
     public void testClearExternalResourcesOnlyOnce() {
         AtomicInteger clearCount = new AtomicInteger();
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
@@ -345,5 +334,4 @@ public class CoordinatorTest extends PlanTestBase {
         Assertions.assertEquals(1, clearCount.get());
     }
 
->>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
 }

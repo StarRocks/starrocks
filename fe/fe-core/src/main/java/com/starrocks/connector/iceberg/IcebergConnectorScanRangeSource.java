@@ -79,13 +79,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-<<<<<<< HEAD
-import java.util.concurrent.atomic.AtomicLong;
-=======
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
->>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
