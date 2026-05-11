@@ -335,8 +335,6 @@ displayed_sidebar: docs
 
 **查询**
 
-<!-- - [Preview] 支持大查询的算子落盘，可以在内存不足时利用磁盘空间来保证查询稳定执行成功。
-- [Query Cache](https://docs.starrocks.io/zh/docs/using_starrocks/query_cache/) 支持更多使用场景，包括各种 Broadcast Join、Bucket Shuffle Join 场景。-->
 - 支持 [Global UDF](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/JAVA_UDF/)。
 - 动态自适应并行度，可以根据查询并发度自适应调节 `pipeline_dop`。
 
