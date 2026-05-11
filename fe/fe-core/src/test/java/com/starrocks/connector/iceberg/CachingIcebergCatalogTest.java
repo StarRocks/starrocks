@@ -55,9 +55,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
@@ -879,6 +881,132 @@ public class CachingIcebergCatalogTest {
             es.shutdownNow();
             System.out.println("===== test reload async end =====");
         }
+    }
+
+    /**
+     * Two concurrent refreshTable calls on the SAME table must be serialized: the second
+     * waits for the first to finish before entering its critical section.
+     */
+    @Test
+    public void testRefreshTableSameTableIsSerializedNotParallel() throws Exception {
+        AtomicInteger concurrentRefreshes = new AtomicInteger(0);
+        AtomicInteger maxConcurrentRefreshes = new AtomicInteger(0);
+        CountDownLatch firstStarted = new CountDownLatch(1);
+
+        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(delegate.getTable(Mockito.any(), Mockito.eq("db"), Mockito.eq("tbl")))
+                .thenAnswer(inv -> {
+                    int current = concurrentRefreshes.incrementAndGet();
+                    maxConcurrentRefreshes.accumulateAndGet(current, Math::max);
+                    firstStarted.countDown();
+                    Thread.sleep(80);
+                    concurrentRefreshes.decrementAndGet();
+
+                    TableOperations ops = Mockito.mock(TableOperations.class);
+                    TableMetadata meta = Mockito.mock(TableMetadata.class);
+                    Mockito.when(ops.current()).thenReturn(meta);
+                    Mockito.when(meta.metadataFileLocation()).thenReturn("loc-" + UUID.randomUUID());
+                    Snapshot snap = Mockito.mock(Snapshot.class);
+                    Mockito.when(snap.snapshotId()).thenReturn(1L);
+                    Mockito.when(snap.dataManifests(Mockito.any())).thenReturn(List.of());
+                    Mockito.when(meta.currentSnapshot()).thenReturn(snap);
+                    return new BaseTable(ops, "db.tbl");
+                });
+
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(
+                CATALOG_NAME, delegate, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        // Populate cache with an initial table so refreshTable enters the update branch.
+        TableOperations initOps = Mockito.mock(TableOperations.class);
+        TableMetadata initMeta = Mockito.mock(TableMetadata.class);
+        Snapshot initSnap = Mockito.mock(Snapshot.class);
+        Mockito.when(initOps.current()).thenReturn(initMeta);
+        Mockito.when(initMeta.metadataFileLocation()).thenReturn("loc-initial");
+        Mockito.when(initMeta.currentSnapshot()).thenReturn(initSnap);
+        Mockito.when(initSnap.snapshotId()).thenReturn(0L);
+        Mockito.when(initSnap.dataManifests(Mockito.any())).thenReturn(List.of());
+        BaseTable initTable = new BaseTable(initOps, "db.tbl");
+        LoadingCache<IcebergTableName, Table> tables1 = Deencapsulation.getField(catalog, "tables");
+        tables1.put(new IcebergTableName("db", "tbl"), initTable);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ConnectContext ctx = new ConnectContext();
+
+        pool.submit(() -> catalog.refreshTable("db", "tbl", ctx, null));
+        firstStarted.await(2, TimeUnit.SECONDS);
+        pool.submit(() -> catalog.refreshTable("db", "tbl", ctx, null));
+
+        pool.shutdown();
+        pool.awaitTermination(5, TimeUnit.SECONDS);
+
+        Assertions.assertEquals(1, maxConcurrentRefreshes.get(),
+                "concurrent refreshes on same table must be serialized (max concurrent should be 1)");
+    }
+
+    /**
+     * Two concurrent refreshTable calls on DIFFERENT tables must not block each other:
+     * both should overlap in time.
+     */
+    @Test
+    public void testRefreshTableDifferentTablesRunInParallel() throws Exception {
+        int sleepMs = 150;
+        AtomicInteger maxConcurrent = new AtomicInteger(0);
+        AtomicInteger concurrent = new AtomicInteger(0);
+        CountDownLatch bothStarted = new CountDownLatch(2);
+
+        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(delegate.getTable(Mockito.any(), Mockito.eq("db"), Mockito.anyString()))
+                .thenAnswer(inv -> {
+                    int c = concurrent.incrementAndGet();
+                    maxConcurrent.accumulateAndGet(c, Math::max);
+                    bothStarted.countDown();
+                    Thread.sleep(sleepMs);
+                    concurrent.decrementAndGet();
+
+                    TableOperations ops = Mockito.mock(TableOperations.class);
+                    TableMetadata meta = Mockito.mock(TableMetadata.class);
+                    Mockito.when(ops.current()).thenReturn(meta);
+                    Mockito.when(meta.metadataFileLocation()).thenReturn("loc-" + UUID.randomUUID());
+                    Snapshot snap = Mockito.mock(Snapshot.class);
+                    Mockito.when(snap.snapshotId()).thenReturn(1L);
+                    Mockito.when(snap.dataManifests(Mockito.any())).thenReturn(List.of());
+                    Mockito.when(meta.currentSnapshot()).thenReturn(snap);
+                    return new BaseTable(ops, "db." + inv.getArgument(2));
+                });
+
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(
+                CATALOG_NAME, delegate, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        LoadingCache<IcebergTableName, Table> tables2 = Deencapsulation.getField(catalog, "tables");
+        // Pre-populate cache for both tables so refreshTable enters the update branch.
+        for (String tbl : List.of("tbl1", "tbl2")) {
+            TableOperations initOps = Mockito.mock(TableOperations.class);
+            TableMetadata initMeta = Mockito.mock(TableMetadata.class);
+            Snapshot initSnap = Mockito.mock(Snapshot.class);
+            Mockito.when(initOps.current()).thenReturn(initMeta);
+            Mockito.when(initMeta.metadataFileLocation()).thenReturn("loc-initial-" + tbl);
+            Mockito.when(initMeta.currentSnapshot()).thenReturn(initSnap);
+            Mockito.when(initSnap.snapshotId()).thenReturn(0L);
+            Mockito.when(initSnap.dataManifests(Mockito.any())).thenReturn(List.of());
+            tables2.put(new IcebergTableName("db", tbl), new BaseTable(initOps, "db." + tbl));
+        }
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ConnectContext ctx = new ConnectContext();
+
+        long start = System.currentTimeMillis();
+        pool.submit(() -> catalog.refreshTable("db", "tbl1", ctx, null));
+        pool.submit(() -> catalog.refreshTable("db", "tbl2", ctx, null));
+
+        pool.shutdown();
+        pool.awaitTermination(5, TimeUnit.SECONDS);
+        long elapsed = System.currentTimeMillis() - start;
+
+        Assertions.assertEquals(2, maxConcurrent.get(),
+                "refreshes on different tables should overlap (max concurrent should be 2)");
+        // If they ran sequentially the elapsed time would be >= 2*sleepMs; parallel means < 1.8*sleepMs.
+        Assertions.assertTrue(elapsed < sleepMs * 2 - 50,
+                "different-table refreshes should run in parallel, elapsed=" + elapsed + "ms");
     }
 
     @Test
