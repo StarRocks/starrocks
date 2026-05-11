@@ -52,6 +52,7 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
 
     target_link_libraries(starrocks_be
         ServiceBE
+        Service
         ${STARROCKS_LINK_LIBS}
         )
     STARROCKS_FORCE_LOAD_LIBS(starrocks_be Exprs ExprCore)
