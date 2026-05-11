@@ -72,7 +72,7 @@ protected:
 // descriptor was freed, but the pointer remained in the shared map. Fragment B then read
 // the dangling pointer in the duplicate-check comparison, causing UAF.
 //
-// The fix uses `runtime_state->global_obj_pool()` (per-query) so the descriptor's
+// The fix uses `RuntimeStateHelper::global_obj_pool(runtime_state)` (per-query) so the descriptor's
 // lifetime matches the shared map. This test simulates that fixed behavior: both
 // fragments share the same query-level ObjectPool, so dropping a fragment's
 // RuntimeState does not free the partition descriptor. Under ASAN this exercises the

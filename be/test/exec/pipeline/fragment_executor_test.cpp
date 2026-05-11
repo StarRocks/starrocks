@@ -23,6 +23,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "testutil/assert.h"
 
 namespace starrocks::pipeline {
@@ -79,7 +80,8 @@ protected:
 // leaving dangling pointers. A sibling fragment then hit UAF on the duplicate-check
 // comparison `partition->thrift_partition_key_exprs() != old_partition->...`.
 //
-// The fix switched to `runtime_state->global_obj_pool()` (per-query). This test
+// The fix switched to `RuntimeStateHelper::global_obj_pool(runtime_state)`
+// (per-query). This test
 // asserts that contract: after a fragment-level RuntimeState (and its per-fragment
 // pool) is destroyed, the partition descriptor it inserted remains alive in the
 // query-level pool. Under ASAN, reading the descriptor's heap fields after the
@@ -126,7 +128,7 @@ TEST_F(FragmentExecutorPartitionTest, PartitionDescriptorOutlivesFragmentPool) {
         // Sanity check: the contract being asserted only holds when the two pools
         // really differ. If a future refactor unified them, the assertion below
         // wouldn't tell us anything useful, so guard it.
-        ASSERT_NE(rs->obj_pool(), rs->global_obj_pool());
+        ASSERT_NE(rs->obj_pool(), RuntimeStateHelper::global_obj_pool(rs.get()));
 
         ASSERT_OK(add_scan_ranges_partition_values(rs.get(), scan_ranges));
     }
