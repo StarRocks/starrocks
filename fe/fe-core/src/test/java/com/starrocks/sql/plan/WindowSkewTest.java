@@ -211,7 +211,6 @@ class WindowSkewTest extends PlanTestBase {
                 ColumnStatistic.builder().setNullsFraction(0.0).setHistogram(histogram).build());
 
         String plan = getCostPlan(BASIC_WINDOW_SQL);
-
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
@@ -246,8 +245,6 @@ class WindowSkewTest extends PlanTestBase {
 
     @Test
     void testOtherAnalyticalFunctionsWithSkew() throws Exception {
-        setColumnStatForP(0.5);
-
         String sql = "select p, s, avg(x) over (partition by p order by s), " +
                 "rank() over (partition by p order by s) from " + TABLE_NAME;
 
