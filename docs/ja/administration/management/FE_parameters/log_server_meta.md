@@ -758,6 +758,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの HTTP サーバーがリッスンするポート。
 - 導入時期：-
 
+### `enable_http_auth`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 導入時期：-
+- 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
+  - 公開プローブ / 可観測性：`/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature`、`/metrics`、`/api/oauth2`。
+  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - ロードラベル + テーブル権限から ID を解決する Stream Load プランナエンドポイント：`/api/{db}/_load_info`、`/api/{db}/{table}/_stream_load_meta`、`/api/{db}/{table}/_schema`、`/api/{db}/{table}/_count`。
+
+  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+
 ### `http_web_page_display_hardware`
 
 - デフォルト：true
