@@ -21,12 +21,12 @@
 #include <thread>
 #include <vector>
 
-#include "testutil/assert.h"
 #include "http/http_channel.h"
 #include "http/http_client.h"
 #include "http/http_handler.h"
 #include "http/http_method.h"
 #include "http/http_request.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
