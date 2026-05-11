@@ -482,7 +482,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Instantaneous
-- Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Refreshed on each metric scrape. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
+- Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
 
 ## `starrocks_fe_clone_task_copy_bytes`
 

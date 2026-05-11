@@ -482,7 +482,7 @@ description: "Alphabetical q - z"
 
 - 单位：计数
 - 类型：瞬时值
-- 描述：仅存算分离模式。当前分配给该 BE 的 StarOSWorker 的 shard 数量（即 worker 本地 shard 表的大小）。每次指标采集时实时刷新。可用于观测各 BE 之间的 shard 分布均衡情况，并发现与 FE 端调度结果的偏差。
+- 描述：仅存算分离模式。当前分配给该 BE 的 StarOSWorker 的 shard 数量（即 worker 本地 shard 表的大小）。该值在 `StarOSWorker::add_shard` 与 `StarOSWorker::remove_shard` 内同步写入（mutation 时推送），不是在指标采集时重新计算；因此采集到的值反映的是最近一次 shard 表的变更结果。BE 关闭时该 gauge 不会被清零，会保留到下一次发生 mutation 为止。可用于观测各 BE 之间的 shard 分布均衡情况，并发现与 FE 端调度结果的偏差。
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
