@@ -22,6 +22,7 @@
 #include "base/testutil/sync_point.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"
@@ -30,7 +31,6 @@
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
-#include "common/thread/threadpool.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
