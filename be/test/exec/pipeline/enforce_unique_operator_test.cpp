@@ -36,7 +36,7 @@ namespace starrocks::pipeline {
 // Pass an empty string "" as file_path to represent a NULL value for that row.
 // Pass INT64_MIN as row_position to represent a NULL value for that row.
 static ChunkPtr build_chunk(const std::vector<std::string>& files, const std::vector<int64_t>& positions,
-                             bool nullable = true) {
+                            bool nullable = true) {
     DCHECK_EQ(files.size(), positions.size());
 
     auto chunk = std::make_shared<Chunk>();

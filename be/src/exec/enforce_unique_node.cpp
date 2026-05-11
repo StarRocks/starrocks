@@ -53,8 +53,8 @@ StatusOr<pipeline::OpFactories> EnforceUniqueNode::decompose_to_pipeline(pipelin
     // that land on different drivers to escape detection.
     ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops);
 
-    auto factory = std::make_shared<EnforceUniqueOperatorFactory>(context->next_operator_id(), id(),
-                                                                   _unique_key_col_indices);
+    auto factory =
+            std::make_shared<EnforceUniqueOperatorFactory>(context->next_operator_id(), id(), _unique_key_col_indices);
     ops.emplace_back(std::move(factory));
 
     // Initialize OperatorFactory's fields involving runtime filters.

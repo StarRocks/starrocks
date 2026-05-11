@@ -90,18 +90,16 @@ Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     // types first and fail with a clear message if they mismatch.
     const Column* file_path_inner = ColumnHelper::get_data_column(file_path_col.get());
     if (!file_path_inner->is_binary()) {
-        return Status::InternalError(
-                "EnforceUniqueOperator: expected _file key column (index " +
-                std::to_string(_unique_key_col_indices[0]) + ") to be a binary column, got " +
-                file_path_inner->get_name());
+        return Status::InternalError("EnforceUniqueOperator: expected _file key column (index " +
+                                     std::to_string(_unique_key_col_indices[0]) + ") to be a binary column, got " +
+                                     file_path_inner->get_name());
     }
     const Column* row_pos_data_col = ColumnHelper::get_data_column(row_pos_col.get());
     const auto* row_pos_typed = dynamic_cast<const FixedLengthColumn<int64_t>*>(row_pos_data_col);
     if (row_pos_typed == nullptr) {
-        return Status::InternalError(
-                "EnforceUniqueOperator: expected _pos key column (index " +
-                std::to_string(_unique_key_col_indices[1]) + ") to be FixedLengthColumn<int64_t>, got " +
-                row_pos_data_col->get_name());
+        return Status::InternalError("EnforceUniqueOperator: expected _pos key column (index " +
+                                     std::to_string(_unique_key_col_indices[1]) +
+                                     ") to be FixedLengthColumn<int64_t>, got " + row_pos_data_col->get_name());
     }
     const auto* file_path_data = down_cast<const BinaryColumn*>(file_path_inner);
     const auto* row_pos_data = row_pos_typed->get_data().data();
