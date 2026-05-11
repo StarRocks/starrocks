@@ -887,11 +887,15 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
         return tablet_metadata_or.status();
     }
 
+<<<<<<< HEAD
     // The path-based lookup may resolve this request through a partition-shared metadata object,
     // especially the shared version-1 object. The serialized PB in that object can carry the id of
     // the tablet that originally wrote it rather than |tablet_id|, but this tablet-id overload must
     // always return metadata whose id identifies the requested tablet. Do not normalize the returned
     // PB in place because it may be shared through the metacache; copy only when the id differs.
+=======
+    // Skip the deep copy when the cached PB already has the right id; set_id below would be a no-op.
+>>>>>>> 4e94649 ([Enhancement] Skip TabletMetadataPB deep copy on metacache hit in tablet_id overload (#73071))
     if (tablet_metadata_or.value()->id() == tablet_id) {
         return std::move(tablet_metadata_or).value();
     }
