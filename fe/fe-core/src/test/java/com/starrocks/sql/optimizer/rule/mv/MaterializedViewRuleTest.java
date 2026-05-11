@@ -25,9 +25,11 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -144,5 +146,43 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         } catch (NoSuchElementException e) {
             Assertions.assertTrue(false);
         }
+    }
+
+    // Regression test for: NULL constant in CASE WHEN THEN clause was incorrectly rejected by
+    // IsNoCallChildrenValidator because isConstant() returned true for NULL, conflicting with the
+    // documented invariant that THEN clauses may be a column ref or NULL.
+    @Test
+    public void testCaseWhenNullThenClauseAllowed() {
+        ColumnRefFactory factory = new ColumnRefFactory();
+        ColumnRefOperator keyCol = factory.create("k", Type.INT, false);
+        ColumnRefOperator aggCol = factory.create("v", Type.BIGINT, false);
+
+        ColumnRefSet keyColumns = new ColumnRefSet();
+        keyColumns.union(keyCol);
+        ColumnRefSet aggregateColumns = new ColumnRefSet();
+        aggregateColumns.union(aggCol);
+
+        IsNoCallChildrenValidator validator = new IsNoCallChildrenValidator(keyColumns, aggregateColumns);
+
+        // CASE WHEN k=1 THEN NULL END  →  valid: NULL in THEN is allowed
+        CaseWhenOperator nullThen = new CaseWhenOperator(
+                Type.BIGINT, null, null,
+                Lists.newArrayList(keyCol, ConstantOperator.createNull(Type.BIGINT)));
+        Assertions.assertTrue(validator.visitCaseWhenOperator(nullThen, null),
+                "THEN NULL should be accepted");
+
+        // CASE WHEN k=1 THEN 1 END  →  invalid: non-null constant in THEN is not allowed
+        CaseWhenOperator nonNullThen = new CaseWhenOperator(
+                Type.BIGINT, null, null,
+                Lists.newArrayList(keyCol, ConstantOperator.createInt(1)));
+        Assertions.assertFalse(validator.visitCaseWhenOperator(nonNullThen, null),
+                "THEN <non-null constant> should be rejected");
+
+        // CASE WHEN k=1 THEN v END  →  valid: aggregate column ref in THEN is allowed
+        CaseWhenOperator aggColThen = new CaseWhenOperator(
+                Type.BIGINT, null, null,
+                Lists.newArrayList(keyCol, aggCol));
+        Assertions.assertTrue(validator.visitCaseWhenOperator(aggColThen, null),
+                "THEN <aggregate column> should be accepted");
     }
 }

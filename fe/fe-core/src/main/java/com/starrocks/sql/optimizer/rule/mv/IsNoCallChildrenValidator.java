@@ -92,8 +92,8 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
             }
             ScalarOperator thenClause = operator.getThenClause(i);
             if (!Utils.extractColumnRef(thenClause).stream().allMatch(aggregateColumns::contains) ||
-                    (thenClause.isConstantRef() && !((ConstantOperator) thenClause).isNull()) ||
-                    thenClause.isConstant()) {
+                    (thenClause.isConstant() &&
+                            !(thenClause.isConstantRef() && ((ConstantOperator) thenClause).isNull()))) {
                 return false;
             }
         }
