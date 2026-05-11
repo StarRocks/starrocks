@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
@@ -138,7 +139,14 @@ int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows
     double factor = 1.0 + config::vector_adaptive_ef_alpha * std::log2(ratio);
     factor = std::min(factor, static_cast<double>(config::vector_adaptive_ef_cap));
     if (factor <= 1.0) return ef_base;
-    return static_cast<int>(static_cast<double>(ef_base) * factor);
+    // Clamp before casting to int: float-to-int conversion is UB when the
+    // double exceeds the int range. Pathological cap/ef_base combinations
+    // (or future config tuning) could cross INT_MAX otherwise.
+    double scaled = static_cast<double>(ef_base) * factor;
+    if (scaled >= static_cast<double>(std::numeric_limits<int>::max())) {
+        return std::numeric_limits<int>::max();
+    }
+    return static_cast<int>(scaled);
 }
 
 void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, int query_k, bool user_set_ef) {

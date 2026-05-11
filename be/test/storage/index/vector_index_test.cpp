@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "fs/fs_factory.h"
 
 #ifdef WITH_TENANN
@@ -466,6 +468,16 @@ TEST_F(AdaptiveEfSearchTest, cap_applied_on_huge_segments) {
     EXPECT_EQ(800, compute_adaptive_ef_search(100, 100, 12800000));
     // 100M rows: factor would exceed cap (= 1 + ~10), clamped to 8, ef = 800.
     EXPECT_EQ(800, compute_adaptive_ef_search(100, 100, 100000000));
+}
+
+TEST_F(AdaptiveEfSearchTest, result_clamped_to_int_max) {
+    // Pathological config: extremely large user_ef combined with a high cap
+    // could push `ef_base * factor` past INT_MAX. The cast must clamp instead
+    // of relying on UB float-to-int conversion.
+    config::vector_adaptive_ef_cap = 1e9;
+    const int huge_ef = std::numeric_limits<int>::max() / 2;
+    int result = compute_adaptive_ef_search(huge_ef, 1, /*rows=*/100000000);
+    EXPECT_EQ(std::numeric_limits<int>::max(), result);
 }
 
 TEST_F(AdaptiveEfSearchTest, respects_max_ef_k_floor) {
