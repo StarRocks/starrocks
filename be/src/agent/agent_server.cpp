@@ -129,6 +129,24 @@ public:
     DISALLOW_COPY_AND_MOVE(Impl);
 
 private:
+    enum class ThreadPoolResizePolicy {
+        RAW,
+        CPU_SCALED,
+        REPLICATION_CPU_SCALED,
+        CLONE_PER_STORE_PATH,
+    };
+
+    using ThreadPoolMember = std::unique_ptr<ThreadPool> Impl::*;
+
+    struct ThreadPoolSpec {
+        ThreadPoolMember pool = nullptr;
+        ThreadPoolResizePolicy resize_policy = ThreadPoolResizePolicy::RAW;
+    };
+
+    const ThreadPoolSpec* get_thread_pool_spec(int type) const;
+    ThreadPool* thread_pool_from_spec(const ThreadPoolSpec& spec) const;
+    int32_t calc_max_threads_by_policy(const ThreadPoolSpec& spec, int32_t new_val) const;
+
     ExecEnv* _exec_env;
 
     std::unique_ptr<ThreadPool> _thread_pool_publish_version;
@@ -662,46 +680,15 @@ void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, cons
 }
 
 void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
-    Status st;
-    switch (type) {
-    case TTaskType::UPLOAD:
-        st = _thread_pool_upload->update_max_threads(calc_real_num_threads(new_val));
-        break;
-    case TTaskType::DOWNLOAD:
-        st = _thread_pool_download->update_max_threads(calc_real_num_threads(new_val));
-        break;
-    case TTaskType::MOVE:
-        st = _thread_pool_move_dir->update_max_threads(calc_real_num_threads(new_val));
-        break;
-    case TTaskType::REMOTE_SNAPSHOT:
-        st = _thread_pool_remote_snapshot->update_max_threads(
-                calc_real_num_threads(new_val, REPLICATION_CPU_CORES_MULTIPLIER));
-        break;
-    case TTaskType::REPLICATE_SNAPSHOT:
-        st = _thread_pool_replicate_snapshot->update_max_threads(
-                calc_real_num_threads(new_val, REPLICATION_CPU_CORES_MULTIPLIER));
-        break;
-    case TTaskType::CLONE: {
-        ThreadPool* thread_pool = get_thread_pool(type);
-        if (thread_pool) {
-            st = thread_pool->update_max_threads(calc_clone_thread_pool_size(_exec_env->store_paths().size(), new_val));
-        } else {
-            LOG(WARNING) << "Failed to update max thread, cannot get thread pool by task type: "
-                         << to_string((TTaskType::type)type);
-        }
-        break;
+    const ThreadPoolSpec* spec = get_thread_pool_spec(type);
+    ThreadPool* thread_pool = get_thread_pool(type);
+    if (spec == nullptr || thread_pool == nullptr) {
+        LOG(WARNING) << "Failed to update max thread, cannot get thread pool by task type: "
+                     << to_string((TTaskType::type)type);
+        return;
     }
-    default: {
-        ThreadPool* thread_pool = get_thread_pool(type);
-        if (thread_pool) {
-            st = thread_pool->update_max_threads(new_val);
-        } else {
-            LOG(WARNING) << "Failed to update max thread, cannot get thread pool by task type: "
-                         << to_string((TTaskType::type)type);
-        }
-        break;
-    }
-    }
+
+    Status st = thread_pool->update_max_threads(calc_max_threads_by_policy(*spec, new_val));
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
@@ -742,89 +729,61 @@ void AgentServer::Impl::stop_task_worker_pool(TaskWorkerType type) const {
     }
 }
 
+const AgentServer::Impl::ThreadPoolSpec* AgentServer::Impl::get_thread_pool_spec(int type) const {
+    static const phmap::flat_hash_map<int, ThreadPoolSpec> kThreadPoolSpecs = {
+            {TTaskType::CREATE, {&Impl::_thread_pool_create_tablet}},
+            {TTaskType::DROP, {&Impl::_thread_pool_drop}},
+            {TTaskType::CLONE, {&Impl::_thread_pool_clone, ThreadPoolResizePolicy::CLONE_PER_STORE_PATH}},
+            {TTaskType::STORAGE_MEDIUM_MIGRATE, {&Impl::_thread_pool_storage_medium_migrate}},
+            {TTaskType::MAKE_SNAPSHOT, {&Impl::_thread_pool_make_snapshot}},
+            {TTaskType::RELEASE_SNAPSHOT, {&Impl::_thread_pool_release_snapshot}},
+            {TTaskType::CHECK_CONSISTENCY, {&Impl::_thread_pool_check_consistency}},
+            {TTaskType::UPLOAD, {&Impl::_thread_pool_upload, ThreadPoolResizePolicy::CPU_SCALED}},
+            {TTaskType::DOWNLOAD, {&Impl::_thread_pool_download, ThreadPoolResizePolicy::CPU_SCALED}},
+            {TTaskType::MOVE, {&Impl::_thread_pool_move_dir, ThreadPoolResizePolicy::CPU_SCALED}},
+            {TTaskType::PUBLISH_VERSION, {&Impl::_thread_pool_publish_version}},
+            {TTaskType::CLEAR_TRANSACTION_TASK, {&Impl::_thread_pool_clear_transaction}},
+            {TTaskType::UPDATE_TABLET_META_INFO, {&Impl::_thread_pool_update_tablet_meta_info}},
+            {TTaskType::ALTER, {&Impl::_thread_pool_alter_tablet}},
+            {TTaskType::DROP_AUTO_INCREMENT_MAP, {&Impl::_thread_pool_drop_auto_increment_map}},
+            {TTaskType::COMPACTION, {&Impl::_thread_pool_compaction}},
+            {TTaskType::REMOTE_SNAPSHOT,
+             {&Impl::_thread_pool_remote_snapshot, ThreadPoolResizePolicy::REPLICATION_CPU_SCALED}},
+            {TTaskType::REPLICATE_SNAPSHOT,
+             {&Impl::_thread_pool_replicate_snapshot, ThreadPoolResizePolicy::REPLICATION_CPU_SCALED}},
+            {TTaskType::UPDATE_SCHEMA, {&Impl::_thread_pool_update_schema}},
+            {TTaskType::COMPACTION_CONTROL, {&Impl::_thread_pool_compaction_control}},
+            {TTaskType::EXTERNAL_CLUSTER_SNAPSHOT, {&Impl::_thread_pool_cluster_snapshot}},
+            {TTaskType::TABLET_RESTORE, {&Impl::_thread_pool_remote_snapshot}},
+    };
+
+    auto iter = kThreadPoolSpecs.find(type);
+    return iter == kThreadPoolSpecs.end() ? nullptr : &iter->second;
+}
+
+ThreadPool* AgentServer::Impl::thread_pool_from_spec(const ThreadPoolSpec& spec) const {
+    return (this->*(spec.pool)).get();
+}
+
+int32_t AgentServer::Impl::calc_max_threads_by_policy(const ThreadPoolSpec& spec, int32_t new_val) const {
+    switch (spec.resize_policy) {
+    case ThreadPoolResizePolicy::CPU_SCALED:
+        return calc_real_num_threads(new_val);
+    case ThreadPoolResizePolicy::REPLICATION_CPU_SCALED:
+        return calc_real_num_threads(new_val, REPLICATION_CPU_CORES_MULTIPLIER);
+    case ThreadPoolResizePolicy::CLONE_PER_STORE_PATH:
+        return calc_clone_thread_pool_size(_exec_env->store_paths().size(), new_val);
+    case ThreadPoolResizePolicy::RAW:
+        return new_val;
+    }
+    return new_val;
+}
+
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
-    // TODO: more thread pools.
     ThreadPool* ret = nullptr;
-    switch (type) {
-    case TTaskType::PUBLISH_VERSION:
-        ret = _thread_pool_publish_version.get();
-        break;
-    case TTaskType::CLONE:
-        ret = _thread_pool_clone.get();
-        break;
-    case TTaskType::DROP:
-        ret = _thread_pool_drop.get();
-        break;
-    case TTaskType::CREATE:
-        ret = _thread_pool_create_tablet.get();
-        break;
-    case TTaskType::STORAGE_MEDIUM_MIGRATE:
-        ret = _thread_pool_storage_medium_migrate.get();
-        break;
-    case TTaskType::MAKE_SNAPSHOT:
-        ret = _thread_pool_make_snapshot.get();
-        break;
-    case TTaskType::RELEASE_SNAPSHOT:
-        ret = _thread_pool_release_snapshot.get();
-        break;
-    case TTaskType::CHECK_CONSISTENCY:
-        ret = _thread_pool_check_consistency.get();
-        break;
-    case TTaskType::COMPACTION:
-        ret = _thread_pool_compaction.get();
-        break;
-    case TTaskType::COMPACTION_CONTROL:
-        ret = _thread_pool_compaction_control.get();
-        break;
-    case TTaskType::UPDATE_SCHEMA:
-        ret = _thread_pool_update_schema.get();
-        break;
-    case TTaskType::UPLOAD:
-        ret = _thread_pool_upload.get();
-        break;
-    case TTaskType::DOWNLOAD:
-        ret = _thread_pool_download.get();
-        break;
-    case TTaskType::MOVE:
-        ret = _thread_pool_move_dir.get();
-        break;
-    case TTaskType::UPDATE_TABLET_META_INFO:
-        ret = _thread_pool_update_tablet_meta_info.get();
-        break;
-    case TTaskType::ALTER:
-        ret = _thread_pool_alter_tablet.get();
-        break;
-    case TTaskType::CLEAR_TRANSACTION_TASK:
-        ret = _thread_pool_clear_transaction.get();
-        break;
-    case TTaskType::DROP_AUTO_INCREMENT_MAP:
-        ret = _thread_pool_drop_auto_increment_map.get();
-        break;
-    case TTaskType::REMOTE_SNAPSHOT:
-        ret = _thread_pool_remote_snapshot.get();
-        break;
-    case TTaskType::REPLICATE_SNAPSHOT:
-        ret = _thread_pool_replicate_snapshot.get();
-        break;
-    case TTaskType::EXTERNAL_CLUSTER_SNAPSHOT:
-        ret = _thread_pool_cluster_snapshot.get();
-        break;
-    case TTaskType::TABLET_RESTORE:
-        ret = _thread_pool_remote_snapshot.get();
-        break;
-    case TTaskType::PUSH:
-    case TTaskType::REALTIME_PUSH:
-    case TTaskType::ROLLUP:
-    case TTaskType::SCHEMA_CHANGE:
-    case TTaskType::CANCEL_DELETE:
-    case TTaskType::CLEAR_REMOTE_FILE:
-    case TTaskType::CLEAR_ALTER_TASK:
-    case TTaskType::RECOVER_TABLET:
-    case TTaskType::STREAM_LOAD:
-    case TTaskType::INSTALL_PLUGIN:
-    case TTaskType::UNINSTALL_PLUGIN:
-    case TTaskType::NUM_TASK_TYPE:
-        break;
+    const ThreadPoolSpec* spec = get_thread_pool_spec(type);
+    if (spec != nullptr) {
+        ret = thread_pool_from_spec(*spec);
     }
     TEST_SYNC_POINT_CALLBACK("AgentServer::Impl::get_thread_pool:1", &ret);
     return ret;
