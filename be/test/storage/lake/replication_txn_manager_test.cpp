@@ -313,7 +313,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_FALSE(status.ok()) << status;
 
     auto slog_path = _tablet_manager->txn_slog_location(_tablet_id, _transaction_id);
@@ -394,10 +394,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     auto txn_info = TxnInfoPB();
@@ -463,10 +463,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     auto txn_info = TxnInfoPB();
@@ -546,7 +546,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify txn_log has no DCG metadata (the .dcgs_snapshot file was skipped)
@@ -610,7 +610,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_w
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify txn_log has no DCG metadata (empty .dcgs_snapshot produces no DCGs)

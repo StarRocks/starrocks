@@ -27,6 +27,10 @@
 #include "storage/rowset/rowset_meta.h"
 #include "tablet_manager.h"
 
+namespace starrocks {
+class ThreadPool;
+} // namespace starrocks
+
 using starrocks::FileConverterCreatorFunc;
 
 namespace starrocks::lake {
@@ -41,7 +45,7 @@ public:
 
     Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
 
-    Status replicate_snapshot(const TReplicateSnapshotRequest& request);
+    Status replicate_snapshot(const TReplicateSnapshotRequest& request, ThreadPool* replicate_file_thread_pool);
 
     Status clear_snapshots(const TxnLogPtr& txn_slog);
 

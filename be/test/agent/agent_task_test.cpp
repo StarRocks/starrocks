@@ -153,7 +153,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     auto replicate_snapshot_agent_task = std::make_shared<ReplicateSnapshotAgentTaskRequest>(
             agent_task_request, agent_task_request.replicate_snapshot_req, time(nullptr));
 
-    run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr);
+    run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr, nullptr);
 
     TPublishVersionRequest publish_version_request;
     publish_version_request.__set_transaction_id(_transaction_id);
