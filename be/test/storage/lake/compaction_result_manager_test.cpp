@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
 

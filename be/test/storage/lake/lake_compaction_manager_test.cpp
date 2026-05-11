@@ -19,7 +19,7 @@
 #include <chrono>
 #include <thread>
 
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 
 namespace starrocks::lake {
 

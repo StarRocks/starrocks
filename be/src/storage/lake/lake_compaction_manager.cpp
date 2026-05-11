@@ -19,7 +19,7 @@
 
 #include <algorithm>
 
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "storage/lake/compaction_policy.h"

@@ -19,7 +19,7 @@
 #include <cstdlib>
 #include <ctime>
 
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
