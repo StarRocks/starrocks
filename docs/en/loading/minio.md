@@ -585,7 +585,3 @@ The following query result is returned, indicating that the data has been succes
 |    142 | 3031639 |    3607361 | pv           | 2017-11-25 15:19:25 |
 +--------+---------+------------+--------------+---------------------+
 ```
-<<<<<<< HEAD
-
-=======
->>>>>>> 483dd55b1e ([Doc] Remove comments (#69823))
