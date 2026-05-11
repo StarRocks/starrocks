@@ -16,39 +16,28 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.api.client.util.Lists;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -129,30 +118,6 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     }
 
     /**
-     * MV can only contain LogicalScanOperator, LogicalProjectOperator, LogicalAggregationOperator for mv push down rewrite.
-     */
-    public static boolean isLogicalSPG(OptExpression root) {
-        if (root == null) {
-            return false;
-        }
-        Operator operator = root.getOp();
-        if (!(operator instanceof LogicalOperator)) {
-            return false;
-        }
-        if (!(operator instanceof LogicalScanOperator)
-                && !(operator instanceof LogicalProjectOperator)
-                && !(operator instanceof LogicalAggregationOperator)) {
-            return false;
-        }
-        for (OptExpression child : root.getInputs()) {
-            if (!isLogicalSPG(child)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * Why do we override this method? since queryExpression's tables are greater than mv's, so it's QUERY_DELTA mv match mode
      * which is not supported in the base class.
      *
@@ -177,20 +142,16 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
             queryPredicateColumnsByTable = cached.predicateColumnsByTable;
         } else {
             queryGroupByColumnsByTable = new HashMap<>();
-            collectGroupByColumnsByTable(queryExpression, queryGroupByColumnsByTable);
+            MvUtils.collectGroupByColumnsByTable(queryExpression, queryGroupByColumnsByTable);
             queryPredicateColumnsByTable = new HashMap<>();
-            collectPredicateColumnsByTable(queryExpression, queryPredicateColumnsByTable);
+            MvUtils.collectPredicateColumnsByTable(queryExpression, queryPredicateColumnsByTable);
             queryColumnCache.put(queryExpression, new QueryColumnCache(queryGroupByColumnsByTable, queryPredicateColumnsByTable));
         }
-        Map<Table, Set<String>> queryGroupByAndPredicateColumnsByTable = new HashMap<>(queryGroupByColumnsByTable);
-        queryPredicateColumnsByTable.forEach(
-                (tableId, columns) -> queryGroupByAndPredicateColumnsByTable.computeIfAbsent(tableId,
-                        k -> new HashSet<>()).addAll(columns));
         List<MaterializationContext> validCandidateContexts = Lists.newArrayList();
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            if (!isLogicalSPG(mvContext.getMvExpression())) {
+            if (!MvUtils.isLogicalSPG(mvContext.getMvExpression())) {
                 logMVRewrite(mvContext, this, "mv pruned: not logical SPG");
-            } else if (validMv(mvContext, scanOperators, queryGroupByAndPredicateColumnsByTable, queryPredicateColumnsByTable)) {
+            } else if (validMv(mvContext, scanOperators, queryGroupByColumnsByTable, queryPredicateColumnsByTable)) {
                 validCandidateContexts.add(mvContext);
             }
         }
@@ -198,7 +159,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     }
 
     private boolean validMv(MaterializationContext mvContext, List<LogicalScanOperator> scanOperators,
-                            Map<Table, Set<String>> queryGroupByAndPredicateColumnsByTable,
+                            Map<Table, Set<String>> queryGroupByColumnsByTable,
                             Map<Table, Set<String>> queryPredicateColumnsByTable) {
         // mv is SPG, so there is only one baseTable
         // Use Table.equals rather than getId() so external tables (e.g. IcebergTable) that
@@ -229,10 +190,11 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
             return false;
         }
         // no group by or predicate columns in query
-        if (!queryGroupByAndPredicateColumnsByTable.containsKey(mvBaseTable)) {
+        if (!queryGroupByColumnsByTable.containsKey(mvBaseTable)
+                && !queryPredicateColumnsByTable.containsKey(mvBaseTable)) {
             return true;
         }
-        if (validMvGroupByAndPredicateColumns(mvContext, queryGroupByAndPredicateColumnsByTable.get(mvBaseTable),
+        if (mvContext.validSPGMvGroupByAndPredicateColumns(queryGroupByColumnsByTable.get(mvBaseTable),
                 queryPredicateColumnsByTable.get(mvBaseTable))) {
             return true;
         }
@@ -262,202 +224,6 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     private boolean mvContainsAllColumnsUsedInScan(Set<String> mvUsedColNames, LogicalScanOperator scanOperator) {
         return scanOperator.getColRefToColumnMetaMap().values().stream().allMatch(
                 (Predicate<Column>) c -> mvUsedColNames.contains(c.getName()));
-    }
-
-    @VisibleForTesting
-    boolean validMvGroupByAndPredicateColumns(MaterializationContext mvContext,
-                                                      Set<String> queryGroupByAndPredicateColumns,
-                                                      Set<String> queryPredicateColumns) {
-        Set<String> mvPredicateColumns = mvContext.getPredicateColumns();
-        if (mvPredicateColumns == null) {
-            Map<Table, Set<String>> mvPredicateColumnsByTable = new HashMap<>();
-            collectPredicateColumnsByTable(mvContext.getMvExpression(), mvPredicateColumnsByTable);
-            // MV is SPG, so there is only one baseTable
-            mvPredicateColumns = mvPredicateColumnsByTable.values().stream().findFirst().orElse(new HashSet<>());
-            mvContext.setPredicateColumns(mvPredicateColumns);
-        }
-        if (queryPredicateColumns == null) {
-            // mv has predicate, query doesn't, then mv should not be used
-            if (!mvPredicateColumns.isEmpty()) {
-                return false;
-            }
-        } else if (!queryPredicateColumns.containsAll(mvPredicateColumns)) {
-            return false;
-        }
-        // MV has no Agg anywhere in the tree (detail table) → skip group-by coverage check,
-        // because a detail table preserves all rows and can serve any group-by + predicate.
-        if (!containsAggregation(mvContext.getMvExpression())) {
-            return true;
-        }
-        Set<String> mvGroupingColumns = mvContext.getGroupingColumns();
-        if (mvGroupingColumns == null) {
-            Map<Table, Set<String>> mvGroupByColumnsByTable = new HashMap<>();
-            collectGroupByColumnsByTable(mvContext.getMvExpression(), mvGroupByColumnsByTable);
-            // MV is SPG, so there is only one baseTable
-            mvGroupingColumns = mvGroupByColumnsByTable.values().stream().findFirst().orElse(new HashSet<>());
-            mvContext.setGroupingColumns(mvGroupingColumns);
-        }
-        // MV group-by + predicate columns must cover query's required columns (group-by + predicate).
-        Set<String> mvGroupByAndPredicateColumns = new HashSet<>(mvGroupingColumns);
-        mvGroupByAndPredicateColumns.addAll(mvPredicateColumns);
-        return mvGroupByAndPredicateColumns.containsAll(queryGroupByAndPredicateColumns);
-    }
-
-    /**
-     * Starting from queryExpression (TopAgg -> Join -> ...), collects the physical columns
-     * referenced by the top-level Agg's group-by keys, grouped by table id.
-     */
-    static void collectGroupByColumnsByTable(OptExpression queryExpression, Map<Table, Set<String>> columnsByTable) {
-        if (queryExpression.getOp() instanceof LogicalAggregationOperator agg) {
-            // colRef -> [<tableId, physicalColName>]
-            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
-            buildSPJFullColumnsToTableColumns(queryExpression.inputAt(0), colRefToTableColumns);
-            for (ColumnRefOperator key : agg.getGroupingKeys()) {
-                List<Pair<Table, String>> resolved = colRefToTableColumns.getOrDefault(key.getId(), Collections.emptyList());
-                for (Pair<Table, String> tableColumn : resolved) {
-                    columnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>()).add(tableColumn.second);
-                }
-            }
-        }
-    }
-
-    /**
-     * Post-order DFS over the subtree rooted at {@code node}, building a colId -> List&lt;(tableId, physicalColName)&gt; map.
-     *
-     * - Scan node: seeds the map from colRefToColumnMetaMap.
-     * - All nodes (post-order): if the node carries an inlined Projection (Cascades merges LogicalProject
-     *   into its parent before rule matching), expands its columnRefMap into the map.
-     * - Nested Agg children are skipped to exclude Agg->Agg->...->Scan paths.
-     */
-    private static void buildSPJFullColumnsToTableColumns(OptExpression node,
-                                                          Map<Integer, List<Pair<Table, String>>> colToTableColumns) {
-        if (node.getOp() instanceof LogicalScanOperator scan) {
-            Table table = scan.getTable();
-            for (Map.Entry<ColumnRefOperator, Column> e : scan.getColRefToColumnMetaMap().entrySet()) {
-                colToTableColumns.put(e.getKey().getId(),
-                        Collections.singletonList(Pair.create(table, e.getValue().getName())));
-            }
-        }
-
-        // Recurse into children first (post-order); skip nested Agg subtrees (excludes Agg->Agg->...->Scan paths)
-        for (OptExpression child : node.getInputs()) {
-            if (child.getOp() instanceof LogicalAggregationOperator) {
-                continue;
-            }
-            buildSPJFullColumnsToTableColumns(child, colToTableColumns);
-        }
-
-        Projection inlineProj = node.getOp().getProjection();
-        if (inlineProj != null) {
-            resolveProjectionIntoMap(inlineProj.getColumnRefMap(), colToTableColumns);
-        }
-
-        if (node.getOp() instanceof LogicalProjectOperator) {
-            resolveProjectionIntoMap(((LogicalProjectOperator) node.getOp()).getColumnRefMap(), colToTableColumns);
-        }
-    }
-
-    /**
-     * Expands each output colRef in {@code columnRefMap} to the union of physical (tableId, colName) pairs
-     */
-    private static void resolveProjectionIntoMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
-                                                 Map<Integer, List<Pair<Table, String>>> columnToTableColumns) {
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> e : columnRefMap.entrySet()) {
-            columnToTableColumns.computeIfAbsent(e.getKey().getId(), input -> {
-                List<Pair<Table, String>> resolved = new ArrayList<>();
-                e.getValue().getUsedColumns().getStream()
-                        .forEach(id -> resolved.addAll(columnToTableColumns.getOrDefault(id, Collections.emptyList())));
-                return resolved.isEmpty() ? null : resolved;
-            });
-        }
-    }
-
-    /**
-     * DFS over the expression tree collecting physical columns referenced in each Scan's predicate,
-     * grouped by table id into {@code predicateColumnsByTable}.
-     * Also collects columns from JOIN ON predicates (e.g. {@code a JOIN b ON a.col = 1}),
-     * resolving them to their source scan tables.
-     * Nested Agg subtrees are skipped to exclude Agg->Agg->...->Scan paths.
-     */
-    @VisibleForTesting
-    static void collectPredicateColumnsByTable(OptExpression node, Map<Table, Set<String>> predicateColumnsByTable) {
-        if (node.getOp() instanceof LogicalScanOperator scan) {
-            if (scan.getPredicate() != null) {
-                Table table = scan.getTable();
-                Map<ColumnRefOperator, Column> refToCol = scan.getColRefToColumnMetaMap();
-                scan.getPredicate().getUsedColumns().getStream().forEach(colId ->
-                        refToCol.forEach((ref, col) -> {
-                            if (ref.getId() == colId) {
-                                predicateColumnsByTable.computeIfAbsent(table, t -> new HashSet<>()).add(col.getName());
-                            }
-                        }));
-            }
-            return;
-        }
-        // Collect columns referenced in JOIN ON filter predicates (e.g. ON a.id = b.id AND a.col = 1).
-        if (node.getOp() instanceof LogicalJoinOperator join && join.getOnPredicate() != null) {
-            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
-            buildSPJFullColumnsToTableColumns(node, colRefToTableColumns);
-            collectJoinOnPredicateColumnsByTable(join.getOnPredicate(), colRefToTableColumns, predicateColumnsByTable);
-        }
-        for (OptExpression child : node.getInputs()) {
-            if (child.getOp() instanceof LogicalAggregationOperator) {
-                continue;
-            }
-            collectPredicateColumnsByTable(child, predicateColumnsByTable);
-        }
-    }
-
-    /**
-     * Extracts filter predicate columns from a JOIN ON expression into {@code predicateColumnsByTable}.
-     *
-     * The ON expression is split into atomic conjuncts. A conjunct is treated as a filter predicate
-     * (rather than an equi-join condition) only when at least one of its direct children is a pure
-     * constant expression (i.e. {@link ScalarOperator#isConstant()} returns true, covering literals,
-     * constant functions like {@code concat(1,'2',3)}, etc.). Since constant children contribute no
-     * column refs, {@code clause.getUsedColumns()} is equivalent to collecting only non-constant children.
-     *
-     * Examples:
-     * <ul>
-     *   <li>{@code a.id = b.id}                              → skipped (both sides reference columns)</li>
-     *   <li>{@code concat(a.col,'x') = concat(b.id,'2',3)}   → skipped (both sides reference columns)</li>
-     *   <li>{@code a.col = 1}                                → col from a added</li>
-     *   <li>{@code concat(a.col,'x') = concat(1,'2',3)}      → col from a added</li>
-     * </ul>
-     */
-    private static void collectJoinOnPredicateColumnsByTable(ScalarOperator onPredicate,
-                                                             Map<Integer, List<Pair<Table, String>>> colRefToTableColumns,
-                                                             Map<Table, Set<String>> predicateColumnsByTable) {
-        for (ScalarOperator clause : Utils.extractConjuncts(onPredicate)) {
-            // Skip conjuncts where no direct child is a pure constant (e.g. col_a = col_b equi-joins).
-            boolean hasConstantChild = clause.getChildren().stream().anyMatch(ScalarOperator::isConstant);
-            if (!hasConstantChild) {
-                continue;
-            }
-            clause.getUsedColumns().getStream().forEach(colId -> {
-                List<Pair<Table, String>> resolved =
-                        colRefToTableColumns.getOrDefault(colId, Collections.emptyList());
-                for (Pair<Table, String> tableColumn : resolved) {
-                    predicateColumnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>())
-                            .add(tableColumn.second);
-                }
-            });
-        }
-    }
-
-    /**
-     * Returns true if the expression tree contains at least one LogicalAggregationOperator.
-     */
-    private static boolean containsAggregation(OptExpression node) {
-        if (node.getOp() instanceof LogicalAggregationOperator) {
-            return true;
-        }
-        for (OptExpression child : node.getInputs()) {
-            if (containsAggregation(child)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override

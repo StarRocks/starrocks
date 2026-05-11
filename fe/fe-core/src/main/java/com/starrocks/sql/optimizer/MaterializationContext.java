@@ -45,6 +45,7 @@ import org.apache.commons.collections4.SetUtils;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -279,22 +280,6 @@ public class MaterializationContext {
         return mvOutputColumnRefs;
     }
 
-    public Set<String> getGroupingColumns() {
-        return groupingColumns;
-    }
-
-    public void setGroupingColumns(Set<String> groupingColumns) {
-        this.groupingColumns = groupingColumns;
-    }
-
-    public Set<String> getPredicateColumns() {
-        return predicateColumns;
-    }
-
-    public void setPredicateColumns(Set<String> predicateColumns) {
-        this.predicateColumns = predicateColumns;
-    }
-
     public int getLevel() {
         return level;
     }
@@ -384,7 +369,83 @@ public class MaterializationContext {
             logMVRewrite(mvName, "mv pruned: query tables are disjoint with mvs' tables");
             return false;
         }
+        if (queryTables.size() == 1 && mvTables.size() == 1) {
+            if (!MvUtils.isLogicalSPG(queryExpression) || !MvUtils.isLogicalSPG(mvExpression)) {
+                return true;
+            }
+            // queryExpression is count(1) and without any group by or predicate column
+            if (MvUtils.getScanOperator(queryExpression).get(0).getScanOptimizeOption().getCanUseAnyColumn()) {
+                return true;
+            }
+
+            // 1. check mv contains all columns needed in query
+            Set<ColumnRefOperator> queryUsedColRefs = MvUtils.collectScanColumn(queryExpression);
+            Set<ColumnRefOperator> mvUsedColRefs = MvUtils.collectScanColumn(mvExpression);
+            Set<String> mvUsedColNames = mvUsedColRefs.stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.toSet());
+            Set<String> queryUsedColNames = queryUsedColRefs.stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.toSet());
+            if (!mvUsedColNames.containsAll(queryUsedColNames)) {
+                logMVRewrite(this, "mv pruned: not contain all columns used in scan");
+                return false;
+            }
+            if (queryExpression.getOp() instanceof LogicalScanOperator || mvExpression.getOp() instanceof LogicalScanOperator) {
+                return true;
+            }
+            // 2. check mv contains all group by + predicate columns needed in query
+            Map<Table, Set<String>> queryGroupByColumnsByTable = new HashMap<>();
+            MvUtils.collectGroupByColumnsByTable(queryExpression, queryGroupByColumnsByTable);
+            Map<Table, Set<String>> queryPredicateColumnsByTable = new HashMap<>();
+            MvUtils.collectPredicateColumnsByTable(queryExpression, queryPredicateColumnsByTable);
+            Table baseTable = mvTables.get(0);
+            if (!validSPGMvGroupByAndPredicateColumns(queryGroupByColumnsByTable.get(baseTable),
+                    queryPredicateColumnsByTable.get(baseTable))) {
+                logMVRewrite(this, "mv pruned: mv group by does not cover query group by + predicate columns");
+                return false;
+            }
+        }
         return true;
+    }
+
+    public boolean validSPGMvGroupByAndPredicateColumns(Set<String> queryGroupByColumns,
+                                                        Set<String> queryPredicateColumns) {
+        if (!MvUtils.isLogicalSPG(mvExpression)) {
+            return false;
+        }
+        if ((queryGroupByColumns == null || queryGroupByColumns.isEmpty())
+                && (queryPredicateColumns == null || queryPredicateColumns.isEmpty())) {
+            return true;
+        }
+        if (predicateColumns == null) {
+            Map<Table, Set<String>> mvPredicateColumnsByTable = new HashMap<>();
+            MvUtils.collectPredicateColumnsByTable(mvExpression, mvPredicateColumnsByTable);
+            // MV is SPG, so there is only one baseTable
+            predicateColumns = mvPredicateColumnsByTable.values().stream().findFirst().orElse(new HashSet<>());
+        }
+        // MV has no Agg anywhere in the tree (detail table) → skip group-by coverage check,
+        // because a detail table preserves all rows and can serve any group-by + predicate.
+        if (!MvUtils.containsAggregation(mvExpression)) {
+            return true;
+        }
+        if (groupingColumns == null) {
+            Map<Table, Set<String>> mvGroupByColumnsByTable = new HashMap<>();
+            MvUtils.collectGroupByColumnsByTable(mvExpression, mvGroupByColumnsByTable);
+            // MV is SPG, so there is only one baseTable
+            groupingColumns = mvGroupByColumnsByTable.values().stream().findFirst().orElse(new HashSet<>());
+        }
+        queryGroupByColumns = queryGroupByColumns == null ? Collections.emptySet() : queryGroupByColumns;
+        // MV group-by columns must cover query's group-by columns
+        if (!groupingColumns.containsAll(queryGroupByColumns)) {
+            return false;
+        }
+        queryPredicateColumns = queryPredicateColumns == null ? Collections.emptySet() : queryPredicateColumns;
+        // MV group-by + predicate columns must cover query's required columns (group-by + predicate).
+        Set<String> mvGroupByAndPredicateColumns = new HashSet<>(groupingColumns);
+        mvGroupByAndPredicateColumns.addAll(predicateColumns);
+        return mvGroupByAndPredicateColumns.containsAll(queryGroupByColumns)
+                && mvGroupByAndPredicateColumns.containsAll(queryPredicateColumns);
     }
 
     public static class RewriteOrdering implements Comparator<MaterializationContext> {

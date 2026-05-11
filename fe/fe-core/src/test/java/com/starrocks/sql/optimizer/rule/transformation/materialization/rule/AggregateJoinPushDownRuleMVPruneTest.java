@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -30,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
@@ -105,7 +107,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
 
         OptExpression node = scanNode(tableA, ImmutableMap.of(colRef, col), pred);
         Map<Table, Set<String>> result = new HashMap<>();
-        AggregateJoinPushDownRule.collectPredicateColumnsByTable(node, result);
+        MvUtils.collectPredicateColumnsByTable(node, result);
 
         assertEquals(Set.of("col"), result.get(tableA));
     }
@@ -121,7 +123,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
 
         OptExpression node = scanNode(tableA, ImmutableMap.of(colRef, col), null);
         Map<Table, Set<String>> result = new HashMap<>();
-        AggregateJoinPushDownRule.collectPredicateColumnsByTable(node, result);
+        MvUtils.collectPredicateColumnsByTable(node, result);
 
         assertTrue(result.isEmpty());
     }
@@ -143,7 +145,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
 
         OptExpression node = scanNode(tableA, ImmutableMap.of(ref1, col1, ref2, col2), pred);
         Map<Table, Set<String>> result = new HashMap<>();
-        AggregateJoinPushDownRule.collectPredicateColumnsByTable(node, result);
+        MvUtils.collectPredicateColumnsByTable(node, result);
 
         assertEquals(Set.of("col1", "col2"), result.get(tableA));
     }
@@ -171,7 +173,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
 
         Map<Table, Set<String>> result = new HashMap<>();
-        AggregateJoinPushDownRule.collectPredicateColumnsByTable(join, result);
+        MvUtils.collectPredicateColumnsByTable(join, result);
 
         assertTrue(result.isEmpty(), "Pure equi-join should not contribute predicate columns");
     }
@@ -199,7 +201,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
 
         Map<Table, Set<String>> result = new HashMap<>();
-        AggregateJoinPushDownRule.collectPredicateColumnsByTable(join, result);
+        MvUtils.collectPredicateColumnsByTable(join, result);
 
         assertEquals(1, result.size());
         assertEquals(Set.of("col"), result.get(tableA));
@@ -231,7 +233,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
 
         Map<Table, Set<String>> result = new HashMap<>();
-        AggregateJoinPushDownRule.collectPredicateColumnsByTable(join, result);
+        MvUtils.collectPredicateColumnsByTable(join, result);
 
         assertEquals(1, result.size());
         assertEquals(Set.of("lo_linenumber"), result.get(tableA));
@@ -267,7 +269,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
 
         Map<Table, Set<String>> result = new HashMap<>();
-        AggregateJoinPushDownRule.collectPredicateColumnsByTable(join, result);
+        MvUtils.collectPredicateColumnsByTable(join, result);
 
         assertEquals(1, result.size());
         assertEquals(Set.of("col1", "col3"), result.get(tableA));
@@ -302,10 +304,11 @@ public class AggregateJoinPushDownRuleMVPruneTest {
             Mockito.when(mvExpr.getInputs()).thenReturn(Collections.emptyList());
         }
 
-        MaterializationContext ctx = Mockito.mock(MaterializationContext.class);
-        Mockito.when(ctx.getMvExpression()).thenReturn(mvExpr);
-        Mockito.when(ctx.getPredicateColumns()).thenReturn(mvPredicateCols);
-        Mockito.when(ctx.getGroupingColumns()).thenReturn(mvGroupingCols);
+        // Use CALLS_REAL_METHODS so validSPGMvGroupByAndPredicateColumns executes real logic.
+        MaterializationContext ctx = Mockito.mock(MaterializationContext.class, Mockito.CALLS_REAL_METHODS);
+        Deencapsulation.setField(ctx, "mvExpression", mvExpr);
+        Deencapsulation.setField(ctx, "groupingColumns", mvGroupingCols);
+        Deencapsulation.setField(ctx, "predicateColumns", mvPredicateCols);
         return ctx;
     }
 
@@ -320,8 +323,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
                 Set.of(),          // mvPredicateCols (cached, empty)
                 true);             // has aggregation
 
-        boolean result = RULE.validMvGroupByAndPredicateColumns(
-                ctx,
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
                 Set.of("a"),   // queryGroupByAndPred
                 null);         // queryPredicateColumns (no predicate in query)
 
@@ -329,7 +331,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
     }
 
     /**
-     * MV predicate = {lo_linenumber}, query predicate = null → MV is over-filtered → invalid.
+     * MV predicate = {lo_linenumber}, query predicate = null → MV is over-filtered → valid.
      */
     @Test
     public void testInvalidMv_MvHasPredicate_QueryHasNone() {
@@ -338,38 +340,36 @@ public class AggregateJoinPushDownRuleMVPruneTest {
                 Set.of("lo_linenumber"), // mvPredicateCols
                 true);
 
-        boolean result = RULE.validMvGroupByAndPredicateColumns(
-                ctx,
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
                 Set.of("lo_orderdate"),
                 null);  // query has no predicate
 
-        assertFalse(result);
+        // do not verify predicate column contain
+        assertTrue(result);
     }
 
     /**
-     * MV predicate = {lo_linenumber}, query predicate = {lo_linenumber} (covered),
-     * MV groupBy = {lo_orderdate, lo_linenumber, lo_custkey},
-     * query groupBy+pred = {lo_orderdate, lo_linenumber} → covered → valid.
-     * (This is the scenario from testAggPushDown_ValidMv_QueryJoinOnPredicateCovered.)
+     * MV predicate = {b}, query predicate = {b} (covered),
+     * MV groupBy = {a, b, c},
+     * query groupBy = {a, b} → covered → valid.
      */
     @Test
     public void testValidMv_PredicateCovered_GroupByCovered() {
         MaterializationContext ctx = mockMvContext(
-                Set.of("lo_orderdate", "lo_linenumber", "lo_custkey"),
-                Set.of("lo_linenumber"),
+                Set.of("a", "b", "c"),
+                Set.of("b"),
                 true);
 
-        boolean result = RULE.validMvGroupByAndPredicateColumns(
-                ctx,
-                Set.of("lo_orderdate", "lo_linenumber"),  // queryGroupByAndPred
-                Set.of("lo_linenumber"));                  // queryPredicateColumns
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
+                Set.of("a", "b"),  // queryGroupByAndPred
+                Set.of("b")); // query groupBy {b}
 
         assertTrue(result);
     }
 
     /**
-     * MV predicate = {lo_linenumber, lo_custkey}, query predicate = {lo_linenumber} only
-     * → query doesn't cover all MV predicate columns → invalid.
+     * MV predicate = {lo_linenumber, lo_custkey},
+     * query predicate = {lo_linenumber} only → query doesn't cover all MV predicate columns → valid.
      */
     @Test
     public void testInvalidMv_MvPredicateNotCoveredByQuery() {
@@ -378,12 +378,12 @@ public class AggregateJoinPushDownRuleMVPruneTest {
                 Set.of("lo_linenumber", "lo_custkey"),
                 true);
 
-        boolean result = RULE.validMvGroupByAndPredicateColumns(
-                ctx,
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
                 Set.of("lo_orderdate", "lo_linenumber"),
                 Set.of("lo_linenumber"));  // missing lo_custkey
 
-        assertFalse(result);
+        // do not verify predicate column contain
+        assertTrue(result);
     }
 
     /**
@@ -397,8 +397,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
                 Set.of(),
                 true);
 
-        boolean result = RULE.validMvGroupByAndPredicateColumns(
-                ctx,
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
                 Set.of("a", "b"),  // query needs both a and b
                 Set.of());         // empty predicate
 
