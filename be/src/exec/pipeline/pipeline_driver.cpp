@@ -705,6 +705,13 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _update_driver_level_timer();
 
+<<<<<<< HEAD
+=======
+    if (_global_rf_timer != nullptr) {
+        _global_rf_timer->unschedule_and_join(_fragment_ctx->pipeline_timer());
+    }
+
+>>>>>>> da25331600 ([BugFix] Fix race condition of PipelineTimerTask doRun and unscheduling during query context destruction (#73082))
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
     const std::string driver_name = _driver_name;

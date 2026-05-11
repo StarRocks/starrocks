@@ -324,8 +324,37 @@ void FragmentContext::prepare_pass_through_chunk_buffer() {
     _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
+<<<<<<< HEAD
     if (_runtime_state) {
         _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
+=======
+    _pass_through_chunk_buffer_guard.reset();
+}
+
+Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
+    _pipeline_timer = timer;
+    _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
+    timespec tm = butil::seconds_from_now(runtime_state()->query_ctx()->get_query_expire_seconds());
+    RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task.get(), tm));
+    return Status::OK();
+}
+
+void FragmentContext::clear_pipeline_timer() {
+    if (_pipeline_timer) {
+        if (!_rf_timeout_tasks.empty()) {
+            for (auto& [ignore, task] : _rf_timeout_tasks) {
+                if (task) {
+                    task->unschedule_and_join(_pipeline_timer);
+                    task.reset();
+                }
+            }
+            _rf_timeout_tasks.clear();
+        }
+        if (_timeout_task) {
+            _timeout_task->unschedule_and_join(_pipeline_timer);
+            _timeout_task.reset();
+        }
+>>>>>>> da25331600 ([BugFix] Fix race condition of PipelineTimerTask doRun and unscheduling during query context destruction (#73082))
     }
 }
 
