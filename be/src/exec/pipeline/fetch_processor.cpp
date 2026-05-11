@@ -93,6 +93,10 @@ bool FetchProcessor::has_output() const {
 }
 
 bool FetchProcessor::is_finished() const {
+    // Consumer (e.g. LIMIT) requested finish; source operator can finish without draining the queue.
+    if (_is_source_finishing) {
+        return true;
+    }
     if (_is_sink_complete) {
         std::shared_lock l(_queue_mu);
         if (_queue.empty()) {
@@ -101,6 +105,16 @@ bool FetchProcessor::is_finished() const {
         }
     }
     return false;
+}
+
+void FetchProcessor::set_source_finishing() {
+    _is_source_finishing = true;
+    // Release unconsumed batch units and current unit immediately so process mem tracker
+    // drops when the consumer finishes early (e.g. LIMIT) instead of when the fragment is destroyed.
+    std::unique_lock l(_queue_mu);
+    std::queue<BatchUnitPtr> empty;
+    _queue.swap(empty);
+    _current_unit = std::make_shared<BatchUnit>();
 }
 
 Status FetchProcessor::set_sink_finishing(RuntimeState* state) {
