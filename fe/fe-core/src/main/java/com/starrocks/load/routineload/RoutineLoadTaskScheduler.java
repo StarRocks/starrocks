@@ -83,8 +83,11 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
 
     private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
-    private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
-    private final ExecutorService threadPool = Executors.newCachedThreadPool();
+    // Not final: shutdownNow() in onStopped() interrupts the delay-scheduler / dispatch pool
+    // so their worker threads exit promptly on demotion; both are rebuilt by start() on
+    // re-election.
+    private volatile ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+    private volatile ExecutorService threadPool = Executors.newCachedThreadPool();
 
     private long lastBackendSlotUpdateTime = -1;
 
@@ -97,6 +100,17 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     public RoutineLoadTaskScheduler(RoutineLoadMgr routineLoadManager) {
         super("routine-load-task-scheduler", 0);
         this.routineLoadManager = routineLoadManager;
+    }
+
+    @Override
+    public synchronized void start() {
+        if (scheduledExecutorService.isShutdown()) {
+            scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+        }
+        if (threadPool.isShutdown()) {
+            threadPool = Executors.newCachedThreadPool();
+        }
+        super.start();
     }
 
     @Override
@@ -115,9 +129,12 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         // The slot watermark is reset so the next leader re-queries BE slot capacity.
         needScheduleTasksQueue.clear();
         lastBackendSlotUpdateTime = -1;
-        // scheduledExecutorService and threadPool are not shut down here - they are owned by
-        // this singleton and live across leader sessions; in-flight submissions complete on
-        // their own. Tier 3 may revisit this once executors become re-creatable.
+        // shutdownNow() interrupts the delay-scheduler / dispatch workers so they exit even
+        // if blocked on metadata locks (which become interruptible in a later PR). We do not
+        // awaitTermination - the demotion drain is bounded and a fresh pool is built by
+        // start() on re-election.
+        scheduledExecutorService.shutdownNow();
+        threadPool.shutdownNow();
     }
 
     private void process() throws InterruptedException {

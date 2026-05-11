@@ -77,7 +77,9 @@ public abstract class AlterHandler extends LeaderDaemon {
      */
     protected ReentrantLock lock = new ReentrantLock();
 
-    protected ThreadPoolExecutor executor;
+    // Not final: shutdownNow() in onStopped() interrupts in-flight AlterReplicaTask
+    // submissions; start() rebuilds the pool when the next leader takes over.
+    protected volatile ThreadPoolExecutor executor;
 
     protected void lock() {
         lock.lock();
@@ -89,9 +91,13 @@ public abstract class AlterHandler extends LeaderDaemon {
 
     public AlterHandler(String name) {
         super(name, Config.alter_scheduler_interval_millisecond);
-        executor = ThreadPoolManager
-                .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
-                        name + "_pool", true);
+        executor = newExecutor();
+    }
+
+    private ThreadPoolExecutor newExecutor() {
+        return ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
+                getName() + "_pool", true);
     }
 
 
@@ -195,16 +201,28 @@ public abstract class AlterHandler extends LeaderDaemon {
         setInterval(Config.alter_scheduler_interval_millisecond);
     }
 
-    // alterJobsV2 is persistent (saved/loaded via image and replayed on followers via editlog),
-    // so it must NOT be cleared on demotion - the next leader resumes those jobs from the same
-    // map. The owned 'executor' thread pool also stays alive across leader sessions; in-flight
-    // AlterReplicaTask submissions complete on their own. Subclasses can override onStopped()
-    // to drop derived caches (e.g. tableNotFinalStateJobMap, lastRecycleBinCheckTime) that are
-    // recomputable from alterJobsV2 / cluster state.
-
     @Override
     public synchronized void start() {
+        // Rebuild the executor if a previous demotion shut it down so handleFinishAlterTask
+        // submissions accepted by the new leader run on a fresh pool.
+        if (executor == null || executor.isShutdown()) {
+            executor = newExecutor();
+        }
         super.start();
+    }
+
+    @Override
+    protected void onStopped() {
+        // alterJobsV2 is persistent (saved/loaded via image and replayed on followers via
+        // editlog), so it must NOT be cleared on demotion - the next leader resumes those
+        // jobs from the same map. Subclasses can override onStopped() to drop derived caches
+        // (e.g. tableNotFinalStateJobMap) that are recomputable from alterJobsV2; just
+        // remember to call super.onStopped() so the executor shutdown still runs.
+        // shutdownNow() interrupts in-flight AlterReplicaTask submissions so threads exit
+        // promptly; no awaitTermination because the drain is bounded.
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdownNow();
+        }
     }
 
     /*

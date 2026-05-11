@@ -71,7 +71,9 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     private final AtomicLong taskIdAllocator;
     private final PriorityBlockingQueue<Task> taskPriorityQueue;
-    private final ExecutorService singleExecutor;
+    // Not final: recreated by {@link #start()} if a previous {@link #stop()} shut it down,
+    // so the assigner is reusable across leader demotion / re-election cycles.
+    private volatile ExecutorService singleExecutor;
 
     // Registered load. load id -> LoadMeta
     private final ConcurrentHashMap<Long, LoadMeta> registeredLoadMetas;
@@ -103,9 +105,24 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     }
 
     @Override
-    public void start() {
-        this.singleExecutor.submit(this::runSchedule);
+    public synchronized void start() {
+        if (singleExecutor == null || singleExecutor.isShutdown()) {
+            singleExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                    1, "coordinator-be-assigner", true);
+        }
+        singleExecutor.submit(this::runSchedule);
         LOG.info("Start coordinator be assigner");
+    }
+
+    @Override
+    public synchronized void stop() {
+        // shutdownNow() interrupts the runSchedule worker so its blocking poll() returns;
+        // runSchedule treats InterruptedException as an exit signal. No awaitTermination is
+        // performed here - the demotion drain is bounded by leader_demotion_drain_timeout_sec
+        // and a fresh executor is created on the next start().
+        if (singleExecutor != null && !singleExecutor.isShutdown()) {
+            singleExecutor.shutdownNow();
+        }
     }
 
     /**
@@ -127,6 +144,12 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     LOG.debug("Set schedule interval to {} ms", checkIntervalMs);
                 }
                 task = taskPriorityQueue.poll(checkIntervalMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException ie) {
+                // shutdownNow() interrupts this thread on leader demotion; exit the schedule
+                // loop so the worker can be replaced by a fresh one on the next start().
+                Thread.currentThread().interrupt();
+                LOG.info("Coordinator be assigner interrupted, exiting");
+                return;
             } catch (Throwable throwable) {
                 LOG.warn("Failed to poll task queue", throwable);
                 continue;

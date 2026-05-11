@@ -501,33 +501,30 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
     }
 
     @Test
-    public void testOnStoppedClearsLeaderSessionState() throws Exception {
-        // mergeCommitJobs holds in-flight merge-commit jobs created on this leader. After
-        // demotion the next leader picks fresh coordinator backends per table, so leftover
-        // entries here would otherwise confuse those decisions. The owned threadPoolExecutor
-        // is intentionally NOT shut down by onStopped() because LeaderDaemon.start() is
-        // idempotent and the executor field is final - that lifecycle is left to Tier 3.
+    public void testOnStoppedClearsLeaderSessionStateAndShutsDownPools() throws Exception {
+        // mergeCommitJobs holds in-flight merge-commit jobs created on this leader; after
+        // demotion the next leader picks fresh coordinator backends per table. The owned
+        // threadPoolExecutor and coordinatorBackendAssigner are shut down so their worker
+        // threads exit promptly during the drain, and start() rebuilds them on re-election.
         @SuppressWarnings("unchecked")
         Map<BatchWriteId, MergeCommitJob> jobs = (Map<BatchWriteId, MergeCommitJob>)
                 FieldUtils.readField(batchWriteMgr, "mergeCommitJobs", true);
-
-        StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {
-            {
-                put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
-                put(HTTP_BATCH_WRITE_PARALLEL, "1");
-                put(HTTP_FORMAT, "json");
-            }
-        });
-        // Seed one job through the public API so the registration with
-        // CoordinatorBackendAssigner mirrors production usage.
-        RequestCoordinatorBackendResult seeded = batchWriteMgr.requestCoordinatorBackends(
-                tableId1, params, new UserIdentity("root", "%"));
-        if (seeded.isOk()) {
-            assertEquals(1, jobs.size(), "precondition: a merge-commit job is registered");
-        }
+        java.util.concurrent.ThreadPoolExecutor poolBeforeStop =
+                (java.util.concurrent.ThreadPoolExecutor) FieldUtils.readField(
+                        batchWriteMgr, "threadPoolExecutor", true);
 
         MethodUtils.invokeMethod(batchWriteMgr, true, "onStopped");
 
         assertTrue(jobs.isEmpty(), "mergeCommitJobs must be cleared on demotion");
+        assertTrue(poolBeforeStop.isShutdown(),
+                "threadPoolExecutor must be shut down on demotion so workers can exit");
+
+        // A subsequent start() must rebuild the pool so the daemon is reusable.
+        batchWriteMgr.start();
+        java.util.concurrent.ThreadPoolExecutor poolAfterRestart =
+                (java.util.concurrent.ThreadPoolExecutor) FieldUtils.readField(
+                        batchWriteMgr, "threadPoolExecutor", true);
+        assertFalse(poolAfterRestart.isShutdown(),
+                "threadPoolExecutor must be rebuilt on re-election");
     }
 }

@@ -65,10 +65,13 @@ public class BatchWriteMgr extends LeaderDaemon {
     // An assigner that manages the assignment of coordinator backends.
     private final CoordinatorBackendAssigner coordinatorBackendAssigner;
 
-    // A thread pool executor for executing batch write tasks.
-    private final ThreadPoolExecutor threadPoolExecutor;
+    // A thread pool executor for executing batch write tasks. Not final: shutdownNow() in
+    // onStopped() and rebuilt by start() so leader-side worker threads exit promptly on
+    // demotion and a fresh pool is available after re-election.
+    private volatile ThreadPoolExecutor threadPoolExecutor;
 
-    private final TxnStateDispatcher txnStateDispatcher;
+    // Rebuilt together with threadPoolExecutor so it never holds a reference to a shut down pool.
+    private volatile TxnStateDispatcher txnStateDispatcher;
 
     public BatchWriteMgr() {
         super("merge-commit-mgr", Config.merge_commit_gc_check_interval_ms);
@@ -83,6 +86,11 @@ public class BatchWriteMgr extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
+        if (threadPoolExecutor == null || threadPoolExecutor.isShutdown()) {
+            threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                    Config.merge_commit_executor_threads_num, "merge-commit", true);
+            txnStateDispatcher = new TxnStateDispatcher(threadPoolExecutor);
+        }
         super.start();
         this.coordinatorBackendAssigner.start();
         LOG.info("Start batch write manager");
@@ -99,8 +107,9 @@ public class BatchWriteMgr extends LeaderDaemon {
         // mergeCommitJobs and the per-table backend-assigner registrations are leader-session
         // bookkeeping: BE coordinators are picked again when the next leader sees the next
         // request. Drop the registrations so a new leader does not inherit assignments made
-        // against a sealed editlog. threadPoolExecutor / coordinatorBackendAssigner are not
-        // shut down here because they are owned by this singleton across leader sessions.
+        // against a sealed editlog. The owned thread pool and the coordinator assigner are
+        // shut down so their worker threads exit promptly during demotion drain; both are
+        // rebuilt by start() on re-election.
         lock.writeLock().lock();
         try {
             for (MergeCommitJob job : mergeCommitJobs.values()) {
@@ -114,6 +123,16 @@ public class BatchWriteMgr extends LeaderDaemon {
             MergeCommitMetricRegistry.getInstance().setJobNum(0);
         } finally {
             lock.writeLock().unlock();
+        }
+        try {
+            coordinatorBackendAssigner.stop();
+        } catch (Throwable t) {
+            LOG.warn("stop coordinatorBackendAssigner failed", t);
+        }
+        if (threadPoolExecutor != null && !threadPoolExecutor.isShutdown()) {
+            // shutdownNow() interrupts in-flight merge-commit submissions; we do not
+            // awaitTermination here - the demotion drain is bounded and tasks are leader-only.
+            threadPoolExecutor.shutdownNow();
         }
     }
 
