@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.ivm.common;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -160,8 +161,10 @@ public class IvmOpUtils {
     public static ScalarOperator buildStateUnionScalarOperator(CallOperator aggFunc,
                                                                 ScalarOperator intermediateAggScalarOp,
                                                                 ScalarOperator aggStateAggStateColumnRef) {
-        Preconditions.checkArgument(intermediateAggScalarOp.getType().equals(aggStateAggStateColumnRef.getType()),
-                "The type of intermediateAggScalarOp and aggStateTableRowIdScalarOp must be the same");
+        Preconditions.checkArgument(
+                typesCompatibleForStateUnion(intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType()),
+                "intermediateAggScalarOp type %s is incompatible with MV state column type %s",
+                intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType());
         Type[] argTypes = new Type[] {intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType()};
         String origAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
         String stateUnionFunctionName = AggStateUtils.stateUnionFunctionName(origAggFuncName);
@@ -181,5 +184,21 @@ public class IvmOpUtils {
         specializedFunc.setAggStateDesc(inputAggStateDesc.clone());
         return new CallOperator(stateUnionFunctionName, intermediateAggScalarOp.getType(),
                 List.of(intermediateAggScalarOp, aggStateAggStateColumnRef), specializedFunc);
+    }
+
+    @VisibleForTesting
+    static boolean typesCompatibleForStateUnion(Type intermediate, Type mvColumn) {
+        if (intermediate.equals(mvColumn)) {
+            return true;
+        }
+        // MaterializedViewAnalyzer caps VARCHAR length at OlapMaxVarcharLength (65533)
+        // when persisting MV column types, so the delta side's narrower VARCHAR(N) is
+        // semantically compatible with the MV side's wider VARCHAR(65533). Same logic
+        // applies to other string types sharing a primitive kind.
+        if (intermediate.isStringType() && mvColumn.isStringType()
+                && intermediate.getPrimitiveType() == mvColumn.getPrimitiveType()) {
+            return true;
+        }
+        return false;
     }
 }
