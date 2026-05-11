@@ -79,7 +79,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
 import java.util.concurrent.atomic.AtomicLong;
+=======
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+>>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
@@ -88,6 +94,7 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
+    private static final long CLOSE_WARN_DELAY_SECONDS = 60;
 
     private final IcebergTable table;
     private final TupleDescriptor desc;
@@ -156,10 +163,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     @Override
     public void close() {
+        AtomicBoolean finished = new AtomicBoolean(false);
+        CompletableFuture.delayedExecutor(CLOSE_WARN_DELAY_SECONDS, TimeUnit.SECONDS).execute(() -> {
+            if (!finished.get()) {
+                LOG.warn("Iceberg remote file info source close is still running after {} seconds, "
+                                + "table: {}.{}, remoteFileInfoSource: {}",
+                        CLOSE_WARN_DELAY_SECONDS, table.getCatalogDBName(), table.getCatalogTableName(),
+                        remoteFileInfoSource.getClass().getName());
+            }
+        });
         try {
             remoteFileInfoSource.close();
         } catch (Exception e) {
             LOG.warn("close RemoteFileInfoSource failed", e);
+        } finally {
+            finished.set(true);
         }
     }
 
