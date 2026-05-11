@@ -58,6 +58,34 @@ CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 // Queue size for the lake partial update threadpool.
 CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
 
+// Threadpool for inner cache-miss block reads inside LakePersistentIndex::get_from_sstables.
+// Separate from pk_index_execution_thread_pool so parallel-publish workers (which themselves
+// run on pk_index_execution_thread_pool) can submit fileset multi_get tasks here and wait
+// without same-pool re-entrance.
+CONF_mInt32(pk_index_inner_io_threadpool_max_threads, "0");
+
+CONF_mInt32(pk_index_inner_io_threadpool_size, "1048576");
+
+// Threadpool for splitting a single PersistentIndexSstable::multi_get into key-chunk tasks
+// so the per-Table::MultiGet sequential cache-miss block-read loop runs on multiple threads.
+// MUST be a different pool from pk_index_inner_io_thread_pool: get_from_sstables already
+// dispatches per-fileset multi_get on inner_io, and re-entering inner_io from inside
+// PersistentIndexSstable::multi_get would deadlock the worker via ThreadPool::wait().
+// Default size is num_cores * 4 because each chunk task is dominated by sleeping on OSS
+// HTTP responses; sizing by cores alone leaves available HTTP concurrency unused.
+CONF_mInt32(pk_index_chunk_io_threadpool_max_threads, "0");
+
+CONF_mInt32(pk_index_chunk_io_threadpool_size, "1048576");
+
+// Threadpool dedicated to LakePersistentIndex::_open_sstables_parallel. Each task does
+// 4 sequential OSS round-trips (footer + index + metaindex + filter blocks) inside
+// Table::Open, so it is purely I/O-bound. Splitting it off pk_index_execution_thread_pool
+// avoids the cold-start head-of-chain throttle where ~150 SST-open tasks queue behind a
+// 16-thread (num_cores/2) pool that is also shared with parallel-publish workers.
+CONF_mInt32(pk_index_sst_open_threadpool_max_threads, "0");
+
+CONF_mInt32(pk_index_sst_open_threadpool_size, "1048576");
+
 CONF_Int32(streaming_load_thread_pool_num_min, "0");
 
 CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");

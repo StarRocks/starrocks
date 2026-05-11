@@ -30,8 +30,8 @@
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
+#include "common/thread/threadpool.h"
 #include "storage/storage_metrics.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
