@@ -411,6 +411,70 @@ TEST_F(CompactionResultManagerTest, multi_disk_round_robin_by_tablet_id) {
     EXPECT_NE(std::string::npos, refs3[0].file_path.find("diskB")) << refs3[0].file_path;
 }
 
+TEST_F(CompactionResultManagerTest, scan_renames_corrupt_file_with_missing_required_fields) {
+    // A .pb file that parses cleanly but is missing the required tablet_id/
+    // base_version/op_compaction sub-message must be rejected and renamed
+    // with the .corrupt suffix. Drives load_one_file's required-fields check
+    // (line 129-131) which is otherwise unreachable from existing tests
+    // because they always populate all fields.
+    auto subdir = _root / CompactionResultManager::kSubDir;
+    std::filesystem::create_directories(subdir);
+    // Write a CompactionResultPB serialized with only result_id set — proto2
+    // optionals make it valid wire-format but the manager's manual check on
+    // tablet_id/base_version/op_compaction fails.
+    CompactionResultPB stub;
+    stub.set_result_id(42);
+    std::string serialized;
+    ASSERT_TRUE(stub.SerializeToString(&serialized));
+    {
+        std::ofstream out(subdir / "100_5_0.pb", std::ios::binary);
+        out.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
+    }
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    EXPECT_EQ(0u, mgr.result_count());
+    // The corrupt file must have been renamed (so a future scan won't keep
+    // trying to load it forever).
+    EXPECT_TRUE(std::filesystem::exists(subdir / "100_5_0.pb.corrupt"));
+    EXPECT_FALSE(std::filesystem::exists(subdir / "100_5_0.pb"));
+}
+
+TEST_F(CompactionResultManagerTest, scan_renames_garbage_pb_payload) {
+    // Pure garbage bytes in a .pb file: ParseFromArray fails outright, hitting
+    // load_one_file line 127 (ParseFromArray returns false). Same .corrupt
+    // suffix treatment expected.
+    auto subdir = _root / CompactionResultManager::kSubDir;
+    std::filesystem::create_directories(subdir);
+    {
+        std::ofstream out(subdir / "200_5_0.pb", std::ios::binary);
+        // Sequence of 0xFF bytes is not a valid protobuf wire format header.
+        for (int i = 0; i < 256; ++i) out.put(static_cast<char>(0xFF));
+    }
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    EXPECT_EQ(0u, mgr.result_count());
+    EXPECT_TRUE(std::filesystem::exists(subdir / "200_5_0.pb.corrupt"));
+}
+
+TEST_F(CompactionResultManagerTest, load_results_returns_corruption_on_mid_flight_garbage) {
+    // After append_result succeeds, overwrite the on-disk file with garbage.
+    // load_results re-reads from disk (we don't cache the parsed PB) and must
+    // surface Corruption from ParseFromArray (line 249-251).
+    CompactionResultManager mgr({_root.string()});
+    ASSERT_OK(mgr.scan_on_startup());
+    ASSERT_OK(mgr.append_result(make_result(900, 5, 0, {1, 2})));
+    auto refs = mgr.list_results_for_tablet(900);
+    ASSERT_EQ(1u, refs.size());
+    // Truncate-and-overwrite the file with garbage bytes.
+    {
+        std::ofstream out(refs[0].file_path, std::ios::binary | std::ios::trunc);
+        for (int i = 0; i < 32; ++i) out.put(static_cast<char>(0xFF));
+    }
+    auto loaded_or = mgr.load_results(900, 10);
+    EXPECT_FALSE(loaded_or.ok()) << loaded_or.status();
+    EXPECT_TRUE(loaded_or.status().is_corruption()) << loaded_or.status();
+}
+
 TEST_F(CompactionResultManagerTest, total_bytes_uses_cached_size_on_delete) {
     // Verify _total_bytes is decremented from the cached ResultRef.bytes,
     // independent of any extra fs::get_file_size call. After delete, total_bytes
