@@ -713,6 +713,153 @@ public class CreateFunctionStmtAnalyzerTest {
         }
     }
 
+    // DECIMAL / BigDecimal UDF test classes
+
+    private static class DecimalScalarEval {
+        public java.math.BigDecimal evaluate(java.math.BigDecimal a, java.math.BigDecimal b) {
+            if (a == null || b == null) {
+                return null;
+            }
+            return a.add(b);
+        }
+    }
+
+    private static class DecimalScalarMismatchEval {
+        // Wrong Java type: SQL declares DECIMAL but Java uses String.
+        public String evaluate(String a) {
+            return a;
+        }
+    }
+
+    public static class DecimalAggEval {
+        public static class State {
+            public int serializeLength() {
+                return 0;
+            }
+        }
+
+        public State create() {
+            return new State();
+        }
+
+        public void destroy(State state) {
+        }
+
+        public final void update(State state, java.math.BigDecimal v) {
+        }
+
+        public void serialize(State state, java.nio.ByteBuffer buff) {
+        }
+
+        public void merge(State state, java.nio.ByteBuffer buffer) {
+        }
+
+        public java.math.BigDecimal finalize(State state) {
+            return null;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDecimal() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(DecimalScalarEval.class);
+
+            String sql = "CREATE FUNCTION ABC.dec_add(DECIMAL(10, 2), DECIMAL(10, 2)) \n"
+                    + "RETURNS DECIMAL(11, 2) \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDecimal256() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(DecimalScalarEval.class);
+
+            String sql = "CREATE FUNCTION ABC.dec256_add(DECIMAL(76, 10), DECIMAL(76, 10)) \n"
+                    + "RETURNS DECIMAL(76, 10) \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDecimalTypeMismatch() {
+        // Declaring DECIMAL but providing a Java method that takes String should be rejected.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(DecimalScalarMismatchEval.class);
+
+                String sql = "CREATE FUNCTION ABC.bad_dec(DECIMAL(10, 2)) \n"
+                        + "RETURNS DECIMAL(10, 2) \n"
+                        + "properties (\n"
+                        + "    \"symbol\" = \"symbol\",\n"
+                        + "    \"type\" = \"StarrocksJar\",\n"
+                        + "    \"file\" = \"http://localhost:8080/\"\n"
+                        + ");";
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testJUDAFDecimal() {
+        try {
+            Config.enable_udf = true;
+            new MockUp<CreateFunctionAnalyzer>() {
+                @Mock
+                public String computeMd5(CreateFunctionStmt stmt) {
+                    return "0xff";
+                }
+            };
+            new MockUp<UDFInternalClassLoader>() {
+                @Mock
+                public final Class<?> loadClass(String name, boolean resolve)
+                        throws ClassNotFoundException {
+                    if (name.contains("$")) {
+                        return DecimalAggEval.State.class;
+                    }
+                    return DecimalAggEval.class;
+                }
+            };
+
+            String sql = "CREATE AGGREGATE FUNCTION ABC.dec_sum(DECIMAL(18, 4)) \n"
+                    + "RETURNS DECIMAL(38, 4) \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(sql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
     @Test
     public void testVarargsUDTF() {
         try {

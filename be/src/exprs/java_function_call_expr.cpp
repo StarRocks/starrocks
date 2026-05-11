@@ -43,7 +43,6 @@ struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
     JavaMethodDescriptor* call_desc;
 
-    // Now we don't support logical type function
     StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
@@ -77,8 +76,15 @@ struct UDFFunctionCallHelper {
         }
         auto& helper = JVMFunctionHelper::getInstance();
         DCHECK(call_desc->method_desc[0].is_box);
-        auto res = ColumnHelper::create_column(ctx->get_return_type(), true);
-        RETURN_IF_ERROR(helper.get_result_from_boxed_array(ctx->get_return_type().type, res.get(), result, num_rows));
+        const auto& return_type = ctx->get_return_type();
+        auto res = ColumnHelper::create_column(return_type, true);
+        if (is_decimalv3_field_type(return_type.type)) {
+            RETURN_IF_ERROR(helper.get_decimal_result_from_boxed_array(return_type.type, return_type.precision,
+                                                                       return_type.scale, res.get(), result, num_rows,
+                                                                       ctx->error_if_overflow()));
+        } else {
+            RETURN_IF_ERROR(helper.get_result_from_boxed_array(return_type.type, res.get(), result, num_rows));
+        }
         RETURN_IF_ERROR(ColumnHelper::update_nested_has_null(res.get()));
         down_cast<NullableColumn*>(res.get())->update_has_null();
         return res;

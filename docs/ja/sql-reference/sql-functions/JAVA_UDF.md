@@ -540,16 +540,27 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 >
 > 現在、スカラー UDF でサポートされているのは、ネストされていない ARRAY と MAP パラメータ/リターンタイプのみです。
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+
+> **NOTE**
+>
+> `DECIMAL` パラメータについて、UDF が返す BigDecimal は列の宣言された
+> `(precision, scale)` に従って `RoundingMode.HALF_UP` でスケール調整されてから
+> 列に書き戻されます。スケール調整後の値が宣言された `(precision, scale)` に
+> 収まらない場合、動作はセッション変数 `overflow_mode` に従います:
+>
+> - `OUTPUT_NULL`（既定）: 該当行は `NULL` として書き込まれます。
+> - `REPORT_ERROR`: クエリは `ArithmeticException` エラーで中断されます。
 
 ## パラメーター設定
 

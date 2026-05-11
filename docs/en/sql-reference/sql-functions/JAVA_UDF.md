@@ -540,18 +540,30 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 >
 > Currently, only non-nested ARRAY and MAP parameter/return types are supported for Scalar UDFs.
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
-| ARRAY          | java.util.List    |
-| Map            | java.util.Map     |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| ARRAY                                          | java.util.List        |
+| Map                                            | java.util.Map         |
+
+> **NOTE**
+>
+> For `DECIMAL` parameters, BigDecimal values produced by the UDF are rescaled
+> to the column's declared `(precision, scale)` using `RoundingMode.HALF_UP`
+> before they are written back. If the rescaled value does not fit in the
+> declared `(precision, scale)`, the behavior follows the session
+> `overflow_mode`:
+>
+> - `OUTPUT_NULL` (default): the offending row is written as `NULL`.
+> - `REPORT_ERROR`: the query aborts with an `ArithmeticException`.
 
 ## Parameter settings
 
