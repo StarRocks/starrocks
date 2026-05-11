@@ -91,10 +91,6 @@ public class UpdatePlanner {
 
         if (targetTable instanceof IcebergTable icebergTable) {
             requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns);
-            // Use the exact column names saved by the analyzer from SELECT list aliases.
-            // getColumnOutputNames() is unreliable (scope expansion adds extras),
-            // and ColumnRefOperator.getName() returns "expr" for SET expressions.
-            colNames = updateStmt.getIcebergColumnOutputNames();
         } else {
             // OLAP/System: cast output column types to target schema types
             optExprBuilder = castOutputColumnsTypeToTargetColumns(columnRefFactory, targetTable,

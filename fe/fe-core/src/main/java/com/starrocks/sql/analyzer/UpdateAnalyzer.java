@@ -207,14 +207,14 @@ public class UpdateAnalyzer {
         }
         ((SelectRelation) queryStatement.getQueryRelation()).setOutputExpr(castOutputExprs);
 
-        // Save the exact column names from the SELECT list aliases for the planner.
-        // Cannot rely on getColumnOutputNames() (scope expansion adds extras) or
-        // ColumnRefOperator.getName() (returns "expr" for SET expressions).
-        List<String> colNames = Lists.newArrayList();
-        for (int i = 0; i < selectList.getItems().size(); i++) {
-            colNames.add(selectList.getItems().get(i).getAlias());
-        }
-        updateStmt.setIcebergColumnOutputNames(colNames);
+        // Pin the SELECT list aliases as the relation's explicit column names so the
+        // planner reads them via the standard getColumnOutputNames() path. Without
+        // this, QueryRelation falls back to scope-derived names which include hidden
+        // metadata columns (_file, _pos) twice for Iceberg.
+        ((SelectRelation) queryStatement.getQueryRelation()).setColumnOutputNames(
+                selectList.getItems().stream()
+                        .map(SelectListItem::getAlias)
+                        .collect(Collectors.toList()));
 
         updateStmt.setTable(icebergTable);
         updateStmt.setQueryStatement(queryStatement);

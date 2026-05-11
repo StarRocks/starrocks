@@ -36,20 +36,6 @@ public class UpdateStmt extends DmlStmt {
 
     private boolean usePartialUpdate;
 
-    // Column names for Iceberg RowDelta output tuple, set by UpdateAnalyzer.
-    // Needed because getColumnOutputNames() may not match the SELECT list
-    // (optimizer can expand it), and ColumnRefOperator.getName() returns
-    // "expr" for SET expressions instead of the target column name.
-    private List<String> icebergColumnOutputNames;
-
-    public void setIcebergColumnOutputNames(List<String> names) {
-        this.icebergColumnOutputNames = names;
-    }
-
-    public List<String> getIcebergColumnOutputNames() {
-        return icebergColumnOutputNames;
-    }
-
     public UpdateStmt(TableRef tableRef, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
         this(tableRef, assignments, fromRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);

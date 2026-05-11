@@ -232,7 +232,7 @@ public class UpdateAnalyzerIcebergTest {
         assertNotNull(updateStmt.getQueryStatement());
 
         // Verify column output names include all expected columns
-        List<String> colNames = updateStmt.getIcebergColumnOutputNames();
+        List<String> colNames = updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames();
         assertNotNull(colNames);
         // _file, _pos, id, data, date, op_code
         assertEquals(6, colNames.size());
@@ -252,7 +252,7 @@ public class UpdateAnalyzerIcebergTest {
 
         UpdateAnalyzer.analyze(updateStmt, connectContext);
 
-        List<String> colNames = updateStmt.getIcebergColumnOutputNames();
+        List<String> colNames = updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames();
         assertNotNull(colNames);
         // _file, _pos, id, data, date, op_code
         assertEquals(6, colNames.size());
@@ -295,7 +295,7 @@ public class UpdateAnalyzerIcebergTest {
         assertNotNull(updateStmt.getTable());
         assertTrue(updateStmt.getTable() instanceof IcebergTable);
         assertNotNull(updateStmt.getQueryStatement());
-        assertNotNull(updateStmt.getIcebergColumnOutputNames());
+        assertNotNull(updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames());
     }
 
     @Test
@@ -465,7 +465,7 @@ public class UpdateAnalyzerIcebergTest {
 
         UpdateAnalyzer.analyze(updateStmt, connectContext);
 
-        List<String> colNames = updateStmt.getIcebergColumnOutputNames();
+        List<String> colNames = updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames();
         assertNotNull(colNames);
         assertEquals(6, colNames.size());
         assertEquals(IcebergTable.FILE_PATH, colNames.get(0));
@@ -531,7 +531,7 @@ public class UpdateAnalyzerIcebergTest {
 
         UpdateAnalyzer.analyze(updateStmt, connectContext);
 
-        List<String> colNames = updateStmt.getIcebergColumnOutputNames();
+        List<String> colNames = updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames();
         SelectRelation selectRelation =
                 (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
         assertNotNull(colNames);
