@@ -106,8 +106,7 @@ public class IcebergRowDeltaSink extends DataSink {
         String dataCodec = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, sessionCodec);
         this.dataCompressionType = dataCodec;
         this.deleteCompressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION, dataCodec);
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
-                sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
+        this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
     }
 
     public void init() {
