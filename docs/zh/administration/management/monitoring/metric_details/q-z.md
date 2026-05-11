@@ -478,6 +478,12 @@ description: "Alphabetical q - z"
 - 类型：累积
 - 描述：仅存算分离模式。`starrocks_be_staros_shard_info_fallback_total` 中 starmgr RPC 返回非 OK 状态的子集。可使用比率 `failed_total / fallback_total` 将 starmgr 的瞬时错误与正常的成功回退区分开来进行告警。
 
+## `starrocks_be_staros_shard_count`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：仅存算分离模式。当前分配给该 BE 的 StarOSWorker 的 shard 数量（即 worker 本地 shard 表的大小）。每次指标采集时实时刷新。可用于观测各 BE 之间的 shard 分布均衡情况，并发现与 FE 端调度结果的偏差。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 单位：字节

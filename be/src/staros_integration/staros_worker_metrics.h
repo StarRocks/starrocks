@@ -30,6 +30,7 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_GAUGE(staros_shard_count, MetricUnit::NOUNIT);
 
 private:
     MetricRegistry* _registry = nullptr;

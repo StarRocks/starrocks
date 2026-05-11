@@ -40,6 +40,9 @@ TEST(StarOSWorkerMetricsTest, InstallRegistersFallbackMetrics) {
 
     metrics.staros_shard_info_fallback_failed_total.increment(4);
     assert_metric_value(&registry, "staros_shard_info_fallback_failed_total", "4");
+
+    metrics.staros_shard_count.set_value(7);
+    assert_metric_value(&registry, "staros_shard_count", "7");
 }
 
 } // namespace starrocks
