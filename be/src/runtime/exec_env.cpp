@@ -104,7 +104,6 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thrift_rpc_helper.h"
-#include "service/staros_worker.h"
 #include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_compaction_manager.h"
