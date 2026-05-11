@@ -28,7 +28,11 @@ void PipelineTimerTask::waitUtilFinished() {
     _latch.wait();
 }
 
+<<<<<<< HEAD:be/src/exec/pipeline/schedule/pipeline_timer.cpp
 void PipelineTimerTask::unschedule(PipelineTimer* timer) {
+=======
+void BthreadTimerTask::unschedule_and_join(BthreadTimer* timer) {
+>>>>>>> da25331600 ([BugFix] Fix race condition of PipelineTimerTask doRun and unscheduling during query context destruction (#73082)):be/src/common/bthread_timer.cpp
     int rc = timer->unschedule(this);
     if (rc == 1) {
         waitUtilFinished();

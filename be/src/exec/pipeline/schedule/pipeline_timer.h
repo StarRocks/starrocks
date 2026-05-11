@@ -45,6 +45,7 @@ class PipelineTimerTask : public std::enable_shared_from_this<PipelineTimerTask>
 public:
     virtual ~PipelineTimerTask() = default;
 
+<<<<<<< HEAD
     void doRun() {
         auto self = shared_from_this();
         Run();
@@ -67,6 +68,9 @@ protected:
 protected:
     std::latch _latch{1};
     TaskId _tid{};
+=======
+    void unschedule_and_join(PipelineTimer* timer);
+>>>>>>> da25331600 ([BugFix] Fix race condition of PipelineTimerTask doRun and unscheduling during query context destruction (#73082))
 };
 
 class PipelineTimer {
@@ -74,6 +78,7 @@ public:
     PipelineTimer() = default;
     ~PipelineTimer() noexcept = default;
 
+<<<<<<< HEAD
     Status start();
 
     Status schedule(PipelineTimerTask* task, const timespec& abstime);
@@ -89,4 +94,9 @@ public:
 private:
     std::shared_ptr<bthread::TimerThread> _thr;
 };
+=======
+inline void PipelineTimerTask::unschedule_and_join(PipelineTimer* timer) {
+    BthreadTimerTask::unschedule_and_join(timer);
+}
+>>>>>>> da25331600 ([BugFix] Fix race condition of PipelineTimerTask doRun and unscheduling during query context destruction (#73082))
 } // namespace starrocks::pipeline
