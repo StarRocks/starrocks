@@ -149,6 +149,8 @@ jobs:
       BRANCH:        ${{ needs.prepare.outputs.BRANCH }}
       PR_NUMBER:     ${{ needs.prepare.outputs.COMMIT_SHA }}
       WEEKLY_REVIEW: 'true'
+      LINUX_DISTRO:  ubuntu
+      BUILD_TYPE:    Release
     outputs:
       sql_oss_path: ${{ steps.run.outputs.sql_oss_path }}
     steps:
