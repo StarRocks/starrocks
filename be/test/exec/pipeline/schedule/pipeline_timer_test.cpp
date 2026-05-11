@@ -94,10 +94,10 @@ TEST_F(PipelineTimerTaskTest, runs_when_due_and_unschedule_after_done_does_not_b
         std::this_thread::yield();
     }
 
-    // task.unschedule drives waitUtilFinished only when rc == 1 (running).
+    // task.unschedule_and_join drives waitUtilFinished only when rc == 1 (running).
     // Either way, the call must not deadlock.
     auto start = std::chrono::steady_clock::now();
-    task->unschedule(&timer);
+    task->unschedule_and_join(&timer);
     auto elapsed = std::chrono::steady_clock::now() - start;
     EXPECT_LT(elapsed, std::chrono::seconds(5));
     EXPECT_TRUE(task->ran.load(std::memory_order_acquire));
@@ -117,7 +117,7 @@ TEST_F(PipelineTimerTaskTest, unschedule_pending_task_removes_without_wait) {
 }
 
 // When Run is in progress, unschedule reports TIMER_TASK_RUNNING and
-// PipelineTimerTask::unschedule blocks inside waitUtilFinished until Run returns.
+// PipelineTimerTask::unschedule_and_join blocks inside waitUtilFinished until Run returns.
 TEST_F(PipelineTimerTaskTest, wait_util_finished_blocks_until_run_returns) {
     auto task = std::make_shared<ProbeTask>();
     task->block_until_released = true;
@@ -155,8 +155,8 @@ TEST_F(PipelineTimerTaskTest, wait_util_finished_returns_immediately_when_alread
     ASSERT_OK(timer.schedule(task.get(), past_abstime()));
     task->run_enter.acquire();
 
-    // Drain post-Run state by asking unschedule to synchronize.
-    task->unschedule(&timer);
+    // Drain post-Run state by asking unschedule_and_join to synchronize.
+    task->unschedule_and_join(&timer);
 
     auto start = std::chrono::steady_clock::now();
     task->waitUtilFinished();
@@ -165,7 +165,7 @@ TEST_F(PipelineTimerTaskTest, wait_util_finished_returns_immediately_when_alread
 }
 
 // Dekker / lost-wakeup stress. Each iteration creates a fresh task, schedules it
-// with a past abstime and immediately calls PipelineTimerTask::unschedule. This
+// with a past abstime and immediately calls PipelineTimerTask::unschedule_and_join. This
 // races the waiter's store of _has_consumer against doRun()'s _finished store +
 // _has_consumer load. A regression on the memory ordering (or on mutex + CV
 // coordination) will manifest as a permanent hang here; the watchdog bounds
@@ -192,11 +192,11 @@ TEST_F(PipelineTimerTaskTest, dekker_synchronization_stress) {
     for (int i = 0; i < kIterations; ++i) {
         auto task = std::make_shared<ProbeTask>();
         ASSERT_OK(timer.schedule(task.get(), past_abstime()));
-        // unschedule drives the race: may see TIMER_TASK_REMOVED (we got there
+        // unschedule_and_join drives the race: may see TIMER_TASK_REMOVED (we got there
         // first), TIMER_TASK_RUNNING (bthread already popped it) or -1 (finished
         // before we looked). Only the "running" case exercises waitUtilFinished,
         // but all three must terminate quickly.
-        task->unschedule(&timer);
+        task->unschedule_and_join(&timer);
         completed.store(i + 1, std::memory_order_release);
     }
 
@@ -233,7 +233,7 @@ TEST_F(PipelineTimerTaskTest, batched_tasks_all_unblock_eventually) {
     waiters.reserve(kTasks);
     for (auto& t : tasks) {
         waiters.emplace_back([&, raw = t.get()] {
-            raw->unschedule(&timer);
+            raw->unschedule_and_join(&timer);
             finished.fetch_add(1, std::memory_order_acq_rel);
         });
     }

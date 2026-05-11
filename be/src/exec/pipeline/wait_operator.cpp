@@ -46,7 +46,7 @@ WaitSourceOperator::~WaitSourceOperator() {
 
 void WaitSourceOperator::close(RuntimeState* state) {
     if (_wait_timer_task != nullptr) {
-        state->fragment_ctx()->pipeline_timer()->unschedule(_wait_timer_task.get());
+        _wait_timer_task->unschedule_and_join(state->fragment_ctx()->pipeline_timer());
         _wait_timer_task = nullptr;
     }
 }
@@ -77,6 +77,16 @@ Status WaitSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void WaitSinkOperator::close(RuntimeState* state) {
+    if (_wait_timer_task != nullptr) {
+        _wait_timer_task->unschedule_and_join(state->fragment_ctx()->pipeline_timer());
+        _wait_timer_task = nullptr;
+    }
+}
+
+>>>>>>> da25331600 ([BugFix] Fix race condition of PipelineTimerTask doRun and unscheduling during query context destruction (#73082))
 bool WaitSinkOperator::need_input() const {
     return !_wait_context->chunk_buffer->is_full();
 }
