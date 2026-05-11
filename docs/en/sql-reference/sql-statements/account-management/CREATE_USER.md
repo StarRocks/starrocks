@@ -5,6 +5,7 @@ displayed_sidebar: docs
 # CREATE USER
 
 import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
+import AuthOption from '../../../_assets/commonMarkdown/AuthOption.mdx'
 
 CREATE USER creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user. From v3.3.3, StarRocks supports setting user properties when creating a user.
 
@@ -25,6 +26,7 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   For the naming conventions of usernames, see [System limits](../../System_limit.md).
 
+<<<<<<< HEAD
 - `auth_option` specifies the authentication method. Currently, three authentication methods are supported: StarRocks native password, mysql_native_password, and "authentication_ldap_simple". StarRocks native password is the same as mysql_native_password in logic but slightly differs in syntax. One user identity can use only one authentication method.
 
     ```SQL
@@ -45,6 +47,9 @@ CREATE USER [IF NOT EXISTS] <user_identity>
     | `authentication_ldap_simple` | Plaintext                      | Plaintext              |
 
 > Note: StarRocks encrypts users' passwords before storing them.
+=======
+<AuthOption />
+>>>>>>> a20389f1e6 ([Doc] move to snippet (#73117))
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: If this parameter is specified, the roles are automatically assigned to the user and activated by default when the user logs in. If not specified, this user does not have any privileges. Make sure that all the roles that are specified already exist.
 
