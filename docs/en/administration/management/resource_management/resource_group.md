@@ -40,7 +40,10 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | Parameter                  | Description                                                    | Value Range                                                    | Default |
 | -------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
 | cpu_weight                 | The CPU scheduling weight of this resource group on a BE node. | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0       |
+| cpu_weight_percent         | The CPU scheduling weight percentage of this resource group on a BE node. Supported from v4.1. | [0, 100] (takes effect when greater than 0)     | 0       |
 | exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0       |
+| exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1. | [0, 100] (takes effect when greater than 0) | 0       |
+| warehouses                 | Warehouses where this resource group takes effect. Supported from v4.1. | Warehouse names separated by commas (`,`) | All warehouses |
 | mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node. | (0, 1] (required)               | -       |
 | mem_pool                   | Groups resource groups to share a memory limit.                | String                                                         | default_mem_pool |
 | spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.         | (0, 1]                                                         | 1.0     |
@@ -51,31 +54,43 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 #### CPU resource parameters
 
-##### `cpu_weight`
+##### `cpu_weight` and `cpu_weight_percent`
 
 This parameter specifies the CPU scheduling weight of a resource group on a single BE node, determining the relative share of CPU time allocated to tasks from this group. Before v3.3.5, this was referred to as `cpu_core_limit`.
 
-Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0. Either cpu_weight or exclusive_cpu_cores must be greater than 0, but not both.
+You can use one of the following parameters to set the CPU scheduling weight:
+
+- `cpu_weight`: Directly sets the CPU scheduling weight. Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0.
+- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * cpu_weight_percent / 100 < 1`, the system returns an error, where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes.
+
+At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE, `be_cpu_cores`: `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`.
+
+Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be greater than 0.
 
 > **NOTE**
 >
 > For example, suppose three resource groups, rg1, rg2, and rg3, have cpu_weight values of 2, 6, and 8, respectively. On a fully loaded BE node, these groups would receive 12.5%, 37.5%, and 50% of the CPU time. If the node is not fully loaded and rg1 and rg2 are under load while rg3 is idle, rg1 and rg2 would receive 25% and 75% of the CPU time, respectively.
 
-##### `exclusive_cpu_cores`
+##### `exclusive_cpu_cores` and `exclusive_cpu_percent`
 
-This parameter defines CPU hard hard limit for a resource group. It has two implications:
+This parameter defines CPU hard isolation for a resource group. It has two implications:
 
-- **Exclusive**: Reserves `exclusive_cpu_cores` CPU cores exclusively for this resource group, making them unavailable to other groups, even when idle.
+- **Exclusive**: Reserves a specified number of CPU cores exclusively for this resource group, making them unavailable to other groups, even when idle.
 - **Quota**: Limits the resource group to only using these reserved CPU cores, preventing it from using available CPU resources from other groups.
 
-The value range is (0, `min_be_cpu_cores - 1`], where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes. It takes effect only when greater than 0. Only one of `cpu_weight` or `exclusive_cpu_cores` can be set to greater than 0.
+You can use one of the following parameters to set CPU hard isolation:
 
-- Resource groups with `exclusive_cpu_cores` greater than 0 are called Exclusive resource groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared resource groups and run on Shared Cores.
-- The total number of `exclusive_cpu_cores` across all resource groups cannot exceed `min_be_cpu_cores - 1`. The upper limit is set to leave at least one Shared Core available.
+- `exclusive_cpu_cores`: Directly sets the number of reserved CPU cores. Its value range is (0, `min_be_cpu_cores - 1`]. The parameter is effective only when it is set to greater than 0.
+- `exclusive_cpu_percent`: Supported from v4.1. Sets the number of reserved CPU cores as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * exclusive_cpu_percent / 100 < 1`, the system returns an error.
 
-The relationship between `exclusive_cpu_cores` and `cpu_weight`:
+At runtime, each BE converts `exclusive_cpu_percent` to the actual `exclusive_cpu_cores` based on the number of CPU cores on that BE, `be_cpu_cores`: `exclusive_cpu_cores = be_cpu_cores * exclusive_cpu_percent / 100`.
 
-Only one of `cpu_weight` or `exclusive_cpu_cores` can be active at a time. Exclusive resource groups operate on their own reserved Exclusive Cores without requiring a share of CPU time through `cpu_weight`.
+- Resource groups with `exclusive_cpu_cores` or `exclusive_cpu_percent` greater than 0 are called Exclusive resource groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared resource groups and run on Shared Cores.
+- The total number of `exclusive_cpu_cores` across all Exclusive resource groups cannot exceed `min_be_cpu_cores - 1`. If `exclusive_cpu_percent` is used, the system first converts it to CPU cores based on `min_be_cpu_cores * exclusive_cpu_percent / 100` and then calculates the total. The upper limit is set to leave at least one Shared Core available.
+
+The relationship between `exclusive_cpu_cores`, `exclusive_cpu_percent`, `cpu_weight`, and `cpu_weight_percent`:
+
+Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be active at a time. Exclusive resource groups operate on their own reserved Exclusive Cores without requiring a share of CPU time through `cpu_weight` or `cpu_weight_percent`.
 
 You can configure whether Shared resource groups can borrow Exclusive Cores from Exclusive resource groups using the BE configuration `enable_resource_group_cpu_borrowing`. When set to `true` (default), Shared groups can borrow CPU resources when Exclusive groups are idle.
 
@@ -84,6 +99,20 @@ To modify this configuration dynamically, use the following command:
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
+
+#### Scope parameter
+
+##### `warehouses`
+
+From v4.1 onwards, resource groups support `warehouses` to specify the scope where they take effect. If `warehouses` is specified, the resource group takes effect only on BEs in the specified warehouses, rather than on all BEs. If `warehouses` is not specified, the resource group takes effect on BEs in all warehouses by default.
+
+The value of `warehouses` is a list of warehouse names separated by commas (`,`), for example, `wh1,wh2,wh3`. The specified warehouses must already exist, and duplicate names are not allowed.
+
+After `warehouses` is specified, `min_be_cpu_cores` in CPU percentage parameter validation refers to the minimum number of CPU cores among BEs in the specified warehouses. If `warehouses` is not specified, `min_be_cpu_cores` refers to the minimum number of CPU cores across all BEs.
+
+> **NOTE**
+>
+> After `warehouses` is specified, CPU quotas for the resource group must be configured by using `cpu_weight_percent` or `exclusive_cpu_percent`, rather than `cpu_weight` or `exclusive_cpu_cores`.
 
 #### Memory resource parameters
 
@@ -274,10 +303,10 @@ TO (
     source_ip='cidr'
 ) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
 WITH (
-    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
+    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
+    "warehouses" = "wh1,wh2,wh3",
     "mem_limit" = "m%",
-    "concurrency_limit" = "INT",
-    "type" = "str" --The type of the resource group. Set the value to normal.
+    "concurrency_limit" = "INT"
 );
 ```
 
@@ -292,7 +321,8 @@ TO
     (user='rg1_user4'),
     (db='db1')
 WITH (
-    'exclusive_cpu_cores' = '10',
+    'exclusive_cpu_percent' = '20',
+    'warehouses' = 'wh1,wh2,wh3',
     'mem_limit' = '20%',
     'big_query_cpu_second_limit' = '100',
     'big_query_scan_rows_limit' = '100000',
@@ -365,7 +395,8 @@ Execute the following statement to modify the resource quotas for an existing re
 
 ```SQL
 ALTER RESOURCE GROUP group_name WITH (
-    'cpu_core_limit' = 'INT',
+    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
+    'warehouses' = 'wh1,wh2,wh3',
     'mem_limit' = 'm%'
 );
 ```
