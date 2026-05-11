@@ -74,6 +74,22 @@ CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 
+// Master kill-switch for the per-multi_get key-chunk parallelism. Tunable so the
+// optimization can be disabled at runtime if it turns pathological under load (e.g.
+// pool starvation, pathological cache contention).
+CONF_mBool(enable_pk_index_parallel_chunk_multi_get, "true");
+
+// Minimum number of keys in one PersistentIndexSstable::multi_get for the chunk-parallel
+// path to engage. Below this, run the legacy sequential path so we don't pay open-file
+// + dispatch overhead for tiny lookups.
+CONF_mInt32(pk_index_parallel_chunk_min_keys, "32");
+
+// Target keys per chunk. Effective chunk count = clamp(ceil(N/target), 1, max_chunks).
+CONF_mInt32(pk_index_parallel_chunk_target_keys, "64");
+
+// Hard upper bound on chunks per multi_get to protect the chunk_io pool's queue.
+CONF_mInt32(pk_index_parallel_chunk_max_chunks, "16");
+
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 
