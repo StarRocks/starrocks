@@ -26,7 +26,7 @@ void BthreadTimerTask::waitUtilFinished() {
     _latch.wait();
 }
 
-void BthreadTimerTask::unschedule(BthreadTimer* timer) {
+void BthreadTimerTask::unschedule_and_join(BthreadTimer* timer) {
     int rc = timer->unschedule(this);
     if (rc == 1) {
         waitUtilFinished();

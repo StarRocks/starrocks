@@ -855,7 +855,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     _update_driver_level_timer();
 
     if (_global_rf_timer != nullptr) {
-        _fragment_ctx->pipeline_timer()->unschedule(_global_rf_timer.get());
+        _global_rf_timer->unschedule_and_join(_fragment_ctx->pipeline_timer());
     }
 
     // Acquire the pointer to avoid be released when removing query

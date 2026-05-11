@@ -30,7 +30,7 @@ class PipelineTimerTask : public BthreadTimerTask {
 public:
     virtual ~PipelineTimerTask() = default;
 
-    void unschedule(PipelineTimer* timer);
+    void unschedule_and_join(PipelineTimer* timer);
 };
 
 class PipelineTimer : public BthreadTimer {
@@ -39,7 +39,7 @@ public:
     ~PipelineTimer() noexcept = default;
 };
 
-inline void PipelineTimerTask::unschedule(PipelineTimer* timer) {
-    BthreadTimerTask::unschedule(timer);
+inline void PipelineTimerTask::unschedule_and_join(PipelineTimer* timer) {
+    BthreadTimerTask::unschedule_and_join(timer);
 }
 } // namespace starrocks::pipeline

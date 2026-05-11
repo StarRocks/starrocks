@@ -441,14 +441,14 @@ void FragmentContext::clear_pipeline_timer() {
         if (!_rf_timeout_tasks.empty()) {
             for (auto& [ignore, task] : _rf_timeout_tasks) {
                 if (task) {
-                    task->unschedule(_pipeline_timer);
+                    task->unschedule_and_join(_pipeline_timer);
                     task.reset();
                 }
             }
             _rf_timeout_tasks.clear();
         }
         if (_timeout_task) {
-            _timeout_task->unschedule(_pipeline_timer);
+            _timeout_task->unschedule_and_join(_pipeline_timer);
             _timeout_task.reset();
         }
     }
