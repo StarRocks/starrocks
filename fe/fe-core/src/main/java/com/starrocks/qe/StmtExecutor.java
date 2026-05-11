@@ -1587,7 +1587,7 @@ public class StmtExecutor {
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
         SessionVariable sv = context.getSessionVariable();
-        if (plan != null && sv != null && sv.isEnableProfileExplain()) {
+        if (plan != null && sv != null && sv.isEnableExplainInProfile()) {
             try {
                 RuntimeProfile summaryProfile = profile.getChild(ProfileKeyDictionary.SUMMARY);
                 summaryProfile.addInfoString(ProfileKeyDictionary.EXPLAIN_PLAN, plan.getExplainString(TExplainLevel.COSTS));

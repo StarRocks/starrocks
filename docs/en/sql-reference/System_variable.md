@@ -902,7 +902,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Default**: false
 
-### enable_profile_explain
+### enable_explain_in_profile
 
 * **Scope**: Session
 * **Description**: When set to `true` and a profile is built for the query, the `EXPLAIN COSTS` text of the executed plan is embedded in the profile's `Summary` section under the `ExplainPlan` key. This lets the optimizer's cardinality estimates, column statistics, predicates, runtime-filter declarations, and overall plan cost be inspected offline alongside the runtime metrics, which is useful when triaging slow queries from a saved profile artifact without access to the live cluster.
