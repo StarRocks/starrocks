@@ -175,6 +175,42 @@ public class RestoreClusterSnapshotMgrTest {
     }
 
     @Test
+    public void testExternalRestoreFailsWhenImageHasUndeclaredStorageVolume() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
+                    throws StarRocksException {
+            }
+        };
+        new MockUp<Storage>() {
+            @Mock
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/external_cluster_snapshot.yaml", true);
+        RestoreClusterSnapshotMgr.getConfig().getComputeNodes().get(0).setCNGroup(null);
+
+        Map<String, String> props = new java.util.HashMap<>();
+        props.put("aws.s3.region", "us-west-2");
+        props.put("aws.s3.endpoint", "https://s3.us-west-2.amazonaws.com");
+        props.put("aws.s3.access_key", "x");
+        props.put("aws.s3.secret_key", "y");
+        GlobalStateMgr.getCurrentState().getStorageVolumeMgr().createStorageVolume(
+                "leftover_from_source", "S3",
+                Collections.singletonList("s3://defaultbucket/test/"), props,
+                Optional.of(true), "leftover from source image");
+
+        StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                RestoreClusterSnapshotMgr::finishRestoring);
+        Assertions.assertTrue(ex.getMessage().contains("leftover_from_source"),
+                "error must list the undeclared SV name; got: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("not declared"),
+                "error must mention undeclared volumes; got: " + ex.getMessage());
+    }
+
+    @Test
     public void testManualRestoreCollectSnapshotInfo() throws Exception {
         new MockUp<ImageLoader>() {
             @Mock
