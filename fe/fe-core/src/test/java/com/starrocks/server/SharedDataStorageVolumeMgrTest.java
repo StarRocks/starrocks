@@ -1139,7 +1139,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testUpdateLocationsOnlyTriggersAccessCheck() throws DdlException, AlreadyExistsException, MetaNotFoundException {
+    public void testUpdateLocationsRejected() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         String svName = "test";
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
@@ -1147,7 +1147,6 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        AtomicInteger callCount = new AtomicInteger(0);
 
         new MockUp<RunMode>() {
             @Mock
@@ -1156,21 +1155,19 @@ public class SharedDataStorageVolumeMgrTest {
             }
         };
 
-        // Allow creation
         new MockUp<StorageVolumeAccessChecker>() {
             @Mock
             public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
-                callCount.incrementAndGet();
             }
         };
 
         svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
-        Assertions.assertEquals(1, callCount.get()); // check fired once during CREATE
 
-        // ALTER with only locations changed — connectivityChanged = true, check must fire
+        // ALTER with locations should be rejected — locations are immutable after creation
         List<String> newLocations = Arrays.asList("s3://abc", "s3://def");
-        svm.updateStorageVolume(svName, null, newLocations, new HashMap<>(), Optional.empty(), "");
-        Assertions.assertEquals(2, callCount.get()); // check fired again for locations change
+        DdlException ex = Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume(svName, null, newLocations, new HashMap<>(), Optional.empty(), ""));
+        Assertions.assertTrue(ex.getMessage().contains("locations cannot be changed after creation"));
     }
 
     @Test

@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
@@ -37,6 +38,11 @@ public final class StorageVolumeAccessChecker {
             // Write an empty temp file and then delete it to verify that the credentials have
             // actual write access to the location. checkPathExist() only verifies path existence,
             // not write permission, and will silently succeed when the path does not yet exist.
+            //
+            // Note: For HDFS and object storage (S3/GCS/Azure), writeFile will create intermediate
+            // directories automatically if they do not exist. This means a non-existent path with
+            // valid credentials will pass the check, which is the desired behavior — the path will
+            // be created on demand when data is actually written.
             String normalizedLoc = location.endsWith("/") ? location : location + "/";
             String tempPath = normalizedLoc + ".starrocks_sv_access_check_" + UUID.randomUUID();
             try {
@@ -49,7 +55,7 @@ public final class StorageVolumeAccessChecker {
                 String message = cause.getMessage();
                 throw new DdlException(String.format(
                         "Storage volume accessibility check failed. storage volume: '%s', type: '%s', location: '%s', error: %s",
-                        svName, svType, location, message == null ? cause.toString() : message));
+                        svName, svType, location, Strings.isNullOrEmpty(message) ? cause.toString() : message));
             }
             // Best-effort cleanup; a leftover temp file is harmless but we should try to remove it.
             try {

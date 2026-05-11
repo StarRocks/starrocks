@@ -121,7 +121,7 @@ public class StorageVolumeAccessCheckerTest {
             @Mock
             public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
                     throws StarRocksException {
-                // Exception with null message
+                // Exception with null message (Strings.nullToEmpty converts to empty string)
                 throw new StarRocksException((String) null);
             }
         };
@@ -129,10 +129,11 @@ public class StorageVolumeAccessCheckerTest {
         DdlException ex = Assertions.assertThrows(DdlException.class,
                 () -> StorageVolumeAccessChecker.check(svName, svType, locations, params));
 
-        // Should contain the toString() of the cause when message is null
+        // When message is null/empty, should fall back to cause.toString()
         Assertions.assertTrue(ex.getMessage().contains("Storage volume accessibility check failed"));
         Assertions.assertTrue(ex.getMessage().contains(svName));
         Assertions.assertTrue(ex.getMessage().contains(svType));
+        Assertions.assertTrue(ex.getMessage().contains("StarRocksException"));
     }
 
     @Test

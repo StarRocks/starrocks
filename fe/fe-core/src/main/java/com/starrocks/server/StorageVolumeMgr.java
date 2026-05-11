@@ -177,6 +177,13 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
 
     public void updateStorageVolume(String name, String svType, List<String> locations,
             Map<String, String> params, Optional<Boolean> enabled, String comment) throws DdlException, MetaNotFoundException {
+        if (!Strings.isNullOrEmpty(svType)) {
+            throw new DdlException("Storage volume type cannot be changed after creation");
+        }
+        if (locations != null && !locations.isEmpty()) {
+            throw new DdlException("Storage volume locations cannot be changed after creation");
+        }
+
         List<String> immutableProperties = Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                 CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
         for (String param : immutableProperties) {
@@ -186,9 +193,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
 
         // Only check storage volume accessibility when connectivity-affecting properties are changed
-        // (type, locations, or cloud credentials). Skip the check for metadata-only changes
-        // (enabled, comment) so that operators can still disable a volume when storage is unreachable.
-        boolean connectivityChanged = !Strings.isNullOrEmpty(svType) || locations != null || !params.isEmpty();
+        // (cloud credentials). Skip the check for metadata-only changes (enabled, comment) so that
+        // operators can still disable a volume when storage is unreachable.
+        boolean connectivityChanged = !params.isEmpty();
+        boolean shouldCheckAccess = connectivityChanged
+                && RunMode.isSharedDataMode() && Config.enable_storage_volume_access_check;
 
         // Step 1: snapshot the current SV state under a read lock.
         StorageVolume svSnapshot;
@@ -201,7 +210,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
 
         // Step 2: build a tentative copy and run the access check OUTSIDE any lock so that a slow
         // or unreachable endpoint does not block concurrent storage-volume operations.
-        if (connectivityChanged) {
+        if (shouldCheckAccess) {
             StorageVolume candidate = new StorageVolume(svSnapshot);
             validateParams(candidate.getType(), params);
             applyChangesToVolume(candidate, svSnapshot.getId(), svType, locations, comment, params, enabled);
@@ -217,8 +226,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
             }
             StorageVolume copied = new StorageVolume(sv);
-            if (!connectivityChanged) {
-                // validateParams was not called above; call it now inside the lock for metadata-only ALTERs.
+            if (!shouldCheckAccess) {
                 validateParams(copied.getType(), params);
             }
             applyChangesToVolume(copied, sv.getId(), svType, locations, comment, params, enabled);
