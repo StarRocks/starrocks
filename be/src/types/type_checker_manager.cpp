@@ -63,16 +63,15 @@ TypeCheckerManager& TypeCheckerManager::getInstance() {
 }
 
 void TypeCheckerManager::init() {
-    // Load type checkers from XML configuration file
-    // Location: conf/type_checker_config.xml (relative to BE home)
+    // Installed under lib/ so package upgrades always overwrite it
+    // (conf/ may be preserved for user customizations).
     std::string xml_path;
 
     const char* be_home = std::getenv("STARROCKS_HOME");
     if (be_home != nullptr) {
-        xml_path = std::string(be_home) + "/conf/type_checker_config.xml";
+        xml_path = std::string(be_home) + "/lib/type_checker_config.xml";
     } else {
-        // Use relative path as fallback
-        xml_path = "conf/type_checker_config.xml";
+        xml_path = "lib/type_checker_config.xml";
     }
 
     // Load from XML configuration - this is now mandatory
