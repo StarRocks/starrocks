@@ -1014,8 +1014,8 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         pkcs[del_idx] = std::move(res).value();
     };
 
-    auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-            ThreadPool::ExecutionMode::CONCURRENT);
+    auto token =
+            ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
         // Count attempted files here on the orchestrator thread; TRACE_COUNTER_INCREMENT reads
         // a thread-local current trace that worker threads don't inherit, so incrementing from
