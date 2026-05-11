@@ -1376,6 +1376,12 @@ public class UtFrameUtils {
         // Use sync analyze
         Config.mv_auto_analyze_async = false;
 
+        // Surface latent ScalarOperator type incoherence in MV rewrite outputs as
+        // IllegalStateException in fe-ut. In production the validator only logs;
+        // strict mode is a CI gate so ReDeriver coverage gaps fail tests rather
+        // than ship as silent recall regressions.
+        FeConstants.strictMvRewriteValidator = true;
+
         // Default REFRESH DEFERRED
         Config.default_mv_refresh_immediate = false;
         // default replication num: 1

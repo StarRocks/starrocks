@@ -43,6 +43,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -53,6 +55,8 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getQuerySplitPredicate;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule implements IMaterializedViewRewriteRule {
+
+    private static final Logger LOG = LogManager.getLogger(BaseMaterializedViewRewriteRule.class);
 
     protected BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
         super(type, pattern);
@@ -246,6 +250,20 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             // NOTE: derive logical property is necessary for statistics calculation.
             deriveLogicalProperty(candidate);
 
+            // Observability only: validate async-path rewrite output for
+            // type/signature coherence. On failure LOG.error loudly but do NOT
+            // drop the candidate — silently masking a rewrite bug, or
+            // regressing recall when the validator turns out to be too strict,
+            // is worse than a loud downstream failure. The candidate proceeds;
+            // PlanValidator / BE will surface a real problem if there is one.
+            // In fe-ut (FeConstants.strictMvRewriteValidator = true) the
+            // validator throws instead, so any ReDeriver gap fails CI.
+            String mvIdent = "mvId=" + mvContext.getMv().getId() + " mvName=" + mvContext.getMv().getName();
+            if (!com.starrocks.sql.optimizer.rule.transformation.materialization.common
+                    .MvRewriteOutputValidator.validate(candidate, mvIdent)) {
+                LOG.error("MvRewriteOutputValidator rejected MV candidate for {} — emitting anyway " +
+                        "(likely ReDeriver coverage gap or validator false-positive)", mvIdent);
+            }
             results.add(candidate);
             mvContext.updateMVUsedCount();
             IMaterializedViewMetricsEntity mvEntity =

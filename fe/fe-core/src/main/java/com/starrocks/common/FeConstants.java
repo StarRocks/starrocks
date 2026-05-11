@@ -90,6 +90,13 @@ public class FeConstants {
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
     public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
 
+    // Set this flag true (in fe-ut) to escalate MvRewriteOutputValidator failures to
+    // IllegalStateException instead of an ERROR log. Intentionally internal — not a
+    // user-tunable Config because in production the validator never gates a candidate;
+    // it only logs. This flag is the CI / test gate that catches ReDeriver coverage
+    // gaps before they ship as silent recall regressions.
+    public static boolean strictMvRewriteValidator = false;
+
     // Set this flag false to suppress showing fragment cost, when running FE unit tests.
     public static boolean showFragmentCost = true;
 
