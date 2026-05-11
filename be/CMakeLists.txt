@@ -545,7 +545,6 @@ set(STARROCKS_LINK_LIBS
     Formats
     HttpClient
     IO
-    Serde
     Storage
     Rowset
     Runtime
@@ -559,6 +558,7 @@ set(STARROCKS_LINK_LIBS
     orc
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    Serde
     $<TARGET_FILE:Cache>
     RuntimeCore
     $<TARGET_FILE:HttpCore>

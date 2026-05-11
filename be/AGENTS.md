@@ -233,7 +233,7 @@ Reusable exec sorting algorithms without pipeline, spill, workgroup, storage, or
 Reusable exec join hash table algorithms without join nodes, pipeline, storage, service, or util coupling.
 - Targets: `ExecJoinCore`
 - Allowed internal include prefixes: `exec/join/`, `exec/sorting/sort_helper.h`, `exprs/`, `serde/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExecSortingCore`, `ExprCore`, `SerdeCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `ExecSortingCore`, `ExprCore`, `Serde`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_join_core_test`
 - Remediation: Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules.
 

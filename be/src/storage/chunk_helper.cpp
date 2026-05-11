@@ -17,6 +17,7 @@
 #include <numeric>
 #include <utility>
 
+#include "base/coding.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -33,6 +34,7 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "serde/column_array_serde.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
@@ -420,6 +422,26 @@ StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const std::vector<SlotDe
 
 StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
     return ChunkHelper::new_chunk_checked(tuple_desc.slots(), n);
+}
+
+StatusOr<Chunk> ChunkHelper::deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
+    const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* end = cur + buff.size();
+
+    uint32_t version = decode_fixed32_le(cur);
+    if (version != 1) {
+        return Status::Corruption("invalid version");
+    }
+    cur += 4;
+
+    uint32_t rows = decode_fixed32_le(cur);
+    cur += 4;
+
+    ASSIGN_OR_RETURN(auto chunk, ChunkHelper::new_chunk_checked(schema, rows));
+    for (auto& column : chunk->columns()) {
+        ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
+    }
+    return Chunk(std::move(*chunk));
 }
 
 MutableChunkPtr ChunkHelper::new_mutable_chunk(const Schema& schema, size_t n) {

@@ -75,6 +75,7 @@ public:
     static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
     static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
     static StatusOr<ChunkUniquePtr> new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
+    static StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff);
 
     // Create an empty mutable chunk according to the |slots| and reserve it of size |n|.
     static MutableChunkPtr new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
