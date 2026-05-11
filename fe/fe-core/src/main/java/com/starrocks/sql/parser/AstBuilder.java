@@ -6546,7 +6546,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<TypeDef> typeDefList = new ArrayList<>();
         List<String> argNames = new ArrayList<>();
         for (com.starrocks.sql.parser.StarRocksParser.TypeContext typeContext : ctx.type()) {
-            typeDefList.add(new TypeDef(TypeParser.getType(typeContext)));
+            typeDefList.add(new TypeDef(getType(typeContext)));
         }
 
         for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext identifierContext : ctx.identifier()) {

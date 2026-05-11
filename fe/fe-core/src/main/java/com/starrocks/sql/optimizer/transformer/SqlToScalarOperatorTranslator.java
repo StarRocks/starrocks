@@ -763,10 +763,10 @@ public final class SqlToScalarOperatorTranslator {
             }
 
             return SqlToScalarOperatorTranslator.translateWithSlotRef(expr, slotRef -> {
-                if (argMap.containsKey(slotRef.getColName())) {
-                    return argMap.get(slotRef.getColName());
+                if (argMap.containsKey(slotRef.getColumnName())) {
+                    return argMap.get(slotRef.getColumnName());
                 }
-                Preconditions.checkState(false, "cannot find function argument: " + slotRef.getColName());
+                Preconditions.checkState(false, "cannot find function argument: " + slotRef.getColumnName());
                 return null;
             });
         }

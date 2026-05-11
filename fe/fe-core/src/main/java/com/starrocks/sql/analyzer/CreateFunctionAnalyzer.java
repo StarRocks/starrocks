@@ -113,10 +113,10 @@ public class CreateFunctionAnalyzer {
             argsMap.put(name, def.getArgTypes()[i]);
         }
         ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
-            if (!argsMap.containsKey(slotRef.getColName())) {
-                throw new SemanticException("Cannot find argument %s in function args", slotRef.getColName());
+            if (!argsMap.containsKey(slotRef.getColumnName())) {
+                throw new SemanticException("Cannot find argument %s in function args", slotRef.getColumnName());
             }
-            slotRef.setType(argsMap.get(slotRef.getColName()));
+            slotRef.setType(argsMap.get(slotRef.getColumnName()));
         });
 
         FunctionName functionName = stmt.getFunctionName();

@@ -176,7 +176,7 @@ public class SqlParser {
         ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
                 com.starrocks.sql.parser.StarRocksParser::expressionSingleton).first;
         return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
-                .create(sessionVariable.getSqlMode(), GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
+                .create(sessionVariable.getSqlMode())
                 .visit(expressionContext);
     }
 
