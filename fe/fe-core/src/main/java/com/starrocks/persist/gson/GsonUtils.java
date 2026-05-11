@@ -144,6 +144,7 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
@@ -413,7 +414,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(Function.class, "clazz")
                     .registerSubtype(ScalarFunction.class, "ScalarFunction")
                     .registerSubtype(AggregateFunction.class, "AggregateFunction")
-                    .registerSubtype(TableFunction.class, "TableFunction");
+                    .registerSubtype(TableFunction.class, "TableFunction")
+                    .registerSubtype(SqlFunction.class, "SqlFunction");
 
     public static final RuntimeTypeAdapterFactory<StorageVolumeMgr> STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(StorageVolumeMgr.class, "clazz")

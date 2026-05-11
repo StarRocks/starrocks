@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArraySliceExpr;
@@ -53,6 +54,7 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -733,6 +735,10 @@ public final class SqlToScalarOperatorTranslator {
                 arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
             }
 
+            if (node.getFn() instanceof SqlFunction) {
+                return visitSqlFunctionCall(node, arguments);
+            }
+
             CallOperator callOperator = new CallOperator(
                     node.getFnName().getFunction(),
                     node.getType(),
@@ -741,6 +747,28 @@ public final class SqlToScalarOperatorTranslator {
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
             return callOperator;
+        }
+
+        public ScalarOperator visitSqlFunctionCall(FunctionCallExpr node, List<ScalarOperator> arguments) {
+            SqlFunction sqlFunction = (SqlFunction) node.getFn();
+            Expr expr = sqlFunction.getAnalyzeExpr();
+            if (expr == null) {
+                throw new StarRocksPlannerException("view function analyze expr is null",
+                        ErrorType.INTERNAL_ERROR);
+            }
+
+            Map<String, ScalarOperator> argMap = Maps.newHashMap();
+            for (int i = 0; i < sqlFunction.getArgNames().length; i++) {
+                argMap.put(sqlFunction.getArgNames()[i], arguments.get(i));
+            }
+
+            return SqlToScalarOperatorTranslator.translateWithSlotRef(expr, slotRef -> {
+                if (argMap.containsKey(slotRef.getColumnName())) {
+                    return argMap.get(slotRef.getColumnName());
+                }
+                Preconditions.checkState(false, "cannot find function argument: " + slotRef.getColumnName());
+                return null;
+            });
         }
 
         @Override

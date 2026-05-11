@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;
@@ -26,6 +29,7 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -77,17 +81,51 @@ public class CreateFunctionAnalyzer {
         }
         loadFunctionProperties(stmt);
         analyzeCommon(stmt, context);
-        String langType = stmt.getLangType();
 
-        if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
-            String checksum = computeMd5(stmt);
-            analyzeJavaUDFClass(stmt, checksum);
-        } else if (CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(langType)) {
-            analyzePython(stmt);
-        } else {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown lang type");
+        if (stmt.isBuildFunctionMode()) {
+            // build function
+            analyzeExpression(stmt, context);
+        } else if (stmt.isUdfFunctionMode()) {
+            String langType = stmt.getLangType();
+
+            if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
+                String checksum = computeMd5(stmt);
+                analyzeJavaUDFClass(stmt, checksum);
+            } else if (CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(langType)) {
+                analyzePython(stmt);
+            } else {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown lang type");
+            }
         }
-        // build function
+    }
+
+    private void analyzeExpression(CreateFunctionStmt stmt, ConnectContext context) {
+        Expr expr = stmt.getExpr();
+        FunctionArgsDef def = stmt.getArgsDef();
+        Preconditions.checkState(def.getArgTypes().length == def.getArgNames().size());
+
+        Map<String, Type> argsMap = Maps.newHashMap();
+        for (int i = 0; i < def.getArgNames().size(); i++) {
+            String name = def.getArgNames().get(i);
+            if (argsMap.containsKey(name)) {
+                throw new SemanticException("Duplicate argument name %s in function args", name);
+            }
+            argsMap.put(name, def.getArgTypes()[i]);
+        }
+        ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
+            if (!argsMap.containsKey(slotRef.getColumnName())) {
+                throw new SemanticException("Cannot find argument %s in function args", slotRef.getColumnName());
+            }
+            slotRef.setType(argsMap.get(slotRef.getColumnName()));
+        });
+
+        FunctionName functionName = stmt.getFunctionName();
+        FunctionArgsDef argsDef = stmt.getArgsDef();
+
+        String viewSql = AstToSQLBuilder.toSQLWithCredential(expr);
+        Function function = new SqlFunction(functionName, argsDef.getArgTypes(), expr.getType(),
+                argsDef.getArgNames().toArray(new String[0]), viewSql);
+        stmt.setFunction(function);
     }
 
     private void loadFunctionProperties(CreateFunctionStmt stmt) {
@@ -104,7 +142,9 @@ public class CreateFunctionAnalyzer {
         TypeDef returnType = stmt.getReturnType();
         // check argument
         argsDef.analyze();
-        returnType.analyze();
+        if (returnType != null) {
+            returnType.analyze();
+        }
     }
 
     private CloudConfiguration setupCredential(Map<String, String> properties) {
