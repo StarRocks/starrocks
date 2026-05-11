@@ -720,6 +720,7 @@
         "pk_index_early_sst_compaction_threshold",
         "enable_pk_index_parallel_execution",
         "pk_index_parallel_execution_min_rows",
+        "pk_index_parallel_load_dels_mem_ratio",
         "pk_index_memtable_max_count",
         "pk_index_memtable_max_wait_flush_timeout_ms",
         "pk_index_size_tiered_min_level_size",
