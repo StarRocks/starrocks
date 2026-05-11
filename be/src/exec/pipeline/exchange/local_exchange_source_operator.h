@@ -93,7 +93,7 @@ public:
 
     void enter_release_memory_mode() override;
     void set_execute_mode(int performance_level) override;
-    void update_exec_stats(RuntimeState* state) override {}
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
     std::string get_name() const override;
 

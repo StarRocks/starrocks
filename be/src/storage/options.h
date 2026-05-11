@@ -48,6 +48,7 @@
 namespace starrocks {
 
 class MemTracker;
+class TableMetricsManager;
 
 // parse a single root path of storage_root_path
 Status parse_root_path(const std::string& root_path, StorePath* path);
@@ -64,6 +65,7 @@ struct EngineOptions {
     UniqueId backend_uid{0, 0};
     MemTracker* compaction_mem_tracker = nullptr;
     MemTracker* update_mem_tracker = nullptr;
+    TableMetricsManager* table_metrics_mgr = nullptr;
     // if start as cn, no need to write cluster id
     bool need_write_cluster_id = true;
 };

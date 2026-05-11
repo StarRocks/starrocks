@@ -52,6 +52,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"
@@ -94,7 +95,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
-#include "util/global_metrics_registry.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -1707,7 +1707,9 @@ int meta_tool_main(int argc, char** argv) {
     }
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
-    starrocks::register_mem_chunk_allocator_metrics(starrocks::GlobalMetricsRegistry::instance()->metrics());
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    starrocks::register_mem_chunk_allocator_metrics(process_metrics_registry->root_registry());
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();

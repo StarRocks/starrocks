@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "exec/pipeline/primitives/operator_exec_stats.h"
 #include "exec/pipeline/primitives/operator_runtime_access.h"
 #include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
@@ -48,7 +49,9 @@ class Operator {
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
-             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access = nullptr);
+             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
+             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -239,7 +242,7 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
-    virtual void update_exec_stats(RuntimeState* state);
+    virtual OperatorExecStatsSnapshot exec_stats_snapshot() const;
 
     void set_observer(PipelineObserver* observer) { _observer = observer; }
     PipelineObserver* observer() const { return _observer; }

@@ -19,11 +19,11 @@
 #include "base/failpoint/fail_point.h"
 #include "common/compiler_util.h"
 #include "common/config_memory_allocator_fwd.h"
+#include "common/stack_util.h"
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/counting_allocator.h"
-#include "util/stack_util.h"
 
 #ifndef BE_TEST
 #include "runtime/exec_env.h"

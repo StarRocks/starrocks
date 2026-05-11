@@ -225,8 +225,6 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
 CONF_mBool(enable_pk_strict_memcheck, "true");
 
-CONF_mBool(skip_pk_preload, "true");
-
 CONF_mInt32(apply_version_slow_log_sec, "30");
 
 // Do lazy load when PK column larger than this threshold. Default is 300MB.

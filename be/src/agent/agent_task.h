@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+class ThreadPool;
+
 void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
@@ -46,5 +48,5 @@ void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMap
                                       ExecEnv* exec_env);
 void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
-                                 ExecEnv* exec_env);
+                                 ExecEnv* exec_env, ThreadPool* replicate_snapshot_pool);
 } // namespace starrocks

@@ -34,16 +34,16 @@
 #include "fs/key_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "gutil/stl_util.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "service/service_be/lake_service.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::lake {
 

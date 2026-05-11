@@ -3914,6 +3914,8 @@ public class StmtExecutor {
                     getPreparedStmtId());
             // Set query source from context
             queryDetail.setQuerySource(context.getQuerySource());
+            queryDetail.setUserIdentity(context.getCurrentUserIdentity() == null
+                    ? null : context.getCurrentUserIdentity().toString());
             queryDetail.setImpersonatedUser(resolveImpersonatedUser());
             context.setQueryDetail(queryDetail);
             // copy queryDetail, cause some properties can be changed in future

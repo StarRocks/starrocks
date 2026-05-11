@@ -34,12 +34,11 @@
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
+#include "exec/spill/spill_metrics.h"
 #include "exec/spill/spiller.hpp"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
-#include "util/global_metrics_registry.h"
-#include "util/metrics/spill_metrics.h"
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);
@@ -132,7 +131,7 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     // value. Several operators (e.g. SpillableAggregateBlockingSinkOperator)
     // call Spiller::prepare() before set_metrics(), and a later set_metrics()
     // assignment would otherwise clobber pointers cached on the Spiller.
-    if (auto* sm = GlobalMetricsRegistry::instance()->spill_metrics(); sm != nullptr) {
+    if (auto* sm = SpillMetrics::instance(); sm != nullptr) {
         global_local = sm->get(/*is_remote=*/false);
         global_remote = sm->get(/*is_remote=*/true);
     }

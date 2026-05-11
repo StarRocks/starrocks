@@ -268,6 +268,12 @@
       ]
     },
     {
+      "path": "be/src/common/config_thread_fwd.h",
+      "configs": [
+        "priority_queue_remaining_tasks_increased_frequency"
+      ]
+    },
+    {
       "path": "be/src/common/config_llm_fwd.h",
       "configs": [
         "llm_cache_size",
@@ -762,7 +768,6 @@
         "primary_key_batch_get_index_memory_limit",
         "pk_dump_interval_seconds",
         "enable_pk_strict_memcheck",
-        "skip_pk_preload",
         "apply_version_slow_log_sec",
         "pk_column_lazy_load_threshold_bytes",
         "column_mode_partial_update_insert_batch_size"

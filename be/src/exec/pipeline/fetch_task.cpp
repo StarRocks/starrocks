@@ -18,18 +18,18 @@
 
 #include <memory>
 
+#include "base/brpc/disposable_closure.h"
 #include "base/brpc/ref_count_closure.h"
 #include "base/status_fmt.hpp"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "exec/pipeline/fetch_processor.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
-#include "util/brpc_stub_cache.h"
-#include "util/disposable_closure.h"
 
 namespace starrocks::pipeline {
 

@@ -224,6 +224,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：String
 * 引入版本：v3.1
 
+### blacklist_backup_routing
+
+* **范围**：Session
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+
+* **默认值**：`CIRCULAR`
+* **类型**：String
+* **合法取值**：`CIRCULAR`、`RANDOM`
+* **引入版本**：-
+
 ### catalog（3.2.4 及以后）
 
 * 描述：用于指定当前会话所在的 Catalog。
@@ -346,7 +356,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。该参数只在以下情况生效：
   * Hive 表中未指定 `compression_codec` 属性。
   * Iceberg 表中未包含`write.parquet.compression-codec` 属性。
-  * `INSERT INTO FILES` 时未设置 `compression` 属性。 
+  * `INSERT INTO FILES` 时未设置 `compression` 属性。
 * 默认值：uncompressed
 * 类型：String
 * 引入版本：v3.2.3
@@ -1269,7 +1279,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：StarRocks 从外部存储系统读取数据时，控制数据缓存填充行为。有效值包括：
   * `auto`（默认）：系统自动根据查询的特点，选择性进行缓存。
-  * `always`：总是缓存数据。 
+  * `always`：总是缓存数据。
   * `never` 永不缓存数据。
 * 默认值：auto
 * 引入版本：v3.3.2
@@ -1355,7 +1365,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：100
 * 引入版本：v3.0
 
-### resource_group 
+### resource_group
 
 * **描述**: 此会话指定的 resource group
 * **默认值**: ""

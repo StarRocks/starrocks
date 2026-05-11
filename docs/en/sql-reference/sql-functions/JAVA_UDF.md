@@ -538,12 +538,18 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 
 > **NOTE**
 >
-> Scalar UDFs support nested `ARRAY` and `MAP` parameter/return types,
-> for example `ARRAY<ARRAY<INT>>`, `ARRAY<MAP<INT, STRING>>`, and
-> `MAP<INT, ARRAY<STRING>>`. The leaf element type must still be one of
+> Scalar UDFs, UDAFs, and UDTFs all support nested `ARRAY`, `MAP`, and
+> `STRUCT` parameter/return types — including arbitrary nesting such as
+> `ARRAY<ARRAY<INT>>`, `ARRAY<MAP<INT, STRING>>`,
+> `MAP<INT, ARRAY<STRING>>`, `STRUCT<a INT, b ARRAY<STRING>>`, and
+> `ARRAY<STRUCT<a INT, b STRING>>`. The leaf element type must still be one of
 > the scalar types listed below. Because of Java type erasure, the Java
-> method signature only needs the raw `java.util.List` / `java.util.Map`;
-> StarRocks drives the per-row conversion from the SQL signature.
+> method signature only needs the raw `java.util.List` / `java.util.Map` for
+> ARRAY / MAP slots whose subtree contains no STRUCT; StarRocks drives the
+> per-row conversion from the SQL signature. STRUCT slots, on the other
+> hand, must be bound to a concrete Java `record` class so the analyzer
+> can preserve the formal record type through the JNI boundary (see
+> [STRUCT type binding](#struct-type-binding) below).
 
 | SQL TYPE                                       | Java TYPE             |
 | ---------------------------------------------- | --------------------- |
@@ -560,6 +566,7 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 | DATETIME                                       | java.time.LocalDateTime |
 | ARRAY                                          | java.util.List        |
 | Map                                            | java.util.Map         |
+| STRUCT                                         | a Java `record` class declared by the UDF author |
 
 > **NOTE**
 >
@@ -571,6 +578,105 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 >
 > - `OUTPUT_NULL` (default): the offending row is written as `NULL`.
 > - `REPORT_ERROR`: the query aborts with an `ArithmeticException`.
+
+### STRUCT type binding
+
+`STRUCT` parameters and return types must be bound to a Java `record`
+class (JDK 14+) declared by the UDF author. The mapping is positional:
+
+- The record's component count must match the SQL `STRUCT` field count.
+- Each component's type must match the corresponding SQL field type by
+  position; component names are not enforced (Java identifiers cannot
+  represent every legal SQL field name, and CREATE FUNCTION binds by
+  position regardless of the session's `STRUCT_CAST_BY_NAME` setting).
+- Nested `STRUCT` is supported in any position: as a record component,
+  as an `ARRAY` element (`List<MyRecord>`), or as a `MAP` key/value
+  (`Map<String, MyRecord>`).
+
+The same record-class binding applies to scalar UDF, UDAF, and UDTF.
+For UDAF, the record class is supplied for the `update(State, ...)`
+arguments and the `finalize(State)` return type. For UDTF, the record
+class is supplied for the `process(...)` arguments and the
+`TYPE[] process(...)` element return type.
+
+#### Scalar UDF example
+
+```java
+public record Address(String street, Integer zip) {}
+
+public record AddressOut(String full, Integer region) {}
+
+public class AddrUdf {
+    public AddressOut evaluate(Address addr) {
+        return new AddressOut(addr.street() + " #" + addr.zip(), addr.zip() / 1000);
+    }
+}
+```
+
+```sql
+CREATE FUNCTION addr_udf(struct<street string, zip int>)
+RETURNS struct<`full` string, region int>
+PROPERTIES (
+    "symbol" = "com.example.AddrUdf",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/addr_udf.jar"
+);
+```
+
+#### UDAF example
+
+```java
+public record Item(String name, Integer qty) {}
+
+public record TopItem(String name, Long total) {}
+
+public class TopItemAgg {
+    public static class State {
+        // serialization elided for brevity
+        public int serializeLength() { return 0; }
+    }
+    public State create() { return new State(); }
+    public void destroy(State state) {}
+    public void update(State state, Item item) { /* ... */ }
+    public void serialize(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public void merge(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public TopItem finalize(State state) { return new TopItem("a", 0L); }
+}
+```
+
+```sql
+CREATE AGGREGATE FUNCTION top_item_agg(struct<name string, qty int>)
+RETURNS struct<name string, total bigint>
+PROPERTIES (
+    "symbol" = "com.example.TopItemAgg",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/top_item_agg.jar"
+);
+```
+
+#### UDTF example
+
+```java
+public record Pair(String key, Integer value) {}
+
+public class ExplodePairs {
+    public Pair[] process(java.util.Map<String, Integer> m) {
+        return m.entrySet().stream()
+                .map(e -> new Pair(e.getKey(), e.getValue()))
+                .toArray(Pair[]::new);
+    }
+}
+```
+
+```sql
+CREATE TABLE FUNCTION explode_pairs(map<string, int>)
+RETURNS struct<`key` string, `value` int>
+PROPERTIES (
+    "symbol" = "com.example.ExplodePairs",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/explode_pairs.jar"
+);
+```
 
 ## Parameter settings
 

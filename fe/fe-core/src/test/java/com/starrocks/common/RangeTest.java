@@ -569,7 +569,7 @@ public class RangeTest {
     @Test
     public void testNullParameterInContains() {
         Range<Integer> range = Range.of(1, 10, true, true);
-        Assertions.assertThrows(NullPointerException.class, () -> range.contains(null));
+        Assertions.assertThrows(NullPointerException.class, () -> range.contains((Integer) null));
     }
 
     @Test
@@ -953,5 +953,64 @@ public class RangeTest {
         Assertions.assertTrue(!r1.isOverlapping(target1));
         Assertions.assertTrue(r2.isOverlapping(target1));
         Assertions.assertTrue(!r3.isOverlapping(target1));
+    }
+
+    // ---- contains(Range) ----
+
+    @Test
+    public void testContainsRangeAllContainsAnything() {
+        Range<Integer> all = Range.all();
+        Assertions.assertTrue(all.contains(all));
+        Assertions.assertTrue(all.contains(Range.lt(100)));
+        Assertions.assertTrue(all.contains(Range.gelt(100, 200)));
+        Assertions.assertTrue(all.contains(Range.ge(200)));
+    }
+
+    @Test
+    public void testContainsRangeFiniteRangeDoesNotContainAll() {
+        Range<Integer> all = Range.all();
+        Assertions.assertFalse(Range.lt(100).contains(all));
+        Assertions.assertFalse(Range.gelt(100, 200).contains(all));
+        Assertions.assertFalse(Range.ge(100).contains(all));
+    }
+
+    @Test
+    public void testContainsRangeHalfBoundedContainsBounded() {
+        Assertions.assertTrue(Range.lt(200).contains(Range.gelt(100, 150)));
+        Assertions.assertTrue(Range.ge(100).contains(Range.gelt(150, 200)));
+    }
+
+    @Test
+    public void testContainsRangeBoundedContainsSubrange() {
+        Range<Integer> outer = Range.gelt(100, 200);
+        Assertions.assertTrue(outer.contains(Range.gelt(100, 150)));
+        Assertions.assertTrue(outer.contains(Range.gelt(150, 200)));
+        Assertions.assertTrue(outer.contains(outer));
+    }
+
+    @Test
+    public void testContainsRangeRejectsSpanning() {
+        Range<Integer> outer = Range.gelt(100, 200);
+        Assertions.assertFalse(outer.contains(Range.gelt(50, 150)));   // spans below
+        Assertions.assertFalse(outer.contains(Range.gelt(150, 300))); // spans above
+    }
+
+    @Test
+    public void testContainsRangeInclusivityAtEqualBounds() {
+        // Outer (100, 200), inner [100, 200): inner is more inclusive on lower
+        // bound — outer does not contain it.
+        Assertions.assertFalse(Range.gtlt(100, 200).contains(Range.gelt(100, 200)));
+        // Outer [100, 200], inner [100, 200): outer is more inclusive on upper
+        // bound — outer contains inner.
+        Assertions.assertTrue(Range.gele(100, 200).contains(Range.gelt(100, 200)));
+        // Outer [100, 200), inner [150, 200]: inner extends to inclusive 200,
+        // outer ends at exclusive 200 — outer does not contain inner.
+        Assertions.assertFalse(Range.gelt(100, 200).contains(Range.gele(150, 200)));
+    }
+
+    @Test
+    public void testContainsRangeRejectsNull() {
+        Range<Integer> all = Range.all();
+        Assertions.assertThrows(NullPointerException.class, () -> all.contains((Range<Integer>) null));
     }
 }

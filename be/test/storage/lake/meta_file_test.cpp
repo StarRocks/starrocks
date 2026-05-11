@@ -22,11 +22,10 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -35,6 +34,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -741,7 +741,7 @@ TEST_F(MetaFileTest, test_error_state) {
     MetaFileBuilder builder(*tablet, metadata);
     Status st = builder.update_num_del_stat(segment_id_to_add_dels);
     EXPECT_FALSE(st.ok());
-    EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
+    EXPECT_TRUE(StorageMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
 TEST_F(MetaFileTest, test_segment_id_helper_fallback_and_override) {

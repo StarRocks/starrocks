@@ -40,6 +40,7 @@
 #include "runtime/exec_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 
@@ -53,7 +54,7 @@ EngineStorageMigrationTask::EngineStorageMigrationTask(TTabletId tablet_id, TSch
           _need_rebuild_pk_index(need_rebuild_pk_index) {}
 
 Status EngineStorageMigrationTask::execute() {
-    StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
+    StorageMetrics::instance()->storage_migrate_requests_total.increment(1);
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "Not found tablet: " << _tablet_id;

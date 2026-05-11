@@ -32,7 +32,8 @@
 #include "common/config_starlet_fwd.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/join.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/rowset/page_io.h"
 
 namespace starrocks {
@@ -96,10 +97,11 @@ public:
 
         staros::starlet::StarletConfig starlet_config;
         starlet_config.rpc_port = config::starlet_port;
-        g_worker = std::make_shared<starrocks::StarOSWorker>();
-        g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
-        g_starlet->init(starlet_config);
-        (void)g_worker->add_shard(shard_info);
+        auto worker = std::make_shared<starrocks::StarOSWorker>();
+        set_staros_worker_for_test(worker);
+        (void)swap_starlet_for_test(std::make_unique<staros::starlet::Starlet>(worker));
+        get_starlet()->init(starlet_config);
+        (void)worker->add_shard(shard_info);
 
         // Expect a clean root directory before testing
         ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
@@ -109,7 +111,7 @@ public:
         if (_is_skipped) {
             return;
         }
-        (void)g_worker->remove_shard(10086);
+        (void)get_staros_worker()->remove_shard(10086);
         shutdown_staros_worker();
         std::string test_type = GetParam();
         if (test_type == "cachefs" && config::starlet_cache_dir.compare(0, 5, std::string("/tmp/")) == 0) {
@@ -412,12 +414,13 @@ TEST_P(StarletFileSystemTest, test_delete_files) {
     shard_info.cache_info.set_enable_cache(false);
     shard_info.cache_info.set_async_write_back(false);
 
-    (void)g_worker->add_shard(shard_info);
+    auto worker = get_staros_worker();
+    (void)worker->add_shard(shard_info);
 
     auto uri3 = build_starlet_uri(shard_info.id, "/f1");
     paths.emplace_back(uri3);
     EXPECT_OK(fs->delete_files(paths));
-    (void)g_worker->remove_shard(shard_info.id);
+    (void)worker->remove_shard(shard_info.id);
 }
 
 TEST_P(StarletFileSystemTest, test_tag) {
@@ -545,15 +548,15 @@ class NewFsStarletTest : public ::testing::Test {
 public:
     void SetUp() override {
         staros::starlet::fslib::register_builtin_filesystems();
-        // Initialize g_worker for the test
-        g_worker = std::make_shared<starrocks::StarOSWorker>();
+        // Initialize the StarOS worker for the test.
+        set_staros_worker_for_test(std::make_shared<starrocks::StarOSWorker>());
         SyncPoint::GetInstance()->EnableProcessing();
     }
 
     void TearDown() override {
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
-        g_worker.reset();
+        set_staros_worker_for_test(nullptr);
     }
 };
 
@@ -644,7 +647,7 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_separate_cache_for_modes) {
     EXPECT_EQ(2, callback_count);
 }
 
-// Test failure scenario when g_worker->get_shard_filesystem returns error
+// Test failure scenario when the StarOS worker get_shard_filesystem returns error
 TEST_F(NewFsStarletTest, test_new_fs_starlet_get_shard_filesystem_failure) {
     int64_t test_shard_id = 44444;
 

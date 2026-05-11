@@ -70,7 +70,7 @@ under the License.
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.132.Final</io.netty.version>
+        <io.netty.version>4.1.133.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -80,7 +80,7 @@ under the License.
         <paimon.version>1.3.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>4.1-rc3</staros.version>
+        <staros.version>4.1-rc4</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>
@@ -93,6 +93,7 @@ under the License.
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
     </properties>
 
     <profiles>
@@ -1167,7 +1168,23 @@ under the License.
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
-                <version>42.4.4</version>
+                <version>42.7.11</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->

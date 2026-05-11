@@ -16,6 +16,10 @@
 
 #include <filesystem>
 
+#include "cache/disk_cache/block_cache.h"
+#ifdef WITH_STARCACHE
+#include "cache/datacache.h"
+#endif
 #include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
@@ -28,6 +32,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -754,8 +759,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (hdfs_scan_node.__isset.column_access_paths && !_disable_column_access_path_hints &&
         _column_access_paths.empty()) {
         bool failed = false;
+        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
         for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
-            auto st = ColumnAccessPath::create(thrift_path, state, state->obj_pool());
+            auto st = ColumnAccessPath::create(thrift_path, path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {

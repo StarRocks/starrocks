@@ -87,6 +87,15 @@ constexpr const char* CREATE_BOXED_LIST_SIGNATURE =
         "(ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;[Ljava/lang/Object;)[Ljava/lang/Object;";
 constexpr const char* CREATE_BOXED_MAP_SIGNATURE =
         "(ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;[Ljava/lang/Object;[Ljava/lang/Object;)[Ljava/lang/Object;";
+// (numRows, parentNullBuf, recordClass, fieldArrays) -> Object[]
+constexpr const char* CREATE_BOXED_STRUCT_SIGNATURE =
+        "(ILjava/nio/ByteBuffer;Ljava/lang/Class;[Ljava/lang/Object;)[Ljava/lang/Object;";
+// (numRows, boxedResult, columnAddr, typeDesc) -> void.
+// Unified dispatcher: writes the result jobject into the native column tree. Handles
+// STRUCT / ARRAY / MAP / DECIMAL / scalar by recursing on the Java side using the
+// UdfTypeDesc tree. The BE constructs the type desc once per UDF and just calls this
+// helper once per query batch.
+constexpr const char* WRITE_RESULT_SIGNATURE = "(ILjava/lang/Object;JLcom/starrocks/udf/UdfTypeDesc;)V";
 
 #define INIT_STATIC_METHOD(target, clazz, name, signature)    \
     target = _env->GetStaticMethodID(clazz, name, signature); \
@@ -105,6 +114,7 @@ static JNINativeMethod java_native_methods[] = {
         {"resize", "(JI)V", (void*)&JavaNativeMethods::resize},
         {"getColumnLogicalType", "(J)I", (void*)&JavaNativeMethods::getColumnLogicalType},
         {"getAddrs", "(J)[J", (void*)&JavaNativeMethods::getAddrs},
+        {"getStructFieldAddrs", "(J)[J", (void*)&JavaNativeMethods::getStructFieldAddrs},
         {"memoryTrackerMalloc", "(J)J", (void*)&JavaNativeMethods::memory_malloc},
         {"memoryTrackerFree", "(J)V", (void*)&JavaNativeMethods::memory_free},
 };
@@ -239,6 +249,24 @@ void JVMFunctionHelper::_init() {
     INIT_HELPER_METHOD(_create_boxed_array, "createBoxedArray", "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
     INIT_HELPER_METHOD(_create_boxed_decimal_array, "createBoxedDecimalArray",
                        "(IIILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
+    INIT_HELPER_METHOD(_create_boxed_struct_array, "createBoxedStructArray", CREATE_BOXED_STRUCT_SIGNATURE);
+    INIT_HELPER_METHOD(_write_result, "writeResult", WRITE_RESULT_SIGNATURE);
+
+    // Cache the UdfTypeDesc class + constructor + field IDs for the BE-side
+    // input boxing recursion (which reads children / recordClass per STRUCT slot)
+    // and for the per-UDF type desc construction in _build_udf_func_desc.
+    {
+        std::string td_name = JVMFunctionHelper::to_jni_class_name("com.starrocks.udf.UdfTypeDesc");
+        _udf_type_desc_class = JNI_FIND_CLASS(td_name.c_str());
+        DCHECK(_udf_type_desc_class != nullptr);
+        _udf_type_desc_ctor = _env->GetMethodID(_udf_type_desc_class, "<init>",
+                                                "(I[Lcom/starrocks/udf/UdfTypeDesc;IILjava/lang/Class;)V");
+        DCHECK(_udf_type_desc_ctor != nullptr);
+        _udf_type_desc_record_class = _env->GetFieldID(_udf_type_desc_class, "recordClass", "Ljava/lang/Class;");
+        _udf_type_desc_children =
+                _env->GetFieldID(_udf_type_desc_class, "children", "[Lcom/starrocks/udf/UdfTypeDesc;");
+        DCHECK(_udf_type_desc_record_class != nullptr && _udf_type_desc_children != nullptr);
+    }
     INIT_HELPER_METHOD(_get_decimal_boxed_result, "getDecimalResultFromBoxedArray", "(IIIILjava/lang/Object;JZ)V");
     INIT_HELPER_METHOD(_bd_unscaled_long, "unscaledLong", "(Ljava/math/BigDecimal;II)J");
     INIT_HELPER_METHOD(_bd_unscaled_le_bytes, "unscaledLEBytes", "(Ljava/math/BigDecimal;III)[B");
@@ -446,6 +474,45 @@ StatusOr<jobject> JVMFunctionHelper::create_boxed_decimal_array(int type, int sc
     return res;
 }
 
+StatusOr<jobject> JVMFunctionHelper::create_boxed_struct_array(jclass record_class, int num_rows, jobject null_buff,
+                                                               jobject field_arrays) {
+    jobject res = _env->CallStaticObjectMethod(_udf_helper_class, _create_boxed_struct_array, num_rows, null_buff,
+                                               record_class, field_arrays);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(_env, "create_boxed_struct_array");
+    return res;
+}
+
+StatusOr<jobject> JVMFunctionHelper::new_udf_type_desc(jint logical_type, jobjectArray children, jint precision,
+                                                       jint scale, jobject record_class) {
+    jobject obj = _env->NewObject(_udf_type_desc_class, _udf_type_desc_ctor, logical_type, children, precision, scale,
+                                  record_class);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(_env, "new_udf_type_desc");
+    return obj;
+}
+
+Status JVMFunctionHelper::write_result(jobject result, int num_rows, jlong column_addr, jobject type_desc,
+                                       bool /*error_if_overflow*/) {
+    // Resize the outer column to num_rows so the Java helper's getAddrs returns
+    // a buffer that's actually backed by num_rows worth of bytes. Without this
+    // the Java side's Platform.copyMemory writes past the end of an empty null
+    // buffer (the BE allocates a 0-sized column via create_column) and crashes.
+    // For NullableColumn(StructColumn) this also cascades to each subfield, so
+    // STRUCT field writes find their addresses lined up. ARRAY/MAP element
+    // columns are still resized inside the Java drain helpers using the
+    // computed total flattened length.
+    auto* col = reinterpret_cast<Column*>(column_addr);
+    col->resize(num_rows);
+
+    // The error_if_overflow flag is currently ignored by the unified Java helper;
+    // inner DECIMAL collection elements always report errors on overflow (matching
+    // the pre-refactor writeElementsByType behavior). For top-level DECIMAL returns,
+    // BE callers can route through get_result_from_boxed_array with explicit
+    // precision/scale instead.
+    _env->CallStaticVoidMethod(_udf_helper_class, _write_result, num_rows, result, column_addr, type_desc);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(_env, "write_result");
+    return Status::OK();
+}
+
 jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
     jobjectArray res_arr = _env->NewObjectArray(num_rows, _object_array_class, o);
     RETURN_IF_JNI_EXCEPTION(_env, "create_object_array: NewObjectArray failed", nullptr);
@@ -526,29 +593,35 @@ jobject JVMFunctionHelper::int_batch_call(FunctionContext* ctx, jobject callers,
     return res;
 }
 
+// Single-source dispatcher: routes DECIMAL types through the precision/scale-aware
+// Java helper, everything else through the regular per-type writer. Splitting at the
+// JNI boundary still pays off — the regular path skips the BigDecimal rescale loop —
+// but BE callers see one entry point with sensible defaults for non-DECIMAL slots.
+static void invoke_boxed_result(JNIEnv* env, jclass helper_class, jmethodID get_boxed_result,
+                                jmethodID get_decimal_boxed_result, int type, int precision, int scale, Column* col,
+                                jobject jcolumn, int rows, bool error_if_overflow) {
+    col->resize(rows);
+    if (is_decimalv3_field_type(static_cast<LogicalType>(type))) {
+        env->CallStaticVoidMethod(helper_class, get_decimal_boxed_result, type, precision, scale, rows, jcolumn,
+                                  reinterpret_cast<int64_t>(col), static_cast<jboolean>(error_if_overflow));
+    } else {
+        env->CallStaticVoidMethod(helper_class, get_boxed_result, type, rows, jcolumn, reinterpret_cast<int64_t>(col));
+    }
+}
+
+Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows, int precision,
+                                                      int scale, bool error_if_overflow) {
+    invoke_boxed_result(_env, _udf_helper_class, _get_boxed_result, _get_decimal_boxed_result, type, precision, scale,
+                        col, jcolumn, rows, error_if_overflow);
+    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
+    return Status::OK();
+}
+
 void JVMFunctionHelper::get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn,
-                                                    int rows) {
-    col->resize(rows);
-    _env->CallStaticVoidMethod(_udf_helper_class, _get_boxed_result, type, rows, jcolumn,
-                               reinterpret_cast<int64_t>(col));
+                                                    int rows, int precision, int scale, bool error_if_overflow) {
+    invoke_boxed_result(_env, _udf_helper_class, _get_boxed_result, _get_decimal_boxed_result, type, precision, scale,
+                        col, jcolumn, rows, error_if_overflow);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
-}
-
-Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows) {
-    col->resize(rows);
-    _env->CallStaticVoidMethod(_udf_helper_class, _get_boxed_result, type, rows, jcolumn,
-                               reinterpret_cast<int64_t>(col));
-    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
-    return Status::OK();
-}
-
-Status JVMFunctionHelper::get_decimal_result_from_boxed_array(int type, int precision, int scale, Column* col,
-                                                              jobject jcolumn, int rows, bool error_if_overflow) {
-    col->resize(rows);
-    _env->CallStaticVoidMethod(_udf_helper_class, _get_decimal_boxed_result, type, precision, scale, rows, jcolumn,
-                               reinterpret_cast<int64_t>(col), static_cast<jboolean>(error_if_overflow));
-    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
-    return Status::OK();
 }
 
 // convert UDAF ctx to jobject
@@ -1157,10 +1230,13 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
             } else if (type == "java/time/LocalDateTime") {
                 desc->emplace_back(MethodTypeDescriptor{TYPE_DATETIME, true});
             } else {
-                // Unrecognized object class. Surface as TYPE_UNKNOWN so get_method_desc()
-                // validation produces a clear error instead of leaving method_desc short
-                // and crashing on a later method_desc[0].is_box access.
-                desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
+                // Any other object class is a user-declared record bound to a STRUCT
+                // parameter/return. The FE analyzer has already validated at
+                // CREATE FUNCTION time that the class is a record matching the SQL
+                // STRUCT type, and that no unrecognized class appears in a non-STRUCT
+                // slot, so this branch is safe to treat as TYPE_STRUCT (no further
+                // class-name interpretation is needed here).
+                desc->emplace_back(MethodTypeDescriptor{TYPE_STRUCT, true});
             }
             continue;
         }

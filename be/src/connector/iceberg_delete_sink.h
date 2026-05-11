@@ -65,6 +65,10 @@ struct IcebergDeleteSinkContext : public ConnectorChunkSinkContext {
 
     // Column name to slot reference mapping (stores slot_ref and type)
     std::unordered_map<std::string, TExprNode> column_slot_map;
+
+    // Optional tag inserted into file name prefix to distinguish writers.
+    // Empty by default (standalone DELETE). Set to "delete" for RowDelta composite sinks.
+    std::string writer_tag;
 };
 
 // IcebergDeleteSinkProvider creates IcebergDeleteSink for writing position delete files

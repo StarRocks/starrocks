@@ -22,10 +22,10 @@
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
 #include "common/status.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/runtime_state_fwd.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 class RuntimeProfile;

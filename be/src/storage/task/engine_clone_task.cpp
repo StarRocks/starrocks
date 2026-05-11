@@ -63,11 +63,11 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/thrift_rpc_helper.h"
 
 using std::set;
 using std::stringstream;

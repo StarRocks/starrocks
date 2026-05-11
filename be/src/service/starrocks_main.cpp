@@ -78,11 +78,9 @@
 #include "runtime/memory/roaring_hook.h"
 #include "service/daemon.h"
 #include "service/service.h"
-#include "service/staros_worker.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
-#include "util/thrift_rpc_helper.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero

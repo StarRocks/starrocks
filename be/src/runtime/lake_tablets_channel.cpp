@@ -32,6 +32,7 @@
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
 #include "common/util/stack_trace_mutex.h"
+#include "common/util/table_metrics.h"
 #include "exec/tablet_info.h"
 #include "fs/bundle_file.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -41,7 +42,7 @@
 #include "runtime/load_channel.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/lake/async_delta_writer.h"
@@ -50,7 +51,6 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -65,7 +65,7 @@ class LakeTabletsChannel : public TabletsChannel {
 
 public:
     LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
-                       RuntimeProfile* parent_profile);
+                       RuntimeProfile* parent_profile, TableMetricsManager* table_metrics_mgr);
 
     ~LakeTabletsChannel() override;
 
@@ -282,6 +282,7 @@ private:
     };
 
     lake::TabletManager* _tablet_manager;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
 
     TabletsChannelKey _key;
 
@@ -368,9 +369,11 @@ private:
 };
 
 LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                       TableMetricsManager* table_metrics_mgr)
         : TabletsChannel(),
           _tablet_manager(tablet_manager),
+          _table_metrics_mgr(table_metrics_mgr),
           _key(key),
           _mem_tracker(mem_tracker),
           _mem_pool(std::make_unique<MemPool>()) {
@@ -400,9 +403,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
-#ifndef BE_TEST
-    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
-#endif
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics = _table_metrics_mgr->get_table_metrics(_schema->table_id());
+    }
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
         _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
@@ -688,10 +691,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
             wait_memtable_flush_time_ns / NANOSECS_PER_USEC);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns /
-                                                                                            NANOSECS_PER_USEC);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns /
+                                                                                          NANOSECS_PER_USEC);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
     size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
@@ -753,9 +756,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                 }
             } else if (i_collect) {
                 if (snap.per_partition_mode) {
-                    StarRocksMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
+                    RuntimeMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
                 } else {
-                    StarRocksMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
+                    RuntimeMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
                 }
                 auto all_logs = _txn_log_collector.logs();
                 if (snap.per_partition_mode) {
@@ -785,8 +788,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         }
                     }
                     if (orphan_count > 0) {
-                        StarRocksMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(
-                                orphan_count);
+                        RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
                 } else {
@@ -1174,7 +1176,6 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
     ADD_AND_SET_TIMER(profile, "FinishWaitFlushTime", writer_stat.finish_wait_flush_time_ns.load());
     ADD_AND_SET_TIMER(profile, "FinishPrepareTxnLogTime", writer_stat.finish_prepare_txn_log_time_ns.load());
     ADD_AND_SET_TIMER(profile, "FinishPutTxnLogTime", writer_stat.finish_put_txn_log_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "FinishPkPreloadTime", writer_stat.finish_pk_preload_time_ns.load());
 
     // Use get_flush_token() to hold a shared_ptr, keeping the FlushToken alive
     // while we read its stats. This prevents use-after-free when close()
@@ -1221,10 +1222,11 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                                         RuntimeProfile* parent_profile) {
+                                                         RuntimeProfile* parent_profile,
+                                                         TableMetricsManager* table_metrics_mgr) {
     // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
     // be consistent with LocalTabletsChannel.
-    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile, table_metrics_mgr);
 }
 
 } // namespace starrocks

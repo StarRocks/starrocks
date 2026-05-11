@@ -29,6 +29,7 @@ public:
 
     std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
     std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const override;
+    std::unique_ptr<ConnectorChunkSinkProvider> create_row_delta_sink_provider() const override;
 };
 
 } // namespace starrocks::connector

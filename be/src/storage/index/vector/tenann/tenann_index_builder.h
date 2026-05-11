@@ -57,10 +57,6 @@ public:
 private:
     std::shared_ptr<tenann::IndexBuilder> _index_builder = nullptr;
     uint32_t _dim = 0;
-    // This will be true when `metric_type` is cosine_similarity and `is_vector_normed` is true.
-    // When it is true, the vector (a row of the array column) is either null or the sum of the squares of all elements
-    // equals 1.
-    bool _is_input_normalized = false;
 
     const bool _is_element_nullable;
     const int _omp_threads;

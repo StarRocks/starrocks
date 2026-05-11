@@ -644,9 +644,8 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(),
                                                    base_level_merge, tablet_mgr, metadata->id(), false);
     while (iter_ptr->Valid()) {
-        const std::string& cur_key = iter_ptr->key().to_string();
-        if (!seek_range.stop_key.empty() &&
-            options.comparator->Compare(Slice(cur_key), Slice(seek_range.stop_key)) >= 0) {
+        const Slice cur_key = iter_ptr->key();
+        if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
             // meet the scan range boundary, quit.
             break;
         }

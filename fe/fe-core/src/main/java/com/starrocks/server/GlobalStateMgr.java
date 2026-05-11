@@ -98,6 +98,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.mv.MaterializedViewDependencyGraph;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
@@ -334,12 +335,12 @@ public class GlobalStateMgr {
     private final DatabaseQuotaRefresher updateDbUsedDataQuotaDaemon;
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
+    private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
-    private Daemon timePrinter;
+    private LeaderDaemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
@@ -1654,29 +1655,38 @@ public class GlobalStateMgr {
      */
     void stopLeaderOnlyDaemonThreads() {
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
-        // Reverse of startLeaderOnlyDaemonThreads(): stop downstream consumers first so that
-        // upstream producers (heartbeat) can wind down without piling work on a draining sink.
-        try {
-            reportHandler.stopGracefully(timeoutMs);
-        } catch (Throwable t) {
-            LOG.warn("stop reportHandler failed", t);
+        // Stop in the reverse order of startLeaderOnlyDaemonThreads().
+        stopOne("tabletCollector", () -> tabletCollector.stopGracefully(timeoutMs));
+        stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
+        stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));
+        stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopGracefully(timeoutMs));
+        stopOne("safeModeChecker", () -> safeModeChecker.stopGracefully(timeoutMs));
+        stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
+        stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
+        stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));
+        if (timePrinter != null) {
+            stopOne("timePrinter", () -> timePrinter.stopGracefully(timeoutMs));
         }
-        try {
-            publishVersionDaemon.stopGracefully(timeoutMs);
-        } catch (Throwable t) {
-            LOG.warn("stop publishVersionDaemon failed", t);
+        stopOne("consistencyChecker", () -> consistencyChecker.stopGracefully(timeoutMs));
+        if (txnTimeoutChecker != null) {
+            stopOne("txnTimeoutChecker", () -> txnTimeoutChecker.stopGracefully(timeoutMs));
         }
+        stopOne("publishVersionDaemon", () -> publishVersionDaemon.stopGracefully(timeoutMs));
+        stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopGracefully(timeoutMs));
+        stopOne("loadEtlChecker", () -> loadEtlChecker.stopGracefully(timeoutMs));
+        stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopGracefully(timeoutMs));
         if (!RunMode.isSharedDataMode()) {
-            try {
-                tabletScheduler.stopGracefully(timeoutMs);
-            } catch (Throwable t) {
-                LOG.warn("stop tabletScheduler failed", t);
-            }
+            stopOne("tabletScheduler", () -> tabletScheduler.stopGracefully(timeoutMs));
         }
+        stopOne("heartbeatMgr", () -> heartbeatMgr.stopGracefully(timeoutMs));
+        stopOne("keyRotationDaemon", () -> keyRotationDaemon.stopGracefully(timeoutMs));
+    }
+
+    private void stopOne(String name, Runnable action) {
         try {
-            heartbeatMgr.stopGracefully(timeoutMs);
+            action.run();
         } catch (Throwable t) {
-            LOG.warn("stop heartbeatMgr failed", t);
+            LOG.warn("stop {} failed", name, t);
         }
     }
 
@@ -2115,10 +2125,10 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
+        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker",
                 Config.transaction_clean_interval_second * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
@@ -2408,9 +2418,9 @@ public class GlobalStateMgr {
 
     public void createTimePrinter() {
         // time printer will write timestamp edit log every 10 seconds
-        timePrinter = new FrontendDaemon("timePrinter", 10 * 1000L) {
+        timePrinter = new LeaderDaemon("timePrinter", 10 * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 Timestamp stamp = new Timestamp();
                 editLog.logTimestamp(stamp);
             }

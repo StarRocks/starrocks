@@ -26,7 +26,6 @@
 #include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -38,6 +37,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -642,7 +642,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_build_sstable_write_error) {
     phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
     map.emplace("key_a", std::make_pair(int64_t(1), IndexValue(1)));
 
-    auto before = StarRocksMetrics::instance()->pk_index_sst_write_error_total.value();
+    auto before = StorageMetrics::instance()->pk_index_sst_write_error_total.value();
 
     SyncPoint::GetInstance()->SetCallBack("table_builder_footer_error",
                                           [](void* arg) { *(Status*)arg = Status::IOError("inject_write_error"); });
@@ -654,7 +654,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_build_sstable_write_error) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     ASSERT_ERROR(st);
-    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_write_error_total.value());
+    ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_write_error_total.value());
 }
 
 TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
@@ -662,7 +662,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
     uint64_t filesize = 0;
     build_test_sst(path, &filesize);
 
-    auto before = StarRocksMetrics::instance()->pk_index_sst_read_error_total.value();
+    auto before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
 
     SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error",
                                           [](void* arg) { *(Status*)arg = Status::IOError("inject_open_error"); });
@@ -679,7 +679,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     ASSERT_ERROR(st);
-    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
+    ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
 TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
@@ -736,7 +736,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     sstable_pb.set_filesize(filesize);
     ASSERT_OK(sst->init(std::move(rf), sstable_pb, cache.get()));
 
-    auto before = StarRocksMetrics::instance()->pk_index_sst_read_error_total.value();
+    auto before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
 
     SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::multi_get:error",
                                           [](void* arg) { *(Status*)arg = Status::IOError("inject_multiget_error"); });
@@ -753,7 +753,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     ASSERT_ERROR(st);
-    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
+    ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
 TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cache) {

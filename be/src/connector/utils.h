@@ -100,10 +100,13 @@ StatusOr<std::string> build_canonical_file_suffix(const std::string& format, TCo
 class LocationProvider {
 public:
     // file_name_prefix = {query_id}_{be_number}_{driver_id}
+    // or {query_id}_{be_number}_{writer_tag}_{driver_id} when writer_tag is non-empty
     LocationProvider(const std::string& base_path, const std::string& query_id, int be_number, int driver_id,
-                     std::string file_suffix)
+                     std::string file_suffix, std::string writer_tag = "")
             : _base_path(PathUtils::remove_trailing_slash(base_path)),
-              _file_name_prefix(fmt::format("{}_{}_{}", query_id, be_number, driver_id)),
+              _file_name_prefix(writer_tag.empty()
+                                        ? fmt::format("{}_{}_{}", query_id, be_number, driver_id)
+                                        : fmt::format("{}_{}_{}_{}", query_id, be_number, writer_tag, driver_id)),
               _file_name_suffix(std::move(file_suffix)) {}
 
     // location = base_path/partition/{query_id}_{be_number}_{driver_id}_index.file_suffix

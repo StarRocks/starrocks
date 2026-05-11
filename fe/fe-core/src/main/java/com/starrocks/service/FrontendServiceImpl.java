@@ -3601,11 +3601,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TBatchGetTabletMetadataRequest batchRequest) {
         TBatchGetTabletMetadataResponse batchResponse = new TBatchGetTabletMetadataResponse();
         batchResponse.setStatus(new TStatus(OK));
-        if (batchRequest.isSetRequests()) {
-            for (TGetTabletMetadataRequest request : batchRequest.getRequests()) {
-                batchResponse.addToResponses(handleGetTabletMetadata(request));
-            }
+        if (!batchRequest.isSetRequests() || batchRequest.getRequests().isEmpty()) {
+            return batchResponse;
         }
+        // The thrift type is a batch but only single-request payloads are accepted today.
+        // A real batch implementation would have to take a read lock on every distinct
+        // (db, table) covered by the batch and hold all of them for the full batch so that
+        // sibling tablets observe one consistent snapshot. Otherwise a schema change
+        // committing between two per-request locks would leave sibling responses with
+        // mismatched schemas and CN would assemble inconsistent TabletMetadataPBs. The
+        // grouping, lock-ordering (to avoid deadlocks against other DDL), and partial-failure
+        // bookkeeping needed to do that correctly are not worth the complexity given that
+        // the current CN caller packs exactly one request.
+        // Keep the wire shape so a future change can lift the restriction; reject the
+        // overflow case loudly until then.
+        if (batchRequest.getRequests().size() > 1) {
+            TStatus status = new TStatus(TStatusCode.NOT_IMPLEMENTED_ERROR);
+            status.addToError_msgs("multi-request batches are not supported, got: "
+                    + batchRequest.getRequests().size());
+            batchResponse.setStatus(status);
+            return batchResponse;
+        }
+        batchResponse.addToResponses(handleGetTabletMetadata(batchRequest.getRequests().get(0)));
         return batchResponse;
     }
 
@@ -3698,7 +3715,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             // tablet_ranges holds all tablets' ranges in this index, only for range distribution
             if (olapTable.isRangeDistribution()) {
-                Map<Long, TTabletRange> tabletRanges = new java.util.HashMap<>();
+                Map<Long, TTabletRange> tabletRanges = new HashMap<>();
                 for (Tablet tablet : index.getTablets()) {
                     if (tablet.getRange() != null) {
                         tabletRanges.put(tablet.getId(), tablet.getRange().toThrift());

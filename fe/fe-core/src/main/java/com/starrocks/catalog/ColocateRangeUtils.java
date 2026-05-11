@@ -83,4 +83,43 @@ public class ColocateRangeUtils {
         }
         return new Tuple(values);
     }
+
+    /**
+     * Extracts the colocate column prefix from a tablet's full sort-key range.
+     *
+     * <p>Inverse of {@link #expandToFullSortKey}: a tablet whose range was produced by
+     * expansion stores a full sort-key tuple in its lower bound, but the colocate-range
+     * lookup keys on the colocate prefix only.
+     *
+     * <p>If the tablet range is unbounded below (lower bound is -inf), this returns
+     * {@code null}, signaling the caller to fall back to the first colocate range
+     * (which always begins at -inf by the {@link ColocateRangeMgr} invariant).
+     *
+     * <p>Unlike {@link #expandToFullSortKey}, this method requires
+     * {@code colocateColumnCount > 0}: a colocate group with zero colocate columns
+     * is not a meaningful concept on the lookup side (every value would map to the
+     * same range, which is just the no-colocate case).
+     *
+     * @param tabletRange the tablet's full sort-key range
+     * @param colocateColumnCount the number of colocate columns (sort key prefix length),
+     *                            must be positive
+     * @return the colocate prefix Tuple, or {@code null} if the range is unbounded below
+     */
+    public static Tuple extractColocatePrefix(Range<Tuple> tabletRange, int colocateColumnCount) {
+        Preconditions.checkArgument(colocateColumnCount > 0,
+                "colocateColumnCount must be positive, got %s", colocateColumnCount);
+        if (tabletRange.isMinimum()) {
+            return null;
+        }
+        List<Variant> values = tabletRange.getLowerBound().getValues();
+        Preconditions.checkArgument(values.size() >= colocateColumnCount,
+                "tablet lower bound has %s values, fewer than colocateColumnCount %s",
+                values.size(), colocateColumnCount);
+        if (values.size() == colocateColumnCount) {
+            return tabletRange.getLowerBound();
+        }
+        // subList returns a view backed by the original list; copy so that the
+        // returned Tuple does not retain a reference to the tablet's bound.
+        return new Tuple(new ArrayList<>(values.subList(0, colocateColumnCount)));
+    }
 }

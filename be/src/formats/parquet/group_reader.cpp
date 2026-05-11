@@ -476,6 +476,11 @@ Status GroupReader::prepare() {
         }
     }
 
+    // Promote shredded variant virtual columns to direct typed_value proxy readers (Phase 3.5).
+    // Must run after _prepare_column_readers() (which sets skip_base_payload) and after
+    // select_offset_index (so the underlying typed_value readers already have the correct range).
+    RETURN_IF_ERROR(_promote_variant_virtual_columns());
+
     // if coalesce read enabled, we have to
     // 1. allocate shared buffered input stream and
     // 2. collect io ranges of every row group reader.
@@ -1348,6 +1353,190 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     }
 }
 
+Status GroupReader::_promote_variant_virtual_columns() {
+    // For each hidden variant source whose VariantColumnReader has _skip_base_payload=true
+    // (all requested shredded paths are scalar typed-value leaves), promote ALL virtual slots
+    // backed by that source to VariantTypedValueProxy readers in _column_readers.  This lets
+    // the proxy participate in Phase 2 dict-filter and eliminates the Phase 3 hidden-source
+    // read and Phase 4 deferred variant conjunct evaluation entirely.
+    //
+    // Full-promotion is all-or-nothing per source: if any virtual slot lacks a typed_value
+    // leaf, we skip the source entirely.  Partial promotion would corrupt the hidden source's
+    // read path (dict-filtered readers output INT codes, not decoded values).
+
+    // Build: hidden source slot_id → list of (virtual slot info) backed by that source.
+    struct VirtualSlotInfo {
+        SlotId virtual_slot_id;
+        int read_col_idx;
+        bool decode_needed;
+        bool has_conjunct;
+    };
+    std::unordered_map<SlotId, std::vector<VirtualSlotInfo>> slots_by_source;
+    {
+        int idx = 0;
+        for (const auto& column : _param.read_cols) {
+            if (column.is_extended_variant_virtual) {
+                auto proj_it = _variant_virtual_projections.find(column.slot_id());
+                if (proj_it != _variant_virtual_projections.end()) {
+                    SlotId src_id = proj_it->second.source_slot_id;
+                    // Only promote hidden sources (negative slot IDs).
+                    if (src_id < 0) {
+                        bool has_conj = _param.conjunct_ctxs_by_slot.count(column.slot_id()) > 0;
+                        slots_by_source[src_id].push_back({column.slot_id(), idx, column.decode_needed, has_conj});
+                    }
+                }
+            }
+            ++idx;
+        }
+    }
+
+    bool any_promoted = false;
+
+    for (auto& [src_name, hidden_source] : _hidden_variant_sources) {
+        SlotId src_id = hidden_source.slot_id;
+        auto slots_it = slots_by_source.find(src_id);
+        if (slots_it == slots_by_source.end()) continue;
+
+        auto* vreader = dynamic_cast<VariantColumnReader*>(hidden_source.reader.get());
+        if (vreader == nullptr || !vreader->skip_base_payload()) continue;
+
+        const auto& virtual_slots = slots_it->second;
+
+        // Check: can ALL virtual slots be promoted?  Three conditions must hold for each slot:
+        // 1. Has a scalar typed_value leaf reader.
+        // 2. Fallback value column is all-null for this row group (data is exclusively in
+        //    typed_value).  If any path has non-null fallback values, _read_range_skip_base_payload's
+        //    runtime detection would fall back to the base payload — which promotion bypasses,
+        //    producing all-NULLs.
+        // 3. The typed_value leaf's read type is directly compatible with the virtual slot's
+        //    target column type for raw writing.  Variable-length types (VARCHAR/VARBINARY etc.)
+        //    share the same BinaryColumn layout and are mutually compatible.  Fixed-size types
+        //    must match exactly; a mismatch (e.g. INT32 typed_value → BIGINT slot) causes the
+        //    PlainDecoder to write the wrong element width into the destination column, crashing.
+        const uint64_t rg_num_rows = get_row_group_metadata()->num_rows;
+        auto var_len_type = [](LogicalType t) {
+            return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
+        };
+        bool all_promotable = true;
+        std::unordered_set<ColumnReader*> promoted_leaf_readers;
+        std::unordered_map<SlotId, ColumnReader*> leaf_readers_by_slot;
+        for (const auto& vsi : virtual_slots) {
+            auto proj_it = _variant_virtual_projections.find(vsi.virtual_slot_id);
+            if (proj_it == _variant_virtual_projections.end()) {
+                all_promotable = false;
+                break;
+            }
+            const auto& parsed_path = proj_it->second.parsed_path;
+            ColumnReader* leaf = vreader->scalar_typed_value_reader_for_path(parsed_path);
+            if (leaf == nullptr) {
+                all_promotable = false;
+                break;
+            }
+            if (!promoted_leaf_readers.insert(leaf).second) {
+                all_promotable = false;
+                break;
+            }
+            leaf_readers_by_slot.emplace(vsi.virtual_slot_id, leaf);
+            if (!vreader->fallback_values_all_null_in_row_group_for_path(parsed_path, rg_num_rows)) {
+                all_promotable = false;
+                break;
+            }
+            const TypeDescriptor* leaf_type = vreader->typed_value_read_type_for_path(parsed_path);
+            const TypeDescriptor& target = proj_it->second.target_type;
+            bool type_ok = (leaf_type != nullptr) &&
+                           (var_len_type(leaf_type->type) && var_len_type(target.type) ? true : *leaf_type == target);
+            if (!type_ok) {
+                all_promotable = false;
+                break;
+            }
+        }
+        if (!all_promotable) continue;
+
+        // Fully promote: create VariantTypedValueProxy for each virtual slot.
+        for (const auto& vsi : virtual_slots) {
+            auto& proj = _variant_virtual_projections.at(vsi.virtual_slot_id);
+            ColumnReader* leaf = leaf_readers_by_slot.at(vsi.virtual_slot_id);
+
+            auto proxy = std::make_unique<VariantTypedValueProxy>(leaf);
+
+            if (vsi.has_conjunct) {
+                // Attempt dict filter for each conjunct; fall back to expression eval if failed.
+                const auto& conjuncts = _param.conjunct_ctxs_by_slot.at(vsi.virtual_slot_id);
+                for (ExprContext* ctx : conjuncts) {
+                    std::vector<std::string> sub_field_path;
+                    // sub_field_path is empty: virtual slot IS the leaf value directly.
+                    if (proxy->try_to_use_dict_filter(ctx, vsi.decode_needed, vsi.virtual_slot_id, sub_field_path, 0)) {
+                        _use_as_dict_filter_column(vsi.read_col_idx, vsi.virtual_slot_id, sub_field_path);
+                    } else {
+                        _left_no_dict_filter_conjuncts_by_slot[vsi.virtual_slot_id].push_back(ctx);
+                    }
+                }
+            }
+            // Always place promoted slots in active indices regardless of conjunct presence.
+            // Projection-only promoted slots must also be active to guarantee active_chunk
+            // has a valid row count when it is the only column set being read.
+            _active_column_indices.push_back(vsi.read_col_idx);
+            _active_slot_ids.push_back(vsi.virtual_slot_id);
+
+            _column_readers[vsi.virtual_slot_id] = std::move(proxy);
+            _promoted_virtual_slots.insert(vsi.virtual_slot_id);
+            _variant_virtual_projections.erase(vsi.virtual_slot_id);
+        }
+
+        // Mark source as fully promoted and remove it from the active/lazy hidden-source lists.
+        hidden_source.fully_promoted = true;
+        _active_hidden_slot_ids.erase(
+                std::remove(_active_hidden_slot_ids.begin(), _active_hidden_slot_ids.end(), src_id),
+                _active_hidden_slot_ids.end());
+        _lazy_hidden_slot_ids.erase(std::remove(_lazy_hidden_slot_ids.begin(), _lazy_hidden_slot_ids.end(), src_id),
+                                    _lazy_hidden_slot_ids.end());
+        // Also remove the hidden source's slot_id from _active_slot_ids (added in Step 4 of
+        // _process_columns_and_conjunct_ctxs when the source was classified as active).
+        _active_slot_ids.erase(std::remove(_active_slot_ids.begin(), _active_slot_ids.end(), src_id),
+                               _active_slot_ids.end());
+
+        any_promoted = true;
+    }
+
+    if (!any_promoted) return Status::OK();
+
+    // Rebuild _column_read_order_ctx to include newly promoted active columns.
+    {
+        std::unordered_map<int, size_t> col_cost;
+        size_t all_cost = 0;
+        for (int col_idx : _active_column_indices) {
+            size_t flat_size = _param.read_cols[col_idx].slot_type().get_flat_size();
+            col_cost[col_idx] = flat_size;
+            all_cost += flat_size;
+        }
+        _column_read_order_ctx =
+                std::make_unique<ColumnReadOrderCtx>(_active_column_indices, all_cost, std::move(col_cost));
+    }
+
+    // Rebuild deferred conjunct list, excluding promoted slots.
+    {
+        std::vector<ExprContext*> remaining;
+        std::unordered_set<SlotId> remaining_ids;
+        for (const auto& column : _param.read_cols) {
+            if (!column.is_extended_variant_virtual) continue;
+            SlotId slot_id = column.slot_id();
+            if (_deferred_conjunct_slot_ids.count(slot_id) == 0) continue;
+            if (_promoted_virtual_slots.count(slot_id) > 0) continue;
+            auto it = _param.conjunct_ctxs_by_slot.find(slot_id);
+            if (it != _param.conjunct_ctxs_by_slot.end()) {
+                for (ExprContext* ctx : it->second) {
+                    remaining.push_back(ctx);
+                }
+                remaining_ids.insert(slot_id);
+            }
+        }
+        _deferred_variant_virtual_conjunct_ctxs = std::move(remaining);
+        _deferred_conjunct_slot_ids = std::move(remaining_ids);
+    }
+
+    return Status::OK();
+}
+
 bool GroupReader::_try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                           std::vector<std::string>& sub_field_path, bool is_decode_needed) {
     const Expr* root_expr = ctx->root();
@@ -1409,6 +1598,10 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
         _column_readers[slot_id]->collect_column_io_range(ranges, &end, types, false);
     }
     for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+        // Fully-promoted sources have all their virtual slots promoted to VariantTypedValueProxy
+        // readers in _column_readers (Phase 2).  Their IO is registered via the proxy entries
+        // in _active_column_indices above; skip the source here to avoid duplicate IO ranges.
+        if (hidden_source.fully_promoted) continue;
         hidden_source.reader->collect_column_io_range(ranges, &end, types, hidden_source.is_active);
     }
     deduplicate_io_ranges(ranges);

@@ -101,6 +101,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
 
@@ -398,6 +399,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKIP_PAGE_CACHE = "skip_page_cache";
 
     public static final String SKIP_BLACK_LIST = "skip_black_list";
+
+    /**
+     * Policy for selecting a backup compute node when the tablet's primary worker cannot be used in shared-data mode.
+     */
+    public static final String BLACKLIST_BACKUP_ROUTING = "blacklist_backup_routing";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -1275,6 +1281,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = SKIP_BLACK_LIST)
     private boolean skipBlackList = false;
+
+    @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -3727,6 +3736,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isSkipBlackList() {
         return skipBlackList;
+    }
+
+    public void setBlacklistBackupRouting(String blacklistBackupRouting) {
+        BlacklistBackupRoutingPolicy result =
+                Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(BlacklistBackupRoutingPolicy.values());
+            throw new IllegalArgumentException("Legal values of " + BLACKLIST_BACKUP_ROUTING + " are " + legalValues);
+        }
+        this.blacklistBackupRouting = StringUtils.upperCase(blacklistBackupRouting);
+    }
+
+    public BlacklistBackupRoutingPolicy getBlacklistBackupRoutingPolicy() {
+        return Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting))
+                .or(BlacklistBackupRoutingPolicy.getDefault());
     }
 
     public int getStatisticCollectParallelism() {

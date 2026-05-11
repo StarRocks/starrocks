@@ -49,5 +49,10 @@ static constexpr int TYPE_MAP_METHOD_ID = 11;
 // (int32 Julian day / packed int64). Java UDFHelper decodes inline.
 DEFINE_TYPE(DateValue, 12);
 DEFINE_TYPE(TimestampValue, 13);
+// STRUCT requires a record class jclass at boxing time (see
+// JVMFunctionHelper::create_boxed_struct_array), so it does not flow through the
+// JNIPrimTypeId-keyed _method_map. The constant is kept here for symmetry and to
+// reserve the slot.
+static constexpr int TYPE_STRUCT_METHOD_ID = 14;
 
 } // namespace starrocks

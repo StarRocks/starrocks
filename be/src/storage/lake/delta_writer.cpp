@@ -34,7 +34,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
@@ -53,6 +52,7 @@
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -558,9 +558,9 @@ inline Status DeltaWriterImpl::flush() {
     watch.start();
     DeferOp defer([&] {
         ADD_COUNTER_RELAXED(_stats.write_wait_flush_time_ns, watch.elapsed_time());
-        StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
-        StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(watch.elapsed_time() /
-                                                                                    NANOSECS_PER_USEC);
+        StorageMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
+        StorageMetrics::instance()->delta_writer_wait_flush_duration_us.increment(watch.elapsed_time() /
+                                                                                  NANOSECS_PER_USEC);
     });
     if (_flush_token == nullptr) {
         // This will happen when flush is invoked before any write.
@@ -771,13 +771,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     watch.start();
     DeferOp defer([&] {
         ADD_COUNTER_RELAXED(_stats.finish_time_ns, watch.elapsed_time());
-        StarRocksMetrics::instance()->delta_writer_commit_task_total.increment(1);
+        StorageMetrics::instance()->delta_writer_commit_task_total.increment(1);
     });
     RETURN_IF_ERROR(finish());
     auto wait_flush_ts = watch.elapsed_time();
     ADD_COUNTER_RELAXED(_stats.finish_wait_flush_time_ns, wait_flush_ts);
-    StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
-    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(wait_flush_ts / NANOSECS_PER_USEC);
+    StorageMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
+    StorageMetrics::instance()->delta_writer_wait_flush_duration_us.increment(wait_flush_ts / NANOSECS_PER_USEC);
 
     if (UNLIKELY(_txn_id < 0)) {
         return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
@@ -830,17 +830,21 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
 
-    // We can support partial update with row mode to be used with condition update at the same time.
+    // Column-mode PCU combined with condition update requires the condition column to be part of
+    // the partial update column set: the handler compares old vs new values from the partial chunk
+    // itself and cannot read the new value otherwise.
     if (is_partial_update() && !_merge_condition.empty() &&
         (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
          _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
-        return Status::NotSupported("partial update with column mode and condition update at the same time");
+        if (_write_schema->field_index(_merge_condition) == static_cast<size_t>(-1)) {
+            return Status::NotSupported(fmt::format(
+                    "partial update with column mode requires merge_condition column '{}' to be included in the "
+                    "partial update column set",
+                    _merge_condition));
+        }
     }
 
     // handle partial update
-    // If there is bundle data file, we will skip preload pk state, because the bundle data file hasn't been
-    // flushed to storage yet.
-    bool skip_pk_preload = config::skip_pk_preload || op_write->rowset().bundle_file_offsets_size() > 0;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {
@@ -855,8 +859,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
-            } else {
-                skip_pk_preload = true;
             }
             // handle partial update
             op_write->mutable_txn_meta()->set_partial_update_mode(_partial_update_mode);
@@ -916,17 +918,8 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     auto put_txn_log_ts = watch.elapsed_time();
     auto commit_txn_duration_ns = put_txn_log_ts - prepare_txn_log_ts;
     ADD_COUNTER_RELAXED(_stats.finish_put_txn_log_time_ns, commit_txn_duration_ns);
-    StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment(commit_txn_duration_ns /
-                                                                                NANOSECS_PER_USEC);
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
-        // preload update state here to minimaze the cost when publishing.
-        FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(load_pk_preload, (void)PK_PRELOAD_FP_ACTION(_txn_id, _tablet_id),
-                                              tablet.update_mgr()->preload_update_state(*txn_log, &tablet));
-    }
-    auto pk_preload_duration_ns = watch.elapsed_time() - put_txn_log_ts;
-    ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, pk_preload_duration_ns);
-    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
-                                                                                NANOSECS_PER_USEC);
+    StorageMetrics::instance()->delta_writer_txn_commit_duration_us.increment(commit_txn_duration_ns /
+                                                                              NANOSECS_PER_USEC);
     VLOG(2) << "txn_log: " << txn_log->DebugString();
 
     if (config::enable_tablet_write_log) {

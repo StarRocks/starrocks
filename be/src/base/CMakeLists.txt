@@ -16,6 +16,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
 ADD_BE_LIB(Base
   bthreads/future_impl.cpp
+  bit/frame_of_reference_coding.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_metrics.cpp
   compression/compression_context_pool_singletons.cpp

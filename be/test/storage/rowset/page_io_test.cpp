@@ -18,6 +18,7 @@
 
 #include "base/compression/block_compression.h"
 #include "base/testutil/assert.h"
+#include "cache/datacache.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "fs/bundle_file.h"

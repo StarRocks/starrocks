@@ -20,29 +20,21 @@ PROPERTIES (
     "replication_num" = "1"
 );
 
-INSERT into t1 values 
+INSERT into t1 values
     (1, null, null);
 
--- TODO(sevev): re-enable the INSERTs below after backporting
--- CelerData/celerdata-enterprise#53733. That PR lifts cosine_similarity
--- normalization and dim-mismatch checks from TenAnnIndexBuilderProxy::add up
--- to VectorIndexWriter::append, so the validation runs whether or not the
--- index builder was constructed. Without it the threshold-skip change from
--- PR #72075 lets sub-threshold inserts of malformed vectors silently succeed
--- (regression). The INSERTs that follow expect those validation errors and
--- can only assert them after the backport.
--- INSERT into t1 values
---     (1, [null, null, null, null, null], [1,2,3,4,5]);
---
--- INSERT into t1 values
---     (1, [1,2,3,4], [1,2,3,4]);
---
--- INSERT into t1 values
---     (1, [], []);
---
--- INSERT INTO t1 values
---     (1, [1,2,3,4,5], [1,2,3,4,5]),
---     (2, [4,5,6,7,8], [4,5,6,7,8]);
+INSERT into t1 values
+    (1, [null, null, null, null, null], [1,2,3,4,5]);
+
+INSERT into t1 values
+    (1, [1,2,3,4], [1,2,3,4]);
+
+INSERT into t1 values
+    (1, [], []);
+
+INSERT INTO t1 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]);
 
 INSERT INTO t1 values
     (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242],
@@ -55,10 +47,10 @@ INSERT INTO t1 values
         null);
 
 
--- INSERT INTO t1 values
---     (1, [1,2,3,4,5], [1,2,3,4,5]),
---     (2, [4,5,6,7,8], [4,5,6,7,8]),
---     (3, null, null);
+INSERT INTO t1 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]),
+    (3, null, null);
 
 INSERT INTO t1 values
     (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242], 

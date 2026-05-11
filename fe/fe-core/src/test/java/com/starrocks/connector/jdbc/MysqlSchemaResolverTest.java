@@ -26,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -58,8 +60,6 @@ public class MysqlSchemaResolverTest {
     PreparedStatement preparedStatement;
 
     private Map<String, String> properties;
-    private MockResultSet dbResult;
-    private MockResultSet tableResult;
     private MockResultSet partitionsResult;
     private Map<JDBCTableName, Integer> tableIdCache;
 
@@ -113,21 +113,31 @@ public class MysqlSchemaResolverTest {
 
     @Test
     public void testCheckPartitionWithPartitionsTable() throws SQLException {
+        List<String> tableNamePatterns = Lists.newArrayList();
         new Expectations() {
             {
                 String catalogSchema = "information_schema";
 
-                dbResult = new MockResultSet("catalog");
-                dbResult.addColumn("TABLE_CAT", Arrays.asList(catalogSchema));
-
-                connection.getMetaData().getCatalogs();
-                result = dbResult;
-                minTimes = 0;
-
                 MockResultSet piResult = new MockResultSet("partitions");
                 piResult.addColumn("TABLE_NAME", Arrays.asList("partitions"));
-                connection.getMetaData().getTables(anyString, null, null, null);
-                result = piResult;
+                connection.getMetaData().getTables(catalogSchema, null, anyString, null);
+                result = new Delegate() {
+                    ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern,
+                                        String[] types) {
+                        tableNamePatterns.add(tableNamePattern);
+                        Assertions.assertNotNull(tableNamePattern);
+                        return piResult;
+                    }
+                };
+                minTimes = 0;
+
+                connection.getMetaData().getCatalogs();
+                result = new Delegate() {
+                    ResultSet getCatalogs() {
+                        Assertions.fail("check partition information should not scan catalogs");
+                        return null;
+                    }
+                };
                 minTimes = 0;
             }
         };
@@ -137,6 +147,8 @@ public class MysqlSchemaResolverTest {
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
+        Assertions.assertEquals(1, tableNamePatterns.size());
+        Assertions.assertTrue(tableNamePatterns.get(0).equalsIgnoreCase("partitions"));
     }
 
     @Test

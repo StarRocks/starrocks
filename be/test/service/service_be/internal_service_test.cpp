@@ -23,7 +23,7 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/utils.h"
-#include "exec/tablet_sink_index_channel.h"
+#include "exec/data_sinks/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
 #include "service/brpc_service_test_util.h"
 

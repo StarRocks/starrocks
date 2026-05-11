@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
@@ -33,6 +34,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -83,6 +85,141 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertTrue(result.isPresent(), "aggregate MV query must produce an IVM rewrite result");
         assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
                 "aggregate MV must yield QUERY_COMPUTED: the query encodes group-by keys as __ROW_ID__");
+    }
+
+    /**
+     * Distinct aggregates must be rejected at IVM analysis time; otherwise incremental
+     * refresh would silently produce wrong data (the rewrite drops the DISTINCT flag).
+     * MIN/MAX(DISTINCT) is not covered: the analyzer normalizes their DISTINCT away
+     * earlier, so isDistinct() is already false here.
+     */
+    @Test
+    public void testRejectDistinctAggregate() throws Exception {
+        String[] ddls = {
+                "CREATE MATERIALIZED VIEW mv_count_distinct "
+                        + "REFRESH DEFERRED MANUAL "
+                        + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                        + "AS SELECT id, COUNT(DISTINCT c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "CREATE MATERIALIZED VIEW mv_sum_distinct "
+                        + "REFRESH DEFERRED MANUAL "
+                        + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                        + "AS SELECT id, SUM(DISTINCT c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+        };
+
+        for (String ddl : ddls) {
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                    "INCREMENTAL refresh must reject distinct aggregates: " + ddl);
+            assertTrue(ex.getMessage().contains("does not support distinct aggregate"),
+                    "error message must mention distinct rejection, got: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * {@code COUNT(*)} in an aggregate MV query must be accepted by IVMAnalyzer.
+     *
+     * <p>Regression: until the fix that allows 0-arg count combinators, {@code count(*)}
+     * caused IVM rewrite to fail with {@code No matching function with signature: count_combine()}
+     * because {@code AggStateUtils.isSupportedAggStateFunction} excluded the 0-arg count form
+     * to protect AGG_STATE column DDL — but that DDL path is already blocked by the parser,
+     * so the exclusion was redundant and only blocked IVM.
+     */
+    @Test
+    public void testAggregateQueryWithCountStar() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_count_star "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, COUNT(*) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(),
+                "COUNT(*) aggregate MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "COUNT(*) aggregate MV must yield QUERY_COMPUTED");
+    }
+
+    /**
+     * Aggregate-function whitelist: each (function, argument-type) combination listed in
+     * {@code IVM_SUPPORTED_AGG_FUNCTIONS} must be accepted by the analyzer.
+     */
+    @Test
+    public void testWhitelistAcceptsSupportedAggregates() throws Exception {
+        // t_numeric: id INT, c1 INT, c2 INT — all numeric.
+        String[] ddls = {
+                // sum / avg over numeric
+                "SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, AVG(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // min / max over numeric
+                "SELECT id, MIN(c1), MAX(c2) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // count(col) — count(*) is exercised by testAggregateQueryWithCountStar above.
+                "SELECT id, COUNT(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // approx_count_distinct / ndv
+                "SELECT id, APPROX_COUNT_DISTINCT(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, NDV(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+        };
+
+        for (String selectSql : ddls) {
+            String ddl = "CREATE MATERIALIZED VIEW mv_wl "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS " + selectSql;
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                    analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+            assertTrue(result.isPresent(), "whitelist must accept: " + selectSql);
+        }
+    }
+
+    /**
+     * Aggregate-function whitelist: combinations not on the list must be rejected at
+     * CREATE time so the user sees a clear error instead of silently wrong data or a
+     * refresh-time crash.
+     */
+    @Test
+    public void testWhitelistRejectsUnsupportedAggregates() throws Exception {
+        record Case(String selectSql, String expectedFragment) { }
+        Case[] cases = {
+                // Unknown function: array_agg is not on the whitelist.
+                new Case("SELECT id, ARRAY_AGG(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                        "does not support aggregate function: array_agg"),
+                // Function on the whitelist but argument type not allowed: MIN(varchar).
+                // t0 has columns: id INT, data STRING, date STRING.
+                new Case("SELECT id, MIN(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id",
+                        "does not support min with argument types"),
+        };
+
+        for (Case c : cases) {
+            String ddl = "CREATE MATERIALIZED VIEW mv_wl_neg "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS " + c.selectSql;
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                    "whitelist must reject: " + c.selectSql);
+            assertTrue(ex.getMessage().toLowerCase().contains(c.expectedFragment.toLowerCase()),
+                    "error message must contain '" + c.expectedFragment + "', got: " + ex.getMessage());
+        }
     }
 
     /**

@@ -594,6 +594,11 @@ public class EditLog {
                     globalStateMgr.getColocateTableIndex().replayModifyTableColocate(info);
                     break;
                 }
+                case OperationType.OP_COLOCATE_RANGE_UPDATE: {
+                    final ColocateRangePersistInfo info = (ColocateRangePersistInfo) journal.data();
+                    globalStateMgr.getColocateTableIndex().replayColocateRangeUpdate(info);
+                    break;
+                }
                 case OperationType.OP_HEARTBEAT_V2: {
                     final HbPackage hbPackage = (HbPackage) journal.data();
                     GlobalStateMgr.getCurrentState().getHeartbeatMgr().replayHearbeat(hbPackage);
@@ -1852,6 +1857,10 @@ public class EditLog {
 
     public void logModifyTableColocate(TablePropertyInfo info) {
         logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
+    }
+
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info);
     }
 
     public void logHeartbeat(HbPackage hbPackage) {

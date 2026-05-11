@@ -26,6 +26,7 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_config.cpp
+    flat_json_metrics.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -50,6 +51,7 @@ set(STORAGE_FILES
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
+    storage_metrics.cpp
     data_dir.cpp
     short_key_index.cpp
     snapshot_manager.cpp
@@ -207,6 +209,7 @@ set(STORAGE_FILES
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
     lake/tablet_merger.cpp
+    lake/tablet_merger_split_family.cpp
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
@@ -315,4 +318,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC ExecCore)
+target_link_libraries(Storage PUBLIC ExecCore Serde)

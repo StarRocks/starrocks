@@ -16,10 +16,10 @@
 
 #include <utility>
 
+#include "exec/data_sinks/file_result_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator_factory.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/file_result_writer.h"
 
 namespace starrocks {
 class BufferControlBlock;

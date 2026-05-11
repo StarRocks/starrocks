@@ -17,7 +17,6 @@
 #include <atomic>
 #include <mutex>
 
-#include "agent/agent_server.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
@@ -28,12 +27,9 @@
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "gen_cpp/Types_constants.h"
-#include "gen_cpp/Types_types.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
 #include "replication_txn_manager.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
@@ -109,7 +105,8 @@ std::string remove_db_id_component(const std::string& path, int64_t db_id) {
     return path.substr(0, pos + 1) + path.substr(pos + db_pattern.length());
 }
 
-Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request) {
+Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request,
+                                                                ThreadPool* replicate_file_thread_pool) {
     auto src_tablet_id = request.src_tablet_id;
     auto src_visible_version = request.src_visible_version;
     auto src_db_id = request.src_db_id;
@@ -262,7 +259,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     watch.start();
     std::atomic<size_t> total_file_size{0};
 
-    ThreadPool* repl_pool = get_replicate_file_thread_pool();
+    ThreadPool* repl_pool = replicate_file_thread_pool;
     bool use_parallel = should_use_parallel_copy(filename_map.size(), repl_pool);
     std::mutex mu;
     std::mutex* shared_mutex = nullptr;
@@ -436,18 +433,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     clean_files.cancel();
     return Status::OK();
-}
-
-ThreadPool* LakeReplicationTxnManager::get_replicate_file_thread_pool() {
-    if (_replicate_file_thread_pool != nullptr) {
-        return _replicate_file_thread_pool;
-    }
-    auto* agent_srv = ExecEnv::GetInstance()->agent_server();
-    if (agent_srv == nullptr) {
-        return nullptr;
-    }
-    _replicate_file_thread_pool = agent_srv->get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
-    return _replicate_file_thread_pool;
 }
 
 bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool) {

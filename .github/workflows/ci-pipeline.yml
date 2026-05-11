@@ -249,13 +249,18 @@ jobs:
               - 'be/test/**'
               - 'build-support/README.md'
               - 'build-support/check_be_module_boundaries.py'
+              - 'build-support/check_common_config_header_includes.sh'
+              - 'build-support/config_header_include_allowlist.txt'
+              - 'build-support/gen_config_fwd_headers.py'
               - 'build-support/render_be_agents.py'
               - 'build-support/test_check_be_module_boundaries.py'
+              - 'build-support/test_gen_config_fwd_headers.py'
               - 'build-support/test_render_be_agents.py'
               - 'build-support/be_module_boundary_baseline.json'
               - 'build-support/exec_env_header_include_allowlist.txt'
               - 'build-support/exec_env_singleton_allowlist.txt'
               - 'build-support/runtime_state_header_include_allowlist.txt'
+              - 'be/src/common/config_fwd_headers_manifest.json'
 
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
@@ -379,7 +384,13 @@ jobs:
         run: |
           python3 -m unittest \
             build-support/test_check_be_module_boundaries.py \
+            build-support/test_gen_config_fwd_headers.py \
             build-support/test_render_be_agents.py
+
+      - name: Config Forward Header Check
+        run: |
+          python3 build-support/gen_config_fwd_headers.py --check
+          bash build-support/check_common_config_header_includes.sh
 
       - name: AGENTS Drift Check
         run: |

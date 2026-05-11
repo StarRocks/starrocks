@@ -21,18 +21,18 @@
 #include <unordered_map>
 
 #include "base/time/time.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "mem_tracker_manager.h"
 #include "pipeline_executor_set_manager.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
+class MetricRegistry;
 class TWorkGroup;
 
 namespace workgroup {
@@ -280,7 +280,7 @@ private:
 // pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
 public:
-    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf);
+    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics = nullptr);
 
     ~WorkGroupManager();
 
@@ -345,6 +345,7 @@ private:
     std::chrono::seconds _workgroup_expiration_time{120};
 
     std::atomic<size_t> _sum_cpu_weight = 0;
+    MetricRegistry* _metrics = nullptr;
     MemTrackerManager _shared_mem_tracker_manager;
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;

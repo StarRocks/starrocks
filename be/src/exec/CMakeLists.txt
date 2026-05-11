@@ -53,6 +53,7 @@ set(SPILL_CORE_FILES
     spill/hybird_block_manager.cpp
     spill/query_spill_manager.cpp
     spill/operator_mem_resource_manager.cpp
+    spill/spill_metrics.cpp
 )
 
 ADD_BE_LIB(SpillCore
@@ -153,7 +154,7 @@ ADD_BE_LIB(ExecJoinCore
 target_link_libraries(ExecJoinCore PUBLIC
     ExecSortingCore
     ExprCore
-    SerdeCore
+    Serde
     RuntimeCore
     ChunkCore
     ColumnCore
@@ -202,7 +203,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/schedule/timeout_tasks.cpp
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/observer.cpp
-    pipeline/schedule/pipeline_timer.cpp
     pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
@@ -341,11 +341,11 @@ set(PIPELINE_EXTENSIONS_SRCS
 
 set(EXEC_NON_PIPELINE_FILES
     spill/spill_dir_manager_bootstrap.cpp
+    catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp
+    query_scan_metrics.cpp
     capture_version_node.cpp
-    data_sink_factory.cpp
-    data_sink_pipeline.cpp
     empty_set_node.cpp
     exec_factory.cpp
     pipeline_node.cpp
@@ -357,13 +357,7 @@ set(EXEC_NON_PIPELINE_FILES
     short_circuit_hybrid.cpp
     olap_common.cpp
     tablet_info.cpp
-    tablet_sink.cpp
-    tablet_sink_colocate_sender.cpp
-    tablet_sink_index_channel.cpp
-    tablet_sink_sender.cpp
-    range_tablet_sink_sender.cpp
     write_combined_txn_log.cpp
-    multi_olap_table_sink.cpp
     mysql_scanner.cpp
     benchmark_scanner.cpp
     cache_stats_scanner.cpp
@@ -429,7 +423,6 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    range_router.cpp
     iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
@@ -505,8 +498,55 @@ set(EXEC_NON_PIPELINE_FILES
     workgroup/lock_free_work_group_scan_task_queue.cpp
 )
 
-add_library(pipeline_primitives_exec_objs OBJECT
+set(EXEC_DATA_SINK_FILES
+    data_sinks/arrow_result_writer.cpp
+    data_sinks/blackhole_table_sink.cpp
+    data_sinks/buffer_control_result_writer.cpp
+    data_sinks/customized_result_writer.cpp
+    data_sinks/data_sink_factory.cpp
+    data_sinks/data_sink_pipeline.cpp
+    data_sinks/data_stream_sender.cpp
+    data_sinks/dictionary_cache_sink.cpp
+    data_sinks/export_sink.cpp
+    data_sinks/file_result_writer.cpp
+    data_sinks/hive_table_sink.cpp
+    data_sinks/http_result_writer.cpp
+    data_sinks/iceberg_table_sink.cpp
+    data_sinks/memory_scratch_sink.cpp
+    data_sinks/metadata_result_writer.cpp
+    data_sinks/multi_cast_data_stream_sink.cpp
+    data_sinks/multi_olap_table_sink.cpp
+    data_sinks/mysql_result_writer.cpp
+    data_sinks/mysql_table_sink.cpp
+    data_sinks/mysql_table_writer.cpp
+    data_sinks/range_router.cpp
+    data_sinks/range_tablet_sink_sender.cpp
+    data_sinks/result_sink.cpp
+    data_sinks/schema_table_sink.cpp
+    data_sinks/statistic_result_writer.cpp
+    data_sinks/table_function_table_sink.cpp
+    data_sinks/tablet_sink.cpp
+    data_sinks/tablet_sink_colocate_sender.cpp
+    data_sinks/tablet_sink_index_channel.cpp
+    data_sinks/tablet_sink_sender.cpp
+    data_sinks/variable_result_writer.cpp
+)
+
+ADD_BE_LIB(PipelinePrimitives
     ${PIPELINE_PRIMITIVES_SRCS}
+)
+
+target_link_libraries(PipelinePrimitives PUBLIC
+    ExecCore
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
 )
 
 # `pipeline/aggregate/aggregate_operators.cpp` intentionally includes the
@@ -530,7 +570,6 @@ add_library(pipeline_extensions_exec_objs OBJECT
 )
 
 IF(ENABLE_MULTI_DYNAMIC_LIBS)
-    set_property(TARGET pipeline_primitives_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_runtime_compat_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_operators_batch_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET pipeline_extensions_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -538,10 +577,10 @@ ENDIF()
 
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
-    $<TARGET_OBJECTS:pipeline_primitives_exec_objs>
+    ${EXEC_DATA_SINK_FILES}
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)
+target_link_libraries(Exec PUBLIC PipelinePrimitives ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)

@@ -4,7 +4,6 @@ src/agent/heartbeat_server.cpp
 src/agent/publish_version.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
-src/cache/peer_cache_engine.cpp
 src/exec/pipeline/fragment_context.cpp
 src/exec/pipeline/fragment_executor.cpp
 src/exec/pipeline/lookup/tablet_adaptor.cpp
@@ -31,7 +30,6 @@ src/service/service_be/starrocks_be.cpp
 src/storage/lake/column_mode_partial_update_handler.cpp
 src/storage/lake/compaction_policy.cpp
 src/storage/lake/lake_persistent_index.cpp
-src/storage/lake/lake_replication_txn_manager.cpp
 src/storage/lake/local_pk_index_manager.cpp
 src/storage/lake/metacache.cpp
 src/storage/lake/rowset.cpp

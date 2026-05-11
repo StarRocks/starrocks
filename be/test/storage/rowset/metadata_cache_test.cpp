@@ -18,7 +18,6 @@
 #include "storage/rowset/metadata_cache.h"
 #undef private
 
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"

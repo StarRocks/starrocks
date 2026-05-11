@@ -15,6 +15,7 @@
 #include "storage/update_compaction_state.h"
 
 #include "common/config_exec_fwd.h"
+#include "common/stack_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -22,7 +23,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

@@ -15,6 +15,17 @@
 
 set -eo pipefail
 
+# build.sh sources env_macos.sh before calling us (directly or via the auto-
+# trigger when thirdparty is not yet built), which exports a batch of CMake
+# behavior-control vars intended for the BE build only. They leak into
+# thirdparty subprocesses and break bundled cmake logic
+# (e.g. velocypack's TargetArch.cmake rejects CMAKE_OSX_ARCHITECTURES=arm64
+# with "Invalid OS X arch name: arm64"). Unset at entry so running via
+# build.sh matches running this script standalone.
+unset CMAKE_OSX_ARCHITECTURES CMAKE_BUILD_TARGET_ARCH \
+      CMAKE_GENERATOR CMAKE_FIND_LIBRARY_SUFFIXES \
+      BUILD_SHARED_LIBS CMAKE_BUILD_TYPE MAKEFLAGS
+
 curdir="$(cd -- "$(dirname -- "$0")" >/dev/null 2>&1 && pwd)"
 
 export STARROCKS_HOME="${STARROCKS_HOME:-$curdir/..}"
@@ -1352,24 +1363,114 @@ build_formula_sasl() {
     sync_lib64_links
 }
 
-build_formula_absl() {
-    ensure_formula abseil
-    local prefix
-    prefix="$(formula_prefix abseil)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libabsl"*.a "${prefix}/lib/libabsl"*.dylib
-    link_formula_metadata "${prefix}"
+# Build abseil from TP source (pinned 20220623). Homebrew's abseil ABI drifts
+# across releases and newer ones are too new for gRPC 1.43; source build
+# keeps the whole TP chain consistent.
+build_absl() {
+    check_if_source_exist "${ABSL_SOURCE}"
+
+    # Drop stale symlinks from a prior build_formula_absl run — cmake --install
+    # would follow them into Homebrew's Cellar (corrupt or EACCES).
+    rm -rf "${TP_INCLUDE_DIR}/absl"
+    rm -rf "${TP_INSTALL_DIR}/lib/cmake/absl"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libabsl_"*.a \
+        "${TP_INSTALL_DIR}/lib/libabsl_"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libabsl_"*.a \
+        "${TP_INSTALL_DIR}/lib64/libabsl_"*.dylib \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/absl_"*.pc
+
+    cd "${TP_SOURCE_DIR}/${ABSL_SOURCE}"
+
+    # Narrow the APPLE+Clang branch to AppleClang only — Homebrew LLVM clang
+    # does not implement Apple Clang's -Xarch_* driver and fails on arm64.
+    local patch_file="${TP_PATCH_DIR}/abseil-cpp-20220623.0-apple-clang-only.patch"
+    local copts_file="absl/copts/AbseilConfigureCopts.cmake"
+    if [[ -f "${patch_file}" ]] && grep -q "MATCHES \\[\\[Clang\\]\\]" "${copts_file}" 2>/dev/null; then
+        patch -p1 --forward --batch < "${patch_file}" >/dev/null || true
+    fi
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" .. \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}" install
     sync_lib64_links
 }
 
-build_formula_grpc() {
-    ensure_formula grpc
-    local prefix
-    prefix="$(formula_prefix grpc)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libgrpc"*.a "${prefix}/lib/libgrpc"*.dylib "${prefix}/lib/libgpr"*.a "${prefix}/lib/libgpr"*.dylib "${prefix}/lib/libaddress_sorting"*.a "${prefix}/lib/libaddress_sorting"*.dylib "${prefix}/lib/libupb"*.a "${prefix}/lib/libupb"*.dylib "${prefix}/lib/libutf8_range"*.a "${prefix}/lib/libutf8_range"*.dylib
-    link_matching_if_missing "${TP_INSTALL_DIR}/bin" "${prefix}/bin/grpc"* "${prefix}/bin/protoc-gen-grpc"* "${prefix}/bin/grpc_cpp_plugin"
-    link_formula_metadata "${prefix}"
+# Build gRPC 1.43 from TP source with all providers pinned to TP deps
+# (protobuf 3.14, abseil 20220623, re2, openssl). The Homebrew symlink
+# approach would drag in protobuf 33.x and collide with arrow-flight targets.
+build_grpc() {
+    check_if_source_exist "${GRPC_SOURCE}"
+
+    # Drop stale symlinks from a prior build_formula_grpc run (see build_absl).
+    rm -rf \
+        "${TP_INCLUDE_DIR}/grpc" \
+        "${TP_INCLUDE_DIR}/grpc++" \
+        "${TP_INCLUDE_DIR}/grpcpp"
+    rm -rf \
+        "${TP_INSTALL_DIR}/lib/cmake/grpc" \
+        "${TP_INSTALL_DIR}/lib/cmake/gRPC"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libgrpc"*.a \
+        "${TP_INSTALL_DIR}/lib/libgrpc"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libgpr"*.a \
+        "${TP_INSTALL_DIR}/lib/libgpr"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libaddress_sorting"*.a \
+        "${TP_INSTALL_DIR}/lib/libaddress_sorting"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libupb"*.a \
+        "${TP_INSTALL_DIR}/lib/libupb"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libutf8_range"*.a \
+        "${TP_INSTALL_DIR}/lib/libutf8_range"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libgrpc"*.a \
+        "${TP_INSTALL_DIR}/lib64/libgrpc"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libgpr"*.a \
+        "${TP_INSTALL_DIR}/lib64/libgpr"*.dylib \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/grpc"*.pc \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/gpr"*.pc \
+        "${TP_INSTALL_DIR}/bin/grpc_cpp_plugin" \
+        "${TP_INSTALL_DIR}/bin/grpc_"* \
+        "${TP_INSTALL_DIR}/bin/protoc-gen-grpc"*
+
+    cd "${TP_SOURCE_DIR}/${GRPC_SOURCE}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" .. \
+        -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DgRPC_INSTALL=ON \
+        -DgRPC_BUILD_TESTS=OFF \
+        -DgRPC_BUILD_CSHARP_EXT=OFF \
+        -DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PYTHON_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF \
+        -DgRPC_BACKWARDS_COMPATIBILITY_MODE=OFF \
+        -DgRPC_SSL_PROVIDER=package \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DgRPC_ZLIB_PROVIDER=package \
+        -DZLIB_LIBRARY_RELEASE="${TP_INSTALL_DIR}/lib/libz.a" \
+        -DgRPC_ABSL_PROVIDER=package \
+        -Dabsl_DIR="${TP_INSTALL_DIR}/lib/cmake/absl" \
+        -DgRPC_PROTOBUF_PROVIDER=package \
+        -DgRPC_RE2_PROVIDER=package \
+        -DRE2_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DRE2_LIBRARY="${TP_INSTALL_DIR}/lib/libre2.a" \
+        -DgRPC_CARES_PROVIDER=module \
+        -DCARES_ROOT_DIR="${TP_SOURCE_DIR}/${CARES_SOURCE}/" \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}" install
     sync_lib64_links
 }
 
@@ -1394,7 +1495,11 @@ build_formula_brotli() {
 }
 
 build_arrow() {
-    if [[ -f "${TP_INSTALL_DIR}/lib/libarrow.a" && -f "${TP_INSTALL_DIR}/lib/libparquet.a" && -f "${TP_INCLUDE_DIR}/arrow/api.h" ]]; then
+    # libarrow_flight_sql.a as short-circuit sentinel: it is installed last,
+    # so its presence implies libarrow_flight.a + libarrow.a; a pre-Flight
+    # install or a run interrupted mid-way falls through to a full rebuild.
+    if [[ -f "${TP_INSTALL_DIR}/lib/libarrow.a" && -f "${TP_INSTALL_DIR}/lib/libparquet.a" \
+          && -f "${TP_INSTALL_DIR}/lib/libarrow_flight_sql.a" && -f "${TP_INCLUDE_DIR}/arrow/api.h" ]]; then
         return 0
     fi
 
@@ -1429,6 +1534,19 @@ build_arrow() {
     export ARROW_FLATBUFFERS_URL="${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}"
     export ARROW_ZSTD_URL="${TP_SOURCE_DIR}/${ZSTD_NAME}"
     export ARROW_THRIFT_URL="${TP_SOURCE_DIR}/${THRIFT_NAME}"
+
+    # Pin pkg-config to TP's protobuf to keep arrow-flight's static-link probe
+    # from picking up Homebrew's v33.x. Saved/restored so it does not leak.
+    local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
+    export PKG_CONFIG_PATH="${TP_INSTALL_DIR}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+
+    # Arrow 19's FindProtobufAlt tries find_package(protobuf CONFIG) then
+    # find_package(Protobuf). CMAKE_DISABLE_FIND_PACKAGE_<name> is case-
+    # sensitive: the lowercase _protobuf guard (set below) blocks only the
+    # CONFIG probe, which is where a stray protobuf-config.cmake would leak.
+    # The capital-P module fallback is intentionally kept and pinned to TP
+    # via the Protobuf_LIBRARY / _INCLUDE_DIR / _PROTOC_EXECUTABLE hints.
+    # Adding _Protobuf (capital) would break Flight configure.
 
     local formula
     for formula in rapidjson zlib lz4 snappy zstd brotli flatbuffers; do
@@ -1508,8 +1626,16 @@ build_arrow() {
         -DBoost_ROOT="${TP_INSTALL_DIR}" \
         -DARROW_BOOST_USE_SHARED=OFF \
         -DBoost_NO_BOOST_CMAKE=ON \
-        -DARROW_FLIGHT=OFF \
-        -DARROW_FLIGHT_SQL=OFF \
+        -DARROW_FLIGHT=ON \
+        -DARROW_FLIGHT_SQL=ON \
+        -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew/anaconda3" \
+        -DCMAKE_DISABLE_FIND_PACKAGE_protobuf=ON \
+        -DProtobuf_PROTOC_EXECUTABLE="${TP_INSTALL_DIR}/bin/protoc" \
+        -DProtobuf_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DProtobuf_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf.a" \
+        -DProtobuf_PROTOC_LIBRARY="${TP_INSTALL_DIR}/lib/libprotoc.a" \
+        -DProtobuf_LITE_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf-lite.a" \
+        -DProtobuf_USE_STATIC_LIBS=ON \
         -Dflatbuffers_ROOT="${flatbuffers_prefix}" \
         -DCMAKE_PREFIX_PATH="${arrow_prefix_path}" \
         -DThrift_ROOT="${TP_INSTALL_DIR}" \
@@ -1517,6 +1643,19 @@ build_arrow() {
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     "${CMAKE_CMD}" --build . -j "${PARALLEL}"
     "${CMAKE_CMD}" --install .
+
+    # Hoist Arrow's bundled zstd — zstd is not in Darwin's package-manifest.sh,
+    # so this is TP's only source (matches Linux build-thirdparty.sh).
+    if [ -f ./zstd_ep-install/lib64/libzstd.a ]; then
+        cp -rf ./zstd_ep-install/lib64/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
+    else
+        cp -rf ./zstd_ep-install/lib/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
+    fi
+    mkdir -p "${TP_INSTALL_DIR}/include/zstd"
+    cp ./zstd_ep-install/include/* "${TP_INSTALL_DIR}/include/zstd"
+
+    restore_env_var PKG_CONFIG_PATH "${old_pkg_config_path}"
+
     sync_lib64_links
 }
 
@@ -2238,10 +2377,10 @@ for package in "${packages[@]}"; do
             build_formula_sasl
             ;;
         absl)
-            build_formula_absl
+            build_absl
             ;;
         grpc)
-            build_formula_grpc
+            build_grpc
             ;;
         flatbuffers)
             build_formula_flatbuffers

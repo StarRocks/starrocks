@@ -29,6 +29,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/noop_sink_operator.h"
@@ -36,6 +37,7 @@
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -58,7 +60,6 @@
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/time_types.h"
-#include "util/priority_thread_pool.hpp"
 
 // Print log with query id.
 #define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id() << "] "
@@ -113,8 +114,9 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (_olap_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, _pool);
         for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], state, _pool);
+            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {

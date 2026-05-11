@@ -23,14 +23,17 @@
 #include <utility>
 #include <vector>
 
+#include "base/brpc/disposable_closure.h"
 #include "base/compression/block_compression.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
 #include "column/chunk.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
+#include "common/util/table_metrics.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
@@ -43,7 +46,7 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
@@ -53,9 +56,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/brpc_stub_cache.h"
-#include "util/disposable_closure.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -66,18 +66,23 @@ std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
 LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
                                          MemTracker* mem_tracker, RuntimeProfile* parent_profile,
-                                         BrpcStubCache* brpc_stub_cache)
+                                         BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                         TableMetricsManager* table_metrics_mgr)
         : TabletsChannel(),
           _load_channel(load_channel),
           _brpc_stub_cache(brpc_stub_cache),
+          _table_metrics_mgr(table_metrics_mgr),
           _key(key),
           _mem_tracker(mem_tracker),
           _max_sliding_window_size(config::max_load_dop * 3),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
-    std::call_once(once_flag, [] {
-        REGISTER_GAUGE_STARROCKS_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });
-    });
+    if (metrics != nullptr) {
+        std::call_once(once_flag, [metrics] {
+            REGISTER_GAUGE_RUNTIME_METRIC(metrics, tablet_writer_count,
+                                          [&]() { return _s_tablet_writer_count.load(); });
+        });
+    }
 
     _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
     _profile_update_counter = ADD_COUNTER(_profile, "ProfileUpdateCount", TUnit::UNIT);
@@ -157,7 +162,9 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 #ifndef BE_TEST
-    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics = _table_metrics_mgr->get_table_metrics(_schema->table_id());
+    }
 #endif
 
     _senders = std::vector<Sender>(params.num_senders());
@@ -512,10 +519,10 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
     auto wait_replica_ns = finish_wait_replica_ts - finish_wait_writer_ts;
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
             wait_memtable_flush_time_us);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
     size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
@@ -1173,7 +1180,6 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
@@ -1228,7 +1234,6 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_SET_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     auto* segment_flush_token = writer->segment_flush_token();
@@ -1245,8 +1250,10 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
                                                                MemTracker* mem_tracker, RuntimeProfile* parent_profile,
-                                                               BrpcStubCache* brpc_stub_cache) {
-    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache);
+                                                               BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                                               TableMetricsManager* table_metrics_mgr) {
+    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache,
+                                                 metrics, table_metrics_mgr);
 }
 
 SecondaryReplicasWaiter::SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms,

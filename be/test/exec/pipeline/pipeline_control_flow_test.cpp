@@ -22,6 +22,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -377,9 +378,9 @@ private:
 
 class RuntimeAccessProbeOperator final : public Operator {
 public:
-    RuntimeAccessProbeOperator(OperatorFactory* factory, int32_t driver_sequence)
-            : Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), false,
-                       driver_sequence) {}
+    RuntimeAccessProbeOperator(OperatorFactory* factory, OperatorRuntimeAccess* runtime_access, int32_t driver_sequence)
+            : Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), false, driver_sequence,
+                       runtime_access) {}
 
     bool has_output() const override { return false; }
     bool need_input() const override { return true; }
@@ -394,7 +395,8 @@ public:
             : OperatorFactory(id, "runtime_access_probe", plan_node_id) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<RuntimeAccessProbeOperator>(this, driver_sequence);
+        return std::make_shared<RuntimeAccessProbeOperator>(
+                this, runtime_access_override != nullptr ? runtime_access_override : this, driver_sequence);
     }
 
     void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
@@ -411,6 +413,30 @@ public:
     int32_t last_driver_sequence = -1;
     std::vector<ExprContext*> local_filters;
     std::vector<ExprContext*> instance_filters;
+    OperatorRuntimeAccess* runtime_access_override = nullptr;
+};
+
+class RuntimeAccessProbe final : public OperatorRuntimeAccess {
+public:
+    void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                 std::vector<ExprContext*>* runtime_in_filters) override {
+        ++bind_calls;
+        last_state = state;
+        last_driver_sequence = driver_sequence;
+        runtime_in_filters->insert(runtime_in_filters->end(), local_filters.begin(), local_filters.end());
+        runtime_in_filters->insert(runtime_in_filters->end(), instance_filters.begin(), instance_filters.end());
+    }
+
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override { return nullptr; }
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override { return nullptr; }
+    const std::vector<SlotId>& get_filter_null_value_columns() const override { return filter_null_value_columns; }
+
+    int bind_calls = 0;
+    RuntimeState* last_state = nullptr;
+    int32_t last_driver_sequence = -1;
+    std::vector<ExprContext*> local_filters;
+    std::vector<ExprContext*> instance_filters;
+    std::vector<SlotId> filter_null_value_columns;
 };
 
 class TestPipelineControlFlow : public PipelineTestBase {};
@@ -553,25 +579,88 @@ struct SpillDriverTestHarness {
 
 TEST(OperatorRuntimeAccessTest, test_operator_precondition_ready_uses_runtime_access) {
     RuntimeAccessProbeFactory factory(1, 2);
+    RuntimeAccessProbe runtime_access;
+    factory.runtime_access_override = &runtime_access;
     int local_filter_sentinel = 0;
     int instance_filter_a_sentinel = 0;
     int instance_filter_b_sentinel = 0;
-    factory.local_filters = {reinterpret_cast<ExprContext*>(&local_filter_sentinel)};
-    factory.instance_filters = {reinterpret_cast<ExprContext*>(&instance_filter_a_sentinel),
-                                reinterpret_cast<ExprContext*>(&instance_filter_b_sentinel)};
+    runtime_access.local_filters = {reinterpret_cast<ExprContext*>(&local_filter_sentinel)};
+    runtime_access.instance_filters = {reinterpret_cast<ExprContext*>(&instance_filter_a_sentinel),
+                                       reinterpret_cast<ExprContext*>(&instance_filter_b_sentinel)};
 
     RuntimeState state;
     auto op = factory.create(1, 7);
 
     op->set_precondition_ready(&state);
 
-    ASSERT_EQ(1, factory.bind_calls);
-    ASSERT_EQ(&state, factory.last_state);
-    ASSERT_EQ(7, factory.last_driver_sequence);
+    ASSERT_EQ(0, factory.bind_calls);
+    ASSERT_EQ(1, runtime_access.bind_calls);
+    ASSERT_EQ(&state, runtime_access.last_state);
+    ASSERT_EQ(7, runtime_access.last_driver_sequence);
     ASSERT_EQ(3, op->runtime_in_filters().size());
-    EXPECT_EQ(factory.local_filters[0], op->runtime_in_filters()[0]);
-    EXPECT_EQ(factory.instance_filters[0], op->runtime_in_filters()[1]);
-    EXPECT_EQ(factory.instance_filters[1], op->runtime_in_filters()[2]);
+    EXPECT_EQ(runtime_access.local_filters[0], op->runtime_in_filters()[0]);
+    EXPECT_EQ(runtime_access.instance_filters[0], op->runtime_in_filters()[1]);
+    EXPECT_EQ(runtime_access.instance_filters[1], op->runtime_in_filters()[2]);
+}
+
+TEST(OperatorExecStatsSnapshotTest, test_default_operator_snapshot) {
+    TestNormalOperatorFactory factory(1, 10, std::make_shared<Counter>());
+    RuntimeState state;
+    auto op = factory.create(1, 0);
+
+    ASSERT_OK(op->prepare_local_state(&state));
+    COUNTER_UPDATE(op->_push_row_num_counter, 5);
+    COUNTER_UPDATE(op->_pull_row_num_counter, 3);
+    op->_init_conjuct_counters();
+    COUNTER_UPDATE(op->_conjuncts_input_counter, 11);
+    COUNTER_UPDATE(op->_conjuncts_output_counter, 7);
+    op->_init_rf_counters(true);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_input_counter, 13);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_output_counter, 9);
+
+    auto snapshot = op->exec_stats_snapshot();
+
+    EXPECT_TRUE(snapshot.valid);
+    EXPECT_TRUE(snapshot.require_registered_plan_node);
+    EXPECT_EQ(10, snapshot.plan_node_id);
+    EXPECT_TRUE(snapshot.update_push_rows);
+    EXPECT_TRUE(snapshot.update_pull_rows);
+    EXPECT_FALSE(snapshot.force_set_pull_rows);
+    EXPECT_EQ(5, snapshot.push_rows);
+    EXPECT_EQ(3, snapshot.pull_rows);
+    EXPECT_TRUE(snapshot.update_pred_filter_rows);
+    EXPECT_EQ(4, snapshot.pred_filter_rows);
+    EXPECT_TRUE(snapshot.update_rf_filter_rows);
+    EXPECT_EQ(4, snapshot.rf_filter_rows);
+}
+
+TEST(OperatorExecStatsSnapshotTest, test_limit_snapshot_force_sets_pull_rows) {
+    LimitOperatorFactory factory(1, 20, 100);
+    RuntimeState state;
+    auto op = factory.create(1, 0);
+
+    ASSERT_OK(op->prepare_local_state(&state));
+    COUNTER_UPDATE(op->_pull_row_num_counter, 6);
+    op->_init_conjuct_counters();
+    COUNTER_UPDATE(op->_conjuncts_input_counter, 10);
+    COUNTER_UPDATE(op->_conjuncts_output_counter, 4);
+    op->_init_rf_counters(true);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_input_counter, 8);
+    COUNTER_UPDATE(op->_bloom_filter_eval_context.join_runtime_filter_output_counter, 3);
+
+    auto snapshot = op->exec_stats_snapshot();
+
+    EXPECT_TRUE(snapshot.valid);
+    EXPECT_FALSE(snapshot.require_registered_plan_node);
+    EXPECT_EQ(20, snapshot.plan_node_id);
+    EXPECT_FALSE(snapshot.update_push_rows);
+    EXPECT_TRUE(snapshot.update_pull_rows);
+    EXPECT_TRUE(snapshot.force_set_pull_rows);
+    EXPECT_EQ(6, snapshot.pull_rows);
+    EXPECT_TRUE(snapshot.update_pred_filter_rows);
+    EXPECT_EQ(6, snapshot.pred_filter_rows);
+    EXPECT_TRUE(snapshot.update_rf_filter_rows);
+    EXPECT_EQ(5, snapshot.rf_filter_rows);
 }
 
 TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
