@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -163,7 +164,7 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const ar
     RETURN_IF_ERROR(build_arrow_to_sr_convert_tree(*field_type.type(), return_type, field_type.nullable(), &tree));
 
     // UDF return result is always nullable
-    auto native_column = FunctionHelper::create_column(return_type, true);
+    auto native_column = ColumnHelper::create_column(return_type, true);
     auto nullable_column = down_cast<NullableColumn*>(native_column.get());
     auto null_column = nullable_column->null_column_raw_ptr();
     auto null_data = null_column->get_data().data();
