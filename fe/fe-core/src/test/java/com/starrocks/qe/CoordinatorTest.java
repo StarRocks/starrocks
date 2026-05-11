@@ -32,8 +32,11 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+=======
+>>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.planner.stream.StreamAggNode;
@@ -50,7 +53,12 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
+<<<<<<< HEAD
 import com.starrocks.thrift.TScanRangeParams;
+=======
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TScanRangeLocations;
+>>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
@@ -68,9 +76,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+=======
+import java.util.concurrent.atomic.AtomicInteger;
+>>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -197,6 +209,7 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBinlogScan() throws Exception {
         PlanFragmentId fragmentId = new PlanFragmentId(0);
         PlanNodeId planNodeId = new PlanNodeId(1);
@@ -302,4 +315,33 @@ public class CoordinatorTest extends PlanTestBase {
         Assertions.assertEquals(1, instances.size());
 
     }
+=======
+    public void testClearExternalResourcesOnlyOnce() {
+        AtomicInteger clearCount = new AtomicInteger();
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        ScanNode scanNode = new ScanNode(new PlanNodeId(0), desc, "counting-scan") {
+            @Override
+            public void clear() {
+                clearCount.incrementAndGet();
+            }
+
+            @Override
+            public java.util.List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+                return Collections.emptyList();
+            }
+
+            @Override
+            protected void toThrift(TPlanNode msg) {
+            }
+        };
+        DefaultCoordinator coordinatorWithScan = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, Lists.newArrayList(), Collections.singletonList(scanNode), new TDescriptorTable(), null);
+
+        coordinatorWithScan.clearExternalResources();
+        coordinatorWithScan.clearExternalResources();
+
+        Assertions.assertEquals(1, clearCount.get());
+    }
+
+>>>>>>> 147c4e2a71 ([BugFix] Avoid holding coordinator lock during external resource cleanup (#72830))
 }
