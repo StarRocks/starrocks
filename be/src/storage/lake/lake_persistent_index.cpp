@@ -976,12 +976,13 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     };
 
     // Gate the two-phase parallel path on update-memtracker pressure: when the update tracker
-    // is already past 50% of its limit, fall back to the legacy single-pass loop to avoid
-    // holding all decoded del-file columns in memory at once. Cold-start latency loss is
-    // acceptable in that regime; OOM is not.
+    // is already past `pk_index_parallel_load_dels_mem_ratio` percent of its limit, fall back
+    // to the legacy single-pass loop to avoid holding all decoded del-file columns in memory
+    // at once. Cold-start latency loss is acceptable in that regime; OOM is not.
     auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-    const bool use_two_phase = config::enable_pk_index_parallel_execution && num_del_files > 1 &&
-                               update_tracker != nullptr && !update_tracker->limit_exceeded_by_ratio(50);
+    const bool use_two_phase =
+            config::enable_pk_index_parallel_execution && num_del_files > 1 && update_tracker != nullptr &&
+            !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_load_dels_mem_ratio);
 
     if (!use_two_phase) {
         // Legacy single-pass loop: read+decode+apply per file, only one decoded column held at a time.

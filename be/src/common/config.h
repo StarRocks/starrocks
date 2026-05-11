@@ -482,6 +482,11 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
+// Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
+// mem tracker is already past this percent (0-100) of its limit. In that regime the function
+// falls back to a single-pass loop that holds only one decoded del-file column at a time,
+// trading the cold-start latency win for bounded peak memory.
+CONF_mInt32(pk_index_parallel_load_dels_mem_ratio, "50");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
