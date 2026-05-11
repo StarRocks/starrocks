@@ -78,7 +78,7 @@ private:
     MonotonicStopWatch* _mono_timer = nullptr;
     WaitContext* _wait_context = nullptr;
     int64_t _wait_time_ns = 0;
-    std::unique_ptr<PipelineTimerTask> _wait_timer_task;
+    std::shared_ptr<PipelineTimerTask> _wait_timer_task;
 };
 
 class WaitSinkOperator final : public Operator {

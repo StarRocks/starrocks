@@ -25,14 +25,7 @@
 namespace starrocks::pipeline {
 
 void PipelineTimerTask::waitUtilFinished() {
-    if (_finished.load(std::memory_order_acquire)) {
-        return;
-    }
-    _has_consumer.store(true, std::memory_order_release);
-    std::unique_lock lock(_mutex);
-    while (!_finished) {
-        _cv.wait(lock);
-    }
+    _latch.wait();
 }
 
 void PipelineTimerTask::unschedule(PipelineTimer* timer) {
