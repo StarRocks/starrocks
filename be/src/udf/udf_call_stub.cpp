@@ -162,19 +162,8 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const ar
     ConvertFuncTree tree;
     RETURN_IF_ERROR(build_arrow_to_sr_convert_tree(*field_type.type(), return_type, field_type.nullable(), &tree));
 
-<<<<<<< HEAD
-    ConvertFunc converter = get_arrow_converter(field_type.type()->id(), _func_ctx->get_return_type().type,
-                                                field_type.nullable(), true);
-    if (UNLIKELY(converter == nullptr)) {
-        return Status::NotSupported(fmt::format("unsupported arrow type {} to starrocks type {}",
-                                                field_type.type()->ToString(), _func_ctx->get_return_type().type));
-    }
-    // UDF return result is always nullable
-    auto native_column = _func_ctx->create_column(_func_ctx->get_return_type(), true);
-=======
     // UDF return result is always nullable
     auto native_column = FunctionHelper::create_column(return_type, true);
->>>>>>> 3e9a68ec7e ([Enhancement] add nested array/map support in Python UDF (#72210))
     auto nullable_column = down_cast<NullableColumn*>(native_column.get());
     auto null_column = nullable_column->null_column_raw_ptr();
     auto null_data = null_column->get_data().data();
