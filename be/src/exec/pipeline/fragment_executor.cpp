@@ -405,7 +405,7 @@ Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
     // ObjectPool instead of runtime_state->obj_pool() (which is per fragment instance) to
     // avoid a heap-use-after-free when one fragment finishes while another is still
     // referencing the entry in _partition_id_to_desc_map.
-    auto* obj_pool = runtime_state->global_obj_pool();
+    auto* obj_pool = RuntimeStateHelper::global_obj_pool(runtime_state);
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     TTableId cache_table_id = -1;
     TableDescriptor* table = nullptr;
