@@ -923,6 +923,32 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
     return Status::OK();
 }
 
+Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
+                                     const Slice& buffer, FileMetaPB* new_delvec_file) {
+    DCHECK(new_delvec_file != nullptr);
+    if (buffer.empty()) {
+        return Status::InvalidArgument("write_delvec_file_from_buffer called with empty buffer");
+    }
+
+    const std::string new_file_name = gen_delvec_filename(txn_id);
+    const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    // No encryption: merge_delvec_files only encrypts when at least one
+    // source file carried encryption_meta, and there are no source files
+    // here. A future caller wanting encrypted output should pass the
+    // encryption metadata in explicitly rather than implicitly fetching the
+    // KEK (which is not configured in unit tests).
+    ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
+    RETURN_IF_ERROR(writer->append(buffer));
+    RETURN_IF_ERROR(writer->close());
+
+    new_delvec_file->set_name(new_file_name);
+    new_delvec_file->set_size(buffer.size);
+    new_delvec_file->clear_encryption_meta();
+    new_delvec_file->set_shared(false);
+    return Status::OK();
+}
+
 bool is_primary_key(TabletMetadata* metadata) {
     return metadata->schema().keys_type() == KeysType::PRIMARY_KEYS;
 }

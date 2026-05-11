@@ -76,14 +76,21 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     }
     if (iter_ptr->rssid_offset() != 0) {
         const int32_t rssid_offset = iter_ptr->rssid_offset();
+        // Per-entry projection: stored bytes are in pre-projection space, so
+        // each entry's rssid must be lifted by rssid_offset to land in the
+        // current child's effective id space.
         for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
             if (is_index_tombstone(index_value_ver.values(i))) continue;
             const int64_t rssid = static_cast<int64_t>(index_value_ver.values(i).rssid()) + rssid_offset;
             index_value_ver.mutable_values(i)->set_rssid(static_cast<uint32_t>(rssid));
         }
-        const uint64_t low = max_rss_rowid & 0xffffffffULL;
-        const int64_t high = static_cast<int64_t>(max_rss_rowid >> 32) + rssid_offset;
-        max_rss_rowid = (static_cast<uint64_t>(high) << 32) | low;
+        // `max_rss_rowid` already lives in the source sstable's effective id
+        // space (per the canonical convention documented at
+        // tablet_merger.cpp::project_source_max_rss_rowid). It must NOT be
+        // shifted by rssid_offset again — doing so double-counts the offset
+        // and inflates the apparent watermark above the true effective max,
+        // which can flip the same-version tie-break below to pick the wrong
+        // input sstable.
     }
 
     auto version = index_value_ver.values(0).version();
