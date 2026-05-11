@@ -40,6 +40,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/range.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
@@ -865,29 +866,62 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
 }
 
-// Same as the test above, but with parallel iterator construction enabled. Verifies
-// that fan-out via load_segment_thread_pool produces the same per-segment iterators
-// in the same order as the serial path, and that per-segment options (tablet_range)
-// are honored independently per task.
+// Verify the parallel path (fan-out onto load_segment_thread_pool) returns iterators
+// in the same order as the serial path AND honors per-segment SegmentReadOptions
+// independently. All 3 segments share identical content, so the only way to make
+// per-segment ordering observable is to give each one a distinct rowid_range and
+// check that the returned iterators yield matching row counts in index order.
 TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_parallel) {
     create_rowsets_for_testing();
-    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
-    set_rowset_shared_segments(rs_meta, true);
-    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
 
-    // Rowset captures _parallel_load (= enable_load_segment_parallel) at construction time,
-    // so the guard must be in place before the Rowset is created.
-    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
-
-    auto rowset =
-            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
-    OlapReaderStatistics stats;
     auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
-    ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
 
-    // 3 segments, each contributes keys {10, 11} after tablet range filtering.
-    ASSERT_EQ(seg_iters.size(), 3);
-    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
+    // Distinct row counts per segment: 3, 1, 2. Identical-output across segments would
+    // mask ordering bugs, so the counts must all differ.
+    std::vector<SparseRangePtr> per_seg_ranges(3);
+    per_seg_ranges[0] = std::make_shared<SparseRange<>>(0, 3);
+    per_seg_ranges[1] = std::make_shared<SparseRange<>>(0, 1);
+    per_seg_ranges[2] = std::make_shared<SparseRange<>>(0, 2);
+    const std::vector<size_t> expected_per_iter_rows{3, 1, 2};
+
+    auto run_and_count_per_iter = [&](bool parallel) {
+        // Rowset captures enable_load_segment_parallel at construction time, so the guard
+        // must be in place before the Rowset is created.
+        ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, parallel);
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats,
+                                                                                      &per_seg_ranges));
+        std::vector<size_t> per_iter_rows;
+        per_iter_rows.reserve(seg_iters.size());
+        for (const auto& it : seg_iters) {
+            CHECK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+            CHECK(it->init_output_schema(std::unordered_set<uint32_t>()).ok());
+            auto chunk = ChunkHelper::new_chunk(it->schema(), 1024);
+            size_t rows = 0;
+            while (true) {
+                chunk->reset();
+                auto st = it->get_next(chunk.get());
+                if (st.is_end_of_file()) break;
+                CHECK(st.ok()) << st.to_string();
+                rows += chunk->num_rows();
+            }
+            per_iter_rows.push_back(rows);
+        }
+        return per_iter_rows;
+    };
+
+    auto parallel_rows = run_and_count_per_iter(true);
+    auto serial_rows = run_and_count_per_iter(false);
+
+    // One iterator per segment.
+    ASSERT_EQ(parallel_rows.size(), 3u);
+    ASSERT_EQ(serial_rows.size(), 3u);
+    // Parallel output preserves serial order (vector equality, not just multiset).
+    ASSERT_EQ(parallel_rows, serial_rows);
+    // And per-segment rowid_range options were honored at the matching index.
+    ASSERT_EQ(parallel_rows, expected_per_iter_rows);
 }
 
 // Test class for segment metadata filter and parallel load with skip_segment_idxs
