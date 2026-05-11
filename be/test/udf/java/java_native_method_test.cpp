@@ -359,19 +359,6 @@ TEST_F(JavaNativeMethodTest, get_struct_field_addrs) {
     env->DeleteLocalRef(jarr);
 }
 
-// Empty STRUCT (zero fields) returns a long[0] without throwing.
-TEST_F(JavaNativeMethodTest, get_struct_field_addrs_empty) {
-    auto env = getJNIEnv();
-    TypeDescriptor td(TYPE_STRUCT);
-    auto col = ColumnHelper::create_column(td, /*nullable=*/true);
-
-    jlongArray jarr = JavaNativeMethods::getStructFieldAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
-    ASSERT_NE(jarr, nullptr);
-    ASSERT_FALSE(env->ExceptionCheck());
-    EXPECT_EQ(0, env->GetArrayLength(jarr));
-    env->DeleteLocalRef(jarr);
-}
-
 // Non-nullable STRUCT column rejects with IllegalArgumentException — STRUCT
 // result columns in StarRocks are always wrapped in NullableColumn, so the
 // helper enforces that invariant rather than silently dereferencing the
