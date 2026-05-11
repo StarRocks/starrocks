@@ -905,9 +905,9 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 ### enable_profile_explain
 
 * **Scope**: Session
-* **Description**: When set to `true` and `enable_profile` is also `true`, the `EXPLAIN COSTS` text of the executed plan is embedded in the profile's `Summary` section under the `ExplainPlan` key. This lets the optimizer's cardinality estimates, column statistics, predicates, runtime-filter declarations, and overall plan cost be inspected offline alongside the runtime metrics, which is useful when triaging slow queries from a saved profile artifact without access to the live cluster.
+* **Description**: When set to `true` and a profile is built for the query, the `EXPLAIN COSTS` text of the executed plan is embedded in the profile's `Summary` section under the `ExplainPlan` key. This lets the optimizer's cardinality estimates, column statistics, predicates, runtime-filter declarations, and overall plan cost be inspected offline alongside the runtime metrics, which is useful when triaging slow queries from a saved profile artifact without access to the live cluster.
 
-  Has no effect when `enable_profile` is `false`. The plan text is rendered once at profile-build time and adds a few tens of KB to the profile in typical cases.
+  A profile is built whenever `enable_profile` is `true`, and also when `enable_big_query_profile` is `true` and the query runs longer than `big_query_profile_threshold`. In all of those cases the plan text is included; otherwise this variable has no effect. The plan text is rendered once at profile-build time and adds a few tens of KB to the profile in typical cases.
 
 * **Default**: false
 * **Data type**: boolean
