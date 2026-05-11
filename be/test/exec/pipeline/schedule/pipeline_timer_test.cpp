@@ -97,7 +97,7 @@ TEST_F(PipelineTimerTaskTest, runs_when_due_and_unschedule_after_done_does_not_b
     // task.unschedule drives waitUtilFinished only when rc == 1 (running).
     // Either way, the call must not deadlock.
     auto start = std::chrono::steady_clock::now();
-    task->unschedule(&timer);
+    task->unschedule_and_wait(&timer);
     auto elapsed = std::chrono::steady_clock::now() - start;
     EXPECT_LT(elapsed, std::chrono::seconds(5));
     EXPECT_TRUE(task->ran.load(std::memory_order_acquire));
@@ -156,7 +156,7 @@ TEST_F(PipelineTimerTaskTest, wait_util_finished_returns_immediately_when_alread
     task->run_enter.acquire();
 
     // Drain post-Run state by asking unschedule to synchronize.
-    task->unschedule(&timer);
+    task->unschedule_and_wait(&timer);
 
     auto start = std::chrono::steady_clock::now();
     task->waitUtilFinished();
@@ -196,7 +196,7 @@ TEST_F(PipelineTimerTaskTest, dekker_synchronization_stress) {
         // first), TIMER_TASK_RUNNING (bthread already popped it) or -1 (finished
         // before we looked). Only the "running" case exercises waitUtilFinished,
         // but all three must terminate quickly.
-        task->unschedule(&timer);
+        task->unschedule_and_wait(&timer);
         completed.store(i + 1, std::memory_order_release);
     }
 
@@ -233,7 +233,7 @@ TEST_F(PipelineTimerTaskTest, batched_tasks_all_unblock_eventually) {
     waiters.reserve(kTasks);
     for (auto& t : tasks) {
         waiters.emplace_back([&, raw = t.get()] {
-            raw->unschedule(&timer);
+            raw->unschedule_and_wait(&timer);
             finished.fetch_add(1, std::memory_order_acq_rel);
         });
     }
