@@ -15,13 +15,12 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
+#include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
 #include <unordered_map>
 #include <utility>
-
-#include <boost/algorithm/string/predicate.hpp>
 
 #include "base/format.h"
 #include "base/simd/simd.h"
