@@ -79,6 +79,31 @@ class CallStub(object):
         module = importer.load_module(module_name)
         return module
 
+def _normalize_scalar(value, arrow_type):
+    # Recursively coerce the result of pa.Scalar.as_py() into idiomatic Python
+    # values for nested types. The default pyarrow behavior returns a list of
+    # (key, value) tuples for MapArray, which is awkward for UDF authors and
+    # breaks when maps appear inside arrays, structs, or other maps.
+    if value is None:
+        return None
+    if pa.types.is_map(arrow_type):
+        key_type = arrow_type.key_type
+        item_type = arrow_type.item_type
+        return {_normalize_scalar(k, key_type): _normalize_scalar(v, item_type)
+                for k, v in value}
+    if (pa.types.is_list(arrow_type)
+            or pa.types.is_large_list(arrow_type)
+            or pa.types.is_fixed_size_list(arrow_type)):
+        elem_type = arrow_type.value_type
+        return [_normalize_scalar(item, elem_type) for item in value]
+    if pa.types.is_struct(arrow_type):
+        return {arrow_type.field(i).name:
+                _normalize_scalar(value[arrow_type.field(i).name],
+                                  arrow_type.field(i).type)
+                for i in range(arrow_type.num_fields)}
+    return value
+
+
 class ScalarCallStub(CallStub):
     """
     Python Scalar Call stub
@@ -89,9 +114,11 @@ class ScalarCallStub(CallStub):
     def evaluate(self, batch: pa.RecordBatch) -> pa.Array:
         num_rows = batch.num_rows
         num_cols = len(batch.columns)
+        col_types = [batch.columns[j].type for j in range(num_cols)]
         result_list = []
         for i in range(num_rows):
-            params = [batch.columns[j][i].as_py() for j in range(num_cols)]
+            params = [_normalize_scalar(batch.columns[j][i].as_py(), col_types[j])
+                      for j in range(num_cols)]
             res = self.eval_func(*params)
             result_list.append(res)
         # set result to output column
