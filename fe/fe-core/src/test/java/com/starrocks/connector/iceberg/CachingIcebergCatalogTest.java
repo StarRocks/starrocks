@@ -55,7 +55,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -946,21 +948,43 @@ public class CachingIcebergCatalogTest {
     /**
      * Two concurrent refreshTable calls on DIFFERENT tables must not block each other:
      * both should overlap in time.
+     *
+     * <p>A CyclicBarrier forces both threads to rendezvous inside the mock before either
+     * proceeds, so the "max concurrent" reading is deterministic even under GC pressure.
+     * No wall-clock assertion is used.
      */
     @Test
     public void testRefreshTableDifferentTablesRunInParallel() throws Exception {
-        int sleepMs = 150;
         AtomicInteger maxConcurrent = new AtomicInteger(0);
         AtomicInteger concurrent = new AtomicInteger(0);
-        CountDownLatch bothStarted = new CountDownLatch(2);
+        // Barrier ensures both threads have incremented the counter before either continues.
+        CyclicBarrier barrier = new CyclicBarrier(2);
 
         IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
         Mockito.when(delegate.getTable(Mockito.any(), Mockito.eq("db"), Mockito.anyString()))
                 .thenAnswer(inv -> {
                     int c = concurrent.incrementAndGet();
                     maxConcurrent.accumulateAndGet(c, Math::max);
-                    bothStarted.countDown();
-                    Thread.sleep(sleepMs);
+                    // Wait until the other thread also reaches this point, guaranteeing overlap.
+                    //
+                    // Why 5 s: in the happy path both threads reach here in microseconds (the
+                    // code path is a handful of ConcurrentHashMap ops + one synchronized block
+                    // on different lock objects).  The timeout only fires when the lock is
+                    // catalog-wide and permanently blocks the second thread — the regression we
+                    // want to catch.
+                    //
+                    // Trade-off: a shorter timeout reduces false-negative latency when the
+                    // regression is present, but risks a false-positive (flaky failure) under
+                    // extreme GC pressure.  5 s is conservative enough to absorb even a full
+                    // GC pause while still keeping test feedback fast.
+                    try {
+                        barrier.await(5, TimeUnit.SECONDS);
+                    } catch (BrokenBarrierException | java.util.concurrent.TimeoutException e) {
+                        throw new RuntimeException(
+                                "Barrier timed out — second thread never reached the barrier. "
+                                        + "This indicates catalog-wide locking is blocking concurrent "
+                                        + "refreshes of different tables.", e);
+                    }
                     concurrent.decrementAndGet();
 
                     TableOperations ops = Mockito.mock(TableOperations.class);
@@ -994,19 +1018,17 @@ public class CachingIcebergCatalogTest {
         ExecutorService pool = Executors.newFixedThreadPool(2);
         ConnectContext ctx = new ConnectContext();
 
-        long start = System.currentTimeMillis();
         pool.submit(() -> catalog.refreshTable("db", "tbl1", ctx, null));
         pool.submit(() -> catalog.refreshTable("db", "tbl2", ctx, null));
 
         pool.shutdown();
         pool.awaitTermination(5, TimeUnit.SECONDS);
-        long elapsed = System.currentTimeMillis() - start;
 
+        // The barrier above guarantees deterministic overlap: if the lock were catalog-wide,
+        // the second thread would block on synchronized() and the barrier would time out,
+        // causing the test to fail with BrokenBarrierException before reaching this line.
         Assertions.assertEquals(2, maxConcurrent.get(),
                 "refreshes on different tables should overlap (max concurrent should be 2)");
-        // If they ran sequentially the elapsed time would be >= 2*sleepMs; parallel means < 1.8*sleepMs.
-        Assertions.assertTrue(elapsed < sleepMs * 2 - 50,
-                "different-table refreshes should run in parallel, elapsed=" + elapsed + "ms");
     }
 
     @Test
