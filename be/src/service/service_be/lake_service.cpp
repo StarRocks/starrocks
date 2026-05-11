@@ -207,7 +207,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto cntl = static_cast<brpc::Controller*>(controller);
     // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
     // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
-    int64_t brpc_queue_us = cntl->latency_us();
+    // cntl can be nullptr in unit tests, so guard the access.
+    int64_t brpc_queue_us = (cntl != nullptr) ? cntl->latency_us() : 0;
 
     if (!request->has_base_version()) {
         cntl->SetFailed("missing base version");
