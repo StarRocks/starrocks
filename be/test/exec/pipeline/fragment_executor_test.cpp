@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -24,15 +25,13 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 
 // Forward declaration: the helper lives in fragment_executor.cpp. It is non-static so
 // this test can call it directly and pin the contract that partition descriptors are
 // allocated from the query-level ObjectPool (so they outlive any single fragment).
-Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
-                                        const std::vector<TScanRangeParams>& scan_ranges);
+Status add_scan_ranges_partition_values(RuntimeState* runtime_state, const std::vector<TScanRangeParams>& scan_ranges);
 
 class FragmentExecutorPartitionTest : public ::testing::Test {
 public:
