@@ -1,0 +1,6 @@
+-- name: test_show_grants_for_current_user_compat
+-- Verify that MySQL-compatible SHOW GRANTS FOR CURRENT_USER() and
+-- SHOW GRANTS FOR CURRENT_USER (without parentheses) are accepted and
+-- return the same result as plain SHOW GRANTS.
+[UC]SHOW GRANTS FOR CURRENT_USER();
+[UC]SHOW GRANTS FOR CURRENT_USER;

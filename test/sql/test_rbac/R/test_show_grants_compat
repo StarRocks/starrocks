@@ -1,0 +1,7 @@
+-- name: test_show_grants_for_current_user_compat
+[UC]SHOW GRANTS FOR CURRENT_USER();
+-- result:
+-- !result
+[UC]SHOW GRANTS FOR CURRENT_USER;
+-- result:
+-- !result
