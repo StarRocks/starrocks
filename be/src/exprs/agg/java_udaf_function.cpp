@@ -79,7 +79,7 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     jobject update_method_obj = udaf_ctx->update->method.handle();
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_clazz,
                      udaf_ctx->udf_classloader->genCallStub(stub_clazz_name, udaf_clazz, update_method_obj,
-                                                            ClassLoader::BATCH_SINGLE_UPDATE));
+                                                            ClassLoader::BATCH_SINGLE_UPDATE, num_args));
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_method,
                      analyzer->get_method_object(udaf_ctx->update_stub_clazz.clazz(), stub_method_name));
 
