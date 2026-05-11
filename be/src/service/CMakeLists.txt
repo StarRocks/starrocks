@@ -51,7 +51,6 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     # set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)
 
     target_link_libraries(starrocks_be
-        ServiceBE
         ${STARROCKS_LINK_LIBS}
         )
     STARROCKS_FORCE_LOAD_LIBS(starrocks_be Exprs ExprCore)

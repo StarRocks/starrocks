@@ -544,6 +544,8 @@ set(STARROCKS_LINK_LIBS
     Formats
     HttpClient
     IO
+    Service
+    ServiceBE
     Storage
     Rowset
     Runtime
