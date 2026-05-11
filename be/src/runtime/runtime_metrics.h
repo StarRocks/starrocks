@@ -100,6 +100,9 @@ public:
     METRICS_DEFINE_THREAD_POOL(lake_vi_build);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_inner_io);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_chunk_io);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_sst_open);
     METRICS_DEFINE_THREAD_POOL(lake_partial_update);
     METRICS_DEFINE_THREAD_POOL(automatic_partition);
 
