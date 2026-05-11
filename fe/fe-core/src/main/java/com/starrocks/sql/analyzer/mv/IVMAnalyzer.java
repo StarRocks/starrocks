@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer.mv;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
@@ -48,12 +49,15 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * This class is responsible for analyzing and rewriting the query statement for IVM (Incremental View Maintenance) refresh.
@@ -84,6 +88,42 @@ public class IVMAnalyzer {
             JoinOperator.INNER_JOIN,
             JoinOperator.CROSS_JOIN
     );
+
+    // Aggregate function whitelist: (function name) -> predicate(argument types).
+    // Only (function, argument-type) combinations explicitly listed here are accepted by
+    // IVMAnalyzer. Unlisted combinations are rejected at CREATE time so the user gets a
+    // clear error instead of silently wrong data or a refresh-time crash. Each entry
+    // documents the boundary verified by tests; widen the predicate (or add a new entry)
+    // only after the (combinator metadata + BE state_union) path has been validated
+    // end-to-end for that type.
+    public static final Map<String, Predicate<Type[]>> IVM_SUPPORTED_AGG_FUNCTIONS =
+            ImmutableMap.<String, Predicate<Type[]>>builder()
+                    // count(*) and count(col) — all argument types are fine; refresh state is BIGINT.
+                    .put(FunctionSet.COUNT,                  args -> args.length <= 1)
+                    // sum: integer / float / DECIMAL.
+                    .put(FunctionSet.SUM,                    args -> isFixedOrFloat(args[0]) || args[0].isDecimalV3())
+                    // avg: integer / float only. DECIMAL is excluded — BE state_union for
+                    // avg<DECIMAL> currently corrupts the (sum, count) tuple on incremental refresh.
+                    .put(FunctionSet.AVG,                    args -> isFixedOrFloat(args[0]))
+                    // min/max: numeric and temporal. VARCHAR/STRING is excluded — combinator
+                    // intermediateType for VARCHAR widens to varchar(MAX) and trips the
+                    // type-equality assertion in IvmOpUtils.buildStateUnionScalarOperator.
+                    .put(FunctionSet.MIN,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0]))
+                    .put(FunctionSet.MAX,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0]))
+                    // bool_or: associative OR over booleans, no state representation issues.
+                    .put(FunctionSet.BOOL_OR,                args -> args.length == 1 && args[0].isBoolean())
+                    // approx_count_distinct / ndv: HLL state union is well-defined.
+                    .put(FunctionSet.APPROX_COUNT_DISTINCT,  args -> args.length == 1)
+                    .put(FunctionSet.NDV,                    args -> args.length == 1)
+                    .build();
+
+    private static boolean isFixedOrFloat(Type t) {
+        return t.isFixedPointType() || t.isFloatingPointType();
+    }
+
+    private static boolean isTemporal(Type t) {
+        return t.isDate() || t.isDatetime();
+    }
 
     private final ConnectContext connectContext;
     private final CreateMaterializedViewStatement statement;
@@ -281,6 +321,10 @@ public class IVMAnalyzer {
                         aggFuncExpr.toString());
             }
             String aggFuncName = aggFuncExpr.getFunctionName();
+            // Whitelist gate: only (function, argument-type) combinations validated end-to-end
+            // are allowed. Unsupported combinations would either fail at refresh time or silently
+            // produce wrong data; reject them here so the user sees a clear CREATE-time error.
+            checkAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
             // build intermediate aggregate function
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
             String newAggFuncName = IvmOpUtils.getIvmAggStateColumnName(aggFuncExpr);
@@ -338,6 +382,21 @@ public class IVMAnalyzer {
 
     private Expr substituteWithMap(Expr expr, ExprSubstitutionMap substitutionMap) {
         return ExprSubstitutionVisitor.rewrite(expr, substitutionMap);
+    }
+
+    private static void checkAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {
+        Predicate<Type[]> rule = IVM_SUPPORTED_AGG_FUNCTIONS.get(aggFuncName.toLowerCase());
+        if (rule == null) {
+            throw new SemanticException(
+                    "IVMAnalyzer does not support aggregate function: %s. Supported functions: %s",
+                    aggFuncName, IVM_SUPPORTED_AGG_FUNCTIONS.keySet());
+        }
+        Type[] argTypes = aggFuncExpr.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+        if (!rule.test(argTypes)) {
+            throw new SemanticException(
+                    "IVMAnalyzer does not support %s with argument types %s",
+                    aggFuncName, Arrays.toString(argTypes));
+        }
     }
 
     public static MaterializedView.RefreshMode getRefreshMode(CreateMaterializedViewStatement statement) {
