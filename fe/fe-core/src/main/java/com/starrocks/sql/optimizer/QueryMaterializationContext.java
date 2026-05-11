@@ -86,6 +86,10 @@ public class QueryMaterializationContext {
 
     private final Set<String> queryDistEqCols = Sets.newHashSet();
 
+    // CREATE-time trial rewrite injects an unregistered mock MV here; IvmRewriter.loadTargetMv
+    // checks this before the session-variable + catalog lookup.
+    private MaterializedView overrideTargetMv;
+
     /**
      * It's used to record the cache stats of `mvQueryContextCache`.
      */
@@ -111,6 +115,14 @@ public class QueryMaterializationContext {
 
 
     public QueryMaterializationContext() {
+    }
+
+    public MaterializedView getOverrideTargetMv() {
+        return overrideTargetMv;
+    }
+
+    public void setOverrideTargetMv(MaterializedView overrideTargetMv) {
+        this.overrideTargetMv = overrideTargetMv;
     }
 
     public void setEnableQueryContextCache(boolean enableQueryContextCache) {
