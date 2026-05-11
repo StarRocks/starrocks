@@ -104,6 +104,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // each thread under the default configurations
     private static final int PUBLISH_MAX_QUEUE_SIZE = 4096;
 
+    private static final long SLOW_PUBLISH_PARTITION_LOG_THRESHOLD_MS = 3000;
+
     // for shared-data, task executor thread will be responsible for sending publish tasks to BE
     // and modify transaction state on FE
     // for shared-nothing, task executor thread will be responsible for checking publish task
@@ -1121,29 +1123,36 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     txnId, e.getMessage());
             return false;
         } finally {
-            long rpcEndMs = System.currentTimeMillis();
-            long totalMs = rpcEndMs - submitTimeMs;
-            if (totalMs >= 3000) {
-                // Per-partition publishPartition phase breakdown for slow outliers.
-                // total = executor_queue + db_lock_wait + fe_prep + rpc, where:
-                //   executor_queue = CompletableFuture submit -> lambda entry
-                //                    (publish-executor scheduling delay / queue depth)
-                //   db_lock_wait   = lambda entry -> lockTablesWithIntensiveDbLock acquired
-                //   fe_prep        = lock acquired -> first BRPC issued
-                //                    (OlapTable lookup, shadow tablet collection, txnInfo build)
-                //   rpc            = publishLogVersion + publishLakePartition BRPC round-trip
-                // Complementary to the txn-level summary in TransactionState.toString:
-                // that one is wall-clock across all partitions running in parallel;
-                // this is per-partition and only fires when one partition crosses
-                // the threshold, so it can attribute which partition / which phase
-                // dominated when the txn-level "publish rpc cost" is large.
-                LOG.warn("Slow publishPartition: txn={} partition={} table={}, total={}ms " +
-                                "(executor_queue={}ms + db_lock_wait={}ms + fe_prep={}ms + rpc={}ms)",
-                        txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
-                        totalMs, lambdaEntryMs - submitTimeMs,
-                        lockAcquiredMs - lambdaEntryMs, rpcStartMs - lockAcquiredMs, rpcEndMs - rpcStartMs);
-            }
+            maybeLogSlowPublishPartition(txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
+                    submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, System.currentTimeMillis());
         }
+    }
+
+    // Per-partition publishPartition phase breakdown for slow outliers.
+    // total = executor_queue + db_lock_wait + fe_prep + rpc, where:
+    //   executor_queue = CompletableFuture submit -> lambda entry
+    //                    (publish-executor scheduling delay / queue depth)
+    //   db_lock_wait   = lambda entry -> lockTablesWithIntensiveDbLock acquired
+    //   fe_prep        = lock acquired -> first BRPC issued
+    //                    (OlapTable lookup, shadow tablet collection, txnInfo build)
+    //   rpc            = publishLogVersion + publishLakePartition BRPC round-trip
+    // Complementary to the txn-level summary in TransactionState.toString:
+    // that one is wall-clock across all partitions running in parallel;
+    // this is per-partition and only fires when one partition crosses
+    // the threshold, so it can attribute which partition / which phase
+    // dominated when the txn-level "publish rpc cost" is large.
+    static void maybeLogSlowPublishPartition(long txnId, long partitionId, long tableId,
+                                             long submitTimeMs, long lambdaEntryMs, long lockAcquiredMs,
+                                             long rpcStartMs, long rpcEndMs) {
+        long totalMs = rpcEndMs - submitTimeMs;
+        if (totalMs < SLOW_PUBLISH_PARTITION_LOG_THRESHOLD_MS) {
+            return;
+        }
+        LOG.warn("Slow publishPartition: txn={} partition={} table={}, total={}ms " +
+                        "(executor_queue={}ms + db_lock_wait={}ms + fe_prep={}ms + rpc={}ms)",
+                txnId, partitionId, tableId,
+                totalMs, lambdaEntryMs - submitTimeMs,
+                lockAcquiredMs - lambdaEntryMs, rpcStartMs - lockAcquiredMs, rpcEndMs - rpcStartMs);
     }
 
     /**
