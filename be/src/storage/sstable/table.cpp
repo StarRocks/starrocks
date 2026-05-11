@@ -292,9 +292,6 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     int64_t multiget_t1_us = 0;
     int64_t multiget_t2_us = 0;
     int64_t multiget_t3_us = 0;
-    int64_t multiget_t3_block_read_miss_us = 0;
-    int64_t multiget_block_read_miss_cnt = 0;
-    ReadIOStat* stat = options.stat;
     size_t i = 0;
     bool founded = false;
     for (auto it = begin; it != end; ++it, ++i) {
@@ -322,15 +319,7 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 // Not found
                 sst_bloom_filter_rows++;
             } else {
-                uint32_t miss_before = stat ? stat->block_cnt_from_file : 0;
-                int64_t tb_start = butil::gettimeofday_us();
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
-                int64_t tb_end = butil::gettimeofday_us();
-                if (stat != nullptr && stat->block_cnt_from_file > miss_before) {
-                    // Cache miss path: BlockReader did an actual file (OSS) read.
-                    multiget_t3_block_read_miss_us += tb_end - tb_start;
-                    multiget_block_read_miss_cnt++;
-                }
                 ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
             }
         }
@@ -348,8 +337,6 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
     TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
     TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
-    TRACE_COUNTER_INCREMENT("multiget_t3_block_read_miss_us", multiget_t3_block_read_miss_us);
-    TRACE_COUNTER_INCREMENT("multiget_block_read_miss_cnt", multiget_block_read_miss_cnt);
     return s;
 }
 
