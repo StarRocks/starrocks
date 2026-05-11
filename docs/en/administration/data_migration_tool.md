@@ -8,7 +8,7 @@ The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Communi
 
 :::note
 
-- The StarRocks Cross-cluster Data Migration Tool only supports migrating data from a shared-nothing cluster to either another shared-nothing cluster or a shared-data cluster.
+- The StarRocks Cross-cluster Data Migration Tool only supports migrating data from a shared-nothing cluster to either another shared-nothing cluster or a shared-data cluster. To migrate between two shared-data clusters, see [Cross-cluster Data Migration Tool for Shared-Data Clusters](./lake_to_lake_migration.md).
 - The StarRocks version of the target cluster must be v3.1.8, v3.2.3, or later.
 
 :::
