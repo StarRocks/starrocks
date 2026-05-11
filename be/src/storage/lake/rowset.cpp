@@ -488,7 +488,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_for_iter_with_delvec_us");
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options_template;
     ASSIGN_OR_RETURN(seg_options_template.fs, FileSystemFactory::CreateSharedFromString(root_loc));
@@ -544,36 +547,39 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         token = ExecEnv::GetInstance()->load_segment_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
 
-    for (int i = 0; i < (int)segments.size(); i++) {
-        auto seg_ptr = segments[i];
-        auto opts = build_per_segment_options(i);
-        auto task = [seg_ptr, schema, opts, &per_segment_iters, &err_mutex, &first_err, i]() {
-            auto res = seg_ptr->new_iterator(schema, opts);
-            if (res.status().is_end_of_file()) {
-                // Leave per_segment_iters[i] as nullptr; the final compaction loop drops nullptrs.
-                return;
-            }
-            if (!res.ok()) {
-                std::lock_guard<std::mutex> lock(err_mutex);
-                first_err.update(res.status());
-                return;
-            }
-            per_segment_iters[i] = std::move(res).value();
-        };
-        if (token) {
-            auto submit_st = token->submit_func(task);
-            if (!submit_st.ok()) {
-                // Thread pool busy / shutting down: run inline so we still make forward progress.
-                LOG(WARNING) << "submit_func failed for new_iterator: " << submit_st.code_as_string()
-                             << ", falling back to inline construction, seg_idx: " << i << ", tablet: " << _tablet_id
-                             << ", rowset: " << metadata().id();
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("build_segment_iter_with_delvec_us");
+        for (int i = 0; i < (int)segments.size(); i++) {
+            auto seg_ptr = segments[i];
+            auto opts = build_per_segment_options(i);
+            auto task = [seg_ptr, schema, opts, &per_segment_iters, &err_mutex, &first_err, i]() {
+                auto res = seg_ptr->new_iterator(schema, opts);
+                if (res.status().is_end_of_file()) {
+                    // Leave per_segment_iters[i] as nullptr; the final compaction loop drops nullptrs.
+                    return;
+                }
+                if (!res.ok()) {
+                    std::lock_guard<std::mutex> lock(err_mutex);
+                    first_err.update(res.status());
+                    return;
+                }
+                per_segment_iters[i] = std::move(res).value();
+            };
+            if (token) {
+                auto submit_st = token->submit_func(task);
+                if (!submit_st.ok()) {
+                    // Thread pool busy / shutting down: run inline so we still make forward progress.
+                    LOG(WARNING) << "submit_func failed for new_iterator: " << submit_st.code_as_string()
+                                 << ", falling back to inline construction, seg_idx: " << i
+                                 << ", tablet: " << _tablet_id << ", rowset: " << metadata().id();
+                    task();
+                }
+            } else {
                 task();
             }
-        } else {
-            task();
         }
+        if (token) token->wait();
     }
-    if (token) token->wait();
 
     if (!first_err.ok()) {
         return first_err;
