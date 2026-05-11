@@ -33,4 +33,9 @@ public final class NativeMethodHelper {
 
     // [nullAddr, dataAddr]
     public static native long[] getAddrs(long columnAddr);
+
+    // For NullableColumn(StructColumn), return one address per STRUCT field. Each
+    // returned address is the field's outer NullableColumn so the same getAddrs /
+    // resize / per-type writer contract applies recursively.
+    public static native long[] getStructFieldAddrs(long columnAddr);
 }

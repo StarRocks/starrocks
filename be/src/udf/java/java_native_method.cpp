@@ -24,6 +24,7 @@
 #include "column/decimalv3_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/date_value.h"
@@ -60,6 +61,13 @@ public:
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.values_column().get());
         return Status::OK();
     }
+
+    // STRUCT field count is variable so the fixed 4-slot getAddrs() return shape
+    // cannot carry every subfield pointer. The Java helper UDFHelper.writeResult
+    // calls getAddrs() only for the parent NullableColumn's null bitmap (already
+    // populated by the NullableColumn arm above); per-subfield Column pointers
+    // are exposed via the dedicated getStructFieldAddrs native helper.
+    Status do_visit(const StructColumn& column) { return Status::OK(); }
 
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
@@ -111,6 +119,11 @@ public:
 
     Status do_visit(const MapColumn& column) {
         *_result = TYPE_MAP;
+        return Status::OK();
+    }
+
+    Status do_visit(const StructColumn& column) {
+        *_result = TYPE_STRUCT;
         return Status::OK();
     }
 
@@ -242,6 +255,32 @@ jlong JavaNativeMethods::memory_malloc(JNIEnv* env, jclass clazz, jlong bytes) {
 void JavaNativeMethods::memory_free(JNIEnv* env, jclass clazz, jlong address) {
     VLOG_ROW << "Freed memory address " << address << ".";
     free(reinterpret_cast<void*>(address)); // NOLINT
+}
+
+jlongArray JavaNativeMethods::getStructFieldAddrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
+    auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
+    if (column == nullptr || !column->is_nullable()) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
+                      "getStructFieldAddrs expects a NullableColumn");
+        return nullptr;
+    }
+    auto* data_col = down_cast<NullableColumn*>(column)->data_column_raw_ptr();
+    if (data_col == nullptr || !data_col->is_struct()) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
+                      "getStructFieldAddrs expects a NullableColumn(StructColumn)");
+        return nullptr;
+    }
+    auto* struct_col = down_cast<StructColumn*>(data_col);
+    int n = static_cast<int>(struct_col->fields_size());
+    jlongArray jarr = env->NewLongArray(n);
+    std::vector<jlong> addrs(n);
+    for (int i = 0; i < n; ++i) {
+        addrs[i] = reinterpret_cast<jlong>(struct_col->field_column_raw_ptr(i));
+    }
+    if (n > 0) {
+        env->SetLongArrayRegion(jarr, 0, n, addrs.data());
+    }
+    return jarr;
 }
 
 } // namespace starrocks
