@@ -45,10 +45,10 @@
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/schema_change.h"
@@ -4994,7 +4994,6 @@ TEST_F(LakeServiceTest, test_get_txn_ids_string_priority) {
     }
 }
 
-<<<<<<< HEAD
 // ==================== build_vector_index RPC ====================
 
 class LakeServiceVectorIndexBuildTest : public lake::TestBase {
