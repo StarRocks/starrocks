@@ -24,9 +24,9 @@
 #include <thread>
 #include <vector>
 
-#include "testutil/assert.h"
 #include "butil/time.h"
 #include "gtest/gtest.h"
+#include "testutil/assert.h"
 #include "util/brpc_stub_cache.h"
 
 namespace starrocks::pipeline {
