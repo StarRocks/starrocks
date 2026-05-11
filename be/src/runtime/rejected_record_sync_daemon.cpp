@@ -562,6 +562,17 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // default) with `format=json`.
     client.set_header(HTTP_FORMAT_KEY, "json");
     client.set_header(HTTP_STRIP_OUTER_ARRAY, "false");
+    // Route through the FE's batch-write coordinator so the N concurrent
+    // PUTs that the N-BE cluster issues every tick coalesce into a single
+    // committed transaction on `_statistics_.rejected_records`. Without
+    // this header the load takes the normal stream-load path, producing
+    // one transaction per BE per tick -- ~N x interval^-1 commits a
+    // second under default config -- which is wasteful for a low-volume
+    // bookkeeping table and applies needless PK-table compaction
+    // pressure. The header value is parsed by `StreamLoadHttpHeader`
+    // (FE) as a bool; `LoadAction.execute` dispatches to
+    // `processBatchWriteStreamLoad` when it is true.
+    client.set_header(HTTP_ENABLE_MERGE_COMMIT, "true");
     // The FE 307-redirects large PUTs; opt into 100-continue so curl
     // negotiates before uploading the payload body.
     client.set_header("Expect", "100-continue");
