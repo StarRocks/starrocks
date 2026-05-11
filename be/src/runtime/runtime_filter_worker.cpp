@@ -558,8 +558,7 @@ struct AsyncRuntimeFilterRpcClosure : public RuntimeFilterRpcClosure {
     }
 };
 
-static void submit_async_runtime_filter_rpc(const RpcServices* rpc_services, const TNetworkAddress& dest,
-                                            int timeout_ms, int64_t http_min_size,
+static void submit_async_runtime_filter_rpc(const TNetworkAddress& dest, int timeout_ms, int64_t http_min_size,
                                             const PTransmitRuntimeFilterParams& request, const char* debug_info) {
     // The closure and brpc's internal serialization buffers are released by a
     // brpc bthread after this function returns, where no thread-local mem
@@ -577,7 +576,7 @@ static void submit_async_runtime_filter_rpc(const RpcServices* rpc_services, con
     // when it successfully hands the closure to brpc; if the stub is null it
     // returns without ref'ing, so dropping our ref deletes the closure here.
     closure->ref();
-    send_rpc_runtime_filter(rpc_services, dest, closure, timeout_ms, http_min_size, request);
+    send_rpc_runtime_filter(dest, closure, timeout_ms, http_min_size, request);
     if (closure->unref()) {
         delete closure;
     }
@@ -756,20 +755,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         }
 
         index += (1 + half);
-<<<<<<< HEAD
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC"});
-        rpc_closures.push_back(new RuntimeFilterRpcClosure);
-        auto* closure = rpc_closures.back();
-        closure->result.set_filter_id(request.filter_id());
-        closure->debug_info = "send total runtime filter";
-        closure->ref();
-        send_rpc_runtime_filter(t.first, closure, timeout_ms, rpc_http_min_size, request);
-=======
-        _runtime_services->runtime_filter_cache->add_rf_event(
-                {request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC"});
-        submit_async_runtime_filter_rpc(_rpc_services, t.first, timeout_ms, rpc_http_min_size, request,
-                                        "send total runtime filter");
->>>>>>> a47d2e560a ([BugFix] Drain runtime_filter worker without joining forwarded RPCs (#72626))
+        submit_async_runtime_filter_rpc(t.first, timeout_ms, rpc_http_min_size, request, "send total runtime filter");
     }
 
     // we don't need to hold rf any more.
@@ -1042,20 +1029,8 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         }
 
         index += (1 + half);
-<<<<<<< HEAD
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
-        rpc_closures.push_back(new RuntimeFilterRpcClosure());
-        auto* closure = rpc_closures.back();
-        closure->debug_info = "forward total runtime filter";
-        closure->result.set_filter_id(request.filter_id());
-        closure->ref();
-        send_rpc_runtime_filter(addr, closure, timeout_ms, rpc_http_min_size, request);
-=======
-        _runtime_services->runtime_filter_cache->add_rf_event(
-                {request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
-        submit_async_runtime_filter_rpc(_rpc_services, addr, timeout_ms, rpc_http_min_size, request,
-                                        "forward total runtime filter");
->>>>>>> a47d2e560a ([BugFix] Drain runtime_filter worker without joining forwarded RPCs (#72626))
+        submit_async_runtime_filter_rpc(addr, timeout_ms, rpc_http_min_size, request, "forward total runtime filter");
     }
 }
 
@@ -1126,21 +1101,10 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
         }
     }
 
-<<<<<<< HEAD
-    auto* rpc_closure = new RuntimeFilterRpcClosure();
-    SingleClosureJoinAndClean join_and_join(rpc_closure);
     _exec_env->add_rf_event(
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
-    rpc_closure->result.set_filter_id(request.filter_id());
-    rpc_closure->debug_info = "deliver broadcast runtime filter relay";
-    rpc_closure->ref();
-    send_rpc_runtime_filter(first_dest.address, rpc_closure, timeout_ms, rpc_http_min_size, request);
-=======
-    _runtime_services->runtime_filter_cache->add_rf_event(
-            {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
-    submit_async_runtime_filter_rpc(_rpc_services, first_dest.address, timeout_ms, rpc_http_min_size, request,
+    submit_async_runtime_filter_rpc(first_dest.address, timeout_ms, rpc_http_min_size, request,
                                     "deliver broadcast runtime filter relay");
->>>>>>> a47d2e560a ([BugFix] Drain runtime_filter worker without joining forwarded RPCs (#72626))
 }
 
 void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
@@ -1199,20 +1163,8 @@ void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddre
                                                        int64_t rpc_http_min_size, const std::string& msg) {
     const std::string debug_info = "deliver part runtime filter. " + msg;
     for (const auto& addr : transmit_addrs) {
-<<<<<<< HEAD
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), addr.hostname, msg});
-        rpc_closures.push_back(new RuntimeFilterRpcClosure());
-        auto* closure = rpc_closures.back();
-        closure->result.set_filter_id(params.filter_id());
-        closure->debug_info = "deliver part runtime filter. " + msg;
-        closure->ref();
-        send_rpc_runtime_filter(addr, closure, transmit_timeout_ms, rpc_http_min_size, params);
-=======
-        _runtime_services->runtime_filter_cache->add_rf_event(
-                {params.query_id(), params.filter_id(), addr.hostname, msg});
-        submit_async_runtime_filter_rpc(_rpc_services, addr, transmit_timeout_ms, rpc_http_min_size, params,
-                                        debug_info.c_str());
->>>>>>> a47d2e560a ([BugFix] Drain runtime_filter worker without joining forwarded RPCs (#72626))
+        submit_async_runtime_filter_rpc(addr, transmit_timeout_ms, rpc_http_min_size, params, debug_info.c_str());
     }
 }
 
