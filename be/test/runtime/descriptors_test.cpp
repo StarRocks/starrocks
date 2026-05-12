@@ -38,13 +38,16 @@ public:
         _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool.get()));
     }
 
-    // Build a minimal THdfsPartition. partition_key_exprs is left empty by default;
-    // callers can override with custom thrift to exercise the dedup-conflict branch.
+    // Build a minimal THdfsPartition. Uses thrift's __set_X helpers so the resulting
+    // struct has __isset bits enabled — ThriftDebugString skips fields with __isset
+    // false, so without this the dumped diagnostic in mismatch errors would be empty.
     static THdfsPartition _make_partition(std::vector<TExpr> partition_key_exprs = {}) {
         THdfsPartition p;
-        p.file_format = THdfsFileFormat::TEXT;
-        p.location.suffix = "";
-        p.partition_key_exprs = std::move(partition_key_exprs);
+        p.__set_file_format(THdfsFileFormat::TEXT);
+        THdfsPartitionLocation loc;
+        loc.__set_suffix("");
+        p.__set_location(loc);
+        p.__set_partition_key_exprs(std::move(partition_key_exprs));
         return p;
     }
 
