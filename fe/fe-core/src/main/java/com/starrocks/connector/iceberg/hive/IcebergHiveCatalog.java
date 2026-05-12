@@ -24,6 +24,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hadoop.GenericExceptionAction;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
@@ -69,10 +71,18 @@ public class IcebergHiveCatalog implements IcebergCatalog {
 
     private final Configuration conf;
     private final HiveCatalog delegate;
+    // Catalog-level hadoop.kerberos.principal/keytab. If either is empty, fall back to the
+    // system UGI (original behavior). HadoopExt.doAsWithSwap uses these two to swap the
+    // process loginUser and doAs-wrap each call so that the HMS thrift SASL handshake
+    // authenticates with the catalog credential.
+    private final String catalogPrincipal;
+    private final String catalogKeytab;
 
     @VisibleForTesting
     public IcebergHiveCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
+        this.catalogPrincipal = conf.get(HadoopExt.HADOOP_KERBEROS_PRINCIPAL);
+        this.catalogKeytab = conf.get(HadoopExt.HADOOP_KERBEROS_KEYTAB);
         String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         if (conf.get(METASTOREWAREHOUSE.varname) == null) {
@@ -96,13 +106,33 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         // database, timeout may happen.
         copiedProperties.putIfAbsent(HiveCatalog.LIST_ALL_TABLES, "true");
 
+        // Make Iceberg's CachedClientPool include the current UGI in its cache key
+        // (KeyElementType.UGI). Combined with HadoopExt.doAsWithSwap swapping the process
+        // loginUser to the catalog keytab before each call, the cache key differs across
+        // catalogs and each catalog gets its own HiveClientPool, preventing stale-client
+        // reuse.
+        copiedProperties.putIfAbsent(CatalogProperties.CLIENT_POOL_CACHE_KEYS, "ugi");
+
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
+
+        // Important: Iceberg HiveCatalog.setConf builds an internal HiveConf via
+        // `new HiveConf(parent, HiveCatalog.class)`, whose constructor re-reads the bundled
+        // hive-site.xml / hivemetastore-site.xml and overwrites catalog-level keys such as
+        // `hive.metastore.kerberos.principal` / `hive.metastore.uris` with their baked
+        // defaults. Re-apply the catalog properties on top of delegate.getConf() after
+        // loadCatalog so the catalog-level overrides are preserved.
+        Configuration delegateConf = delegate.getConf();
+        if (delegateConf != null) {
+            properties.forEach(delegateConf::set);
+        }
     }
 
     @VisibleForTesting
     public IcebergHiveCatalog(HiveCatalog hiveCatalog, Configuration conf) {
         this.delegate = hiveCatalog;
         this.conf = conf;
+        this.catalogPrincipal = conf.get(HadoopExt.HADOOP_KERBEROS_PRINCIPAL);
+        this.catalogKeytab = conf.get(HadoopExt.HADOOP_KERBEROS_KEYTAB);
     }
 
     @Override
@@ -110,21 +140,26 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         return IcebergCatalogType.HIVE_CATALOG;
     }
 
+    private <T, E extends Exception> T withCatalogUgi(GenericExceptionAction<T, E> action) throws E {
+        return HadoopExt.getInstance().doAsWithSwap(catalogPrincipal, catalogKeytab, action);
+    }
+
     @Override
     public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
-        return delegate.loadTable(TableIdentifier.of(dbName, tableName));
+        return withCatalogUgi(() -> delegate.loadTable(TableIdentifier.of(dbName, tableName)));
     }
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
-        return delegate.tableExists(TableIdentifier.of(dbName, tableName));
+        return withCatalogUgi(() -> delegate.tableExists(TableIdentifier.of(dbName, tableName)));
     }
 
     @Override
     public List<String> listAllDatabases(ConnectContext context) {
-        return delegate.listNamespaces().stream()
-                .map(ns -> ns.level(0))
-                .collect(Collectors.toList());
+        return this.<List<String>, RuntimeException>withCatalogUgi(
+                () -> delegate.listNamespaces().stream()
+                        .map(ns -> ns.level(0))
+                        .collect(Collectors.toList()));
     }
 
     @Override
@@ -175,14 +210,16 @@ public class IcebergHiveCatalog implements IcebergCatalog {
 
     @Override
     public Database getDB(ConnectContext context, String dbName) {
-        Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
+        Map<String, String> dbMeta = this.<Map<String, String>, RuntimeException>withCatalogUgi(
+                () -> delegate.loadNamespaceMetadata(Namespace.of(dbName)));
         Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override
     public List<String> listTables(ConnectContext context, String dbName) {
-        List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
+        List<TableIdentifier> tableIdentifiers = this.<List<TableIdentifier>, RuntimeException>withCatalogUgi(
+                () -> delegate.listTables(Namespace.of(dbName)));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -234,7 +271,8 @@ public class IcebergHiveCatalog implements IcebergCatalog {
 
     @Override
     public Map<String, String> loadNamespaceMetadata(ConnectContext context, Namespace ns) {
-        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
+        return this.<Map<String, String>, RuntimeException>withCatalogUgi(
+                () -> ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns)));
     }
 
     @Override
@@ -252,20 +290,6 @@ public class IcebergHiveCatalog implements IcebergCatalog {
             }
         } catch (Exception e) {
             LOG.error("Failed to delete uncommitted files", e);
-        }
-    }
-
-    @Override
-    public boolean registerTable(ConnectContext context, String dbName, String tableName, 
-                                 String metadataFileLocation) {
-        try {
-            TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
-            Table table = delegate.registerTable(tableIdentifier, metadataFileLocation);
-            return table != null;
-        } catch (Exception e) {
-            LOG.error("Failed to register table {}.{} with metadata file location {}", 
-                    dbName, tableName, metadataFileLocation, e);
-            throw new StarRocksConnectorException("Failed to register table: " + e.getMessage(), e);
         }
     }
 
