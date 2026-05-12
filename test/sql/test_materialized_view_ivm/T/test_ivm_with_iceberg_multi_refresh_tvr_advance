@@ -1,11 +1,6 @@
 -- name: test_ivm_with_iceberg_multi_refresh_tvr_advance
--- Regression: ensure baseTableInfoTvrVersionRangeMap advances across multiple
--- incremental refreshes. Pre-fix, prepareRefreshPlan()'s finally reset
--- enable_ivm_refresh before executor.executePlan ran, so
--- IVMInsertLoadTxnCallback never registered and the persistent TVR map
--- stayed at baseline — each refresh recomputed the delta from baseline →
--- currentVersion, producing duplicate-row accumulation in the MV
--- (mv rows grow by 1, 2, 3, ... instead of by the new-insert count).
+-- Pins the expected mv row-count sequence and asserts that EXPLAIN REFRESH
+-- does not leak enable_ivm_refresh / tvr_target_mvid into the caller's session.
 
 create external catalog mv_iceberg_${uuid0}
 properties
@@ -25,9 +20,8 @@ set catalog default_catalog;
 create database db_${uuid0};
 use db_${uuid0};
 
--- Unpartitioned IVM MV with simple projection (the minimal shape that triggers
--- the bug: partitioned MVs go through PCT and have a separate TVR persistence
--- path, so the regression specifically targets the IVM-only code path).
+-- Unpartitioned IVM MV: hits the pure-IVM refresh path (partitioned MVs route
+-- through PCT and have a separate TVR persistence mechanism).
 CREATE MATERIALIZED VIEW test_mv_multi
 REFRESH DEFERRED MANUAL
 properties
@@ -36,48 +30,32 @@ properties
 )
 AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi;
 
--- Baseline refresh (goes through Hybrid → PCT to establish TVR baseline).
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
 
--- Regression: EXPLAIN REFRESH only invokes getProcessExecPlan() and never
--- calls execProcessExecPlan(). The IVM session-variable scope MUST be
--- contained within prepareRefreshPlan() — leaking enable_ivm_refresh=true
--- and tvr_target_mvid into the caller's ConnectContext would taint every
--- subsequent statement in the session.
+-- EXPLAIN REFRESH runs prepareRefreshPlan() without invoking execProcessExecPlan(),
+-- so the IVM scope must be contained within prepareRefreshPlan() — leaking
+-- enable_ivm_refresh or tvr_target_mvid would taint subsequent statements.
 [UC]EXPLAIN REFRESH MATERIALIZED VIEW test_mv_multi;
 SELECT @@enable_ivm_refresh;
 SELECT @@tvr_target_mvid;
 
--- Iteration 1: +1 row → mv should have 3 rows. (Pre-fix: 3 ✓ — first
--- post-baseline refresh happens to look correct because the persistent map
--- starts at the baseline snapshot S0; this is the only refresh where the
--- bug is invisible.)
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (3, 30);
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
 
--- Iteration 2: +1 row → mv should have 4 rows. (Pre-fix: 5 — TVR stuck at S0,
--- delta = S0→S2 covers both iter1's row and iter2's row, iter1's row gets
--- re-applied.)
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (4, 40);
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
 
--- Iteration 3: +1 row → mv should have 5 rows. (Pre-fix: 8 — accumulating.)
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (5, 50);
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
 
--- Iteration 4: +2 rows → mv should have 7 rows. (Pre-fix: 12.)
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (6, 60), (7, 70);
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
 
--- Per-row equality. The count(*) checks above already catch duplicate
--- accumulation (pre-fix the mv row counts diverge as 3, 5, 8, 12 instead of
--- 3, 4, 5, 7). This SELECT pins the actual row values too — both source
--- and mv should produce the same 7 rows when ordered by (k, v).
 SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi ORDER BY k, v;
 SELECT k, v FROM test_mv_multi ORDER BY k, v;
 

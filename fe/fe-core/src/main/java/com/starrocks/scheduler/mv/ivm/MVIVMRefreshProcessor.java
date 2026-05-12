@@ -164,9 +164,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         final ExecPlan execPlan = processExecPlan.execPlan();
         final ConnectContext ctx = mvContext.getCtx();
 
-        // Scope enable_ivm_refresh around executor.executePlan so InsertLoadTxnCallbackFactory
-        // registers IVMInsertLoadTxnCallback for this INSERT (otherwise the persistent TVR
-        // map never advances and incremental refreshes accumulate duplicate rows).
+        // Scope enable_ivm_refresh around executor.executePlan so
+        // InsertLoadTxnCallbackFactory registers the TVR-persistence callback.
         boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
         String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
@@ -460,10 +459,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .setQuerySource(QueryDetail.QuerySource.MV.name())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
 
-        // Scope enable_ivm_refresh to this method so IvmRewriter sees it but the variable
-        // doesn't leak — neither into MVHybridRefreshProcessor's PCT fallback after this
-        // throws (#73004), nor into the caller's session after `EXPLAIN REFRESH ...`
-        // (which runs prepareRefreshPlan without ever invoking execProcessExecPlan).
+        // Scope enable_ivm_refresh to this method so it doesn't leak into the Hybrid
+        // -> PCT fallback (#73004) or the caller's session after EXPLAIN REFRESH.
         boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
         String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
