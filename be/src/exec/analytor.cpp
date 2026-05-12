@@ -630,7 +630,8 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
     TAnalyticWindow window = _tnode.analytic_node.window;
     _process_impl = &Analytor::_materializing_process;
     std::stringstream process_mode;
-    const bool use_cumulative_mode = _is_unbounded_preceding && !(_is_range_window && _is_range_offset_window);
+    const bool use_cumulative_mode =
+            (_is_unbounded_preceding && !(_is_range_window && _is_range_offset_window)) || _is_growing_range_frame();
     process_mode << (_need_partition_materializing ? "Materializing/" : "Streaming/");
     process_mode << (_use_removable_cumulative_process ? "RemovableCumulative"
                                                        : (use_cumulative_mode ? "Cumulative" : "ByDefinition"));
@@ -656,7 +657,9 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
         } else {
             // Generic RANGE frame (including finite offsets and CURRENT ROW/CURRENT ROW).
             DCHECK(_need_partition_materializing);
-            _materializing_process_impl = &Analytor::_materializing_process_for_range_frame;
+            _materializing_process_impl = _is_growing_range_frame()
+                                                  ? &Analytor::_materializing_process_for_growing_range_frame
+                                                  : &Analytor::_materializing_process_for_range_frame;
         }
     } else {
         if (!window.__isset.window_start && !window.__isset.window_end) {
@@ -711,6 +714,7 @@ void Analytor::_compute_range_nonnull_segment() {
 void Analytor::_reset_range_frame_cursors() {
     _range_start_frame_cursor = _range_nonnull_start;
     _range_end_frame_cursor = _range_nonnull_start;
+    _range_cumulative_frame_end = _partition.start;
 }
 
 int64_t Analytor::_seek_range_frame_boundary_with_offset(const RangeBoundarySpec& boundary, bool is_start) {
@@ -761,6 +765,11 @@ int64_t Analytor::_resolve_range_offset_boundary(const RangeBoundarySpec& bounda
         return is_start ? _range_nonnull_end : _range_nonnull_start;
     }
     return _seek_range_frame_boundary_with_offset(boundary, is_start);
+}
+
+bool Analytor::_is_growing_range_frame() const {
+    return _is_range_offset_window && _range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
+           _range_end_boundary.has_offset;
 }
 
 Analytor::FrameRange Analytor::_get_frame_for_range() {
@@ -1312,6 +1321,36 @@ void Analytor::_materializing_process_for_range_frame(RuntimeState* state) {
     }
 }
 
+void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* state) {
+    const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
+    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+        _find_peer_group_end();
+        DCHECK(_peer_group.is_real);
+
+        if (_current_row_position == _peer_group.start) {
+            const FrameRange range = _get_frame_for_range();
+            DCHECK_EQ(range.start, _partition.start);
+            DCHECK_GE(range.end, _range_cumulative_frame_end);
+            if (range.end > _range_cumulative_frame_end) {
+                _update_window_batch(_partition.start, _partition.end, _range_cumulative_frame_end, range.end);
+                _range_cumulative_frame_end = range.end;
+            }
+        }
+
+        const int64_t base = _first_global_position_of_current_chunk();
+        const int64_t start = _get_global_position(_current_row_position) - base;
+        int64_t end = _get_global_position(_peer_group.end) - base;
+        if (end > chunk_size) {
+            end = chunk_size;
+        }
+        DCHECK_GE(start, 0);
+        DCHECK_GT(end, start);
+
+        _get_window_function_result(start, end);
+        _update_current_row_position(end - start);
+    }
+}
+
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
                                     int64_t frame_end) {
     SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
@@ -1391,6 +1430,7 @@ void Analytor::_reset_state_for_next_partition() {
     _range_nonnull_end = 0;
     _range_start_frame_cursor = 0;
     _range_end_frame_cursor = 0;
+    _range_cumulative_frame_end = 0;
     _reset_window_state();
     DCHECK_GE(_current_row_position, 0);
 }
