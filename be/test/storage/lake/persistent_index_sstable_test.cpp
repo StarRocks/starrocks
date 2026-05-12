@@ -140,7 +140,7 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     std::vector<std::unique_ptr<sstable::Table>> sstable_ptrs(3);
     for (int i = 0; i < 3; ++i) {
         std::unique_ptr<sstable::Table> sstable;
-    CHECK_OK(sstable::Table::Open(options, read_files[i].get(), fileszs[i], sstable));
+        CHECK_OK(sstable::Table::Open(options, read_files[i].get(), fileszs[i], sstable));
         sstable::Iterator* iter = sstable->NewIterator(read_options);
         list.emplace_back(iter);
         sstable_ptrs[i] = std::move(sstable);
@@ -464,7 +464,7 @@ TEST_F(PersistentIndexSstableTest, test_ioerror_inject) {
         // scan & check
         ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
         std::unique_ptr<sstable::Table> sstable;
-    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
+        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
         sstable::ReadOptions read_options;
         sstable::Iterator* iter = sstable->NewIterator(read_options);
         for (iter->SeekToFirst(); iter->Valid() && iter->status().ok(); iter->Next()) {
