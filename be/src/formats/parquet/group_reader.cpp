@@ -1454,7 +1454,6 @@ Status GroupReader::_promote_variant_virtual_columns() {
 
         // Fully promote: create VariantTypedValueProxy for each virtual slot.
         for (const auto& vsi : virtual_slots) {
-            auto& proj = _variant_virtual_projections.at(vsi.virtual_slot_id);
             ColumnReader* leaf = leaf_readers_by_slot.at(vsi.virtual_slot_id);
 
             auto proxy = std::make_unique<VariantTypedValueProxy>(leaf);
