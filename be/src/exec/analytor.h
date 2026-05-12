@@ -106,13 +106,7 @@ class Analytor final : public pipeline::ContextWithDependency {
         int64_t _average_size = 0;
     };
 
-    enum class RangeBoundaryType {
-        UNBOUNDED_PRECEDING,
-        UNBOUNDED_FOLLOWING,
-        CURRENT_ROW,
-        PRECEDING,
-        FOLLOWING
-    };
+    enum class RangeBoundaryType { UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, CURRENT_ROW, PRECEDING, FOLLOWING };
 
     struct RangeBoundarySpec {
         RangeBoundaryType type = RangeBoundaryType::CURRENT_ROW;

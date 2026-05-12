@@ -724,8 +724,8 @@ int64_t Analytor::_seek_range_frame_boundary_with_offset(const RangeBoundarySpec
     cursor = std::clamp(cursor, _range_nonnull_start, _range_nonnull_end);
     while (cursor < _range_nonnull_end) {
         const int cmp = _order_columns[0]->compare_at(cursor, _current_row_position, *boundary.column, 1);
-        const bool should_advance = _range_order_is_asc ? (is_start ? cmp < 0 : cmp <= 0)
-                                                        : (is_start ? cmp > 0 : cmp >= 0);
+        const bool should_advance =
+                _range_order_is_asc ? (is_start ? cmp < 0 : cmp <= 0) : (is_start ? cmp > 0 : cmp >= 0);
         if (!should_advance) {
             break;
         }
