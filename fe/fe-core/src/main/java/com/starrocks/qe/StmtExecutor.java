@@ -1590,7 +1590,25 @@ public class StmtExecutor {
         if (plan != null && sv != null && sv.isEnableExplainInProfile()) {
             try {
                 RuntimeProfile summaryProfile = profile.getChild(ProfileKeyDictionary.SUMMARY);
-                summaryProfile.addInfoString(ProfileKeyDictionary.EXPLAIN_PLAN, plan.getExplainString(TExplainLevel.COSTS));
+                // Honor both the cluster-wide FE config `enable_sql_desensitize_in_log` (which
+                // already governs the sibling "Sql Statement" info-string in this same Summary)
+                // and the session variable `enable_desensitize_explain` (which governs literal
+                // digesting in EXPLAIN output via PlanNode.explainExpr). Temporarily force-on
+                // `enable_desensitize_explain` while rendering when either signal is set, then
+                // restore the previous value.
+                boolean prevDesensitize = sv.isEnableDesensitizeExplain();
+                boolean forceDesensitize = Config.enable_sql_desensitize_in_log || prevDesensitize;
+                String explainPlan;
+                try {
+                    sv.setEnableDesensitizeExplain(forceDesensitize);
+                    explainPlan = plan.getExplainString(TExplainLevel.COSTS);
+                } finally {
+                    sv.setEnableDesensitizeExplain(prevDesensitize);
+                }
+                // Defense in depth: also strip credential-bearing literals (e.g. FILES("...")
+                // properties) that the digest pass does not specifically target.
+                summaryProfile.addInfoString(ProfileKeyDictionary.EXPLAIN_PLAN,
+                        SqlCredentialRedactor.redact(explainPlan));
             } catch (Exception e) {
                 LOG.warn("Failed to embed explain plan in profile", e);
             }
