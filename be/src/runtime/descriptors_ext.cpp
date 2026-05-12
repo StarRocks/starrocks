@@ -387,10 +387,10 @@ Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, Obj
     // fields regardless of which branch (fast-path shared-lock hit, or slow-path
     // emplace() race loss) actually detected the conflict.
     auto mismatch_status = [&](const HdfsPartitionDescriptor* old_partition) {
-        return Status::InternalError(fmt::format(
-                "Partition id {} already exists with different partition_key_exprs. "
-                "new partition (thrift) = {}, old_partition = {}",
-                id, apache::thrift::ThriftDebugString(thrift_partition), old_partition->debug_string()));
+        return Status::InternalError(
+                fmt::format("Partition id {} already exists with different partition_key_exprs. "
+                            "new partition (thrift) = {}, old_partition = {}",
+                            id, apache::thrift::ThriftDebugString(thrift_partition), old_partition->debug_string()));
     };
 
     // Fast path: shared-lock lookup. If the partition is already registered, skip
