@@ -90,10 +90,18 @@ struct RangeSplitResult {
 //
 // Returns RangeSplitResult with boundaries and per-range estimates, or empty boundaries if
 // splitting is not possible (e.g., not enough data or segments).
+//
+// colocate_column_count > 0 enables colocate-aware boundary canonicalization: when the
+// selected boundary crosses a colocate-prefix transition between adjacent candidate ranges,
+// the boundary tuple is replaced with the canonical (prefix(right), NULL, ..., NULL) shape.
+// This lets the FE classify the resulting tablet ranges as Level 1 (new ColocateRange) vs
+// Level 2 (intra-colocate) via syntactic equality on the lower bound.
+// colocate_column_count == 0 (default) preserves the pre-P3 behavior exactly.
 StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
                                                             int32_t target_split_count, int64_t target_value_per_split,
                                                             bool use_num_rows, bool track_sources = false,
-                                                            const TabletRange* tablet_range = nullptr);
+                                                            const TabletRange* tablet_range = nullptr,
+                                                            int32_t colocate_column_count = 0);
 
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
