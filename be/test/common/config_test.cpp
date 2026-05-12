@@ -513,4 +513,20 @@ TEST_F(ConfigTest, test_alias04) {
     EXPECT_EQ(8080, cfg_int32);
 }
 
+TEST_F(ConfigTest, test_alias05) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias1);
+    CONF_Alias(cfg_int32, cfg_int32_alias2);
+
+    // Different assgnment order from test_alias03
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias2 = 8091
+        cfg_int32_alias1 = 8081
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8081, cfg_int32);
+}
+
 } // namespace starrocks
