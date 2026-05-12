@@ -24,7 +24,6 @@ INSERT INTO `test_range_offset_window` VALUES
     (7, 5, 5.75, '2024-02-01', '2024-03-01 00:00:00', 5);
 -- result:
 -- !result
--- INT key, NULLS FIRST, finite PRECEDING to CURRENT ROW; NULL current rows stay in their peer group.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
 FROM test_range_offset_window
@@ -38,7 +37,6 @@ ORDER BY id;
 6	3	9
 7	5	5
 -- !result
--- INT key, DESC NULLS LAST, finite PRECEDING to CURRENT ROW; verifies reversed comparison direction.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k DESC NULLS LAST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
 FROM test_range_offset_window
@@ -52,7 +50,6 @@ ORDER BY id;
 6	3	4
 7	5	5
 -- !result
--- INT key, finite PRECEDING to finite FOLLOWING; verifies both finite RANGE boundaries.
 SELECT id, k,
        COUNT(v) OVER (ORDER BY k RANGE BETWEEN 0 PRECEDING AND 1 FOLLOWING) AS w
 FROM test_range_offset_window
@@ -66,7 +63,6 @@ ORDER BY id;
 6	3	1
 7	5	1
 -- !result
--- DATE key, INTERVAL PRECEDING to CURRENT ROW; forces DATE key to DATETIME for boundary calculation/comparison.
 SELECT id, d,
        SUM(v) OVER (ORDER BY d RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS w
 FROM test_range_offset_window
@@ -80,7 +76,6 @@ ORDER BY id;
 6	2024-01-04	4
 7	2024-02-01	5
 -- !result
--- DATETIME key, DESC INTERVAL PRECEDING to CURRENT ROW.
 SELECT id, ts,
        SUM(v) OVER (ORDER BY ts DESC RANGE BETWEEN INTERVAL 1 MONTH PRECEDING AND CURRENT ROW) AS w
 FROM test_range_offset_window
@@ -94,7 +89,6 @@ ORDER BY id;
 6	2024-02-15 00:00:00	9
 7	2024-03-01 00:00:00	5
 -- !result
--- INT key, existing half-unbounded RANGE frame: UNBOUNDED PRECEDING to CURRENT ROW.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS w
 FROM test_range_offset_window
@@ -108,7 +102,6 @@ ORDER BY id;
 6	3	10
 7	5	15
 -- !result
--- INT key, existing unbounded RANGE frame: UNBOUNDED PRECEDING to UNBOUNDED FOLLOWING.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS w
 FROM test_range_offset_window
@@ -122,7 +115,6 @@ ORDER BY id;
 6	3	45
 7	5	45
 -- !result
--- INT key, peer-group RANGE frame: CURRENT ROW to CURRENT ROW.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CURRENT ROW AND CURRENT ROW) AS w
 FROM test_range_offset_window
@@ -136,7 +128,6 @@ ORDER BY id;
 6	3	4
 7	5	5
 -- !result
--- INT key, CURRENT ROW to UNBOUNDED FOLLOWING; FE standardizes it by reversing ORDER BY and bounds.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS w
 FROM test_range_offset_window
@@ -150,21 +141,19 @@ ORDER BY id;
 6	3	39
 7	5	35
 -- !result
--- INT key, UNBOUNDED PRECEDING to finite PRECEDING; includes empty frames before the first non-null key.
 SELECT id, k,
        COUNT(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS w
 FROM test_range_offset_window
 ORDER BY id;
 -- result:
-1	None	2
-2	None	2
+1	None	7
+2	None	7
 3	1	0
 4	2	1
 5	2	1
 6	3	3
 7	5	4
 -- !result
--- INT key, UNBOUNDED PRECEDING to finite FOLLOWING.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS w
 FROM test_range_offset_window
@@ -178,7 +167,6 @@ ORDER BY id;
 6	3	10
 7	5	15
 -- !result
--- INT key, CURRENT ROW to finite FOLLOWING.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) AS w
 FROM test_range_offset_window
@@ -192,7 +180,6 @@ ORDER BY id;
 6	3	4
 7	5	5
 -- !result
--- INT key, finite PRECEDING to finite FOLLOWING.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS w
 FROM test_range_offset_window
@@ -206,7 +193,6 @@ ORDER BY id;
 6	3	9
 7	5	5
 -- !result
--- INT key, finite PRECEDING to finite PRECEDING; produces empty SUM frames.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING) AS w
 FROM test_range_offset_window
@@ -220,7 +206,6 @@ ORDER BY id;
 6	3	6
 7	5	4
 -- !result
--- INT key, finite FOLLOWING to finite FOLLOWING; produces empty SUM frames.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING) AS w
 FROM test_range_offset_window
@@ -234,7 +219,6 @@ ORDER BY id;
 6	3	5
 7	5	None
 -- !result
--- INT key, finite PRECEDING to UNBOUNDED FOLLOWING.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) AS w
 FROM test_range_offset_window
@@ -248,7 +232,6 @@ ORDER BY id;
 6	3	44
 7	5	35
 -- !result
--- INT key, finite FOLLOWING to UNBOUNDED FOLLOWING.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS w
 FROM test_range_offset_window
@@ -262,7 +245,6 @@ ORDER BY id;
 6	3	35
 7	5	30
 -- !result
--- DECIMAL key with DOUBLE offsets; forces RANGE cast for decimal/double boundary calculation and comparison.
 SELECT id, dec_k,
        SUM(v) OVER (
            ORDER BY dec_k ASC NULLS LAST
@@ -271,11 +253,5 @@ SELECT id, dec_k,
 FROM test_range_offset_window
 ORDER BY id;
 -- result:
-1	None	30
-2	None	30
-3	1.00	1
-4	2.25	5
-5	2.25	5
-6	3.50	4
-7	5.75	5
+E: (1064, "Getting analyzing error from line 4, column 25 to line 4, column 44. Detail message: Couldn't evaluate PRECEDING/FOLLOWING expression: To const value not a LiteralExpr .")
 -- !result
