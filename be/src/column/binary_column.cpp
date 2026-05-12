@@ -14,6 +14,8 @@
 
 #include "column/binary_column.h"
 
+#include <cstring>
+
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -704,25 +706,36 @@ void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     size_t replace_num = src.size();
     bool need_resize = false;
-    for (size_t i = 0; i < replace_num; ++i) {
-        DCHECK_LT(indexes[i], _offsets.size());
-        size_t cur_len = _offsets[indexes[i] + 1] - _offsets[indexes[i]];
-        size_t new_len = src_column._offsets[i + 1] - src_column._offsets[i];
-        if (cur_len != new_len) {
-            need_resize = true;
-            break;
+
+    const auto& dst_offsets_ref = _offsets;
+    const auto& src_offsets_ref = src_column._offsets;
+    Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref, [&](const auto& dst_buf, const auto& src_buf) {
+        const auto* __restrict dst_offsets = dst_buf.data();
+        const auto* __restrict src_offsets = src_buf.data();
+        for (size_t i = 0; i < replace_num; ++i) {
+            DCHECK_LT(indexes[i], _offsets.size());
+            const size_t cur_len = dst_offsets[indexes[i] + 1] - dst_offsets[indexes[i]];
+            const size_t new_len = src_offsets[i + 1] - src_offsets[i];
+            if (cur_len != new_len) {
+                need_resize = true;
+                break;
+            }
         }
-    }
+    });
 
     if (!need_resize) {
         auto& bytes = get_bytes();
         auto* dest_bytes = bytes.data();
         const uint8_t* src_bytes = src_column._data_base();
-        const auto& src_offsets = src_column.get_offset();
-        for (size_t i = 0; i < replace_num; ++i) {
-            size_t str_size = src_offsets[i + 1] - src_offsets[i];
-            strings::memcpy_inlined(dest_bytes + _offsets[indexes[i]], src_bytes + src_offsets[i], str_size);
-        }
+        Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref, [&](const auto& dst_buf, const auto& src_buf) {
+            const auto* __restrict dst_offsets = dst_buf.data();
+            const auto* __restrict src_offsets = src_buf.data();
+            for (size_t i = 0; i < replace_num; ++i) {
+                const size_t src_offset = src_offsets[i];
+                const size_t str_size = src_offsets[i + 1] - src_offset;
+                strings::memcpy_inlined(dest_bytes + dst_offsets[indexes[i]], src_bytes + src_offset, str_size);
+            }
+        });
     } else {
         auto new_binary_column = BinaryColumnBase<T>::create();
         size_t idx_begin = 0;
@@ -1080,6 +1093,10 @@ template <typename T>
 void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes,
                                                           size_t chunk_size, uint32_t max_one_row_size,
                                                           const uint8_t* null_masks, bool has_null) const {
+    if (UNLIKELY(chunk_size == 0)) {
+        return;
+    }
+
     uint32_t* sizes = slice_sizes.data();
     const uint8_t* base = _data_base();
 
@@ -1102,6 +1119,17 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
             }
         });
     } else {
+        if (std::memchr(null_masks, 0, chunk_size) == nullptr) {
+            // All rows are null, so only null flags are serialized; offsets/bytes are not needed.
+            const bool null_flag = true;
+            for (size_t i = 0; i < chunk_size; ++i) {
+                uint8_t* pos = dst + i * max_one_row_size + sizes[i];
+                strings::memcpy_inlined(pos, &null_flag, sizeof(bool));
+                sizes[i] += sizeof(bool);
+            }
+            return;
+        }
+
         _offsets.visit_storage([&](const auto& offsets_buf) {
             const auto* __restrict offsets_data = offsets_buf.data();
             uint64_t offset = offsets_data[0];
