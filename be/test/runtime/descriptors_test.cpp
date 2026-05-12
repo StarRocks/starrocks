@@ -132,9 +132,13 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails)
     ASSERT_FALSE(s.ok());
     ASSERT_TRUE(s.is_internal_error()) << s.to_string();
 
+    // The mismatch error must include id, both descriptors, and explicitly mention
+    // partition_key_exprs. The format is unified across fast-path and slow-path race
+    // branches, so this assertion is deterministic regardless of which branch fires.
     const std::string msg = s.to_string();
     EXPECT_NE(std::string::npos, msg.find(std::to_string(partition_id))) << msg;
     EXPECT_NE(std::string::npos, msg.find("partition_key_exprs")) << msg;
+    EXPECT_NE(std::string::npos, msg.find("new partition (thrift)")) << msg;
     EXPECT_NE(std::string::npos, msg.find("old_partition")) << msg;
 
     // Existing entry must be unchanged.
