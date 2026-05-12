@@ -33,7 +33,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Shared-data](#shared-data)
 - [Data Lake](#data-lake)
 - [Other](#other)
