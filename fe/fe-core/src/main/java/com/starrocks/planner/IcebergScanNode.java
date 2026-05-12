@@ -459,4 +459,11 @@ public class IcebergScanNode extends ScanNode {
     public Set<DeleteFile> getEqualAppliedDeleteFiles() {
         return scanRangeSource.getEqualAppliedDeleteFiles();
     }
+
+    public Optional<Long> getBaseSnapshotId() {
+        if (tvrVersionRange == null) {
+            return Optional.empty();
+        }
+        return tvrVersionRange.end();
+    }
 }
