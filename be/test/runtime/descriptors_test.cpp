@@ -182,9 +182,8 @@ TEST_F(HiveTableDescriptorAddPartitionTest, ConcurrentInsertSameIdConvergesToOne
     std::vector<Status> statuses(kThreads);
 
     for (int i = 0; i < kThreads; ++i) {
-        threads.emplace_back([&, i]() {
-            statuses[i] = _table_desc->add_partition_value(_pool.get(), partition_id, thrift);
-        });
+        threads.emplace_back(
+                [&, i]() { statuses[i] = _table_desc->add_partition_value(_pool.get(), partition_id, thrift); });
     }
     for (auto& t : threads) {
         t.join();
