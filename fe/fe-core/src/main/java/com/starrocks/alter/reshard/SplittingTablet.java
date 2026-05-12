@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  *
  * When `newTabletRanges` is empty the BE follows the data-driven split path
  * (segment distribution computes the K-1 boundaries). When non-empty, the
- * PSPS (Pre-Sample & Pre-Split) path applies on the BE: the FE-supplied
+ * external boundaries path applies on the BE: the FE-supplied
  * boundaries are honored verbatim and `newTabletRanges.size()` must equal
  * `newTabletIds.size()`. BE re-validates structural and schema-aware
  * invariants before committing.
@@ -44,8 +44,22 @@ public class SplittingTablet implements ReshardingTablet {
     @SerializedName(value = "newTabletIds")
     protected final List<Long> newTabletIds;
 
+    // Defaulted to empty list in the no-arg Gson constructor below so legacy
+    // SplittingTablet records persisted before this field existed deserialize
+    // to an empty list instead of null. Gson invokes the no-arg constructor
+    // (when one exists, as here) and then reflection-sets only the fields
+    // present in the JSON, so toProto / fallbackToIdenticalTablet never see
+    // null even on an in-flight reshard job replayed from a pre-PR snapshot.
     @SerializedName(value = "newTabletRanges")
     protected final List<TabletRange> newTabletRanges;
+
+    // Used only by Gson deserialization; delegates to the validated 3-arg
+    // constructor so the same wrapping / preconditions apply. Gson then
+    // reflection-sets each field present in the JSON, leaving newTabletRanges
+    // at the empty default for legacy records that predate the field.
+    private SplittingTablet() {
+        this(0, Collections.emptyList(), Collections.emptyList());
+    }
 
     public SplittingTablet(long oldTabletId, List<Long> newTabletIds) {
         this(oldTabletId, newTabletIds, Collections.emptyList());
@@ -133,7 +147,7 @@ public class SplittingTablet implements ReshardingTablet {
         newTabletIds.subList(1, newTabletIds.size()).clear();
         // Drop stale FE-supplied ranges. After BE's identical fallback there is
         // a single inherited new tablet, not the K originally requested, so
-        // the PSPS-style range list would be both mis-sized and meaningless.
+        // the external-boundaries-style range list would be both mis-sized and meaningless.
         newTabletRanges.clear();
     }
 

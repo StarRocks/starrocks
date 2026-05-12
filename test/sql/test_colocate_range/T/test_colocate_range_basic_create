@@ -1,0 +1,24 @@
+-- name: test_colocate_range_basic_create @cloud @sequential
+-- SQL integration: basic CREATE / DROP of range-colocate tables.
+-- TSP-recorded R/ file pending; case definition lives here so the checker coverage
+-- can be regression-tracked once the test cluster supports range distribution.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_basic_${uuid0}:k1');
+
+show create table t1;
+
+create table t2 (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_basic_${uuid0}:k1');
+
+show create table t2;
+
+drop table t2;
+drop table t1;
+drop database db_${uuid0};

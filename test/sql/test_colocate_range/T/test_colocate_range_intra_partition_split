@@ -1,0 +1,26 @@
+-- name: test_colocate_range_intra_partition_split @cloud @sequential
+-- SQL integration: Level-2 (intra-colocate) tablet split. Children stay inside
+-- the same ColocateRange so ColocateRangeMgr is unchanged and the group stays stable.
+-- No checker-pause needed: Level-2 never produces an unstable group, so the colocate
+-- checker finds no work and does not interfere with the assertions.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_intra_${uuid0}:k1');
+
+-- Seed enough rows in a single colocate prefix (k1=100) to make a Level-2 split meaningful.
+insert into t (k1, k2, v)
+select 100, x, x from generate_series(1, 1000) as g(x);
+
+-- Manual split inside a single colocate prefix. Children stay in the same ColocateRange.
+alter table t split tablet properties('tablet_reshard_target_size' = '1024');
+
+-- Group must remain stable (no canonical boundary crossed).
+select count(*) from t a join t b on a.k1 = b.k1;
+
+drop table t;
+drop database db_${uuid0};

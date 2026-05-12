@@ -427,7 +427,7 @@ message TxnInfoPB {
 message SplittingTabletInfoPB {
     optional int64 old_tablet_id = 1;
     repeated int64 new_tablet_ids = 2;
-    // FE-supplied new-tablet ranges (PSPS / Pre-Sample & Pre-Split path).
+    // FE-supplied new-tablet ranges (external-boundaries path).
     // When non-empty:
     //   - BE skips data-driven boundary computation in `split_tablet` and
     //     dispatches to `compute_split_ranges_from_external_boundaries`

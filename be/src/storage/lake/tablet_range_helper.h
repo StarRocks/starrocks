@@ -62,7 +62,7 @@ public:
     // exactly: old range itself is well-formed; each new range is
     // well-formed and non-zero-width (lower != upper by byte equality);
     // adjacent ranges meet exactly with no gaps or overlaps; first.lower
-    // matches old.lower; last.upper matches old.upper. Used by the PSPS
+    // matches old.lower; last.upper matches old.upper. Used by the external boundaries
     // pre-split path to validate FE-supplied ranges before BE commits to
     // writing K new tablets.
     //
@@ -72,7 +72,7 @@ public:
     // checks.
     static Status validate_new_tablet_ranges(
             const TabletRangePB& old_tablet_range,
-            const ::google::protobuf::RepeatedPtrField<TabletRangePB>& new_tablet_ranges);
+            const google::protobuf::RepeatedPtrField<TabletRangePB>& new_tablet_ranges);
 };
 
 } // namespace starrocks::lake
