@@ -17,13 +17,13 @@ The StarRocks Type Checker system uses **mandatory** XML-based configuration for
 
 The type checker configuration is loaded from the following location:
 
-1. **Default Location**: `$STARROCKS_HOME/conf/type_checker_config.xml`
+1. **Default Location**: `$STARROCKS_HOME/lib/type_checker_config.xml`
    ```bash
    export STARROCKS_HOME=/opt/starrocks
-   # Configuration will be loaded from /opt/starrocks/conf/type_checker_config.xml
+   # Configuration will be loaded from /opt/starrocks/lib/type_checker_config.xml
    ```
 
-2. **Relative Fallback**: `conf/type_checker_config.xml` (if `STARROCKS_HOME` is not set)
+2. **Relative Fallback**: `lib/type_checker_config.xml` (if `STARROCKS_HOME` is not set)
 
 **IMPORTANT**: XML configuration is **mandatory**. The configuration file must exist at one of the above locations. If the file is not found or fails to parse, the system will log errors and continue with an empty checker map (default checker handles unknown types).
 
@@ -118,7 +118,7 @@ The following StarRocks logical types can be used in type rules:
 
 ## Default Type Mappings
 
-The default `conf/type_checker_config.xml` includes mappings for:
+The default `lib/type_checker_config.xml` includes mappings for:
 
 - **Java Primitives**: Byte, Short, Integer, Long, Boolean, Float, Double
 - **Java Objects**: String, BigInteger, BigDecimal
@@ -126,25 +126,25 @@ The default `conf/type_checker_config.xml` includes mappings for:
 - **Binary Types**: byte[], [B, java.util.UUID
 - **Database-Specific**: Oracle (TIMESTAMP, TIMESTAMPLTZ, TIMESTAMPTZ, OracleBlob), SQL Server (DateTimeOffset), ClickHouse (UnsignedByte, UnsignedShort, UnsignedInteger, UnsignedLong)
 
-See `conf/type_checker_config.xml` for the complete configuration.
+See `lib/type_checker_config.xml` for the complete configuration.
 
 ## Usage
 
 ### For Administrators
 
 1. **Using Default Configuration**
-   - The default configuration is provided at `conf/type_checker_config.xml`
+   - The default configuration is provided at `lib/type_checker_config.xml`
    - Ensure this file exists before starting StarRocks BE
    - No additional setup required if using standard type mappings
 
 2. **Custom Configuration**
    ```bash
    # Edit the configuration file
-   vim $STARROCKS_HOME/conf/type_checker_config.xml
+   vim $STARROCKS_HOME/lib/type_checker_config.xml
    
    # Or copy to a different location and symlink
-   cp conf/type_checker_config.xml /path/to/custom_config.xml
-   ln -s /path/to/custom_config.xml $STARROCKS_HOME/conf/type_checker_config.xml
+   cp lib/type_checker_config.xml /path/to/custom_config.xml
+   ln -s /path/to/custom_config.xml $STARROCKS_HOME/lib/type_checker_config.xml
    
    # Start StarRocks BE
    ./bin/start_be.sh
@@ -247,9 +247,9 @@ Run the type checker tests:
 2. Verify loading:
 ```bash
 # Place your test XML at the default location
-cp /tmp/test_config.xml $STARROCKS_HOME/conf/type_checker_config.xml
+cp /tmp/test_config.xml $STARROCKS_HOME/lib/type_checker_config.xml
 # Or without STARROCKS_HOME
-cp /tmp/test_config.xml conf/type_checker_config.xml
+cp /tmp/test_config.xml lib/type_checker_config.xml
 # Start BE and check logs
 ```
 
@@ -257,7 +257,7 @@ cp /tmp/test_config.xml conf/type_checker_config.xml
 
 To add a new type mapping:
 
-1. Edit your XML configuration file (or `conf/type_checker_config.xml`)
+1. Edit your XML configuration file (or `lib/type_checker_config.xml`)
 2. Add a new `<type-mapping>` element with appropriate type rules:
    ```xml
    <type-mapping java_class="com.example.CustomType" display_name="CustomType">
@@ -290,16 +290,16 @@ To add a new type mapping:
 
 2. Verify file exists and has correct permissions:
    ```bash
-   ls -la $STARROCKS_HOME/conf/type_checker_config.xml
+   ls -la $STARROCKS_HOME/lib/type_checker_config.xml
    # Or if STARROCKS_HOME is not set
-   ls -la conf/type_checker_config.xml
+   ls -la lib/type_checker_config.xml
    ```
 
 3. Check BE logs for error messages
 
 4. Validate XML syntax:
    ```bash
-   xmllint --noout conf/type_checker_config.xml
+   xmllint --noout lib/type_checker_config.xml
    ```
 
 ### Type Checker Not Working
@@ -315,13 +315,13 @@ To add a new type mapping:
 1. Ensure XML is well-formed (matching open/close tags)
 2. Verify all attributes are properly quoted
 3. Check for special characters that need escaping
-4. Use XML validator: `xmllint conf/type_checker_config.xml`
+4. Use XML validator: `xmllint lib/type_checker_config.xml`
 
 ## Migration from Previous Versions
 
 If you're upgrading from a version with hardcoded type checkers:
 
-1. **XML Configuration is Now Mandatory**: Ensure `conf/type_checker_config.xml` exists
+1. **XML Configuration is Now Mandatory**: Ensure `lib/type_checker_config.xml` exists
 2. **No Hardcoded Fallback**: The system will not fall back to hardcoded configuration
 3. **New XML Format**: Update any custom XML to use `<type-rule>` elements instead of `checker` attribute
 4. **Verify Configuration**: Test your XML configuration before deployment
@@ -355,6 +355,6 @@ All type validation logic is now data-driven via XML configuration, eliminating 
 - Type Checker Implementation: `be/src/types/checker/type_checker.h`
 - XML Loader: `be/src/types/checker/type_checker_xml_loader.h`
 - Type Checker Manager: `be/src/types/type_checker_manager.h`
-- Default Configuration: `conf/type_checker_config.xml`
+- Default Configuration: `lib/type_checker_config.xml`
 - Unit Tests: `be/test/types/type_checker_test.cpp`, `be/test/types/type_checker_xml_loader_test.cpp`
 
