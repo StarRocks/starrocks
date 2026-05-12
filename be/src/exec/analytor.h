@@ -29,7 +29,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "types/datum.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -225,7 +224,6 @@ private:
     void _materializing_process_for_range_frame(RuntimeState* state);
     // For ROWS frames with finite bounds.
     void _materializing_process_for_sliding_frame(RuntimeState* state);
-    void _materializing_process_for_range_offset_frame(RuntimeState* state);
     ProcessByPartitionFunc _materializing_process_impl = nullptr;
 
     // Update all window aggregate states from the frame range [frame_start, frame_end) within the current
@@ -245,10 +243,9 @@ private:
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
     void _compute_range_nonnull_segment();
-    FrameRange _get_range_offset_frame_range();
+    FrameRange _get_frame_for_range();
     int64_t _resolve_range_offset_boundary(const RangeBoundarySpec& boundary, bool is_start, bool current_row_is_null);
-    int64_t _seek_range_frame_start_with_offset(const Datum& boundary_value);
-    int64_t _seek_range_frame_end_with_offset(const Datum& boundary_value);
+    int64_t _seek_range_frame_boundary_with_offset(const RangeBoundarySpec& boundary, bool is_start);
     void _reset_range_frame_cursors();
 
     bool _has_output() const { return _output_chunk_index < _input_chunks.size(); }
@@ -261,13 +258,9 @@ private:
     int64_t _window_result_position() const {
         return _get_global_position(_current_row_position) - _first_global_position_of_current_chunk();
     }
-    FrameRange _get_frame_range() const {
-        if (_is_range_window) {
-            DCHECK(!_is_range_offset_window);
-            DCHECK_EQ(_range_start_boundary.type, RangeBoundaryType::CURRENT_ROW);
-            DCHECK_EQ(_range_end_boundary.type, RangeBoundaryType::CURRENT_ROW);
-            return {_peer_group.start, _peer_group.end};
-        } else if (_is_unbounded_preceding) {
+    FrameRange _get_frame_for_rows() const {
+        DCHECK(!_is_range_window);
+        if (_is_unbounded_preceding) {
             return {_partition.start, _current_row_position + _rows_end_offset + 1};
         } else {
             return {_current_row_position + _rows_start_offset, _current_row_position + _rows_end_offset + 1};
