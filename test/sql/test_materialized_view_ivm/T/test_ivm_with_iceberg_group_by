@@ -43,3 +43,8 @@ SELECT k, count(*) FROM test_mv1 GROUP BY k ORDER BY k;
 SELECT k FROM test_mv1 GROUP BY k ORDER BY k;
 SELECT DISTINCT k FROM test_mv1 ORDER BY k;
 SELECT k, sum(v) FROM test_mv1 GROUP BY k HAVING sum(v) >= 20 ORDER BY k;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.bug_base force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;

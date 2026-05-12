@@ -83,3 +83,15 @@ SELECT k, sum(v) FROM test_mv1 GROUP BY k HAVING sum(v) >= 20 ORDER BY k;
 2	20
 3	30
 -- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.bug_base force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
