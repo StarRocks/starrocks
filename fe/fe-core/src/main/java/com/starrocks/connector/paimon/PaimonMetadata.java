@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
@@ -283,8 +284,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         PaimonTable paimonTable = (PaimonTable) table;
         long latestSnapshotId = -1L;
         try {
-            if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
-                latestSnapshotId = paimonTable.getNativeTable().latestSnapshot().get().id();
+            Optional<Snapshot> latestSnapshot = paimonTable.getNativeTable().latestSnapshot();
+            if (latestSnapshot.isPresent()) {
+                latestSnapshotId = latestSnapshot.get().id();
             }
         } catch (Exception e) {
             // System table does not have snapshotId, ignore it.
