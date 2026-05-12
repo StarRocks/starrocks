@@ -25,13 +25,9 @@
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -62,6 +58,13 @@ class FragmentContext {
 public:
     FragmentContext();
     ~FragmentContext();
+
+    // Fragment-level shared MemPool — delegates to RuntimeState which owns it.
+    MemPool* fragment_mem_pool() { return _runtime_state ? _runtime_state->fragment_mem_pool() : nullptr; }
+
+    // PMR memory resource — delegates to RuntimeState which owns it.
+    std::pmr::memory_resource* mem_resource() { return _runtime_state ? _runtime_state->mem_resource() : nullptr; }
+
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
@@ -153,18 +156,6 @@ public:
     bool enable_resource_group() const { return _workgroup != nullptr; }
     TQueryType::type query_type() const;
 
-    // STREAM MV
-    Status reset_epoch();
-    void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
-    bool is_stream_pipeline() const { return _is_stream_pipeline; }
-    void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
-
-#ifdef BE_TEST
-    // for ut
-    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
-    bool is_stream_test() const { return _is_stream_test; }
-#endif
-
     size_t expired_log_count() { return _expired_log_count; }
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
@@ -225,9 +216,9 @@ private:
 
     std::unique_ptr<EventScheduler> _event_scheduler;
     PipelineTimer* _pipeline_timer = nullptr;
-    PipelineTimerTask* _timeout_task = nullptr;
-    PipelineTimerTask* _report_state_task = nullptr;
-    std::unordered_map<uint64_t, PipelineTimerTask*> _rf_timeout_tasks;
+    std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
+    std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
+    std::unordered_map<uint64_t, std::shared_ptr<PipelineTimerTask>> _rf_timeout_tasks;
 
     RuntimeFilterHub _runtime_filter_hub;
 
@@ -244,13 +235,6 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
-
-    // STREAM MV
-    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
-    bool _is_stream_pipeline = false;
-#ifdef BE_TEST
-    bool _is_stream_test = false;
-#endif
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;

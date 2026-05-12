@@ -67,7 +67,8 @@ public class TimeUtils {
 
     public static final String DEFAULT_TIME_ZONE = "Asia/Shanghai";
 
-    private static final ZoneId TIME_ZONE = ZoneOffset.ofTotalSeconds(8 * 3600);
+    public static final ZoneId DEFAULT_STORAGE_ZONE = ZoneOffset.ofTotalSeconds(8 * 3600);
+    private static final ZoneId TIME_ZONE = DEFAULT_STORAGE_ZONE;
 
     // set CST to +08:00 instead of America/Chicago
     public static final ImmutableMap<String, String> TIME_ZONE_ALIAS_MAP = ImmutableMap.of(
@@ -171,6 +172,29 @@ public class TimeUtils {
             return FeConstants.NULL_STRING;
         }
         return longToTimeString(timeStamp, DATETIME_TO_STRING_FORMAT);
+    }
+
+    /**
+     * Formats a timestamp using the session timezone and appends the UTC offset suffix.
+     * e.g. "2024-01-01 08:00:00 (+08:00)"
+     */
+    public static String longToTimeStringWithTimeZone(long timeStamp) {
+        return longToTimeStringWithTimeZone(timeStamp, getTimeZone().toZoneId());
+    }
+
+    /**
+     * Formats a timestamp using the given timezone and appends the UTC offset suffix.
+     * Use this overload when formatting multiple timestamps that should share the same timezone.
+     */
+    public static String longToTimeStringWithTimeZone(long timeStamp, ZoneId zoneId) {
+        if (timeStamp <= 0L) {
+            return FeConstants.NULL_STRING;
+        }
+        Instant instant = Instant.ofEpochMilli(timeStamp);
+        ZoneOffset offset = zoneId.getRules().getOffset(instant);
+        String time = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                .withZone(zoneId).format(instant);
+        return time + " (" + offset + ")";
     }
 
     public static LocalDate parseDate(String dateStr) throws AnalysisException {

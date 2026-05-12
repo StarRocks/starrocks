@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "connector/file_scan_metrics.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/avro_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
@@ -24,8 +25,6 @@
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks::connector {
 
@@ -206,7 +205,7 @@ void FileDataSource::_update_counter() {
     _runtime_state->update_num_rows_load_filtered(_counter.num_rows_filtered);
     _runtime_state->update_num_rows_load_unselected(_counter.num_rows_unselected);
     // update the file scan metrics all together
-    auto* metric_repo = GlobalMetricsRegistry::instance()->file_scan_metrics();
+    auto* metric_repo = FileScanMetrics::instance();
     if (metric_repo != nullptr) {
         metric_repo->update(_scanner->file_format(), _scanner->scan_type(), _counter);
     }

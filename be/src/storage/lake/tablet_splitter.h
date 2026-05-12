@@ -37,6 +37,24 @@ struct SegmentSplitInfo {
     int64_t num_rows = 0;
     int64_t data_size = 0;
     uint32_t source_id = 0; // Optional: for per-source statistics tracking (e.g., rowset_id)
+
+    // Equal-row-interval samples of the sort key (NON-DECREASING) and the row
+    // interval used to produce them. Populated from SegmentMetadataPB when
+    // available. Empty sort_key_samples <=> sort_key_sample_row_interval == 0.
+    // When non-empty, the producer guarantees
+    //   sort_key_samples.size() * sort_key_sample_row_interval < num_rows.
+    // Consumed by calculate_range_split_boundaries() to treat each segment as
+    // N+1 sub-segments with known row counts, instead of a single [min, max]
+    // range with a single divide-by-overlap-count estimate.
+    std::vector<VariantTuple> sort_key_samples;
+    int64_t sort_key_sample_row_interval = 0;
+
+    // Load sort-key samples from a SegmentMetadataPB. Validates that
+    // sort_key_samples.size() * sort_key_sample_row_interval < num_rows
+    // (overflow-safe); on failure, leaves sort_key_samples and
+    // sort_key_sample_row_interval at their defaults (empty/zero).
+    // Requires num_rows to be set before calling.
+    Status load_sort_key_samples(const SegmentMetadataPB& segment_meta);
 };
 
 // Per-range estimated statistics keyed by source_id.
@@ -72,10 +90,18 @@ struct RangeSplitResult {
 //
 // Returns RangeSplitResult with boundaries and per-range estimates, or empty boundaries if
 // splitting is not possible (e.g., not enough data or segments).
+//
+// colocate_column_count > 0 enables colocate-aware boundary canonicalization: when the
+// selected boundary crosses a colocate-prefix transition between adjacent candidate ranges,
+// the boundary tuple is replaced with the canonical (prefix(right), NULL, ..., NULL) shape.
+// This lets the FE classify the resulting tablet ranges as Level 1 (new ColocateRange) vs
+// Level 2 (intra-colocate) via syntactic equality on the lower bound.
+// colocate_column_count == 0 (default) preserves the pre-P3 behavior exactly.
 StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
                                                             int32_t target_split_count, int64_t target_value_per_split,
                                                             bool use_num_rows, bool track_sources = false,
-                                                            const TabletRange* tablet_range = nullptr);
+                                                            const TabletRange* tablet_range = nullptr,
+                                                            int32_t colocate_column_count = 0);
 
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,

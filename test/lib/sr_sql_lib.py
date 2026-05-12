@@ -644,6 +644,65 @@ class StarrocksSQLApiLib(object):
     def use_database(self, db_name):
         return self.execute_sql("use %s" % db_name)
 
+    def create_iceberg_catalog(self, catalog_name, catalog_type):
+        """
+        Create an iceberg external catalog for SQL tests, dispatching to a
+        builder per backend type. Each builder reads its own sr.conf vars
+        and does whatever pre-setup that type needs (e.g. mkdir the
+        hadoop-file warehouse root).
+
+        :param catalog_name: catalog name (already ${uuid0}-resolved)
+        :param catalog_type: one of {"hive", "hadoop"}
+        """
+        builders = {
+            "hive": self._create_iceberg_catalog_hive,
+            "hadoop": self._create_iceberg_catalog_hadoop,
+        }
+        builder = builders.get(catalog_type)
+        tools.assert_is_not_none(builder, "unknown iceberg catalog type: %s" % catalog_type)
+        return builder(catalog_name)
+
+    def _create_iceberg_catalog_hive(self, catalog_name):
+        """
+        Hive-metastore-backed iceberg catalog over OSS S3. Consumes:
+          ${iceberg_catalog_hive_metastore_uris}, ${oss_ak}, ${oss_sk},
+          ${oss_endpoint} — all shipped in [env] of the stock sr.conf.
+        """
+        sql = (
+            'create external catalog %s properties ('
+            '"type" = "iceberg", '
+            '"iceberg.catalog.type" = "hive", '
+            '"iceberg.catalog.hive.metastore.uris" = "%s", '
+            '"aws.s3.access_key" = "%s", '
+            '"aws.s3.secret_key" = "%s", '
+            '"aws.s3.endpoint" = "%s")'
+        ) % (catalog_name, self.iceberg_catalog_hive_metastore_uris,
+             self.oss_ak, self.oss_sk, self.oss_endpoint)
+        res = self.execute_sql(sql)
+        tools.assert_true(res["status"], "create hive iceberg catalog failed: %s" % res.get("msg"))
+
+    def _create_iceberg_catalog_hadoop(self, catalog_name):
+        """
+        Local-disk hadoop iceberg catalog. Consumes:
+          ${iceberg_local_warehouse_root} + ${uuid0}.
+        ${iceberg_local_warehouse_root} is NOT shipped in sr.conf; local devs
+        wanting to run against hadoop-on-file add it to their [replace]:
+          iceberg_local_warehouse_root = /tmp/starrocks-sql-test/iceberg
+        The warehouse sub-directory is mkdir'd before FE initializes the
+        catalog, since Iceberg HadoopCatalog's FE-side validation expects the
+        warehouse path to exist.
+        """
+        warehouse = "%s/sql_test/%s" % (self.iceberg_local_warehouse_root, self.uuid0)
+        os.makedirs(warehouse, exist_ok=True)
+        sql = (
+            'create external catalog %s properties ('
+            '"type" = "iceberg", '
+            '"iceberg.catalog.type" = "hadoop", '
+            '"iceberg.catalog.warehouse" = "file://%s")'
+        ) % (catalog_name, warehouse)
+        res = self.execute_sql(sql)
+        tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
+
     def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
                                   tolerate_exist=False):
         """
@@ -1094,7 +1153,7 @@ class StarrocksSQLApiLib(object):
 
             old_this_res_len = len(this_res)
             actual_res, actual_res_log, var, order = self.execute_single_statement(
-                _each_cmd, _cmd_id_str, record_mode, this_res, var_key=exec_id, conn=conn
+                _each_cmd, _cmd_id_str, record_mode and not uncheck, this_res, var_key=exec_id, conn=conn
             )
 
             if record_mode:
@@ -1336,17 +1395,17 @@ class StarrocksSQLApiLib(object):
                 log.info("[%s.check] only check with no Error" % sql_id)
                 tools.assert_equal(0, act[0], "shell %s error: %s" % (sql, act))
             elif not sql.startswith(FUNCTION_FLAG):
-                # Function, without error msg
-                log.info("[%s.check] only check with no Error" % sql_id)
+                # Explicit empty result block: verify no error and result is empty
+                log.info("[%s.check] check no Error and empty result" % sql_id)
                 tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
+                if not any(re.search(c, sql) for c in skip.skip_res_cmd):
+                    tools.assert_equal("", act, "sql result not match: expected empty but got (%s)" % str(act))
             else:
-                # SQL, with empty result
+                # function call with empty result
                 exp = []
             return
 
-        if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
-            condition in sql for condition in skip.skip_res_cmd
-        ):
+        if any(re.search(condition, sql) for condition in skip.skip_res_cmd):
             log.info("[%s.check] skip check" % sql_id)
             return
 
@@ -2277,7 +2336,19 @@ class StarrocksSQLApiLib(object):
                 mvs.sort()
                 print("Hit materialized views:", ", ".join(mvs))
                 return mvs
-        return self._with_materialized_view_rewrite(check_mv)
+
+        # Retry the check several times before declaring failure. MV partition
+        # staleness state propagates asynchronously after base-table writes, so
+        # the optimizer may not pick the expected rewrite (e.g. UNION) on the
+        # first explain call right after an INSERT.
+        max_retries = 5
+        for attempt in range(max_retries):
+            result = self._with_materialized_view_rewrite(check_mv)
+            if not isinstance(result, bool) or result:
+                return result
+            if attempt < max_retries - 1:
+                time.sleep(2)
+        return False
 
     def print_hit_materialized_views(self, query) -> str:
         """
@@ -2374,6 +2445,146 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.5)
             sleep_time += 0.5
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    @staticmethod
+    def _canonical_json(value):
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+    def _show_proc_rows(self, path):
+        res = self.execute_sql("SHOW PROC '%s'" % path, True)
+        tools.assert_true(res["status"], "show proc failed for %s: %s" % (path, res.get("msg")))
+        return res["result"]
+
+    def _show_schema_change_rows(self, db_name, table_name):
+        sql = (
+            "SHOW ALTER TABLE COLUMN FROM %s WHERE TableName = '%s' ORDER BY JobId DESC"
+            % (db_name, table_name.replace("'", "\\'"))
+        )
+        res = self.retry_execute_sql(sql, True)
+        tools.assert_true(res["status"], "show alter table column failed: %s" % res.get("msg"))
+        return res["result"]
+
+    def wait_table_schema_change_finish(self, db_name, table_name, expect_state="FINISHED", timeout_sec=300):
+        """
+        wait schema change job for the specified table finish and return status
+        """
+        elapsed = 0
+        status = ""
+        while elapsed < timeout_sec:
+            rows = self._show_schema_change_rows(db_name, table_name)
+            if rows:
+                status = rows[0][9]
+                if status in ("FINISHED", "CANCELLED", ""):
+                    break
+            time.sleep(1)
+            elapsed += 1
+        tools.assert_equal(expect_state, status, "wait table schema change finish error for %s.%s" % (db_name, table_name))
+        return status
+
+    def get_schema_change_job_count(self, db_name, table_name):
+        rows = self._show_schema_change_rows(db_name, table_name)
+        return len({str(row[0]) for row in rows})
+
+    def assert_schema_change_job_count(self, db_name, table_name, expected_count):
+        actual_count = self.get_schema_change_job_count(db_name, table_name)
+        tools.assert_equal(int(expected_count), actual_count, "unexpected schema change job count for %s.%s" % (db_name, table_name))
+
+    def get_latest_schema_change_job_info(self, db_name, table_name):
+        rows = self._show_schema_change_rows(db_name, table_name)
+        if not rows:
+            return self._canonical_json({})
+        row = rows[0]
+        info = {
+            "job_id": str(row[0]),
+            "table_name": str(row[1]),
+            "index_name": str(row[4]),
+            "index_id": str(row[5]),
+            "origin_index_id": str(row[6]),
+            "schema_version": str(row[7]),
+            "transaction_id": str(row[8]),
+            "state": str(row[9]),
+            "msg": str(row[10]),
+            "progress": str(row[11]),
+            "timeout": str(row[12]),
+        }
+        if len(row) > 13:
+            info["warehouse"] = str(row[13])
+        return self._canonical_json(info)
+
+    def assert_latest_schema_change_job_path(self, db_name, table_name, expected_path):
+        info = json.loads(self.get_latest_schema_change_job_info(db_name, table_name))
+        tools.assert_true(info, "no schema change job found for %s.%s" % (db_name, table_name))
+        tools.assert_equal("FINISHED", info["state"], "latest schema change job is not finished for %s.%s" % (db_name, table_name))
+        same_index = info["index_id"] == info["origin_index_id"]
+        if expected_path == "slow":
+            tools.assert_false(same_index, "expected slow path for %s.%s, but latest job kept same index id" % (db_name, table_name))
+        elif expected_path in ("fast", "fast_v1"):
+            tools.assert_true(same_index, "expected fast path for %s.%s, but latest job used shadow index" % (db_name, table_name))
+        else:
+            tools.assert_true(False, "unknown schema change path expectation: %s" % expected_path)
+
+    def get_index_identity_snapshot(self, db_name, table_name):
+        rows = self._show_proc_rows("/dbs/%s/%s/index_schema" % (db_name, table_name))
+        identities = [{"index_id": str(row[0]), "index_name": str(row[1])} for row in rows]
+        identities.sort(key=lambda item: (item["index_name"], item["index_id"]))
+        return self._canonical_json(identities)
+
+    def get_index_schema_snapshot(self, db_name, table_name):
+        index_rows = self._show_proc_rows("/dbs/%s/%s/index_schema" % (db_name, table_name))
+        snapshot = []
+        for index_row in index_rows:
+            index_id = str(index_row[0])
+            index_name = str(index_row[1])
+            schema_rows = self._show_proc_rows("/dbs/%s/%s/index_schema/%s" % (db_name, table_name, index_id))
+            columns = []
+            for row in schema_rows:
+                columns.append({
+                    "field": str(row[0]),
+                    "type": str(row[1]),
+                    "null": str(row[2]),
+                    "key": str(row[3]),
+                })
+            snapshot.append({
+                "index_id": index_id,
+                "index_name": index_name,
+                "columns": columns,
+            })
+        snapshot.sort(key=lambda item: (item["index_name"], item["index_id"]))
+        return self._canonical_json(snapshot)
+
+    def assert_sync_fast_path(self, db_name, table_name, expected_previous_job_count, expected_index_snapshot):
+        self.assert_schema_change_job_count(db_name, table_name, int(expected_previous_job_count) + 1)
+        self.assert_latest_schema_change_job_path(db_name, table_name, "fast")
+        actual_index_snapshot = self.get_index_identity_snapshot(db_name, table_name)
+        tools.assert_equal(
+            expected_index_snapshot,
+            actual_index_snapshot,
+            "unexpected index identity snapshot for sync fast path on %s.%s" % (db_name, table_name),
+        )
+
+    def assert_index_identity_snapshot(self, db_name, table_name, expected_index_snapshot):
+        actual_index_snapshot = self.get_index_identity_snapshot(db_name, table_name)
+        tools.assert_equal(
+            expected_index_snapshot,
+            actual_index_snapshot,
+            "unexpected index identity snapshot for %s.%s" % (db_name, table_name),
+        )
+
+    def assert_index_schema_columns(self, db_name, table_name, index_name, *expected_columns):
+        snapshot = json.loads(self.get_index_schema_snapshot(db_name, table_name))
+        for index in snapshot:
+            if index["index_name"] == index_name:
+                actual_columns = [
+                    "%s|%s|%s|%s" % (column["field"], column["type"], column["null"], column["key"])
+                    for column in index["columns"]
+                ]
+                tools.assert_equal(
+                    list(expected_columns),
+                    actual_columns,
+                    "unexpected schema for index %s on %s.%s" % (index_name, db_name, table_name),
+                )
+                return
+        tools.assert_true(False, "index %s not found on %s.%s" % (index_name, db_name, table_name))
 
     def wait_alter_table_not_pending(self, alter_type="COLUMN"):
         """

@@ -51,9 +51,9 @@ Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
     auto clone_pk_column = _pk_column->clone_empty();
     TRY_CATCH_BAD_ALLOC(
             PrimaryKeyEncoder::encode(_pkey_schema, data, 0, data.num_rows(), clone_pk_column.get(), pk_encoding_type));
-    std::vector<Slice> keys;
-    const Slice* vkeys =
-            PrimaryIndex::build_persistent_keys(*clone_pk_column, _key_size, 0, clone_pk_column->size(), &keys);
+    Buffer<Slice> keys;
+    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(*clone_pk_column, _key_size, 0,
+                                                                             clone_pk_column->size(), &keys));
     for (size_t i = 0; i < clone_pk_column->size(); i++) {
         RETURN_IF_ERROR(_pk_sst_builder->add(vkeys[i]));
     }

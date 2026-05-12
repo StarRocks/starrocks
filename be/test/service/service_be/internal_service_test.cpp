@@ -23,7 +23,7 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/utils.h"
-#include "exec/tablet_sink_index_channel.h"
+#include "exec/data_sinks/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
 #include "service/brpc_service_test_util.h"
 
@@ -38,6 +38,20 @@ TEST_F(InternalServiceTest, test_get_info_timeout_invalid) {
     service._get_info_impl(&request, &response, nullptr, -10);
     auto st = Status(response.status());
     ASSERT_TRUE(st.is_time_out());
+}
+
+TEST_F(InternalServiceTest, test_submit_mv_maintenance_task_not_supported) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    PMVMaintenanceTaskRequest request;
+    PMVMaintenanceTaskResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    service.submit_mv_maintenance_task(&cntl, &request, &response, &closure);
+
+    auto st = Status(response.status());
+    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_TRUE(st.message().find("Legacy incremental MV maintenance is no longer supported") != std::string::npos);
 }
 
 TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {

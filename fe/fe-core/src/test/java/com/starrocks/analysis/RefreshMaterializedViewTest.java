@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
@@ -30,6 +31,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,6 +46,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -286,6 +292,99 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             Assertions.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 90. " +
                             "Detail message: Batch build partition EVERY is date type but START or END does not type match.",
                     e.getMessage());
+        }
+    }
+
+    @Test
+    public void testLegacyIncrementalRefreshRejected() throws Exception {
+        String mvName = "legacy_incremental_refresh_mv";
+        starRocksAssert.withMaterializedView("create materialized view test." + mvName + "\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "as select k2, sum(v1) as total from test.tbl_with_mv group by k2;");
+        try {
+            MaterializedView mv = getMv("test", mvName);
+            mv.getRefreshScheme().setType(MaterializedViewRefreshType.INCREMENTAL);
+
+            RefreshMaterializedViewStatement statement =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(
+                            "refresh materialized view test." + mvName, connectContext);
+            DdlException exception = Assertions.assertThrows(DdlException.class,
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(statement));
+            Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                    exception.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("test." + mvName);
+        }
+    }
+
+    @Test
+    public void testIncrementalRefreshModeRejectsPartitionRefresh() throws Exception {
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+        starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_to_refresh\n" +
+                "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                "distributed by hash(id) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\n" +
+                "\"refresh_mode\" = \"incremental\"\n" +
+                ")\n" +
+                "as select id, data, date from `iceberg0`.`partitioned_db`.`t1` as a;");
+        try {
+            String sql = "REFRESH MATERIALIZED VIEW test.mv_incremental_to_refresh " +
+                    "PARTITION START('2020-01-01') END ('2020-01-03') FORCE;";
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+            Assertions.assertTrue(e.getMessage().contains(
+                    "Partition refresh is not supported for materialized views with refresh_mode=INCREMENTAL."));
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_incremental_to_refresh");
+        }
+    }
+
+    @Test
+    public void testIncrementalRefreshModeRejectsForceRefresh() throws Exception {
+        // Create a MV with PCT mode (no Iceberg required), then flip the persisted refresh_mode
+        // to "incremental" so the FORCE-rejection branch in the analyzer fires. This isolates the
+        // analyzer check from the IVM eligibility constraints of the CREATE path.
+        starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_force_refresh\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\n" +
+                "\"refresh_mode\" = \"pct\"\n" +
+                ")\n" +
+                "as select k1, k2, v1 from test.tbl_with_mv;");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "mv_incremental_force_refresh");
+            mv.getTableProperty().setMvRefreshMode("incremental");
+            mv.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental");
+
+            String sql = "REFRESH MATERIALIZED VIEW test.mv_incremental_force_refresh FORCE;";
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+            Assertions.assertTrue(e.getMessage().contains(
+                    "FORCE refresh is not supported for materialized views with refresh_mode=INCREMENTAL."),
+                    "expected FORCE rejection error, got: " + e.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_incremental_force_refresh");
+        }
+    }
+
+    @Test
+    public void testPctRefreshModeAllowsForceRefresh() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test.mv_pct_force_refresh\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\n" +
+                "\"refresh_mode\" = \"pct\"\n" +
+                ")\n" +
+                "as select k1, k2, v1 from test.tbl_with_mv;");
+        try {
+            String sql = "REFRESH MATERIALIZED VIEW test.mv_pct_force_refresh FORCE;";
+            // Should parse without error: FORCE is only blocked on INCREMENTAL/AUTO MVs.
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_pct_force_refresh");
         }
     }
 

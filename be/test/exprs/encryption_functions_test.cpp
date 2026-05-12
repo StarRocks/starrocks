@@ -21,7 +21,7 @@
 #include <sstream>
 
 #include "butil/time.h"
-#include "common/config.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "types/decimalv3.h"

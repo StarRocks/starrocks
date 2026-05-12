@@ -359,7 +359,7 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
 
     for (size_t col_idx = 0; col_idx < _scanner_ctx.materialized_columns.size(); col_idx++) {
         SlotDescriptor* slot_desc = _scanner_ctx.materialized_columns[col_idx].slot_desc;
-        const std::string& slot_name = slot_desc->col_name();
+        const auto slot_name = std::string(slot_desc->col_name());
         const TypeDescriptor& slot_type = slot_desc->type();
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         FillColumnArgs args{.num_rows = num_rows,
@@ -406,11 +406,16 @@ StatusOr<size_t> JniScanner::fill_empty_chunk(ChunkPtr* chunk) {
     return status;
 }
 
-static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
+static void build_nested_fields(const TypeDescriptor& type, std::string_view parent, std::string* sb) {
     for (int i = 0; i < type.children.size(); i++) {
         const auto& t = type.children[i];
         if (t.is_unknown_type()) continue;
-        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
+        std::string p;
+        if (type.is_struct_type()) {
+            p = fmt::format("{}.{}", parent, type.field_names[i]);
+        } else {
+            p = fmt::format("{}.${}", parent, i);
+        }
         if (t.is_complex_type()) {
             build_nested_fields(t, p, sb);
         } else {
@@ -523,7 +528,7 @@ std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOpti
     } else if (dynamic_cast<const HdfsTableDescriptor*>(hive_table)) {
         const auto* hdfs_table = down_cast<const HdfsTableDescriptor*>(hive_table);
         auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
-        std::string partition_full_path = partition_desc->location();
+        std::string partition_full_path(partition_desc->location());
         data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
 
         hive_column_names = hdfs_table->get_hive_column_names();
@@ -578,7 +583,7 @@ std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOpti
     const auto& scan_range = *(options.scan_range);
     const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(options.hive_table);
     auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
-    std::string partition_full_path = partition_desc->location();
+    std::string partition_full_path(partition_desc->location());
 
     std::string delta_file_paths;
     if (!scan_range.hudi_logs.empty()) {

@@ -8,41 +8,64 @@ USE db_${uuid0};
 
 SELECT * FROM information_schema.keywords ORDER BY word ASC;
 -- result:
+DELETE	1
+INDEX	1
+INSERT	1
+PASSWORD	0
+SELECT	1
+TABLE	1
+UPDATE	1
+USER	0
+VIEW	1
 -- !result
--- WORD  | RESERVED
--- ---------|---------
--- DELETE   | true
--- INDEX    | true
--- INSERT   | true
--- PASSWORD | false
--- SELECT   | true
--- TABLE    | true
--- UPDATE   | true
--- USER     | false
--- VIEW     | true
 
 SELECT * FROM information_schema.keywords WHERE RESERVED = true ORDER BY word ASC;
 -- result:
+DELETE	1
+INDEX	1
+INSERT	1
+SELECT	1
+TABLE	1
+UPDATE	1
+VIEW	1
 -- !result
 
 SELECT * FROM information_schema.keywords WHERE RESERVED = false ORDER BY word ASC;
 -- result:
+PASSWORD	0
+USER	0
 -- !result
 
 SELECT * FROM information_schema.keywords ORDER BY word ASC LIMIT 3 OFFSET 2;
 -- result:
+INSERT	1
+PASSWORD	0
+SELECT	1
 -- !result
 
 SELECT * FROM information_schema.keywords WHERE word LIKE 'S%' ORDER BY word ASC;
 -- result:
+SELECT	1
 -- !result
 
 SELECT * FROM information_schema.keywords WHERE word IN ('SELECT', 'USER', 'TABLE') ORDER BY word ASC;
 -- result:
+SELECT	1
+TABLE	1
+USER	0
 -- !result
 
 SELECT * FROM information_schema.keywords ORDER BY RESERVED DESC, word ASC;
 -- result:
+DELETE	1
+INDEX	1
+INSERT	1
+SELECT	1
+TABLE	1
+UPDATE	1
+VIEW	1
+PASSWORD	0
+USER	0
 -- !result
 
 ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "1");
@@ -50,6 +73,15 @@ ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "1");
 -- !result
 SELECT * FROM information_schema.keywords ORDER BY word ASC;
 -- result:
+DELETE	1
+INDEX	1
+INSERT	1
+PASSWORD	0
+SELECT	1
+TABLE	1
+UPDATE	1
+USER	0
+VIEW	1
 -- !result
 ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "100000");
 -- result:
@@ -66,8 +98,17 @@ CREATE USER test_user IDENTIFIED BY 'password';
 GRANT SELECT ON information_schema.keywords TO test_user;
 -- result:
 -- !result
-SELECT * FROM information_schema.keywords;
+SELECT * FROM information_schema.keywords ORDER BY word ASC;
 -- result:
+DELETE	1
+INDEX	1
+INSERT	1
+PASSWORD	0
+SELECT	1
+TABLE	1
+UPDATE	1
+USER	0
+VIEW	1
 -- !result
 DROP USER test_user;
 -- result:

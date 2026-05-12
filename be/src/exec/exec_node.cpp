@@ -55,9 +55,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -132,7 +132,8 @@ void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, Ru
 void ExecNode::register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc) {
     rf_desc->set_probe_plan_node_id(_id);
     _runtime_filter_collector.add_descriptor(rf_desc);
-    ExecEnv::GetInstance()->runtime_filter_cache()->add_rf_event(
+    auto* query_execution_services = state->query_execution_services();
+    query_execution_services->runtime->runtime_filter_cache->add_rf_event(
             {state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
              strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
     state->runtime_filter_registry()->register_descriptor(rf_desc);
@@ -153,8 +154,10 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
     if (state != nullptr && state->query_options().__isset.runtime_filter_scan_wait_time_ms) {
         _runtime_filter_collector.set_scan_wait_timeout_ms(state->query_options().runtime_filter_scan_wait_time_ms);
     }
-    if (state != nullptr && state->exec_env() != nullptr) {
-        _runtime_filter_collector.set_runtime_filter_cache(state->exec_env()->runtime_filter_cache());
+    if (state != nullptr && state->query_execution_services() != nullptr &&
+        state->query_execution_services()->runtime != nullptr) {
+        _runtime_filter_collector.set_runtime_filter_cache(
+                state->query_execution_services()->runtime->runtime_filter_cache);
     }
     if (tnode.__isset.filter_null_value_columns) {
         _filter_null_value_columns = tnode.filter_null_value_columns;
@@ -372,7 +375,6 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
-    collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

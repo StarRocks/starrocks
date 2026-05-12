@@ -23,13 +23,10 @@
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
 #include "fs/fs_starlet.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
-
-namespace starrocks {
-extern std::shared_ptr<StarOSWorker> g_worker;
-} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -44,12 +41,12 @@ public:
     StarletLocationProviderTest() = default;
     ~StarletLocationProviderTest() override = default;
     void SetUp() override {
-        g_worker = std::make_shared<StarOSWorker>();
+        set_staros_worker_for_test(std::make_shared<StarOSWorker>());
         _provider = new lake::StarletLocationProvider();
     }
     void TearDown() override {
         delete _provider;
-        g_worker.reset();
+        set_staros_worker_for_test(nullptr);
     }
 
     lake::StarletLocationProvider* _provider;
@@ -74,13 +71,13 @@ TEST_F(StarletLocationProviderTest, test_get_real_location) {
     shard_info.id = tablet_id;
     shard_info.path_info.set_full_path(root_path);
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    auto backup_worker = g_worker;
-    auto defer = DeferOp([backup_worker] { g_worker = backup_worker; });
-    g_worker.reset(new MockStarOSWorker());
+    // Preserve original worker value, and reset it to our mocked worker.
+    auto backup_worker = get_staros_worker();
+    auto defer = DeferOp([backup_worker] { set_staros_worker_for_test(backup_worker); });
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
 
     // set mock function excepted call
-    auto worker = dynamic_cast<MockStarOSWorker*>(g_worker.get());
+    auto worker = dynamic_cast<MockStarOSWorker*>(get_staros_worker().get());
     EXPECT_CALL(*worker, _fetch_shard_info_from_remote(tablet_id)).WillRepeatedly(::testing::Return(shard_info));
 
     // fire the testing

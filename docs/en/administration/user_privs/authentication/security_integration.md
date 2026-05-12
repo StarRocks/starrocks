@@ -40,9 +40,10 @@ PROPERTIES (
     "authentication_ldap_simple_server_host" = "",
     "authentication_ldap_simple_server_port" = "",
     "authentication_ldap_simple_bind_base_dn" = "",
-    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_user_search_attr" = "",
     "authentication_ldap_simple_bind_root_dn" = "",
     "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_bind_dn_pattern" = "",
     "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
     "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
     "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
@@ -74,13 +75,13 @@ PROPERTIES (
 
 ##### authentication_ldap_simple_bind_base_dn
 
-- Required: Yes
-- Description: The base Distinguished Name (DN) of the LDAP user for which the cluster searches.
+- Required: No
+- Description: The base Distinguished Name (DN) of the LDAP user for which the cluster searches. Required when using search-and-bind mode. Not needed when using direct bind mode with `authentication_ldap_simple_bind_dn_pattern`.
 
 ##### authentication_ldap_simple_user_search_attr
 
-- Required: Yes
-- Description: The user's attribute used to log in to the LDAP service, for example, `uid`.
+- Required: No
+- Description: The user's attribute used to log in to the LDAP service, for example, `uid`. Required when using search-and-bind mode.
 
 :::note
 
@@ -97,13 +98,18 @@ For more details, see the DN matching mechanism in [Authenticate User Groups](..
 
 ##### authentication_ldap_simple_bind_root_dn
 
-- Required: Yes
-- Description: The admin DN of your LDAP service.
+- Required: No
+- Description: The admin DN of your LDAP service. Required when using search-and-bind mode.
 
 ##### authentication_ldap_simple_bind_root_pwd
 
-- Required: Yes
-- Description: The admin password of your LDAP service.
+- Required: No
+- Description: The admin password of your LDAP service. Required when using search-and-bind mode.
+
+##### authentication_ldap_simple_bind_dn_pattern
+
+- Required: No
+- Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. The pattern must produce a valid LDAP Distinguished Name (DN); UPN-style patterns like `${USER}@domain` are not supported. For example, `uid=${USER},ou=People,dc=example,dc=com`. Multiple patterns can be separated by semicolons, and the system will try each pattern in order until one succeeds. When this parameter is set, the system skips the search step and directly binds with the constructed DN, so `authentication_ldap_simple_bind_base_dn`, `authentication_ldap_simple_user_search_attr`, `authentication_ldap_simple_bind_root_dn`, and `authentication_ldap_simple_bind_root_pwd` are not required.
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 

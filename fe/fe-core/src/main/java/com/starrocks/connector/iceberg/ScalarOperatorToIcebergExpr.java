@@ -110,9 +110,12 @@ public class ScalarOperatorToIcebergExpr {
 
     public Expression convert(List<ScalarOperator> operators, IcebergContext context, boolean strict) {
         IcebergExprVisitor visitor = new IcebergExprVisitor();
+        IcebergContext effectiveContext = strict && !context.isStrict()
+                ? new IcebergContext(context.getSchema(), context.isInsideNot(), true)
+                : context;
         List<Expression> expressions = Lists.newArrayList();
         for (ScalarOperator operator : operators) {
-            Expression filterExpr = operator.accept(visitor, context);
+            Expression filterExpr = operator.accept(visitor, effectiveContext);
             if (filterExpr == null) {
                 if (strict) {
                     LOG.debug("Strict mode: cannot convert operator {}", operator.debugString());
@@ -141,13 +144,33 @@ public class ScalarOperatorToIcebergExpr {
 
     public static class IcebergContext {
         private final Types.StructType schema;
+        private final boolean insideNot;
+        private final boolean strict;
 
         public IcebergContext(Types.StructType schema) {
+            this(schema, false, false);
+        }
+
+        public IcebergContext(Types.StructType schema, boolean insideNot, boolean strict) {
             this.schema = schema;
+            this.insideNot = insideNot;
+            this.strict = strict;
         }
 
         public Types.StructType getSchema() {
             return schema;
+        }
+
+        public boolean isInsideNot() {
+            return insideNot;
+        }
+
+        public boolean isStrict() {
+            return strict;
+        }
+
+        public IcebergContext withInsideNot() {
+            return new IcebergContext(schema, true, strict);
         }
     }
 
@@ -185,7 +208,7 @@ public class ScalarOperatorToIcebergExpr {
                 if (operator.getChild(0) instanceof LikePredicateOperator) {
                     return null;
                 }
-                Expression expression = operator.getChild(0).accept(this, context);
+                Expression expression = operator.getChild(0).accept(this, context.withInsideNot());
 
                 if (expression != null) {
                     return not(expression);
@@ -195,6 +218,21 @@ public class ScalarOperatorToIcebergExpr {
                 Expression right = operator.getChild(1).accept(this, context);
                 if (left != null && right != null) {
                     return (op == CompoundPredicateOperator.CompoundType.OR) ? or(left, right) : and(left, right);
+                }
+                // For AND predicates outside of NOT, allow partial pushdown.
+                // If only one side converts successfully, push down that side alone.
+                // This is safe because AND(a, b) is more restrictive than just a (or just b),
+                // so pushing down one side still correctly filters data.
+                // This must NOT be done inside NOT, because NOT(AND(a, b)) = OR(NOT(a), NOT(b)),
+                // and pushing down NOT(a) alone would over-filter.
+                if (!context.isStrict() && !context.isInsideNot()
+                        && op == CompoundPredicateOperator.CompoundType.AND) {
+                    if (left != null) {
+                        return left;
+                    }
+                    if (right != null) {
+                        return right;
+                    }
                 }
             }
             return null;

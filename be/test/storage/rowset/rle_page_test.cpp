@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <memory>
 
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_pool.h"
@@ -64,7 +65,7 @@ public:
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const CppType*>(column->raw_data());
+        *ret = GetStorageContainer<type>::get_data(column, 0);
     }
 
     template <LogicalType Type, class PageBuilderType = RlePageBuilder<Type>>
@@ -103,7 +104,7 @@ public:
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(size, size_to_fetch);
 
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
+        const auto values = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < size; i++) {
             if (src[i] != values[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];

@@ -18,18 +18,19 @@
 #include <queue>
 
 #include "base/brpc/ref_count_closure.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "serde/protobuf_serde.h"
+#include "storage/chunk_helper.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
-#include "util/brpc_stub_cache.h"
-#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {
 
@@ -287,7 +288,7 @@ Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService
     }
     auto& values_pb = result.values();
     TRY_CATCH_BAD_ALLOC({
-        StatusOr<Chunk> res = serde::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
+        StatusOr<Chunk> res = ChunkHelper::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
         if (!res.ok()) return res.status();
         values.columns().swap(res.value().columns());
     });

@@ -155,7 +155,7 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
                                               bool diff_case_sensitive) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
-        std::string col_name = slot->col_name();
+        std::string col_name(slot->col_name());
         if (diff_case_sensitive && std::isupper(col_name[0])) {
             std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::tolower);
         } else if (diff_case_sensitive && std::islower(col_name[0])) {
@@ -321,6 +321,25 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
     ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
     EXPECT_FALSE(status.ok());
+}
+
+TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMicros) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.is_first_split = true;
+
+    TExprMinMaxValue min_max_value;
+    min_max_value.__set_type(TExprNodeType::INT_LITERAL);
+    min_max_value.__set_has_null(false);
+    min_max_value.__set_all_null(false);
+    min_max_value.__set_min_int_value(-1);
+    min_max_value.__set_max_int_value(0);
+
+    auto col = ctx.create_min_max_value_column(tuple_desc->slots()[0], min_max_value, 2);
+    ASSERT_EQ(2, col->size());
+    EXPECT_EQ("1969-12-31 23:59:59.999999", col->debug_item(0));
+    EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
 }
 
 // ========================= ORC SCANNER ============================

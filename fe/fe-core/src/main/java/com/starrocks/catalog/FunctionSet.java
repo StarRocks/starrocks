@@ -110,6 +110,7 @@ public class FunctionSet {
     public static final String DAYNAME = "dayname";
     public static final String DAYOFMONTH = "dayofmonth";
     public static final String DAYOFWEEK = "dayofweek";
+    public static final String DAYOFWEEK_ISO = "dayofweek_iso";
     public static final String DAYOFYEAR = "dayofyear";
     public static final String FROM_DAYS = "from_days";
     public static final String FROM_UNIXTIME = "from_unixtime";
@@ -141,6 +142,7 @@ public class FunctionSet {
     public static final String LOCALTIMESTAMP = "localtimestamp";
 
     public static final String WEEK = "week";
+    public static final String WEEK_ISO = "week_iso";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -307,6 +309,10 @@ public class FunctionSet {
     public static final String ISNOTNULL = "isnotnull";
     public static final String ASSERT_TRUE = "assert_true";
     public static final String HOST_NAME = "host_name";
+    // materialize: identity function that acts as an optimization barrier.
+    // Returns the input unchanged but is opaque to the FE optimizer,
+    // preventing constant folding, partition pruning, and other rewrites.
+    public static final String MATERIALIZE = "materialize";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
     public static final String ENCODE_SORT_KEY = "encode_sort_key";

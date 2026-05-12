@@ -122,7 +122,7 @@ private:
     Status _construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
-                             const std::string& col_name);
+                             std::string_view col_name);
 
     Status _check_ndjson();
 
@@ -168,6 +168,11 @@ private:
     size_t _payload_capacity = 0;
 
     TBrokerRangeDesc _range_desc;
+
+    // CDC envelope type
+    TEnvelopeType::type _envelope_type = TEnvelopeType::NONE;
+    // CDC operation for current row: 0 = upsert, 1 = delete; 0xFF = sentinel (not yet set this row)
+    uint8_t _cdc_op = 0xFF;
 };
 
 } // namespace starrocks

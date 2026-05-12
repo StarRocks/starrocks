@@ -15,6 +15,7 @@
 #include "exec/sorting/merge.h"
 
 #include "exec/sorting/sort_permute.h"
+#include "exprs/expr_context.h"
 
 namespace starrocks {
 StatusOr<MergedRun> MergedRun::build(ChunkUniquePtr&& chunk, const std::vector<ExprContext*>& exprs) {

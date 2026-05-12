@@ -142,6 +142,7 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
     public void processOnce() {
         // Set status of query to OK.
         ctx.getState().reset();
+        ctx.setMultiStmt(false);
         executor = null;
 
         // Only handle query，so no need to dispatch
@@ -310,7 +311,6 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
         executor = new StmtExecutor(ctx, parsedStmt, deploymentFinished);
         ctx.setIsLastStmt(true);
-        ctx.setSingleStmt(true);
         ctx.setExecutor(executor);
 
         executor.addRunningQueryDetail(parsedStmt);

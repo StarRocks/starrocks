@@ -142,13 +142,15 @@ Parquet 格式示例：
 
 如果此项设置为 `true`：
 
-- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 - 对于 DECIMAL 类型，系统使用 `fixed_len_byte_array` 编码。
+- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 
 如果此项设置为 `false`：
 
-- 对于 DATETIME 类型，系统使用 `INT64` 编码。
 - 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码。
+- 对于 DATETIME 类型，系统使用 `INT64` 编码。
+  - **即时语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `true`，系统将输出一个已转换为 UTC 的时间戳。每个值都能在时间轴上唯一标识一个特定时刻，并可转换为特定时区。
+  - **本地语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `false`，系统将输出一个表示本地时区中的年、月、日、时、分、秒及亚秒的时间戳，无论具体哪个时区被视为本地时区。此类值始终以相同方式显示，无论当前生效的本地时区为何，且无法标识时间轴上的特定时刻。
 
 :::note
 
@@ -238,13 +240,26 @@ CSV 格式示例：
 单批中的所有数据文件必须具有相同的文件格式。
 :::
 
-##### 推送目标表结构检查
+##### 目标表类型/Schema 下推
 
-从 v3.4.0 开始，系统支持将目标表结构检查推送到 `FILES()` 的扫描阶段。
+从 v3.4.0 开始，系统支持将目标表的列类型下推到 `FILES()` 的扫描阶段，以提升类型推断精度。
 
-`FILES()` 的结构检测并不完全严格。例如，CSV 文件中的任何整数列在函数读取文件时被推断和检查为 BIGINT 类型。在这种情况下，如果目标表中的相应列是 `TINYINT` 类型，CSV 数据记录中超过 BIGINT 类型的数据将不会被过滤。相反，它们将被隐式填充为 `NULL`。
+`FILES()` 的结构检测并不完全严格。例如，CSV 文件中的任何整数列在函数读取文件时被推断为 BIGINT 类型。在这种情况下，如果目标表中的相应列是 `TINYINT` 类型，CSV 数据记录中超过 TINYINT 范围的数据将不会被过滤。相反，它们将被隐式填充为 `NULL`。
 
-为了解决此问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_schema`，用于控制是否将目标表结构检查推送到 `FILES()` 的扫描阶段。通过将 `files_enable_insert_push_down_schema` 设置为 `true`，系统将在文件读取时过滤掉未通过目标表结构检查的数据记录。
+为了解决此问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_column_type`（别名：`files_enable_insert_push_down_schema`），用于控制是否将目标表列类型下推到 `FILES()` 的扫描阶段。通过将 `files_enable_insert_push_down_column_type` 设置为 `true`，系统将在文件读取阶段用目标表列类型重写已推断出的匹配列的类型。仅影响文件推断 schema 中已存在的列，不增加或删除列。
+
+如需完整的 schema 下推（列名和列类型均下推），可在 INSERT 语句中设置属性 `enable_push_down_schema` 为 `true`。该属性是 INSERT 属性，不是 `FILES()` 的属性：
+
+```sql
+INSERT INTO target_table
+PROPERTIES ("enable_push_down_schema" = "true")
+SELECT * FROM FILES(
+    "path" = "s3://...",
+    "format" = "parquet"
+);
+```
+
+设置 `enable_push_down_schema` 为 `true` 后，StarRocks 会将 `FILES()` 的 schema 重塑为目标表列 —— 补充推断 schema 中缺失的列，并将 schema 裁剪为 SELECT 列表实际读取的列。需要注意的是，当使用 `BY NAME` 模式且 SELECT 为 `*` 时，`*` 会展开为目标表的列名而非文件的原始列名，因此文件中多余的列即使使用 `SELECT *` 也会被排除。
 
 ##### 联合化具有不同结构的文件
 
@@ -546,6 +561,22 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
   | `azure.adls2.oauth2_client_id`       | 是          | 服务主体的客户端（应用程序）ID。        |
   | `azure.adls2.oauth2_client_secret`   | 是          | 创建的新客户端（应用程序）密钥的值。    |
   | `azure.adls2.oauth2_client_endpoint` | 是          | 服务主体或应用程序的 OAuth 2.0 令牌终端（v1）。 |
+
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
 ##### Azure Data Lake Storage Gen1
 
@@ -913,7 +944,12 @@ unload_data_param ::=
     "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
+    "target_max_file_size" = "<int>",
+    "csv.column_separator" = "<column_separator>",
+    "csv.row_delimiter" = "<row_delimiter>",
+    "csv.include_header" = { "true" | "false" },
+    "csv.enclose" = "<enclose_character>",
+    "csv.escape" = "<escape_character>"
 ```
 
 | **Key**          | **Required** | **Description**                                              |
@@ -922,6 +958,11 @@ unload_data_param ::=
 | `partition_by`     | No           | 用于将数据文件分区到不同存储路径的列列表。多个列用逗号（,）分隔。`FILES()` 提取指定列的键/值信息，并将数据文件存储在具有提取键/值对的存储路径下。有关进一步说明，请参见示例 7。 |
 | `single`           | No           | 是否将数据导出到单个文件。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果导出数据量超过 512 MB，数据将存储在多个文件中。</li></ul>                  |
 | `target_max_file_size` | No           | 要导出的批次中每个文件的最大大小（此值仅为系统尽力达成的目标，不代表实际结果）。单位：字节。默认值：1073741824（1 GB）。当要导出的数据大小超过此值时，数据将被分割成多个文件，并且每个文件的大小不会显著超过此值。引入于 v3.2.7。 |
+| `csv.column_separator` | No       | CSV 格式导出文件中使用的列分隔符。默认值：`\t`。仅在 `format` 为 `csv` 时生效。                           |
+| `csv.row_delimiter` | No          | CSV 格式导出文件中使用的行分隔符。默认值：`\n`。仅在 `format` 为 `csv` 时生效。                          |
+| `csv.include_header` | No         | 是否在 CSV 格式导出文件的首行输出列名。有效值：`true`、`false`（默认）。仅在 `format` 为 `csv` 时生效。 |
+| `csv.enclose`      | No           | CSV 格式导出文件中用于包裹每个字段值的字符。指定该参数后，所有非 NULL 字段值将被该字符包裹，字段值内出现的 enclose/escape 字符将使用 `csv.escape` 字符进行转义。NULL 值输出为 `\N`，不进行包裹。类型：单字节 ASCII 字符。多字符或多字节（非 ASCII）的值会被语义层拒绝。默认值：`NONE`（禁用）。仅在 `format` 为 `csv` 时生效。 |
+| `csv.escape`       | No           | 用于转义 enclose 字符和 escape 字符自身的字符。类型：单字节 ASCII 字符。多字符或多字节（非 ASCII）的值会被语义层拒绝。默认值：`NONE`。常见组合：<ul><li>`"csv.enclose"="\""`, `"csv.escape"="\""`：RFC 4180 风格（双引号重复）。</li><li>`"csv.enclose"="\""`, `"csv.escape"="\\"`：反斜杠转义风格。</li></ul>**注意**<br />将 RFC 4180 双引号重复格式的输出（即 `escape` 与 `enclose` 相同）重新导入到 StarRocks 时，读端只需设置 `csv.enclose`，不要设置 `csv.escape`。StarRocks 的 CSV reader 通过其 ENCLOSE 状态原生处理双引号重复。 |
 
 ## 示例
 

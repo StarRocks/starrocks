@@ -24,7 +24,6 @@
 #include "common/system/backend_options.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
-#include "util/stack_util.h"
 
 namespace starrocks::io {
 

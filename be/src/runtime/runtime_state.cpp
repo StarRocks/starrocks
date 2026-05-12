@@ -160,6 +160,13 @@ RuntimeState::~RuntimeState() {
     }
 }
 
+void RuntimeState::init_fragment_mem_pool() {
+    if (_fragment_mem_pool == nullptr) {
+        _fragment_mem_pool = std::make_unique<MemPool>();
+        _mem_resource = std::make_unique<MemPoolResource>(_fragment_mem_pool.get());
+    }
+}
+
 void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) {
     _fragment_ctx = fragment_ctx;
 }
@@ -325,13 +332,6 @@ int64_t RuntimeState::get_load_mem_limit() const {
         return _query_options.load_mem_limit;
     }
     return 0;
-}
-
-Status RuntimeState::reset_epoch() {
-    std::lock_guard<std::mutex> l(_tablet_infos_lock);
-    _tablet_commit_infos.clear();
-    _tablet_fail_infos.clear();
-    return Status::OK();
 }
 
 } // end namespace starrocks

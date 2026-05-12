@@ -17,6 +17,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
@@ -34,6 +35,7 @@ template <LogicalType field_type, typename ItemSet>
 class ColumnInPredicate final : public ColumnPredicate {
     using ValueType = StorageCppType<field_type>;
     static_assert(std::is_same_v<ValueType, typename ItemSet::value_type>);
+    static_assert(!lt_is_string_or_binary<field_type>, "ColumnInPredicate does not support string/binary types");
 
 public:
     ColumnInPredicate(const TypeInfoPtr& type_info, ColumnId id, ItemSet values)
@@ -42,8 +44,10 @@ public:
     ~ColumnInPredicate() override = default;
 
     template <typename Op>
-    inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+    Status t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const ValueType*>(visitor.result());
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
                 sel[i] = Op::apply(sel[i], (uint8_t)(_values.contains(v[i])));
@@ -54,25 +58,25 @@ public:
                 sel[i] = Op::apply(sel[i], (uint8_t)(!null_data[i] && _values.contains(v[i])));
             }
         }
+        return Status::OK();
     }
 
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
     Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
     }
 
     Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const ValueType*>(visitor.result());
 
         uint16_t new_size = 0;
         if (!column->has_null()) {
@@ -474,6 +478,8 @@ private:
 
 template <LogicalType LT>
 class BitsetInPredicate final : public ColumnPredicate {
+    static_assert(!lt_is_string_or_binary<LT>, "BitsetInPredicate does not support string/binary types");
+
 public:
     using CppType = typename Bitset<LT>::CppType;
 
@@ -482,22 +488,21 @@ public:
     ~BitsetInPredicate() override = default;
 
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        _t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
-        return Status::OK();
+        return _t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
     Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        _t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
-        return Status::OK();
+        return _t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
     }
 
     Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        _t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
-        return Status::OK();
+        return _t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
-        auto* v = reinterpret_cast<const CppType*>(column->raw_data());
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const CppType*>(visitor.result());
 
         uint16_t new_size = 0;
         if (!column->has_null()) {
@@ -573,8 +578,10 @@ public:
 
 private:
     template <typename Op>
-    inline void _t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
-        auto* v = reinterpret_cast<const CppType*>(column->raw_data());
+    inline Status _t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const CppType*>(visitor.result());
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
                 const uint8_t res = _bitset.template contains<true /*CheckRange*/>(v[i], true);
@@ -587,6 +594,7 @@ private:
                 sel[i] = Op::apply(sel[i], res);
             }
         }
+        return Status::OK();
     }
 
     Bitset<LT> _bitset;

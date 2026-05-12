@@ -19,6 +19,7 @@
 #include <shared_mutex>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "base/bthreads/single_flight.h"
 #include "common/statusor.h"
@@ -175,6 +176,13 @@ public:
     bool is_tablet_in_worker(int64_t tablet_id) { return true; }
 #endif
 #endif // USE_STAROS
+
+    // Pick a tablet id from `candidates` that is already known to this worker's staros
+    // shard cache (so that later location_provider calls can resolve it without issuing
+    // a get-shard-info RPC to StarMgr). Falls back to the first candidate when none is
+    // local or when USE_STAROS is not enabled. Callers must ensure `candidates` is not
+    // empty.
+    int64_t pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates);
 
     Status drop_local_cache(const std::string& path);
     void prune_metacache();

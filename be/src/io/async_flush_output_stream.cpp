@@ -15,10 +15,10 @@
 #include "io/async_flush_output_stream.h"
 
 #include "base/failpoint/fail_point.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::io {
 

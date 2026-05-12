@@ -16,14 +16,18 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -149,7 +153,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     auto replicate_snapshot_agent_task = std::make_shared<ReplicateSnapshotAgentTaskRequest>(
             agent_task_request, agent_task_request.replicate_snapshot_req, time(nullptr));
 
-    run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr);
+    run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr, nullptr);
 
     TPublishVersionRequest publish_version_request;
     publish_version_request.__set_transaction_id(_transaction_id);
@@ -255,6 +259,73 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     Status st = task.execute();
     ASSERT_TRUE(st.is_corruption());
     tablet->set_is_dropping(false);
+}
+
+TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::CREATE));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::ALTER));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::REMOTE_SNAPSHOT));
+}
+
+TEST_F(AgentTaskTest, get_thread_pool_returns_null_for_unsupported_types) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    const int unsupported_types[] = {TTaskType::PUSH, TTaskType::REALTIME_PUSH, TTaskType::EXTERNAL_CLUSTER_SNAPSHOT,
+                                     TTaskType::NUM_TASK_TYPE, -1};
+    for (int type : unsupported_types) {
+        EXPECT_EQ(nullptr, agent_server->get_thread_pool(type)) << type;
+    }
+}
+
+TEST_F(AgentTaskTest, update_thread_pool_size_applies_cpu_scaled_policy) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::UPLOAD);
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_max_threads = thread_pool->max_threads();
+    DeferOp defer([agent_server, original_max_threads]() {
+        agent_server->update_max_thread_by_type(TTaskType::UPLOAD, original_max_threads);
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::UPLOAD, 0);
+
+    ASSERT_EQ(std::max(1, CpuInfo::num_cores()), thread_pool->max_threads());
+}
+
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
+
+    constexpr int new_parallelism = 4;
+    const int expected_max_threads =
+            std::max(static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * new_parallelism, 2);
+
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, new_parallelism);
+
+    ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
+}
+
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_skips_missing_pool) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_max_threads = thread_pool->max_threads();
+
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, 4);
+
+    ASSERT_EQ(original_max_threads, thread_pool->max_threads());
 }
 
 TEST_F(AgentTaskTest, create_tablet_task_timeout) {

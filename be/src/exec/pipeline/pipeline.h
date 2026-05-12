@@ -19,7 +19,7 @@
 
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
@@ -101,10 +101,6 @@ public:
         return ss.str();
     }
 
-    // STREAM MV
-    Status reset_epoch(RuntimeState* state);
-    void count_down_epoch_finished_driver(RuntimeState* state);
-
     size_t output_amplification_factor() const;
     Event* pipeline_event() const { return _pipeline_event.get(); }
 
@@ -117,8 +113,6 @@ private:
 
     EventPtr _pipeline_event;
     ExecutionGroupRawPtr _execution_group = nullptr;
-    // STREAM MV
-    std::atomic<size_t> _num_epoch_finished_drivers = 0;
 };
 
 } // namespace pipeline

@@ -25,7 +25,8 @@ jobs:
   info:
     if: >
       (github.event.pull_request && github.event.requested_team) ||
-      (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved')
+      (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved') ||
+      github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     env:
       REPO: ${{ github.repository }}
@@ -113,6 +114,28 @@ jobs:
 
     steps:
       - name: PROTO-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  global-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event_name == 'pull_request_review' &&
+      needs.info.outputs.BASE_REF == 'main' &&
+      !contains(needs.info.outputs.LABELS, 'sync') &&
+      !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
+    name: GLOBAL REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: global-reviewer
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: GLOBAL REVIEW
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh

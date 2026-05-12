@@ -119,6 +119,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
 - Introduced in: -
 
+### `audit_stmt_before_execute`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether FE emits a `BEFORE_QUERY` audit event before each statement executes. When enabled, ConnectProcessor writes one audit record before statement execution and still writes the normal `AFTER_QUERY` audit record after the statement finishes. For multi-statement requests, this happens per executed statement: statements executed before a failure each emit a before/after pair, the failed statement also emits both records, and statements after the failure emit nothing because they are not executed. Parse failures are unchanged and still only produce the existing failed after-audit for the original SQL text. This is an FE-wide switch, so changing it affects all sessions on the FE.
+- Introduced in: v4.1
+
 ### `bdbje_log_level`
 
 - Default: INFO
@@ -1368,6 +1377,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: When StarRocks deserializes TaskRun history rows for `information_schema.task_runs`, a corrupted or invalid JSON row will normally cause deserialization to log a warning and throw a RuntimeException. If this item is set to `true`, the system will catch deserialization errors, skip the malformed record, and continue processing remaining rows instead of failing the query. This will make `information_schema.task_runs` queries tolerant of bad entries in the `_statistics_.task_run_history` table. Note that enabling it will silently drop corrupted history records (potential data loss) instead of surfacing an explicit error.
 - Introduced in: v3.3.3, v3.4.0, v3.5.0
+
+### `leader_demotion_drain_timeout_sec`
+
+- Default: 180
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Per-daemon timeout used during leader demotion to wait for each leader-only daemon worker thread to exit after being interrupted. If a worker is still alive when the timeout elapses, the FE process is terminated, because a stuck worker combined with a later re-election would run two workers against the same singleton state - strictly worse than a process restart. Increase this if you routinely see heartbeat/report/publish/tablet-scheduler daemons needing more than the default to drain.
+- Introduced in: v4.1
 
 ### `lock_checker_interval_second`
 

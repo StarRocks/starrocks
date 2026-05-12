@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -89,7 +90,7 @@ public class SqlCredentialRedactor {
 
     static {
         for (String key : CREDENTIAL_KEYS) {
-            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase());
+            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase(Locale.ROOT));
         }
     }
 
@@ -144,6 +145,27 @@ public class SqlCredentialRedactor {
     private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
+     * Cheap check for whether {@link #redact(String)} might change the SQL. Used on hot paths (e.g. query profiles)
+     * to skip full redaction when the text has no credential-related markers.
+     */
+    public static boolean mayNeedCredentialRedaction(String sql) {
+        if (sql == null || sql.isEmpty()) {
+            return false;
+        }
+        String lower = sql.toLowerCase(Locale.ROOT);
+        for (String key : CREDENTIAL_KEYS_LOWERCASE) {
+            if (lower.indexOf(key) >= 0) {
+                return true;
+            }
+        }
+        // "password" is already in CREDENTIAL_KEYS_LOWERCASE, so "set password"
+        // (with any whitespace) is caught by the loop above. Only "identified"
+        // needs a separate check — a single keyword avoids false negatives from
+        // whitespace variations like IDENTIFIED\nBY or IDENTIFIED\tWITH.
+        return lower.contains("identified");
+    }
+
+    /**
      * Redact sensitive credentials from SQL string.
      *
      * @param sql the SQL string that may contain credentials
@@ -172,7 +194,7 @@ public class SqlCredentialRedactor {
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
             // Check if this key should be redacted (case-insensitive)
-            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase())) {
+            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase(Locale.ROOT))) {
                 // Append text before the match
                 result.append(sql, lastEnd, matcher.start());
 

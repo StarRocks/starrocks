@@ -64,7 +64,7 @@ public:
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const StorageCppType<type>*>(column->raw_data());
+        *ret = GetStorageContainer<type>::get_data(column, 0);
     }
 
     template <LogicalType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
@@ -92,7 +92,7 @@ public:
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(size, size_to_fetch);
 
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
+        const auto values = GetStorageContainer<Type>::get_data(column);
 
         for (uint i = 0; i < size; i++) {
             ASSERT_EQ(src[i], values[i]);

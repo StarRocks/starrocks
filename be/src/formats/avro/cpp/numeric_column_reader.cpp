@@ -57,7 +57,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
 }
 
 template <typename FromType, typename ToType>
-static inline Status check_append_numeric_column(const FromType& from, const std::string& col_name,
+static inline Status check_append_numeric_column(const FromType& from, std::string_view col_name,
                                                  FixedLengthColumn<ToType>* column) {
     ToType to{};
     if (checked_cast(from, &to)) {
@@ -104,7 +104,7 @@ Status NumericColumnReader<T>::read_numeric_value(const avro::GenericDatum& datu
 }
 
 template <typename T>
-static inline Status get_numeric_value_from_string(const std::string& col_name, const std::string& from, T* to) {
+static inline Status get_numeric_value_from_string(std::string_view col_name, std::string_view from, T* to) {
     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
     if constexpr (std::is_floating_point<T>::value) {
         *to = StringParser::string_to_float<T>(from.data(), from.size(), &parse_result);
@@ -250,7 +250,7 @@ Status DecimalColumnReader<T>::read_datum(const avro::GenericDatum& datum, Colum
 }
 
 template <typename FromType, typename ToType>
-static inline Status check_append_numeric_to_decimal_column(const FromType& from, const std::string& col_name,
+static inline Status check_append_numeric_to_decimal_column(const FromType& from, std::string_view col_name,
                                                             int precision, int scale, DecimalV3Column<ToType>* column) {
     ToType to{};
     bool fail = false;
@@ -320,7 +320,7 @@ Status DecimalColumnReader<T>::read_string_value(const avro::GenericDatum& datum
 }
 
 template <typename T>
-static inline Status check_append_bytes_to_decimal_column(const std::vector<uint8_t>& from, const std::string& col_name,
+static inline Status check_append_bytes_to_decimal_column(const std::vector<uint8_t>& from, std::string_view col_name,
                                                           int32_t avro_precision, int32_t avro_scale, int new_precision,
                                                           int new_scale, DecimalV3Column<T>* column) {
     // get avro decimal value

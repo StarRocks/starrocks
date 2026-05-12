@@ -1,0 +1,3 @@
+-- name: test_update_be_configs
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE name = "abort_on_large_memory_allocation";
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = "abort_on_large_memory_allocation";

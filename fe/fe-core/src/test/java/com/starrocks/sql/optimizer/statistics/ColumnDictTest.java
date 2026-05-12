@@ -110,6 +110,36 @@ public class ColumnDictTest {
     }
 
     @Test
+    public void testMergeDictWithHighBitBytesUtf8() {
+        // Regression test: BE sorts dict strings via memcmp (unsigned bytes) and assigns ids in
+        // that order. ByteBuffer.compareTo on JDK 8 compares bytes as signed, which inverts the
+        // order of any UTF-8 string with a high-bit byte. Walking the merge with a signed
+        // comparator over a BE-sorted (unsigned) array put d2's high-byte key at newIdx=1, then
+        // drained d1 and put the same key again at a later newIdx, failing ImmutableMap.build()
+        // with "Multiple entries with same key".
+        // Minimal repro: ASCII '7' (0x37) vs Cyrillic 'В' (UTF-8 first byte 0xD0). Signed: 0x37 -
+        // (signed 0xD0) = +103. Unsigned: 0x37 - 0xD0 = -153.
+        ImmutableMap.Builder<ByteBuffer, Integer> builder1 = ImmutableMap.builder();
+        ImmutableMap.Builder<ByteBuffer, Integer> builder2 = ImmutableMap.builder();
+
+        builder1.put(toByteBuffer("78"), 1);
+        builder1.put(toByteBuffer("В"), 2);
+
+        builder2.put(toByteBuffer("В"), 1);
+
+        ColumnDict dict1 = new ColumnDict(builder1.build(), 1);
+        ColumnDict dict2 = new ColumnDict(builder2.build(), 2);
+
+        Pair<ColumnDict, ColumnDict> res = ColumnDict.merge(dict1, dict2);
+
+        Assertions.assertNotNull(res);
+        Assertions.assertEquals(2, res.first.getDictSize());
+        Assertions.assertEquals(1, res.first.getDict().get(toByteBuffer("78")));
+        Assertions.assertEquals(2, res.first.getDict().get(toByteBuffer("В")));
+        Assertions.assertEquals(res.first.getDict(), res.second.getDict());
+    }
+
+    @Test
     public void testMergeDictFail() {
         ImmutableMap.Builder<ByteBuffer, Integer> builder1 = ImmutableMap.builder();
         ImmutableMap.Builder<ByteBuffer, Integer> builder2 = ImmutableMap.builder();

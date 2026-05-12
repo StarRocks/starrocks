@@ -19,6 +19,9 @@
 #include "base/string/slice.h"
 
 namespace starrocks {
+class DateValue;
+class TimestampValue;
+
 template <class Type>
 struct JNIPrimTypeId {
     static constexpr bool supported = false;
@@ -42,5 +45,14 @@ DEFINE_TYPE(double, 8);
 DEFINE_TYPE(Slice, 9);
 static constexpr int TYPE_ARRAY_METHOD_ID = 10;
 static constexpr int TYPE_MAP_METHOD_ID = 11;
+// DateValue/TimestampValue are PODs whose storage IS the wire format
+// (int32 Julian day / packed int64). Java UDFHelper decodes inline.
+DEFINE_TYPE(DateValue, 12);
+DEFINE_TYPE(TimestampValue, 13);
+// STRUCT requires a record class jclass at boxing time (see
+// JVMFunctionHelper::create_boxed_struct_array), so it does not flow through the
+// JNIPrimTypeId-keyed _method_map. The constant is kept here for symmetry and to
+// reserve the slot.
+static constexpr int TYPE_STRUCT_METHOD_ID = 14;
 
 } // namespace starrocks

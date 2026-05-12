@@ -111,6 +111,19 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testCastVariantQueryRewriteToDecimal() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select cast(variant_query(v, '$.profile.rank') as decimal(10, 2)) from " + VARIANT_TABLE;
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "v.profile.rank");
+
+        String verbose = getVerboseExplain(sql);
+        assertContains(verbose, "ExtendedColumnAccessPath");
+        assertContains(verbose,
+                "/v(decimal(10, 2))/profile(decimal(10, 2))/rank(decimal(10, 2))");
+    }
+
+    @Test
     public void testAggregateRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
         String sql = "select sum(get_variant_int(v, '$.metrics.views')) from " + VARIANT_TABLE;

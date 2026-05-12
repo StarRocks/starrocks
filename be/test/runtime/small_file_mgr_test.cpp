@@ -29,7 +29,6 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "runtime/exec_env.h"
 
 int main(int argc, char* argv[]);
 
@@ -112,8 +111,7 @@ TEST_F(SmallFileMgrTest, test_get_file) {
     info.__set_network_address(addr);
     info.__set_http_port(real_port);
     ASSERT_TRUE(update_master_info(info));
-    ExecEnv* env = ExecEnv::GetInstance();
-    SmallFileMgr mgr(env, g_download_path);
+    SmallFileMgr mgr(g_download_path);
     Status st = mgr.init();
     ASSERT_TRUE(st.ok());
 

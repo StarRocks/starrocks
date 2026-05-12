@@ -18,18 +18,18 @@
 
 #include <memory>
 
+#include "base/brpc/disposable_closure.h"
 #include "base/brpc/ref_count_closure.h"
 #include "base/status_fmt.hpp"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "exec/pipeline/fetch_processor.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
-#include "util/brpc_stub_cache.h"
-#include "util/disposable_closure.h"
 
 namespace starrocks::pipeline {
 
@@ -186,7 +186,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)processor.get()
                << ", unit: " << unit_debug_string;
     _ctx->send_ts = MonotonicNanos();
-    auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+    auto* query_execution_services = state->query_execution_services();
+    auto stub = query_execution_services->rpc->brpc_stub_cache->get_stub(node_info->host, node_info->brpc_port);
     if (stub == nullptr) {
         auto msg = fmt::format("Connect {}:{} failed.", node_info->host, node_info->brpc_port);
         LOG(WARNING) << msg;
@@ -200,7 +201,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
 }
 
 void LookUpCloseTask::submit(RuntimeState* state) {
-    auto stub = state->exec_env()->brpc_stub_cache()->get_stub(_host, _port);
+    auto* query_execution_services = state->query_execution_services();
+    auto stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_host, _port);
     if (stub == nullptr) {
         auto msg = fmt::format("Connect {}:{} failed.", _host, _port);
         LOG(WARNING) << msg;

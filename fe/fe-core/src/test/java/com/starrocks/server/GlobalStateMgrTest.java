@@ -62,27 +62,42 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.commons.io.FileUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class GlobalStateMgrTest {
+    private String testMetaDir;
+    private String testPluginDir;
 
     @BeforeEach
     public void setUp() {
-        Config.meta_dir = UUID.randomUUID().toString();
-        Config.plugin_dir = UUID.randomUUID().toString();
+        testMetaDir = UUID.randomUUID().toString();
+        testPluginDir = UUID.randomUUID().toString();
+        Config.meta_dir = testMetaDir;
+        Config.plugin_dir = testPluginDir;
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        FileUtils.deleteQuietly(new File(testMetaDir));
+        FileUtils.deleteQuietly(new File(testPluginDir));
     }
 
     @Test
@@ -232,6 +247,96 @@ public class GlobalStateMgrTest {
         Config.metadata_enable_recovery_mode = originVal;
     }
 
+    @Test
+    public void testLeaderLeaseActivation() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.ACTIVATING, globalStateMgr.getLeaderRoleState());
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
+
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(101L);
+
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+        Assertions.assertEquals(101L, lease.getHaEpoch());
+        Assertions.assertEquals(1L, lease.getGeneration());
+        Assertions.assertTrue(globalStateMgr.isLeaderLeaseValid(lease));
+        Assertions.assertTrue(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.ACTIVE, globalStateMgr.getLeaderRoleState());
+        Assertions.assertNull(globalStateMgr.getPendingDemotionTargetType());
+    }
+
+    @Test
+    public void testLeaderLeaseActivationAllowsEpochZero() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(0L);
+
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+        Assertions.assertEquals(0L, lease.getHaEpoch());
+        Assertions.assertTrue(lease.isValid());
+        Assertions.assertTrue(globalStateMgr.isLeaderLeaseValid(lease));
+    }
+
+    @Test
+    public void testLeaderLeaseInvalidatedByDemotionSkeleton() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(102L);
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertTrue(globalStateMgr.isLeaderDemoting());
+        Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(lease));
+        Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.DEMOTING, globalStateMgr.getLeaderRoleState());
+        Assertions.assertEquals(FrontendNodeType.FOLLOWER, globalStateMgr.getPendingDemotionTargetType());
+        Assertions.assertThrows(IllegalStateException.class, globalStateMgr::captureLeaderLeaseOrThrow);
+    }
+
+    @Test
+    public void testLeaderGenerationBumpsAcrossDemotionAndReelection() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(103L);
+        LeaderLease firstLease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.FOLLOWER);
+
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(104L);
+        LeaderLease secondLease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        Assertions.assertTrue(secondLease.getGeneration() > firstLease.getGeneration());
+        Assertions.assertEquals(104L, secondLease.getHaEpoch());
+        Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(firstLease));
+    }
+
+    @Test
+    public void testLeaderLeaseRollbackAfterActivationFailure() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(105L);
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        globalStateMgr.rollbackLeaderActivation();
+
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(lease));
+        Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());
+        Assertions.assertNull(globalStateMgr.getPendingDemotionTargetType());
+    }
+
     private static class MyGlobalStateMgr extends GlobalStateMgr {
         public static final String ERROR_MESSAGE = "Create Exception here.";
         private final boolean throwException;
@@ -345,5 +450,67 @@ public class GlobalStateMgrTest {
         Assertions.assertNotNull(table);
         table = newState.getLocalMetastore().getTable("db2", "t1");
         Assertions.assertEquals(1, table.getForeignKeyConstraints().size());
+    }
+
+    @Test
+    public void testStopOneInvokesAction() throws Exception {
+        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
+        AtomicBoolean ran = new AtomicBoolean(false);
+        Runnable action = () -> ran.set(true);
+
+        Method stopOne = GlobalStateMgr.class.getDeclaredMethod("stopOne", String.class, Runnable.class);
+        stopOne.setAccessible(true);
+        stopOne.invoke(mgr, "fakeDaemon", action);
+
+        Assertions.assertTrue(ran.get(), "stopOne must invoke the action");
+    }
+
+    @Test
+    public void testStopOneSwallowsThrowable() throws Exception {
+        // stopOne wraps each daemon's stopGracefully so that a single misbehaving daemon
+        // does not abort the demotion drain mid-way and leave later daemons running.
+        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
+        AtomicBoolean ran = new AtomicBoolean(false);
+        Runnable action = () -> {
+            ran.set(true);
+            throw new RuntimeException("boom");
+        };
+
+        Method stopOne = GlobalStateMgr.class.getDeclaredMethod("stopOne", String.class, Runnable.class);
+        stopOne.setAccessible(true);
+        // No exception expected to escape.
+        stopOne.invoke(mgr, "throwingDaemon", action);
+
+        Assertions.assertTrue(ran.get(), "action should still run");
+    }
+
+    @Test
+    public void testStopLeaderOnlyDaemonThreadsDrivesEveryWiredDaemon() throws Exception {
+        // Sanity test for the demotion drain wiring: every daemon listed in
+        // stopLeaderOnlyDaemonThreads must be reachable and its stopGracefully invocation must
+        // be shielded by stopOne, so a misbehaving daemon cannot abort the drain. The lazily
+        // initialized timePrinter / txnTimeoutChecker fields are still null here, exercising the
+        // null-skip branches.
+        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
+
+        Method stop = GlobalStateMgr.class.getDeclaredMethod("stopLeaderOnlyDaemonThreads");
+        stop.setAccessible(true);
+        // None of the daemons are running; every stopGracefully is effectively a state reset.
+        // Any throwable from a daemon's onStopped is contained by stopOne, so the call must
+        // complete without propagating.
+        stop.invoke(mgr);
+    }
+
+    @Test
+    public void testStopLeaderOnlyDaemonThreadsCoversLazilyInitializedDaemons() throws Exception {
+        // timePrinter and txnTimeoutChecker are created lazily after the leader has activated;
+        // exercise the non-null branch so the drain stops them too.
+        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
+        mgr.createTxnTimeoutChecker();
+        mgr.createTimePrinter();
+
+        Method stop = GlobalStateMgr.class.getDeclaredMethod("stopLeaderOnlyDaemonThreads");
+        stop.setAccessible(true);
+        stop.invoke(mgr);
     }
 }

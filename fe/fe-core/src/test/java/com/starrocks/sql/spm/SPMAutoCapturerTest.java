@@ -18,13 +18,17 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.summary.QueryHistory;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
@@ -43,6 +47,24 @@ public class SPMAutoCapturerTest extends PlanTestBase {
         if (originalPattern != null) {
             GlobalVariable.spmCaptureIncludeTablePattern = originalPattern;
         }
+    }
+
+    @Test
+    public void testOnStoppedDropsCapturedConnectContext() throws Exception {
+        SPMAutoCapturer capturer = new SPMAutoCapturer();
+
+        ConnectContext captured = Mockito.mock(ConnectContext.class);
+        FieldUtils.writeField(capturer, "connect", captured, true);
+        Assertions.assertSame(captured, FieldUtils.readField(capturer, "connect", true),
+                "precondition: connect installed");
+
+        // The captured ConnectContext is leader-session-only state (carries leader-side query
+        // execution state). On demotion it must be released so the next leader rebuilds a
+        // fresh context and the demoted FE does not retain references into leader-only state.
+        MethodUtils.invokeMethod(capturer, true, "onStopped");
+
+        Assertions.assertNull(FieldUtils.readField(capturer, "connect", true),
+                "captured ConnectContext should be cleared on demotion");
     }
 
     private long getMetricValue(String name, String result) {

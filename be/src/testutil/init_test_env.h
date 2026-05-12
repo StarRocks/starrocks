@@ -23,10 +23,12 @@
 #include "common/config_cache_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -56,6 +58,8 @@ int init_test_env(int argc, char** argv) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+    auto fs_registry_status = fs::install_builtin_file_system_providers();
+    CHECK(fs_registry_status.ok()) << fs_registry_status;
     butil::FilePath curr_dir(std::filesystem::current_path());
     butil::FilePath storage_root;
     CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
@@ -81,10 +85,12 @@ int init_test_env(int argc, char** argv) {
 
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
 
     auto* global_env = GlobalEnv::GetInstance();
     config::disable_storage_page_cache = true;
-    auto st = global_env->init();
+    auto st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
@@ -94,6 +100,7 @@ int init_test_env(int argc, char** argv) {
     options.store_paths = paths;
     options.compaction_mem_tracker = compaction_mem_tracker.get();
     options.update_mem_tracker = update_mem_tracker.get();
+    options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     Status s = StorageEngine::open(options, &engine);
     if (!s.ok()) {
         butil::DeleteFile(storage_root, true);
@@ -109,11 +116,21 @@ int init_test_env(int argc, char** argv) {
     // for managing it.
     auto* cache_env = DataCache::GetInstance();
     config::datacache_enable = false;
-    st = cache_env->init(paths);
+    std::vector<std::string> cache_storage_root_paths;
+    cache_storage_root_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        cache_storage_root_paths.emplace_back(path.path);
+    }
+    DataCacheInitOptions cache_init_options;
+    cache_init_options.storage_root_paths = std::move(cache_storage_root_paths);
+    cache_init_options.metrics = process_metrics_registry->root_registry();
+    cache_init_options.process_mem_limit = global_env->process_mem_limit();
+    cache_init_options.process_mem_tracker = global_env->process_mem_tracker();
+    st = cache_env->init(cache_init_options);
     CHECK(st.ok()) << st;
 
     auto* exec_env = ExecEnv::GetInstance();
-    st = exec_env->init(paths);
+    st = exec_env->init(paths, process_metrics_registry);
     CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();

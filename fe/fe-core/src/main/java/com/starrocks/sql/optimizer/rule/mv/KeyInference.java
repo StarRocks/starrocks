@@ -20,18 +20,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -108,90 +103,6 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         OlapTable olapTable = (OlapTable) table;
 
         return visitTable(olapTable, scan, scan.getRealOutputColumns(), scan.getColRefToColumnMetaMap());
-    }
-
-    @Override
-    public KeyPropertySet visitPhysicalStreamScan(OptExpression optExpression, Void ctx) {
-        PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
-        Table table = scan.getTable();
-        Preconditions.checkState(table.isOlapTable());
-        OlapTable olapTable = (OlapTable) table;
-
-        KeyPropertySet res =
-                visitTable(olapTable, scan, scan.getOutputColumns(), scan.getColRefToColumnMetaMap());
-        scan.setKeyPropertySet(res);
-        return res;
-    }
-
-    @Override
-    public KeyPropertySet visitPhysicalStreamJoin(OptExpression optExpression, Void ctx) {
-        KeyPropertySet lhsKeySet = infer(optExpression.inputAt(0), ctx);
-        KeyPropertySet rhsKeySet = infer(optExpression.inputAt(1), ctx);
-        PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
-
-        if (!join.getJoinType().isInnerJoin()) {
-            throw new NotImplementedException("Only INNER JOIN is supported");
-        }
-
-        // Join unique keys come from:
-        // 1. Combination of left unique-keys and right unique-keys
-        // 2. Left unique keys if right join columns are unique on join conjuncts
-        // 3. Right unique keys if left join columns are unique on join conjuncts
-        JoinHelper joinHelper =
-                JoinHelper.of(join, optExpression.getChildOutputColumns(0), optExpression.getChildOutputColumns(1));
-        List<Integer> lhsJoinColumns = joinHelper.getLeftOnColumnIds();
-        List<Integer> rhsJoinColumns = joinHelper.getRightOnColumnIds();
-        ColumnRefSet outputColumns = optExpression.getOutputColumns();
-        KeyPropertySet resKeySet = new KeyPropertySet();
-
-        boolean rhsUnique = rhsKeySet.getKeys().stream().anyMatch(key -> key.unique && key.columns.containsAll(rhsJoinColumns));
-        boolean lhsUnique = lhsKeySet.getKeys().stream().anyMatch(key -> key.unique && key.columns.containsAll(lhsJoinColumns));
-        if (!lhsKeySet.empty() && rhsUnique) {
-            for (KeyProperty key : lhsKeySet.getKeys()) {
-                if (key.unique && outputColumns.containsAll(key.columns)) {
-                    resKeySet.addKey(key);
-                }
-            }
-        }
-        if (!rhsKeySet.empty() && lhsUnique) {
-            for (KeyProperty key : rhsKeySet.getKeys()) {
-                if (key.unique && outputColumns.containsAll(key.columns)) {
-                    resKeySet.addKey(key);
-                }
-            }
-        }
-
-        for (KeyProperty lhsKey : lhsKeySet.getKeys()) {
-            for (KeyProperty rhsKey : rhsKeySet.getKeys()) {
-                if (outputColumns.containsAll(lhsKey.columns) && outputColumns.containsAll(rhsKey.columns)) {
-                    KeyProperty joinUniqueKey = KeyProperty.combine(lhsKey, rhsKey);
-                    resKeySet.addKey(joinUniqueKey);
-                }
-            }
-        }
-
-        // Fallback to treat output columns as non-unique key
-        if (resKeySet.empty()) {
-            resKeySet.addKey(KeyProperty.of(outputColumns));
-        }
-
-        join.setKeyPropertySet(resKeySet);
-        return resKeySet;
-    }
-
-    @Override
-    public KeyPropertySet visitPhysicalStreamAgg(OptExpression optExpression, Void ctx) {
-        Operator input = optExpression.inputAt(0).getOp();
-        PhysicalStreamAggOperator agg = (PhysicalStreamAggOperator) optExpression.getOp();
-
-        if (CollectionUtils.isNotEmpty(agg.getGroupBys())) {
-            KeyProperty keyProperty = KeyProperty.ofUnique(new ColumnRefSet(agg.getGroupBys()));
-            agg.setKeyPropertySet(new KeyPropertySet(keyProperty));
-        } else {
-            throw new NotImplementedException("StreamAggregation without group by is not supported");
-        }
-
-        return agg.getKeyPropertySet();
     }
 
     public static class KeyProperty {

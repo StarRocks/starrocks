@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/workgroup/work_group_fwd.h"

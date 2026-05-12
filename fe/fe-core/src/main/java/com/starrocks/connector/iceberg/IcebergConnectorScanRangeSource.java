@@ -66,6 +66,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -82,6 +83,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
@@ -94,6 +98,7 @@ import static com.starrocks.connector.iceberg.IcebergUtil.checkFileFormatSupport
 
 public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
+    private static final long CLOSE_WARN_DELAY_SECONDS = 60;
 
     private final IcebergTable table;
     private final TupleDescriptor desc;
@@ -176,10 +181,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     @Override
     public void close() {
+        AtomicBoolean finished = new AtomicBoolean(false);
+        CompletableFuture.delayedExecutor(CLOSE_WARN_DELAY_SECONDS, TimeUnit.SECONDS).execute(() -> {
+            if (!finished.get()) {
+                LOG.warn("Iceberg remote file info source close is still running after {} seconds, "
+                                + "table: {}.{}, remoteFileInfoSource: {}",
+                        CLOSE_WARN_DELAY_SECONDS, table.getCatalogDBName(), table.getCatalogTableName(),
+                        remoteFileInfoSource.getClass().getName());
+            }
+        });
         try {
             remoteFileInfoSource.close();
         } catch (Exception e) {
             LOG.warn("close RemoteFileInfoSource failed", e);
+        } finally {
+            finished.set(true);
         }
     }
 
@@ -268,6 +284,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             } else {
                 return buildDeleteFileScanRanges(fileScanTask, partitionId);
             }
+        } catch (StarRocksConnectorException e) {
+            throw e;
         } catch (Exception e) {
             LOG.error("build scan range failed", e);
             throw new StarRocksConnectorException("build scan range failed", e);
@@ -282,6 +300,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             FileContent content = deleteFile.content();
             if (content == FileContent.EQUALITY_DELETES) {
                 continue;
+            }
+
+            if (ContentFileUtil.isDV(deleteFile)) {
+                throw new StarRocksConnectorException(
+                        "Iceberg V3 Deletion Vectors are not supported. " +
+                        "Table contains deletion vector file: " + deleteFile.path());
             }
 
             TIcebergDeleteFile target = new TIcebergDeleteFile();

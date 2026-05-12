@@ -5,6 +5,7 @@ displayed_sidebar: docs
 # CREATE USER
 
 import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
+import AuthOption from '../../../_assets/commonMarkdown/AuthOption.mdx'
 
 CREATE USER creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user. From v3.3.3, StarRocks supports setting user properties when creating a user.
 
@@ -25,33 +26,7 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   For the naming conventions of usernames, see [System limits](../../System_limit.md).
 
-- `auth_option` specifies the authentication method. Currently, five authentication methods are supported: StarRocks native password, `mysql_native_password`, `authentication_ldap_simple`, JSON Web Token (JWT) Authentication, and OAuth 2.0 Authentication. StarRocks native password is the same as `mysql_native_password` in logic but slightly differs in syntax. One user identity can use only one authentication method.
-
-    ```SQL
-    auth_option: {
-        IDENTIFIED BY 'auth_string'
-        IDENTIFIED WITH mysql_native_password BY 'auth_string'
-        IDENTIFIED WITH mysql_native_password AS 'auth_string'
-        IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
-        IDENTIFIED WITH authentication_jwt [AS 'auth_properties']
-        IDENTIFIED WITH authentication_oauth2 [AS 'auth_properties']
-    }
-    ```
-
-    | **Authentication method**    | **Password for user creation** | **Password for login** |
-    | ---------------------------- | ------------------------------ | ---------------------- |
-    | Native password              | Plaintext or ciphertext        | Plaintext              |
-    | `mysql_native_password BY`   | Plaintext                      | Plaintext              |
-    | `mysql_native_password WITH` | Ciphertext                     | Plaintext              |
-    | `authentication_ldap_simple` | Plaintext                      | Plaintext              |
-
-    :::note
-    StarRocks encrypts users' passwords before storing them.
-    :::
-
-    For details of `auth_properties` for JSON Web Token (JWT) Authentication and OAuth 2.0 Authentication, see the corresponding documents:
-    - [JSON Web Token Authentication](../../../administration/user_privs/authentication/jwt_authentication.md)
-    - [OAuth 2.0 Authentication](../../../administration/user_privs/authentication/oauth2_authentication.md)
+<AuthOption />
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: If this parameter is specified, the roles are automatically assigned to the user and activated by default when the user logs in. If not specified, this user does not have any privileges. Make sure that all the roles that are specified already exist.
 

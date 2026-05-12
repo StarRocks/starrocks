@@ -544,8 +544,7 @@ public class InformationSchemaDataSource {
             List<BasicTable> tables = new ArrayList<>();
             List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
             for (String tableName : tableNames) {
-                if (request.isSetTable_name() &&
-                        !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                if (matcher != null && !matcher.match(tableName)) {
                     continue;
                 }
 

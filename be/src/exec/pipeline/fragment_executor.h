@@ -90,8 +90,6 @@ public:
     }
     const TDataSink& output_sink() const;
 
-    const bool is_stream_pipeline() const { return _common_request.is_stream_pipeline; }
-
 private:
     static const std::vector<TScanRangeParams> _no_scan_ranges;
     static const PerDriverScanRangesMap _no_scan_ranges_per_driver_seq;

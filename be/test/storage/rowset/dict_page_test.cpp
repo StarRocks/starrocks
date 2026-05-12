@@ -21,6 +21,7 @@
 #include <limits>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/util/debug_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/binary_plain_page.h"
@@ -102,14 +103,13 @@ public:
         status = page_decoder.next_batch(&decode_size, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(data_num, decode_size);
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
-        auto* decoded = (CppType*)values;
+        const auto values = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < decode_size; i++) {
-            if (data[i] != decoded[i]) {
+            if (data[i] != values[i]) {
                 if constexpr (std::is_same_v<int128_t, CppType>) {
                     FAIL() << "Fail at index " << i;
                 } else {
-                    FAIL() << "Fail at index " << i << " inserted=" << data[i] << " got=" << decoded[i];
+                    FAIL() << "Fail at index " << i << " inserted=" << data[i] << " got=" << values[i];
                 }
             }
         }
@@ -122,14 +122,13 @@ public:
         ASSERT_TRUE(status.ok()) << status.to_string();
         // 2000 - 100
         ASSERT_EQ(data_num - 100, decode_size);
-        values = reinterpret_cast<const CppType*>(column->raw_data());
-        decoded = (CppType*)values;
+        const auto values2 = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < decode_size; i++) {
-            if (data[i + 100] != decoded[i]) {
+            if (data[i + 100] != values2[i]) {
                 if constexpr (std::is_same_v<int128_t, CppType>) {
                     FAIL() << "Fail at index " << i;
                 } else {
-                    FAIL() << "Fail at index " << i << " inserted=" << data[i + 100] << " got=" << decoded[i];
+                    FAIL() << "Fail at index " << i << " inserted=" << data[i + 100] << " got=" << values2[i];
                 }
             }
         }
@@ -381,11 +380,10 @@ TEST_F(DictPageTest, TestLargeDataSize) {
         st = page_decoder.next_batch(&decode_size, column.get());
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(page_size, decode_size);
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
-        auto* decoded = (CppType*)values;
+        const auto values = GetStorageContainer<TYPE_BIGINT>::get_data(column);
         for (int j = page_start_id; j < page_start_ids[i + 1]; j++) {
-            if (decoded[j - page_start_id] != j) {
-                FAIL() << "Fail at index " << i << " inserted=" << j << " got=" << decoded[j - page_start_id];
+            if (values[j - page_start_id] != j) {
+                FAIL() << "Fail at index " << i << " inserted=" << j << " got=" << values[j - page_start_id];
             }
         }
     }

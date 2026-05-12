@@ -14,83 +14,32 @@
 
 #pragma once
 
-#include <atomic>
-#include <condition_variable>
-#include <cstdint>
-#include <mutex>
-
-#include "common/status.h"
-
-namespace bthread {
-class TimerThread;
-}
+#include "common/bthread_timer.h"
 
 namespace starrocks::pipeline {
-using TaskId = int64_t;
+using TaskId = BthreadTimerTaskId;
+
 class PipelineTimer;
 
-class LightTimerTask {
+class LightTimerTask : public BthreadLightTimerTask {
 public:
     virtual ~LightTimerTask() = default;
-
-    virtual void Run() = 0;
-
-    void set_tid(TaskId tid) { _tid = tid; }
-    TaskId tid() const { return _tid; }
-
-private:
-    TaskId _tid{};
 };
 
-class PipelineTimerTask {
+class PipelineTimerTask : public BthreadTimerTask {
 public:
     virtual ~PipelineTimerTask() = default;
 
-    void doRun() {
-        Run();
-        _finished.store(true, std::memory_order_seq_cst);
-        if (_has_consumer.load(std::memory_order_acquire)) {
-            _cv.notify_one();
-        }
-    }
-
-    // only call when unschedule == 1
-    void waitUtilFinished();
-    void unschedule(PipelineTimer* timer);
-
-    void set_tid(TaskId tid) { _tid = tid; }
-    TaskId tid() const { return _tid; }
-
-protected:
-    // implement interface
-    virtual void Run() = 0;
-
-protected:
-    std::atomic<bool> _finished{};
-    std::atomic<bool> _has_consumer{};
-    TaskId _tid{};
-    std::mutex _mutex;
-    std::condition_variable _cv;
+    void unschedule_and_join(PipelineTimer* timer);
 };
 
-class PipelineTimer {
+class PipelineTimer : public BthreadTimer {
 public:
-    PipelineTimer() = default;
+    PipelineTimer() : BthreadTimer("pipeline_timer") {}
     ~PipelineTimer() noexcept = default;
-
-    Status start();
-
-    Status schedule(PipelineTimerTask* task, const timespec& abstime);
-    //   0   -  Removed the task which does not run yet
-    //  -1   -  The task does not exist.
-    //   1   -  The task is just running.
-    int unschedule(PipelineTimerTask* task);
-
-    Status schedule(LightTimerTask* task, const timespec& abstime);
-
-    int unschedule(LightTimerTask* task);
-
-private:
-    std::shared_ptr<bthread::TimerThread> _thr;
 };
+
+inline void PipelineTimerTask::unschedule_and_join(PipelineTimer* timer) {
+    BthreadTimerTask::unschedule_and_join(timer);
+}
 } // namespace starrocks::pipeline

@@ -16,12 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include "base/compression/block_compression.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Partitions_types.h"
@@ -31,7 +34,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks::pipeline {
 
@@ -41,7 +43,8 @@ public:
     AlwaysOverflowCodec() : BlockCompressionCodec(LZ4) {}
 
     Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
-                    faststring* compressed_body1, raw::RawString* compressed_body2) const override {
+                    faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const BlockCompressionOptions& /*options*/) const override {
         return Status::NotSupported("mock");
     }
 

@@ -88,6 +88,7 @@ struct ColumnReaderOptions {
     const DataCacheOptions* datacache_options;
 };
 
+class ColumnConverter;
 class StoredColumnReader;
 
 struct ColumnDictFilterContext {
@@ -102,6 +103,9 @@ struct ColumnDictFilterContext {
     SlotId slot_id;
     std::vector<std::string> sub_field_path;
     ObjectPool obj_pool;
+    // If set, applied to raw dict values before predicate evaluation.
+    // Required for columns whose physical bytes differ from the logical string form (e.g. UUID).
+    ColumnConverter* dict_value_converter = nullptr;
 
 public:
     Status rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader, bool* is_group_filtered);

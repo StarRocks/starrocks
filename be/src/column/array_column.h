@@ -66,8 +66,6 @@ public:
 
     bool is_array() const override { return true; }
 
-    const uint8_t* raw_data() const override;
-
     size_t size() const override;
 
     size_t capacity() const override;

@@ -26,6 +26,9 @@
 #include "common/runtime_profile.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
+#include "exec/data_sinks/data_stream_sender.h"
+#include "exec/data_sinks/result_sink.h"
+#include "exec/data_sinks/tablet_sink.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_factory.h"
 #include "exec/exec_node.h"
@@ -34,6 +37,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -41,18 +45,15 @@
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
-#include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/result_sink.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
@@ -162,14 +163,12 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
-    const auto& is_stream_pipeline = request.is_stream_pipeline();
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
-    _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
 
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);
@@ -231,6 +230,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
                                                                     query_globals,
                                                                     &exec_env->query_execution_services(), exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->init_fragment_mem_pool();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
@@ -746,7 +746,6 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
 
-    auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
@@ -754,7 +753,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     auto* runtime_state = _fragment_ctx->runtime_state();
     size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
     // Build pipelines
-    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
+    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
     ASSIGN_OR_RETURN(auto exec_ops, builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan));
@@ -936,14 +935,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
             VLOG_QUERY << "Prepare fragment succeed: query_id=" << print_id(request.common().params.query_id)
                        << " fragment_instance_id=" << print_id(request.fragment_instance_id())
-                       << " is_stream_pipeline=" << request.is_stream_pipeline()
                        << " backend_num=" << request.backend_num()
                        << " fragment plan=" << fragment_ctx->plan()->debug_string();
         } else {
             _fail_cleanup(prepare_success);
             LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
                          << " fragment_instance_id=" << print_id(request.fragment_instance_id())
-                         << " is_stream_pipeline=" << request.is_stream_pipeline()
                          << " backend_num=" << request.backend_num();
             VLOG_QUERY << "Prepare fragment failed fragment=" << request.common().fragment;
         }

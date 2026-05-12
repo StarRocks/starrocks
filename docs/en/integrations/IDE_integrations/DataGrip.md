@@ -31,9 +31,10 @@ Download the StarRocks JDBC driver JAR. See [StarRocks JDBC Driver](../JDBC_driv
    - Set the **Name** to `StarRocks`.
    - Under **Driver Files**, click **+** and add the StarRocks JDBC driver JAR you downloaded.
    - Set the **Class** to `com.starrocks.cj.jdbc.Driver`.
-   - Set the **URL template** to:
+   - Set the **URL template** to one of:
      ```
-     jdbc:starrocks://{host}:{port}/{catalog}.{database}
+     jdbc:starrocks://{host}:{port}
+     jdbc:starrocks://{host}:{port}/{database}
      ```
    - Click **OK** to save the driver.
 
@@ -45,12 +46,32 @@ Download the StarRocks JDBC driver JAR. See [StarRocks JDBC Driver](../JDBC_driv
 
    - **Host**: the FE host IP address of your StarRocks cluster.
    - **Port**: the FE query port of your StarRocks cluster, for example, `9030`.
-   - **Catalog**: the name of the target catalog. Use `default_catalog` for internal tables, or the name of an external catalog.
-   - **Database**: the name of the target database within the catalog.
+   - **Database**: the database to connect to, in the format `[{catalog_name}.]{database_name}`. Both internal and external catalogs are supported. If the catalog is omitted, `default_catalog` is used.
+     - `catalog_name`: the name of the target catalog in your StarRocks cluster.
+     - `database_name`: the name of the target database in your StarRocks cluster.
    - **User**: the username to log in to your StarRocks cluster, for example, `admin`.
    - **Password**: the password to log in to your StarRocks cluster.
 
 6. Click **Test Connection** to verify the settings, then click **OK**.
+
+:::note
+After connecting, DataGrip only loads the database list. Tables are not fetched until you right-click the database in the sidebar and select **Refresh**. This is expected behavior.
+:::
+
+### Browse catalogs and databases in the sidebar
+
+After connecting, there are two ways to control what appears in the left sidebar:
+
+**Option 1 — Use the URL to scope directly to one catalog/database (simplest)**
+
+Edit the **URL** field to include `catalog.database` as shown in the tip above. DataGrip will display that catalog and database in the sidebar immediately, with no further configuration.
+
+**Option 2 — Select schemas in data source properties (multiple catalogs/databases)**
+
+1. Double-click the data source (or right-click > **Properties**).
+2. Go to the **Schemas** tab.
+3. Check the catalogs and databases you want visible in the sidebar.
+4. Click **OK**. DataGrip will refresh and display your selection.
 
 ## Connect using the MySQL driver
 

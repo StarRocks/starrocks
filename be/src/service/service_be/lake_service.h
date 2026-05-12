@@ -13,8 +13,11 @@
 // limitations under the License.
 
 #pragma once
+#include <mutex>
 #include <span>
+#include <unordered_set>
 
+#ifndef __APPLE__
 #include "common/status.h"
 #include "gen_cpp/lake_service.pb.h"
 
@@ -118,6 +121,11 @@ public:
                                 ::starrocks::RepairTabletMetadataResponse* response,
                                 ::google::protobuf::Closure* done) override;
 
+    void build_vector_index(::google::protobuf::RpcController* controller,
+                            const ::starrocks::BuildVectorIndexRequest* request,
+                            ::starrocks::BuildVectorIndexResponse* response,
+                            ::google::protobuf::Closure* done) override;
+
 private:
     void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
                                           std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,
@@ -131,6 +139,11 @@ private:
 
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
+
+    // Tablets currently being built by this CN. Used to dedup repeated
+    // build_vector_index RPCs for the same tablet (e.g. after FE re-enqueue).
+    std::mutex _building_vi_mutex;
+    std::unordered_set<int64_t> _building_vi_tablets;
 };
 
 // Get txn_ids string from PublishVersionRequest (compatible with both new and old FE versions)
@@ -139,3 +152,4 @@ private:
 std::string get_txn_ids_string(const PublishVersionRequest* request);
 
 } // namespace starrocks
+#endif // __APPLE__

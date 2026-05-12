@@ -253,6 +253,22 @@ StatusOr<VariantPath> VariantPathParser::parse_shredded_path(std::string_view in
 // VariantPath methods
 // ---------------------------------------------------------------------------
 
+bool VariantPath::is_strict_prefix_of(const VariantPath& other) const {
+    if (other.segments.size() <= segments.size()) return false;
+    for (size_t i = 0; i < segments.size(); ++i) {
+        if (segments[i] != other.segments[i]) return false;
+    }
+    return true;
+}
+
+bool VariantPath::is_ancestor_or_same(const VariantPath& other) const {
+    if (other.segments.size() < segments.size()) return false;
+    for (size_t i = 0; i < segments.size(); ++i) {
+        if (segments[i] != other.segments[i]) return false;
+    }
+    return true;
+}
+
 std::optional<std::string> VariantPath::to_shredded_path() const {
     std::string result;
     for (const auto& seg : segments) {

@@ -159,6 +159,18 @@ public:
 
     bool is_equal_schema(const VariantColumn* other) const;
 
+    void mutate_each_subcolumn() override {
+        for (auto& column : _typed_columns) {
+            column = (std::move(*column)).mutate();
+        }
+        if (_metadata_column != nullptr) {
+            _metadata_column = BinaryColumn::static_pointer_cast((std::move(*_metadata_column)).mutate());
+        }
+        if (_remain_value_column != nullptr) {
+            _remain_value_column = BinaryColumn::static_pointer_cast((std::move(*_remain_value_column)).mutate());
+        }
+    }
+
     // Encode a single typed cell (from a typed column at a given row) into a VariantRowValue.
     // Handles TYPE_VARIANT recursion, null checks, and VariantEncoder encoding.
     // Used by both VariantColumn internal paths and VariantFunctions query paths.

@@ -63,6 +63,7 @@ public class DataCacheSelectExecutor {
             ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
             try (var scope = subContext.bindScope()) {
                 subContext.setCurrentComputeResource(computeResource);
+                subContext.setMultiStmt(false);
                 StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
                 isFirstSubContext = false;
                 // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command

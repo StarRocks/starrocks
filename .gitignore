@@ -106,7 +106,9 @@ CMakeLists.txt
 .claude
 .clangd
 .cursor/
+.codex/
 .worktrees/
+handbook/plans/local/
 
 
 !build-mac/CMakeLists.txt

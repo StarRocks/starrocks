@@ -22,7 +22,9 @@
 #include "common/logging.h"
 #include "fs/fs_starlet.h"
 #include "gutil/strings/util.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_status.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 
 namespace starrocks::lake {
 
@@ -32,7 +34,7 @@ std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
 
 StatusOr<std::string> StarletLocationProvider::real_location(const std::string& virtual_path) const {
     ASSIGN_OR_RETURN(auto path_and_id, parse_starlet_uri(virtual_path));
-    auto info_or = g_worker->retrieve_shard_info(path_and_id.second);
+    auto info_or = get_staros_worker()->retrieve_shard_info(path_and_id.second);
     if (!info_or.ok()) {
         return to_status(info_or.status());
     }

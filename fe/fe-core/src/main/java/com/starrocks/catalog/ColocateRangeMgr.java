@@ -66,13 +66,64 @@ public class ColocateRangeMgr {
      * @return the ColocateRange containing the value, or null if not found
      */
     public ColocateRange getColocateRange(long colocateGroupId, Tuple colocateValue) {
-        List<ColocateRange> colocateRanges = colocateGroupToRanges.get(colocateGroupId);
-        if (colocateRanges == null || colocateRanges.isEmpty()) {
+        int index = getColocateRangeIndex(colocateGroupId, colocateValue);
+        if (index < 0) {
             return null;
         }
-        Range<Tuple> pointRange = Range.gele(colocateValue, colocateValue);
-        int index = Collections.binarySearch(colocateRanges, pointRange);
-        return index >= 0 ? colocateRanges.get(index) : null;
+        return colocateGroupToRanges.get(colocateGroupId).get(index);
+    }
+
+    /**
+     * Returns the index of the ColocateRange that contains the given colocate value.
+     *
+     * <p>The index is stable across all tables sharing this colocate group: the i-th
+     * range in {@link #getColocateRanges(long)} corresponds to the same PACK shard group
+     * across every partition/table/database in the group. Coordinator-side scan-range
+     * dispatch uses this index as the bucket sequence so that scan ranges from joined
+     * tables that share a colocate range are routed to the same fragment instance.
+     *
+     * @param colocateGroupId the colocate group id
+     * @param colocateValue the colocate prefix to look up; null means the global lower
+     *                      bound (-inf), which always lands in the first range
+     * @return the index in {@code [0, getColocateRanges(grpId).size())}, or -1 if the
+     *         group does not exist or the value is not covered
+     */
+    public int getColocateRangeIndex(long colocateGroupId, Tuple colocateValue) {
+        return indexOf(colocateGroupToRanges.get(colocateGroupId), colocateValue);
+    }
+
+    /**
+     * Binary-search variant of {@link #getColocateRangeIndex} that operates on a caller-supplied
+     * range list. Used when the caller is mutating a working copy in-flight (e.g. splice path)
+     * and cannot consult the live {@code colocateGroupToRanges} map.
+     *
+     * @return the index of the {@link ColocateRange} containing {@code value}, or {@code -1}
+     *         if {@code ranges} is null/empty or the value is not covered. {@code value == null}
+     *         maps to the first range (the global {@code -infinity} sentinel).
+     */
+    public static int indexOf(List<ColocateRange> ranges, Tuple value) {
+        if (ranges == null || ranges.isEmpty()) {
+            return -1;
+        }
+        if (value == null) {
+            return 0;
+        }
+        int index = Collections.binarySearch(ranges, Range.gele(value, value));
+        return index >= 0 ? index : -1;
+    }
+
+    /**
+     * Returns true iff the range list has an entry whose lower bound is exactly {@code prefix}
+     * with inclusive lower (i.e. {@code prefix} is already a registered colocate boundary).
+     */
+    public static boolean hasBoundaryAt(List<ColocateRange> ranges, Tuple prefix) {
+        int idx = indexOf(ranges, prefix);
+        if (idx < 0) {
+            return false;
+        }
+        Range<Tuple> range = ranges.get(idx).getRange();
+        return !range.isMinimum() && range.isLowerBoundIncluded()
+                && java.util.Objects.equals(range.getLowerBound(), prefix);
     }
 
     /**

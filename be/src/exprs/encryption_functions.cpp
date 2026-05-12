@@ -228,10 +228,7 @@ private:
 static StatusOr<ColumnPtr> aes_encrypt_2params(FunctionContext* ctx, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
-    // Check if data or key columns are only_null
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return columns[0]->only_null() ? columns[0] : columns[1];
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -283,10 +280,7 @@ static StatusOr<ColumnPtr> aes_encrypt_2params(FunctionContext* ctx, const Colum
 static StatusOr<ColumnPtr> aes_decrypt_2params(FunctionContext* ctx, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
-    // Check if data or key columns are only_null
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return columns[0]->only_null() ? columns[0] : columns[1];
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);

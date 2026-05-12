@@ -40,11 +40,13 @@
 #include <string_view>
 
 #include "base/coding.h"
+#include "base/compression/block_compression.h"
 #include "base/hash/crc32c.h"
 #include "base/string/faststring.h"
 #include "base/utility/scoped_cleanup.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
+#include "common/config_compression_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
@@ -57,7 +59,6 @@
 #include "runtime/raw_container_checked.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
@@ -72,14 +73,16 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         return Status::OK();
     }
     if (codec != nullptr && uncompressed_size > 0) {
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            RETURN_IF_ERROR(
-                    codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr));
+            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr,
+                                            compression_options));
         } else {
             compressed_body->resize(codec->max_compressed_len(uncompressed_size));
             Slice compressed_slice(*compressed_body);
-            RETURN_IF_ERROR(codec->compress(body, &compressed_slice));
+            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, compression_options));
             compressed_body->resize(compressed_slice.get_size());
         }
         double space_saving = 1.0 - static_cast<double>(compressed_body->size()) / uncompressed_size;
@@ -135,20 +138,6 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
     result->offset = offset;
     result->size = wfile->size() - offset;
     return Status::OK();
-}
-
-// The unique key identifying entries in the page cache.
-// Each cached page corresponds to a specific offset within
-// a file.
-//
-// TODO(zc): Now we use file name(std::string) as a part of key,
-//  which is not efficient. We should make it better later
-std::string encode_cache_key(const std::string& fname, int64_t offset) {
-    std::string str;
-    str.reserve(fname.size() + sizeof(offset));
-    str.append(fname);
-    str.append((char*)&offset, sizeof(offset));
-    return str;
 }
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
@@ -323,7 +312,11 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
     bool page_cache_available = (cache != nullptr) && cache->available();
 #endif
     PageCacheHandle cache_handle;
-    std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_pointer.offset);
+    // Let the stream produce its own page-cache key for opts.page_pointer.offset. For non-bundled
+    // streams this is just (filename, offset); for bundle slices the override folds in the slice
+    // base offset so two slices of the same physical file never collide at equal stream-relative
+    // offsets. Callers do not need to know whether the stream is a slice.
+    std::string cache_key = opts.read_file->page_cache_key(opts.page_pointer.offset);
     if (opts.use_page_cache && page_cache_available && cache->lookup(cache_key, &cache_handle)) {
         return parse_page_from_cache(handle, body, footer, &cache_handle, opts);
     }

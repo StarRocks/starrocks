@@ -282,7 +282,9 @@ class WindowSkewTest extends PlanTestBase {
 
     @Test
     void testWindowWithComplexPartition() throws Exception {
-        setColumnStatForP(0.3);
+        // Test that the rewrite is not triggered if the complex expr stats return a lower
+        // null fraction. In our case null fractions from the CASE WHEN should be (1 - 0.2) * 0.2 = 0.16 --> below threshold
+        setColumnStatForP(0.2);
 
         // Partition by expression (case when) instead of direct column
         String sql = "select p, s, sum(x) " +

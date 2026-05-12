@@ -199,13 +199,30 @@ FROM test_shredding_variant
 ORDER BY id;
 
 -- ========================================
--- Query 7: Full Variant Column Comparison
+-- Query 7: Key Fields Comparison (Shredded vs No-Shredded consistency)
 -- ========================================
--- This verifies that the full variant object is correctly reconstructed from shredded sub-columns.
+-- Verify key scalar and nested fields match between shredded and non-shredded variants.
+-- Avoid SELECT data (full JSON) as the field set evolves with test data schema.
 SELECT '--- Full Variant Comparison ---' as label;
-(SELECT get_variant_int(data, '$.id') as id, 'shredded' as label, data FROM test_shredding_variant)
+(SELECT get_variant_int(data, '$.id') as id, 'shredded' as label,
+        get_variant_int(data, '$.age') as age,
+        get_variant_string(data, '$.city') as city,
+        cast(variant_query(data, '$.score') as string) as score,
+        get_variant_double(data, '$.profile.salary') as salary,
+        get_variant_string(data, '$.profile.department') as dept,
+        get_variant_string(data, '$.name') as name,
+        get_variant_string(data, '$.email') as email
+ FROM test_shredding_variant)
 UNION ALL
-(SELECT get_variant_int(data, '$.id') as id, 'noshred' as label, data FROM test_noshredding_variant)
+(SELECT get_variant_int(data, '$.id') as id, 'noshred' as label,
+        get_variant_int(data, '$.age') as age,
+        get_variant_string(data, '$.city') as city,
+        cast(variant_query(data, '$.score') as string) as score,
+        get_variant_double(data, '$.profile.salary') as salary,
+        get_variant_string(data, '$.profile.department') as dept,
+        get_variant_string(data, '$.name') as name,
+        get_variant_string(data, '$.email') as email
+ FROM test_noshredding_variant)
 ORDER BY id, label;
 
 -- ========================================

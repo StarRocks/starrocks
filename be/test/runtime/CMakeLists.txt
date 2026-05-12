@@ -12,13 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
 set(RUNTIME_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     current_thread_core_test.cpp
     mem_tracker_test.cpp
     mem_pool_test.cpp
+    load_fail_point_test.cpp
+    query_statistics_test.cpp
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
+    thrift_rpc_helper_test.cpp
     memory/mem_chunk_allocator_test.cpp
     memory/system_allocator_test.cpp
     memory/memory_resource_test.cpp
@@ -49,3 +57,22 @@ target_link_libraries(starrocks_runtime_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_runtime_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(runtime_core_test $<TARGET_OBJECTS:starrocks_runtime_core_test_objs>)
 target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
+
+set(STREAM_LOAD_METRICS_TEST_LINK_LIBS
+    RuntimeCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(stream_load_metrics_test ${BE_TEST_MACOS_LINK_STUBS} stream_load_metrics_test.cpp)
+target_link_libraries(stream_load_metrics_test ${STREAM_LOAD_METRICS_TEST_LINK_LIBS} gtest_main)
+set_target_properties(stream_load_metrics_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

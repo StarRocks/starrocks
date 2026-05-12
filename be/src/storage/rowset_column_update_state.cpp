@@ -20,6 +20,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -38,7 +39,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -159,10 +159,6 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     TRY_CATCH_BAD_ALLOC(header_ptr->offsets.push_back(header_ptr->upserts->size()));
     header_ptr->end_idx = *end_idx;
     DCHECK(header_ptr->offsets.size() == header_ptr->end_idx - header_ptr->start_idx + 1);
-    // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
-    // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
-    // So we try build slice in advance in here to make sure the correctness of memory statistics
-    TRY_CATCH_BAD_ALLOC(header_ptr->upserts->raw_data());
     _memory_usage += header_ptr->upserts->memory_usage();
 
     return Status::OK();
@@ -587,7 +583,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
 Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& stat, Rowset* rowset) {
     rowset->rowset_meta()->set_num_rows(stat.num_rows_written);
     rowset->rowset_meta()->set_total_row_size(stat.total_row_size);
-    rowset->rowset_meta()->set_total_disk_size(stat.total_data_size);
+    rowset->rowset_meta()->set_total_disk_size(stat.total_data_size + stat.total_index_size);
     rowset->rowset_meta()->set_data_disk_size(stat.total_data_size);
     rowset->rowset_meta()->set_index_disk_size(stat.total_index_size);
     rowset->rowset_meta()->set_empty(stat.num_rows_written == 0);
@@ -644,9 +640,9 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             padding_char_columns(schema, tablet_schema, chunk_ptr.get());
             RETURN_IF_ERROR(writer->append_chunk(*chunk_ptr));
             RETURN_IF_ERROR(writer->finalize(&segment_file_size, &index_size, &footer_position));
-            // update statisic
+            // update statistic
             stat.num_segment++;
-            stat.total_data_size += segment_file_size;
+            stat.total_data_size += static_cast<int64_t>(segment_file_size) - static_cast<int64_t>(index_size);
             stat.total_index_size += index_size;
             stat.num_rows_written += static_cast<int64_t>(chunk_ptr->num_rows());
             stat.total_row_size += static_cast<int64_t>(chunk_ptr->bytes_usage());

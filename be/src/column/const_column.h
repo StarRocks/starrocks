@@ -61,8 +61,6 @@ public:
 
     bool is_constant() const override { return true; }
 
-    const uint8_t* raw_data() const override { return _data->raw_data(); }
-
     size_t size() const override { return _size; }
 
     size_t capacity() const override { return UINT32_MAX; }

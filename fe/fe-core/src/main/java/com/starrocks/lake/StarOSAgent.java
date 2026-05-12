@@ -493,12 +493,17 @@ public class StarOSAgent {
     }
 
     public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
+        return createShardGroup(dbId, tableId, partitionId, indexId, PlacementPolicy.SPREAD);
+    }
+
+    public long createShardGroup(long dbId, long tableId, long partitionId, long indexId,
+                                  PlacementPolicy placementPolicy) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
             createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
-                    .setPolicy(PlacementPolicy.SPREAD)
+                    .setPolicy(placementPolicy)
                     .putLabels("dbId", String.valueOf(dbId))
                     .putLabels("tableId", String.valueOf(tableId))
                     .putLabels("partitionId", String.valueOf(partitionId))
@@ -568,6 +573,17 @@ public class StarOSAgent {
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
                                    ComputeResource computeResource)
         throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
+                computeResource);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                   List<Long> groupIds, @Nullable List<Long> matchShardIds,
+                                   @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
+        throws DdlException {
+        Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                "groupIds must not be null or empty");
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
         }
@@ -579,7 +595,7 @@ public class StarOSAgent {
 
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
             builder.setReplicaCount(1)
-                    .addGroupIds(groupId)
+                    .addAllGroupIds(groupIds)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
                     .putAllShardProperties(properties)
@@ -608,22 +624,27 @@ public class StarOSAgent {
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }
 
-    public void createShards(Map<Long, List<Long>> oldToNewShardIds, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-            long groupId, @NotNull Map<String, String> properties, ComputeResource computeResource)
-            throws DdlException {
-        createShardsForSplit(oldToNewShardIds, pathInfo, cacheInfo, groupId, properties, computeResource);
-    }
-
-    public void createShardsForSplit(Map<Long, List<Long>> oldToNewShardIds, FilePathInfo pathInfo,
-            FileCacheInfo cacheInfo, long groupId, @NotNull Map<String, String> properties,
-            ComputeResource computeResource) throws DdlException {
+    /**
+     * Create shards for a tablet split.
+     *
+     * <p>{@code oldShardIdToGroupIds} carries one entry per old tablet, mapping that old tablet's
+     * id to the list of group ids each new shard spawned from it should join. For non-colocate
+     * range tables this is a single-element list with the SPREAD shard group; for range-colocate
+     * tables it is {@code [SPREAD, <old-tablet's PACK shard group>]} per old tablet, and the PACK
+     * group differs per old tablet once the colocate group has multiple ranges.
+     */
+    public void createShardsForSplit(Map<Long, List<Long>> oldShardIdToGroupIds,
+                                     Map<Long, List<Long>> oldToNewShardIds,
+                                     FilePathInfo pathInfo,
+                                     FileCacheInfo cacheInfo,
+                                     @NotNull Map<String, String> properties,
+                                     ComputeResource computeResource) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
             builder.setReplicaCount(1)
-                    .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
                     .putAllShardProperties(properties)
@@ -632,6 +653,11 @@ public class StarOSAgent {
             List<CreateShardInfo> createShardInfoList = new ArrayList<>(oldToNewShardIds.size() * 2);
             for (Map.Entry<Long, List<Long>> entry : oldToNewShardIds.entrySet()) {
                 builder.clearPlacementPreferences();
+                builder.clearGroupIds();
+                List<Long> groupIds = oldShardIdToGroupIds.get(entry.getKey());
+                Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                        "Missing group ids for old shard " + entry.getKey());
+                builder.addAllGroupIds(groupIds);
                 PlacementPreference preference = PlacementPreference.newBuilder()
                         .setPlacementPolicy(PlacementPolicy.PACK)
                         .setPlacementRelationship(PlacementRelationship.WITH_SHARD)

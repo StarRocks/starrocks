@@ -27,6 +27,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"

@@ -91,17 +91,15 @@ public class TablesProcDir implements ProcDirInterface {
             throw new AnalysisException("table id or name is null or empty");
         }
 
+        // Lock-free: idToTable / nameToTable in Database are ConcurrentHashMap, so the
+        // getTable lookup is thread-safe on its own. A concurrent DROP TABLE may make
+        // the result null or stale, both acceptable here. The returned TableProcDir
+        // takes its own table-level locks when its descendants actually fetch data.
         Table table;
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            try {
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
-            } catch (NumberFormatException e) {
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableIdOrName);
-            }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
+        } catch (NumberFormatException e) {
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableIdOrName);
         }
 
         if (table == null) {

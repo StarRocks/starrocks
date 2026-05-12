@@ -123,8 +123,8 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, executor,
                 expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         // get insert only table
-        com.starrocks.catalog.Table table = cachingHiveMetastore.getTable("transactional_db", "insert_only");
-        Assertions.assertNotNull(table);
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> cachingHiveMetastore.getTable("transactional_db", "insert_only"));
         // get full acid table
         Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> cachingHiveMetastore.getTable("transactional_db", "full_acid"));

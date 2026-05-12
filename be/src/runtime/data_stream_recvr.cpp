@@ -38,6 +38,7 @@
 #include <deque>
 #include <utility>
 
+#include "base/compression/block_compression.h"
 #include "base/phmap/phmap.h"
 #include "base/string/faststring.h"
 #include "base/time/time.h"
@@ -47,15 +48,16 @@
 #include "common/util/debug_util.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/sorting/sort_cursor.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
-#include "util/compression/block_compression.h"
 #include "util/logging.h"
 
 namespace starrocks {
