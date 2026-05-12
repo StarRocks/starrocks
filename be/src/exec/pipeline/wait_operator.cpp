@@ -46,7 +46,7 @@ WaitSourceOperator::~WaitSourceOperator() {
 
 void WaitSourceOperator::close(RuntimeState* state) {
     if (_wait_timer_task != nullptr) {
-        state->fragment_ctx()->pipeline_timer()->unschedule(_wait_timer_task.get());
+        _wait_timer_task->unschedule_and_wait(state->fragment_ctx()->pipeline_timer());
         _wait_timer_task = nullptr;
     }
 }
