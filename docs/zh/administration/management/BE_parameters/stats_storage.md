@@ -32,7 +32,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [统计报告](#统计报告)
 - [存储](#存储)
 
