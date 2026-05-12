@@ -124,11 +124,11 @@ SELECT id, k,
 FROM test_range_offset_window
 ORDER BY id;
 
--- DECIMAL key with DOUBLE offsets; forces RANGE cast for decimal/double boundary calculation and comparison.
+-- DECIMAL key with DOUBLE literal offsets; forces RANGE cast for decimal/double boundary calculation and comparison.
 SELECT id, dec_k,
        SUM(v) OVER (
            ORDER BY dec_k ASC NULLS LAST
-           RANGE BETWEEN CAST(0.50 AS DOUBLE) PRECEDING AND CAST(0.75 AS DOUBLE) FOLLOWING
+           RANGE BETWEEN 5E-1 PRECEDING AND 7.5E-1 FOLLOWING
        ) AS w
 FROM test_range_offset_window
 ORDER BY id;

@@ -248,10 +248,16 @@ ORDER BY id;
 SELECT id, dec_k,
        SUM(v) OVER (
            ORDER BY dec_k ASC NULLS LAST
-           RANGE BETWEEN CAST(0.50 AS DOUBLE) PRECEDING AND CAST(0.75 AS DOUBLE) FOLLOWING
+           RANGE BETWEEN 5E-1 PRECEDING AND 7.5E-1 FOLLOWING
        ) AS w
 FROM test_range_offset_window
 ORDER BY id;
 -- result:
-E: (1064, "Getting analyzing error from line 4, column 25 to line 4, column 44. Detail message: Couldn't evaluate PRECEDING/FOLLOWING expression: To const value not a LiteralExpr .")
+1	None	30
+2	None	30
+3	1.00	1
+4	2.25	5
+5	2.25	5
+6	3.50	4
+7	5.75	5
 -- !result
