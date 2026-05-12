@@ -53,6 +53,9 @@ public:
 
     int compare(const VariantTuple& other) const;
 
+    bool operator<(const VariantTuple& other) const { return compare(other) < 0; }
+    bool operator==(const VariantTuple& other) const { return compare(other) == 0; }
+
     void to_proto(TuplePB* tuple_pb) const;
 
     Status from_proto(const TuplePB& tuple_pb);
