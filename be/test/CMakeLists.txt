@@ -269,6 +269,7 @@ set(EXEC_FILES
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
+        ./runtime/descriptors_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
