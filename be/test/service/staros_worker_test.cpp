@@ -61,7 +61,7 @@ TEST_F(StarOSWorkerTest, test_add_listener) {
     EXPECT_EQ(0, counter);
     EXPECT_TRUE(ids.empty());
 
-    auto& shard_count_metric = StarOSWorkerMetrics::instance()->staros_shard_count;
+    auto& shard_count_metric = StarRocksMetrics::instance()->staros_shard_count;
 
     info.id = 1;
     EXPECT_TRUE(worker->add_shard(info).ok());

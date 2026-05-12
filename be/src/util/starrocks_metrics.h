@@ -321,6 +321,7 @@ public:
     // task/node mis-selection or shard push lag.
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_GAUGE(staros_shard_count, MetricUnit::NOUNIT);
 
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
