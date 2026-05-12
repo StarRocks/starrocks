@@ -15,7 +15,7 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,7 +28,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * PipeScheduler: get tasks from pipe and execute them
  */
-public class PipeScheduler extends FrontendDaemon {
+public class PipeScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PipeScheduler.class);
 
@@ -44,12 +44,26 @@ public class PipeScheduler extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         try {
             process();
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of PipeScheduler", e);
         }
+    }
+
+    @Override
+    protected void onStopped() {
+        // recovered and beSlotMap are leader-session bookkeeping: the next leader must
+        // re-run pipe.recovery() before scheduling, and BE slot reservations made against a
+        // sealed editlog must not leak across sessions.
+        slotLock.lock();
+        try {
+            beSlotMap.clear();
+        } finally {
+            slotLock.unlock();
+        }
+        recovered = false;
     }
 
     private void process() {

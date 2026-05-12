@@ -396,7 +396,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -523,7 +523,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -689,5 +689,47 @@ public class VacuumTest {
             long fullVacuumResult = FullVacuumDaemon.computeMinActiveTxnId(db, olapTable);
             Assertions.assertEquals(50L, fullVacuumResult);
         }
+    }
+
+    @Test
+    public void testAutovacuumDaemonOnStoppedShutsDownExecutorAndStartRebuilds() throws Exception {
+        // The owned BlockingThreadPoolExecutorService is leader-only: shutdownNow() in
+        // onStopped() must interrupt in-flight vacuum tasks so worker threads exit, and
+        // start() must rebuild the pool for the next leader.
+        AutovacuumDaemon daemon = new AutovacuumDaemon();
+        org.apache.hadoop.util.BlockingThreadPoolExecutorService before =
+                (org.apache.hadoop.util.BlockingThreadPoolExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(daemon, "executorService", true);
+
+        org.apache.commons.lang3.reflect.MethodUtils.invokeMethod(daemon, true, "onStopped");
+        Assertions.assertTrue(before.isShutdown(), "executorService must be shut down on demotion");
+
+        daemon.start();
+        org.apache.hadoop.util.BlockingThreadPoolExecutorService after =
+                (org.apache.hadoop.util.BlockingThreadPoolExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(daemon, "executorService", true);
+        Assertions.assertNotSame(before, after, "executorService must be rebuilt on re-election");
+        Assertions.assertFalse(after.isShutdown());
+        daemon.setStop();
+    }
+
+    @Test
+    public void testFullVacuumDaemonOnStoppedShutsDownExecutorAndStartRebuilds() throws Exception {
+        // Same shutdown/rebuild contract as AutovacuumDaemon.
+        FullVacuumDaemon daemon = new FullVacuumDaemon();
+        org.apache.hadoop.util.BlockingThreadPoolExecutorService before =
+                (org.apache.hadoop.util.BlockingThreadPoolExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(daemon, "executorService", true);
+
+        org.apache.commons.lang3.reflect.MethodUtils.invokeMethod(daemon, true, "onStopped");
+        Assertions.assertTrue(before.isShutdown());
+
+        daemon.start();
+        org.apache.hadoop.util.BlockingThreadPoolExecutorService after =
+                (org.apache.hadoop.util.BlockingThreadPoolExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(daemon, "executorService", true);
+        Assertions.assertNotSame(before, after);
+        Assertions.assertFalse(after.isShutdown());
+        daemon.setStop();
     }
 }

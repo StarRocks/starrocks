@@ -103,9 +103,15 @@ public class LeaderTaskExecutor {
     }
 
     public void close() {
-        scheduledThreadPool.shutdown();
-        executor.shutdown();
-        runningTasks.clear();
+        // shutdownNow() interrupts in-flight tasks so worker threads exit promptly even if
+        // blocked on metadata locks; this is required for the leader-demotion drain path
+        // bounded by leader_demotion_drain_timeout_sec. Queued tasks are discarded - they
+        // are leader-side work that the new leader will re-issue.
+        scheduledThreadPool.shutdownNow();
+        executor.shutdownNow();
+        synchronized (runningTasks) {
+            runningTasks.clear();
+        }
     }
 
     public int getTaskNum() {

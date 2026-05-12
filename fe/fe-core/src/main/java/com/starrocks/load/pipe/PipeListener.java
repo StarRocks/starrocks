@@ -16,7 +16,7 @@ package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,7 +26,7 @@ import java.util.List;
  * Listen event for the pipe, and generate new tasks
  * TODO: currently it's singe-thread execution, but it's very easy to extend to multi-thread style
  */
-public class PipeListener extends FrontendDaemon {
+public class PipeListener extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PipeListener.class);
 
@@ -38,7 +38,7 @@ public class PipeListener extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         try {
             process();
         } catch (Throwable e) {

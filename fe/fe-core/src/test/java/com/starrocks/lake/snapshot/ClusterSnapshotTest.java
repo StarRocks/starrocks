@@ -666,8 +666,8 @@ public class ClusterSnapshotTest {
         long beginTime = scheduler.lastAutomatedJobStartTimeMs;
 
         setAutomatedSnapshotOn(false);
-        scheduler.runAfterCatalogReady();
-        scheduler.runAfterCatalogReady();
+        scheduler.runAfterLeaseValid();
+        scheduler.runAfterLeaseValid();
 
         new MockUp<ClusterSnapshotJobScheduler>() {
             @Mock
@@ -678,7 +678,7 @@ public class ClusterSnapshotTest {
 
         long oldValue = Config.automated_cluster_snapshot_interval_seconds;
         Config.automated_cluster_snapshot_interval_seconds = 0L;
-        scheduler.runAfterCatalogReady();
+        scheduler.runAfterLeaseValid();
         long endTime = scheduler.lastAutomatedJobStartTimeMs;
         Config.automated_cluster_snapshot_interval_seconds = oldValue;
 

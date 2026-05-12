@@ -1454,4 +1454,52 @@ public class TaskManagerTest {
         Assertions.assertTrue(dispatched[0],
                 "Dispatch scheduler should proceed when leader");
     }
+
+    @Test
+    public void testStopShutsDownSchedulersAndStartRebuilds() throws Exception {
+        // TaskManager owns two ScheduledExecutorService instances; stop() must shut both down
+        // so worker threads exit on demotion and start() must rebuild them for re-election.
+        // periodFutureMap holds futures scheduled on the old pool - it must be empty after
+        // stop() so a re-registered periodic task on the new leader does not collide with
+        // stale futures.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+
+        java.util.concurrent.ScheduledExecutorService periodBefore =
+                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(mgr, "periodScheduler", true);
+        java.util.concurrent.ScheduledExecutorService dispatchBefore =
+                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(mgr, "dispatchScheduler", true);
+
+        mgr.stop();
+        Assertions.assertTrue(periodBefore.isShutdown(), "periodScheduler must be shut down by stop()");
+        Assertions.assertTrue(dispatchBefore.isShutdown(), "dispatchScheduler must be shut down by stop()");
+        java.util.Map<?, ?> futureMap = (java.util.Map<?, ?>) org.apache.commons.lang3.reflect.FieldUtils
+                .readField(mgr, "periodFutureMap", true);
+        Assertions.assertTrue(futureMap.isEmpty(), "periodFutureMap must be cleared by stop()");
+
+        // Second start() rebuilds both pools.
+        mgr.start();
+        java.util.concurrent.ScheduledExecutorService periodAfter =
+                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(mgr, "periodScheduler", true);
+        java.util.concurrent.ScheduledExecutorService dispatchAfter =
+                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(mgr, "dispatchScheduler", true);
+        Assertions.assertNotSame(periodBefore, periodAfter, "periodScheduler must be rebuilt on re-election");
+        Assertions.assertNotSame(dispatchBefore, dispatchAfter, "dispatchScheduler must be rebuilt on re-election");
+        Assertions.assertFalse(periodAfter.isShutdown());
+        Assertions.assertFalse(dispatchAfter.isShutdown());
+
+        mgr.stop();
+    }
+
+    @Test
+    public void testStopIsNoOpWhenNotStarted() {
+        // stop() guards with isStart.compareAndSet(true, false); a TaskManager that never
+        // started must not throw when stop is called.
+        TaskManager mgr = new TaskManager();
+        Assertions.assertDoesNotThrow(mgr::stop);
+    }
 }

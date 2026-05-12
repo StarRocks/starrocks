@@ -15,7 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -23,7 +23,7 @@ import org.apache.logging.log4j.Logger;
 
 // ClusterSnapshotJobScheduler daemon is running on master node. Coordinate two checkpoint controller
 // together to finish image checkpoint one by one and upload image for backup
-public class ClusterSnapshotJobScheduler extends FrontendDaemon implements SnapshotJobContext {
+public class ClusterSnapshotJobScheduler extends LeaderDaemon implements SnapshotJobContext {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJobScheduler.class);
     private static int CAPTURE_ID_RETRY_TIME = 10;
 
@@ -85,7 +85,7 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // skip first run when the scheduler start
         if (lastAutomatedJobStartTimeMs == 0) {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()

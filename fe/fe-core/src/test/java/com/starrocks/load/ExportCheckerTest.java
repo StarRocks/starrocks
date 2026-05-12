@@ -88,4 +88,56 @@ public class ExportCheckerTest {
         cancelled = (boolean) method.invoke(checker, job);
         Assertions.assertTrue(cancelled);
     }
+
+    @Test
+    public void testStopAllClosesExecutorsAndInitRebuilds() throws Exception {
+        // stopAll must shut down all three LeaderTaskExecutor instances so their worker
+        // threads exit on demotion; a subsequent init() must replace the static maps with
+        // fresh instances for the next leader.
+        ExportChecker.init(1000L);
+        com.starrocks.task.LeaderTaskExecutor pendingBefore = readExecutor(JobState.PENDING);
+        com.starrocks.task.LeaderTaskExecutor exportingBefore = readExecutor(JobState.EXPORTING);
+        com.starrocks.task.LeaderTaskExecutor subTaskBefore = readSubTaskExecutor();
+        Assertions.assertNotNull(pendingBefore);
+        Assertions.assertNotNull(exportingBefore);
+        Assertions.assertNotNull(subTaskBefore);
+
+        ExportChecker.stopAll(1000L);
+        Assertions.assertTrue(readPoolFromExecutor(pendingBefore).isShutdown(),
+                "pending executor pool must be shut down");
+        Assertions.assertTrue(readPoolFromExecutor(exportingBefore).isShutdown(),
+                "exporting executor pool must be shut down");
+        Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).isShutdown(),
+                "sub-task executor pool must be shut down");
+
+        // init() again must produce fresh instances.
+        ExportChecker.init(1000L);
+        Assertions.assertNotSame(pendingBefore, readExecutor(JobState.PENDING));
+        Assertions.assertNotSame(exportingBefore, readExecutor(JobState.EXPORTING));
+        Assertions.assertNotSame(subTaskBefore, readSubTaskExecutor());
+        // Tear down what init() just created so the test does not leak threads.
+        ExportChecker.stopAll(1000L);
+    }
+
+    private com.starrocks.task.LeaderTaskExecutor readExecutor(JobState state) throws Exception {
+        Field field = ExportChecker.class.getDeclaredField("executors");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<JobState, com.starrocks.task.LeaderTaskExecutor> executors =
+                (Map<JobState, com.starrocks.task.LeaderTaskExecutor>) field.get(null);
+        return executors.get(state);
+    }
+
+    private com.starrocks.task.LeaderTaskExecutor readSubTaskExecutor() throws Exception {
+        Field field = ExportChecker.class.getDeclaredField("exportingSubTaskExecutor");
+        field.setAccessible(true);
+        return (com.starrocks.task.LeaderTaskExecutor) field.get(null);
+    }
+
+    private java.util.concurrent.ThreadPoolExecutor readPoolFromExecutor(com.starrocks.task.LeaderTaskExecutor lte)
+            throws Exception {
+        Field field = com.starrocks.task.LeaderTaskExecutor.class.getDeclaredField("executor");
+        field.setAccessible(true);
+        return (java.util.concurrent.ThreadPoolExecutor) field.get(lte);
+    }
 }

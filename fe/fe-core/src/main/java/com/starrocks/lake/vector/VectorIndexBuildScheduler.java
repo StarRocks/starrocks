@@ -12,7 +12,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
@@ -40,7 +40,7 @@ import javax.annotation.Nullable;
  * builtVersion is stored on {@link LakeTablet} (with @SerializedName) and persisted via checkpoint.
  * Publish path reads builtVersion directly from the tablet object.
  */
-public class VectorIndexBuildScheduler extends FrontendDaemon {
+public class VectorIndexBuildScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(VectorIndexBuildScheduler.class);
 
     static final int MAX_CONCURRENT_TASKS = 64;
@@ -100,7 +100,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
             recoveryScanDone = false;
             return;
@@ -115,6 +115,20 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
         checkRunningTaskTimeout();
         cleanupStaleEntries();
         scheduleFromPending();
+    }
+
+    @Override
+    protected void onStopped() {
+        // The four caches and the recovery watermark are all leader-session bookkeeping:
+        // pendingTablets is repopulated by transactions on the next leader, runningTasks /
+        // preferredNodes are rebuilt as new build attempts are dispatched, cooldownUntil is
+        // a transient backoff map, and recoveryScanDone must reset to false so the next
+        // leader rescans tablets whose builtVersion < visibleVersion.
+        pendingTablets.clear();
+        runningTasks.clear();
+        preferredNodes.clear();
+        cooldownUntil.clear();
+        recoveryScanDone = false;
     }
 
     // ========== Public API ==========

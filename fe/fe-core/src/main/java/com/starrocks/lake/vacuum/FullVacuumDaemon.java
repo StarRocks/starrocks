@@ -25,7 +25,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
@@ -56,16 +56,22 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.rpc.LakeService.TIMEOUT_VACUUM_FULL;
 
-public class FullVacuumDaemon extends FrontendDaemon implements Writable {
+public class FullVacuumDaemon extends LeaderDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(FullVacuumDaemon.class);
 
     private static final long MILLISECONDS_PER_SECOND = 1000;
 
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
 
-    private final BlockingThreadPoolExecutorService executorService =
-            BlockingThreadPoolExecutorService.newInstance(Config.lake_fullvacuum_parallel_partitions, 0, TIMEOUT_VACUUM_FULL,
-                    TimeUnit.MILLISECONDS, "fullvacuum");
+    // Not final: shutdownNow() in onStopped() interrupts in-flight full-vacuum tasks so
+    // they exit promptly; start() rebuilds the pool on re-election.
+    private volatile BlockingThreadPoolExecutorService executorService = newExecutorService();
+
+    private static BlockingThreadPoolExecutorService newExecutorService() {
+        return BlockingThreadPoolExecutorService.newInstance(
+                Config.lake_fullvacuum_parallel_partitions, 0, TIMEOUT_VACUUM_FULL,
+                TimeUnit.MILLISECONDS, "fullvacuum");
+    }
 
     public FullVacuumDaemon() {
         // Check every minute if we should run a full vacuum
@@ -73,7 +79,24 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    public synchronized void start() {
+        if (executorService.isShutdown()) {
+            executorService = newExecutorService();
+        }
+        super.start();
+    }
+
+    @Override
+    protected void onStopped() {
+        // Same contract as AutovacuumDaemon: shut down the pool so worker threads exit on
+        // demotion, and clear in-flight partition bookkeeping so the next leader does not
+        // skip partitions whose ids stayed in vacuumingPartitions across the boundary.
+        executorService.shutdownNow();
+        vacuumingPartitions.clear();
+    }
+
+    @Override
+    protected void runAfterLeaseValid() {
         if (!Config.lake_enable_fullvacuum) {
             return;
         }

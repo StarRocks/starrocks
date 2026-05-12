@@ -27,7 +27,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
@@ -61,7 +61,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class AutovacuumDaemon extends FrontendDaemon {
+public class AutovacuumDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(AutovacuumDaemon.class);
 
     private static final long MILLISECONDS_PER_SECOND = 1000;
@@ -70,15 +70,42 @@ public class AutovacuumDaemon extends FrontendDaemon {
     private static final long MILLISECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
-    private final BlockingThreadPoolExecutorService executorService = BlockingThreadPoolExecutorService.newInstance(
-            Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
+
+    // Not final: shutdownNow() in onStopped() interrupts in-flight vacuum tasks so they
+    // exit promptly even if blocked on metadata locks; start() rebuilds the pool on
+    // re-election.
+    private volatile BlockingThreadPoolExecutorService executorService = newExecutorService();
+
+    private static BlockingThreadPoolExecutorService newExecutorService() {
+        return BlockingThreadPoolExecutorService.newInstance(
+                Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
+    }
 
     public AutovacuumDaemon() {
         super("auto-vacuum", 2000);
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    public synchronized void start() {
+        if (executorService.isShutdown()) {
+            executorService = newExecutorService();
+        }
+        super.start();
+    }
+
+    @Override
+    protected void onStopped() {
+        // vacuumingPartitions is leader-session bookkeeping: the in-flight executor tasks
+        // remove themselves from this set in a finally block, but shutdownNow() will cancel
+        // queued tasks that have not yet run, so we clear here to avoid stale partition ids
+        // suppressing the next leader's vacuum scan. The executor itself is shut down so
+        // worker threads exit promptly during the drain.
+        executorService.shutdownNow();
+        vacuumingPartitions.clear();
+    }
+
+    @Override
+    protected void runAfterLeaseValid() {
         if (FeConstants.runningUnitTest) {
             return;
         }

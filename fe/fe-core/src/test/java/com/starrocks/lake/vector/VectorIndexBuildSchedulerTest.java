@@ -732,7 +732,7 @@ public class VectorIndexBuildSchedulerTest {
         };
 
         java.lang.reflect.Method m =
-                VectorIndexBuildScheduler.class.getDeclaredMethod("runAfterCatalogReady");
+                VectorIndexBuildScheduler.class.getDeclaredMethod("runAfterLeaseValid");
         m.setAccessible(true);
         m.invoke(scheduler);
 
@@ -762,7 +762,7 @@ public class VectorIndexBuildSchedulerTest {
         };
 
         java.lang.reflect.Method m =
-                VectorIndexBuildScheduler.class.getDeclaredMethod("runAfterCatalogReady");
+                VectorIndexBuildScheduler.class.getDeclaredMethod("runAfterLeaseValid");
         m.setAccessible(true);
 
         java.lang.reflect.Field f = VectorIndexBuildScheduler.class.getDeclaredField("recoveryScanDone");
@@ -1004,5 +1004,24 @@ public class VectorIndexBuildSchedulerTest {
         Assertions.assertTrue(getRunningTasks().isEmpty());
         Assertions.assertEquals(20L, latestVersion(tabletId));
         Assertions.assertEquals(15L, latestCompactionVersion(tabletId));
+    }
+
+    @Test
+    public void testOnStoppedClearsLeaderSessionStateAndResetsRecovery() throws Exception {
+        // The four caches and recoveryScanDone are all leader-session bookkeeping: a new
+        // leader rebuilds pendingTablets from transactions, dispatches new builds, and must
+        // rerun recoveryScan() because builtVersion < visibleVersion tablets may have moved.
+        scheduler.addPendingTablet(1L, 5L, false);
+        scheduler.addPendingTablet(2L, 7L, false);
+        getRunningTasks().put(3L, createTaskWithStartTime(3L, 9L, System.currentTimeMillis()));
+        org.apache.commons.lang3.reflect.FieldUtils.writeField(scheduler, "recoveryScanDone", true, true);
+
+        org.apache.commons.lang3.reflect.MethodUtils.invokeMethod(scheduler, true, "onStopped");
+
+        Assertions.assertTrue(getPendingTablets().isEmpty(), "pendingTablets must be cleared on demotion");
+        Assertions.assertTrue(getRunningTasks().isEmpty(), "runningTasks must be cleared on demotion");
+        Assertions.assertFalse(
+                (boolean) org.apache.commons.lang3.reflect.FieldUtils.readField(scheduler, "recoveryScanDone", true),
+                "recoveryScanDone must reset so the next leader rescans tablets");
     }
 }

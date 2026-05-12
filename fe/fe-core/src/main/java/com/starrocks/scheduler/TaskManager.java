@@ -99,13 +99,18 @@ public class TaskManager implements MemoryTrackable {
 
     // The periodScheduler is used to generate the corresponding TaskRun on time for the Periodical Task.
     // This scheduler can use the time wheel to optimize later.
-    private final ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
+    //
+    // Not final: rebuilt by start() if a previous stop() shut it down so this manager is
+    // reusable across leader demotion / re-election cycles.
+    private volatile ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
 
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
     // This operation need to consider concurrency.
     // This scheduler can use notify/wait to optimize later.
-    private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
+    //
+    // Not final: same rebuild-on-restart contract as periodScheduler.
+    private volatile ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
     // Use to concurrency control
     private final QueryableReentrantLock taskLock;
 
@@ -121,6 +126,15 @@ public class TaskManager implements MemoryTrackable {
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
+            // Rebuild both schedulers if a previous stop() shut them down. periodScheduler also
+            // needs a fresh pool so the futures kept by periodFutureMap (which we cleared in
+            // stop()) cannot reference cancelled futures from the previous leader session.
+            if (periodScheduler.isShutdown()) {
+                periodScheduler = Executors.newScheduledThreadPool(1);
+            }
+            if (dispatchScheduler.isShutdown()) {
+                dispatchScheduler = Executors.newScheduledThreadPool(1);
+            }
             clearUnfinishedTaskRun();
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
@@ -141,6 +155,33 @@ public class TaskManager implements MemoryTrackable {
                 }
             }, 0, 1, TimeUnit.SECONDS);
         }
+    }
+
+    /**
+     * Coordinated stop for leader demotion. TaskManager owns two ScheduledExecutorService
+     * instances and is not a LeaderDaemon (its dispatch loop runs inside the executor with
+     * an embedded leader check), so it cannot follow the standard {@code stopGracefully}
+     * contract; this method is the equivalent. After it returns the manager is in a state
+     * where the next {@link #start()} rebuilds both pools and re-registers periodic tasks.
+     * shutdownNow() interrupts in-flight TaskRun checks so they exit promptly even if blocked
+     * in metadata locks.
+     */
+    public void stop() {
+        if (!isStart.compareAndSet(true, false)) {
+            return;
+        }
+        // Cancel periodic futures so a re-registered task on the next leader does not race
+        // a still-firing future against the new periodScheduler.
+        for (ScheduledFuture<?> future : periodFutureMap.values()) {
+            try {
+                future.cancel(true);
+            } catch (Throwable t) {
+                LOG.warn("cancel periodic task future failed", t);
+            }
+        }
+        periodFutureMap.clear();
+        periodScheduler.shutdownNow();
+        dispatchScheduler.shutdownNow();
     }
 
     private void registerPeriodicalTask() {
