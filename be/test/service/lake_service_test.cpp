@@ -650,8 +650,7 @@ TEST_F(LakeServiceTest, test_publish_version_vector_index_dispatch_gate) {
         log.set_tablet_id(tablet_id);
         log.set_partition_id(_partition_id);
         log.set_txn_id(txn_id);
-        log.mutable_op_write()->mutable_rowset()->add_segments(
-                generate_segment_file_for_tablet(tablet_id, txn_id));
+        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file_for_tablet(tablet_id, txn_id));
         log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
         auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
         segment_meta->set_num_rows(100);
