@@ -281,12 +281,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             }
         }
 
-        public void pin() {
-            useCount.incrementAndGet();
+        public int pin() {
+            return useCount.incrementAndGet();
         }
 
-        public void unpin() {
-            useCount.decrementAndGet();
+        public int unpin() {
+            return useCount.decrementAndGet();
         }
 
         public static DiskCacheEntry newDiskCacheEntry(SeekableInputStream stream, long fileLength, String key) {
@@ -558,10 +558,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     SeekableInputStream stream = diskCacheEntry.toSeekableInputStream();
                     return new DiskCacheSeekableInputStream(stream, diskCache, key, diskCacheEntry);
                 } catch (Exception e) {
-                    diskCache.asMap().computeIfPresent(key, (k, v) -> {
-                        v.unpin();
-                        return v;
-                    });
+                    DiskCacheSeekableInputStream.unpinAndCleanupOrphan(diskCache, key, diskCacheEntry);
                     return null;
                 }
             } else {
@@ -594,21 +591,25 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             try {
                 stream.close();
             } finally {
-                int remaining = entry.useCount.decrementAndGet();
-                LOG.debug("diskCache unpin: key={}, useCount={}, size={}MB, stats=[{}]",
-                        key, remaining, entry.length >> 20, diskCache.stats());
-                if (remaining == 0) {
-                    // Only delete if *our specific entry* is no longer in the cache.
-                    // diskCache.asMap().get(key) == null  -> evicted, no replacement -> safe to delete
-                    // diskCache.asMap().get(key) == entry -> still live -> skip, Caffeine handles it
-                    // diskCache.asMap().get(key) is a NEW object -> evicted + replaced -> DON'T delete new file
-                    DiskCacheEntry current = diskCache.asMap().get(key);
-                    if (current == null) {
-                        IOUtil.deleteLocalFileWithRemotePath(key);
-                        LOG.warn("diskCache cleaning up orphaned file for evicted-while-pinned entry: key={}", key);
-                    }
-                    // if current != null && current != entry: new entry loaded, skip deletion
+                unpinAndCleanupOrphan(diskCache, key, entry);
+            }
+        }
+
+        static void unpinAndCleanupOrphan(Cache<String, DiskCacheEntry> diskCache, String key, DiskCacheEntry entry) {
+            int remaining = entry.unpin();
+            LOG.debug("diskCache unpin: key={}, useCount={}, size={}MB, stats=[{}]",
+                    key, remaining, entry.length >> 20, diskCache.stats());
+            if (remaining == 0) {
+                // Only delete if *our specific entry* is no longer in the cache.
+                // diskCache.asMap().get(key) == null  -> evicted, no replacement -> safe to delete
+                // diskCache.asMap().get(key) == entry -> still live -> skip, Caffeine handles it
+                // diskCache.asMap().get(key) is a NEW object -> evicted + replaced -> DON'T delete new file
+                DiskCacheEntry current = diskCache.asMap().get(key);
+                if (current == null) {
+                    IOUtil.deleteLocalFileWithRemotePath(key);
+                    LOG.warn("diskCache cleaning up orphaned file for evicted-while-pinned entry: key={}", key);
                 }
+                // if current != null && current != entry: new entry loaded, skip deletion
             }
         }
 
