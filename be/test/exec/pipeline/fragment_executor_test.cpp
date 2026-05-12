@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/InternalService_types.h"
