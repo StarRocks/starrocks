@@ -157,6 +157,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     @Test
     public void testWhitelistAcceptsSupportedAggregates() throws Exception {
         // t_numeric: id INT, c1 INT, c2 INT — all numeric.
+        // t0: id INT, data STRING, date STRING.
         String[] ddls = {
                 // sum / avg over numeric
                 "SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
@@ -186,6 +187,38 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         }
     }
 
+    /** {@code MIN(VARCHAR)} — widened in #73095 once state_union accepted compatible string types. */
+    @Test
+    public void testWhitelistAcceptsMinVarchar() throws Exception {
+        // t0.data is STRING (i.e. VARCHAR(65533) under the StarRocks type system).
+        assertWhitelistAccepts("SELECT id, MIN(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
+    }
+
+    /** {@code MAX(VARCHAR)} — same widening as MIN; covered by #73095. */
+    @Test
+    public void testWhitelistAcceptsMaxVarchar() throws Exception {
+        assertWhitelistAccepts("SELECT id, MAX(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
+    }
+
+    /**
+     * {@code AVG(DECIMAL)} — unblocked by #73012 which preserves the typed AggStateDesc
+     * on the state_union scalar so DECIMAL precision/scale survive the intermediate
+     * (sum, count) tuple. Use {@code CAST(c1 AS DECIMAL(10, 2))} since the mocked
+     * Iceberg tables only expose integer numeric columns.
+     */
+    @Test
+    public void testWhitelistAcceptsAvgDecimal() throws Exception {
+        assertWhitelistAccepts(
+                "SELECT id, AVG(CAST(c1 AS DECIMAL(10, 2))) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+    }
+
+    /** {@code ARRAY_AGG(col)} (single arg) — newly whitelisted entry. */
+    @Test
+    public void testWhitelistAcceptsArrayAggSingleArg() throws Exception {
+        assertWhitelistAccepts("SELECT id, ARRAY_AGG(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
+    }
+
     /**
      * Aggregate-function whitelist: combinations not on the list must be rejected at
      * CREATE time so the user sees a clear error instead of silently wrong data or a
@@ -195,31 +228,71 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     public void testWhitelistRejectsUnsupportedAggregates() throws Exception {
         record Case(String selectSql, String expectedFragment) { }
         Case[] cases = {
-                // Unknown function: array_agg is not on the whitelist.
-                new Case("SELECT id, ARRAY_AGG(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
-                        "does not support aggregate function: array_agg"),
-                // Function on the whitelist but argument type not allowed: MIN(varchar).
-                // t0 has columns: id INT, data STRING, date STRING.
-                new Case("SELECT id, MIN(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id",
-                        "does not support min with argument types"),
+                // Unknown function: stddev is not on the whitelist.
+                new Case("SELECT id, STDDEV(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                        "does not support aggregate function: stddev"),
         };
 
         for (Case c : cases) {
-            String ddl = "CREATE MATERIALIZED VIEW mv_wl_neg "
-                    + "REFRESH DEFERRED MANUAL "
-                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
-                    + "AS " + c.selectSql;
-            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
-            QueryStatement qs = stmt.getQueryStatement();
-            Analyzer.analyze(qs, connectContext);
-
-            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
-            SemanticException ex = assertThrows(SemanticException.class,
-                    () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
-                    "whitelist must reject: " + c.selectSql);
-            assertTrue(ex.getMessage().toLowerCase().contains(c.expectedFragment.toLowerCase()),
-                    "error message must contain '" + c.expectedFragment + "', got: " + ex.getMessage());
+            assertWhitelistRejects(c.selectSql, c.expectedFragment);
         }
+    }
+
+    /**
+     * {@code ARRAY_AGG(col ORDER BY key)} must be rejected: FunctionAnalyzer inlines the
+     * ORDER BY key as an extra child, so args.length > 1, while IVM state_union is unordered.
+     */
+    @Test
+    public void testWhitelistRejectsArrayAggOrderBy() throws Exception {
+        assertWhitelistRejects(
+                "SELECT id, ARRAY_AGG(data ORDER BY date) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id",
+                "does not support array_agg with argument types");
+    }
+
+    /**
+     * {@code SUM(VARCHAR)} must be rejected: SUM is whitelisted but its predicate is
+     * isFixedOrFloat || isDecimalV3, so STRING args are not accepted.
+     */
+    @Test
+    public void testWhitelistRejectsSumVarchar() throws Exception {
+        assertWhitelistRejects(
+                "SELECT id, SUM(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id",
+                "does not support sum with argument types");
+    }
+
+    // ── whitelist test helpers ───────────────────────────────────────────────
+
+    private void assertWhitelistAccepts(String selectSql) throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_wl "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS " + selectSql;
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+        assertTrue(result.isPresent(), "whitelist must accept: " + selectSql);
+    }
+
+    private void assertWhitelistRejects(String selectSql, String expectedFragment) throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_wl_neg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS " + selectSql;
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "whitelist must reject: " + selectSql);
+        assertTrue(ex.getMessage().toLowerCase().contains(expectedFragment.toLowerCase()),
+                "error message must contain '" + expectedFragment + "', got: " + ex.getMessage());
     }
 
     /**
