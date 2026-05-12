@@ -19,46 +19,76 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
+import com.starrocks.thrift.TIcebergWriteMode;
 import org.apache.iceberg.Table;
 
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_PARQUET_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 
 /**
- * IcebergDeleteSink is used to support delete operations to Iceberg tables.
- * It supports write position delete files
+ * IcebergRowDeltaSink is used to support UPDATE operations on Iceberg tables
+ * using the RowDelta model. It writes both position delete files and new data
+ * files in a single atomic operation.
  * <p>
  * Required columns:
  * - _file (STRING): Path of the data file
  * - _pos (BIGINT): Row position within the file
+ * - Plus data columns for the updated rows
  */
-public class IcebergDeleteSink extends DataSink {
+public class IcebergRowDeltaSink extends DataSink {
+    public static final String WRITE_MODE_ROW_DELTA = "ROW_DELTA";
+
+    /**
+     * Operation codes for row-level delta operations.
+     * Each row in the RowDelta output carries an op_code that tells the BE sink
+     * how to route it. Values must stay in sync with BE IcebergRowDeltaSink::OP_*.
+     */
+    public enum OpCode {
+        NO_OP(0),           // discard (MERGE row matches no WHEN clause)
+        DELETE(1),          // position delete only
+        UPDATE(2),          // position delete + new data row
+        INSERT(3);          // new data row only
+
+        private final int value;
+
+        OpCode(int value) {
+            this.value = value;
+        }
+
+        public int value() {
+            return value;
+        }
+    }
+
     protected final TupleDescriptor desc;
     private IcebergTable icebergTable;
     private final long targetTableId;
+    private final String fileFormat;
     private final String tableLocation;
     private final String dataLocation;
-    private final String compressionType;
+    private final String dataCompressionType;
+    private final String deleteCompressionType;
     private final long targetMaxFileSize;
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
 
     /**
-     * Constructor for IcebergDeleteSink
+     * Constructor for IcebergRowDeltaSink
      *
      * @param icebergTable    The target Iceberg table
      * @param desc            Tuple descriptor containing operation columns
      * @param sessionVariable Session variables for configuration
      */
-    public IcebergDeleteSink(IcebergTable icebergTable, TupleDescriptor desc,
-                             SessionVariable sessionVariable) {
+    public IcebergRowDeltaSink(IcebergTable icebergTable, TupleDescriptor desc,
+                               SessionVariable sessionVariable) {
         this.icebergTable = icebergTable;
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
@@ -66,10 +96,16 @@ public class IcebergDeleteSink extends DataSink {
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
-        // Priority: write.delete.parquet.compression-codec > write.parquet.compression-codec > session variable
-        this.compressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION,
-                nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
-                        sessionVariable.getConnectorSinkCompressionCodec()));
+        this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
+                .toLowerCase();
+        // Row-delta writes both new data files and new position-delete files, so each
+        // needs its own codec.
+        // Data files: write.parquet.compression-codec > session variable.
+        // Delete files: write.delete.parquet.compression-codec > write.parquet.compression-codec > session variable.
+        String sessionCodec = sessionVariable.getConnectorSinkCompressionCodec();
+        String dataCodec = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, sessionCodec);
+        this.dataCompressionType = dataCodec;
+        this.deleteCompressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION, dataCodec);
         this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
     }
 
@@ -77,15 +113,17 @@ public class IcebergDeleteSink extends DataSink {
         String catalogName = icebergTable.getCatalogName();
         this.cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
         // Validate tuple descriptor contains required columns
-        validateDeleteTuple(desc);
+        validateTuple(desc);
     }
 
     /**
-     * Validate that the tuple descriptor contains required columns
+     * Validate that the tuple descriptor contains required columns for row delta operations.
+     * The tuple must include _file and _pos columns for identifying rows to delete,
+     * plus data columns for the new rows.
      *
      * @param desc The tuple descriptor to validate
      */
-    private void validateDeleteTuple(TupleDescriptor desc) {
+    private void validateTuple(TupleDescriptor desc) {
         boolean hasFilePathColumn = false;
         boolean hasPosColumn = false;
 
@@ -110,36 +148,36 @@ public class IcebergDeleteSink extends DataSink {
         }
 
         if (!hasFilePathColumn || !hasPosColumn) {
-            throw new StarRocksConnectorException("IcebergDeleteSink requires _file and _pos columns in tuple descriptor");
+            throw new StarRocksConnectorException(
+                    "IcebergRowDeltaSink requires _file and _pos columns in tuple descriptor");
         }
     }
 
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(prefix).append("ICEBERG DELETE SINK");
+        strBuilder.append(prefix).append("ICEBERG ROW DELTA SINK");
         strBuilder.append("\n");
         strBuilder.append(prefix).append("  TABLE: ").append(tableIdentifier).append("\n");
         strBuilder.append(prefix).append("  LOCATION: ").append(tableLocation).append("\n");
+        strBuilder.append(prefix).append("  WRITE MODE: ").append(WRITE_MODE_ROW_DELTA).append("\n");
         strBuilder.append(prefix).append("  TUPLE ID: ").append(desc.getId()).append("\n");
         return strBuilder.toString();
     }
 
     @Override
     protected TDataSink toThrift() {
-        TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_DELETE_SINK);
+        TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_ROW_DELTA_SINK);
         TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
         tIcebergTableSink.setTarget_table_id(targetTableId);
         tIcebergTableSink.setTuple_id(desc.getId().asInt());
         tIcebergTableSink.setLocation(tableLocation);
-        // For delete sink, we set both data and delete locations
         tIcebergTableSink.setData_location(dataLocation);
-        tIcebergTableSink.setFile_format("parquet"); // Delete files are always parquet
+        tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(false);
-        // DeleteSink only emits position-delete files; the codec belongs in the
-        // delete-file slot. `compression_type` is reserved for data files now.
-        TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
-        tIcebergTableSink.setDelete_compression_type(compression);
+        tIcebergTableSink.setWrite_mode(TIcebergWriteMode.ROW_DELTA);
+        tIcebergTableSink.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(dataCompressionType));
+        tIcebergTableSink.setDelete_compression_type(PARQUET_COMPRESSION_TYPE_MAP.get(deleteCompressionType));
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
@@ -165,7 +203,7 @@ public class IcebergDeleteSink extends DataSink {
     }
 
     /**
-     * Sets the sink extra info for this delete operation
+     * Sets the sink extra info for this row delta operation
      *
      * @param sinkExtraInfo The extra info to set
      */
@@ -174,7 +212,7 @@ public class IcebergDeleteSink extends DataSink {
     }
 
     /**
-     * Gets the sink extra info for this delete operation
+     * Gets the sink extra info for this row delta operation
      *
      * @return The extra info, or null if not set
      */

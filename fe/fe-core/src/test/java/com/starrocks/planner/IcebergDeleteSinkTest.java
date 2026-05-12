@@ -280,7 +280,7 @@ public class IcebergDeleteSinkTest {
 
             TDataSink tDataSink = sink.toThrift();
             TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
-            assertEquals(TCompressionType.ZSTD, icebergSink.getCompression_type());
+            assertEquals(TCompressionType.ZSTD, icebergSink.getDelete_compression_type());
         }
 
         // Test 2: Only write.parquet.compression is set (fallback)
@@ -300,7 +300,7 @@ public class IcebergDeleteSinkTest {
 
             TDataSink tDataSink = sink.toThrift();
             TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
-            assertEquals(TCompressionType.SNAPPY, icebergSink.getCompression_type());
+            assertEquals(TCompressionType.SNAPPY, icebergSink.getDelete_compression_type());
         }
 
         // Test 3: Both set, write.delete.parquet.compression has higher priority
@@ -322,7 +322,7 @@ public class IcebergDeleteSinkTest {
             TDataSink tDataSink = sink.toThrift();
             TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
             // Should use write.delete.parquet.compression (gzip), not write.parquet.compression (snappy)
-            assertEquals(TCompressionType.GZIP, icebergSink.getCompression_type());
+            assertEquals(TCompressionType.GZIP, icebergSink.getDelete_compression_type());
         }
 
         // Test 4: Neither set, use session variable default (uncompressed)
@@ -341,7 +341,7 @@ public class IcebergDeleteSinkTest {
 
             TDataSink tDataSink = sink.toThrift();
             TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
-            assertEquals(TCompressionType.NO_COMPRESSION, icebergSink.getCompression_type());
+            assertEquals(TCompressionType.NO_COMPRESSION, icebergSink.getDelete_compression_type());
         }
 
         // Test 5: Session variable with custom compression
@@ -363,7 +363,7 @@ public class IcebergDeleteSinkTest {
 
             TDataSink tDataSink = sink.toThrift();
             TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
-            assertEquals(TCompressionType.LZ4, icebergSink.getCompression_type());
+            assertEquals(TCompressionType.LZ4, icebergSink.getDelete_compression_type());
         }
     }
 }

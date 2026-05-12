@@ -19,10 +19,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
@@ -39,16 +41,19 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -70,6 +75,151 @@ public class UpdateAnalyzer {
         properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
     }
 
+    /**
+     * Analyze Iceberg table update statement.
+     * For Iceberg update, we convert:
+     *   UPDATE table SET col1=expr1, col2=expr2 WHERE condition
+     * to:
+     *   INSERT INTO iceberg_row_delta_sink
+     *   SELECT _file, _pos, partition_col1, ..., new_col1, new_col2, ..., 2 AS op_code
+     *   FROM table WHERE condition
+     */
+    private static void analyzeIcebergTable(UpdateStmt updateStmt, IcebergTable icebergTable,
+                                            ConnectContext session) {
+        if (icebergTable.getFormatVersion() != 2) {
+            throw new SemanticException(
+                    "UPDATE is only supported for Iceberg V2 tables, but table format version is "
+                            + icebergTable.getFormatVersion());
+        }
+        if (updateStmt.getWherePredicate() == null) {
+            throw new SemanticException("Update must specify where clause to prevent full table update");
+        }
+        if (updateStmt.getCommonTableExpressions() != null) {
+            throw new SemanticException("Update for Iceberg table do not support `with` clause");
+        }
+        if (updateStmt.getFromRelations() != null) {
+            throw new SemanticException("Update for Iceberg table do not support `from` clause");
+        }
+
+        // Build assignment map
+        List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
+        Map<String, ColumnAssignment> assignmentByColName = new HashMap<>();
+        for (ColumnAssignment col : assignmentList) {
+            assignmentByColName.put(col.getColumn().toLowerCase(), col);
+        }
+
+        // Reject partition column updates
+        List<Column> partitionColumns = icebergTable.getPartitionColumns().stream()
+                .filter(Objects::nonNull).toList();
+        for (Column partitionCol : partitionColumns) {
+            if (assignmentByColName.containsKey(partitionCol.getName().toLowerCase())) {
+                throw new SemanticException("Update for Iceberg table do not support updating partition column: "
+                        + partitionCol.getName());
+            }
+        }
+
+        // Validate assignment columns exist and are writable
+        TableName tableName = TableName.fromTableRef(updateStmt.getTableRef());
+        for (String colName : assignmentByColName.keySet()) {
+            Column col = icebergTable.getColumn(colName);
+            if (col == null) {
+                throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
+            }
+            if (col.isHidden()) {
+                throw new SemanticException("Updating metadata column '%s' is not allowed", colName);
+            }
+        }
+
+        // Build SELECT list: _file, _pos, partition_cols, full schema (with SET exprs), op_code
+        SelectList selectList = new SelectList();
+
+        // Add _file column
+        SlotRef filePathColumn = new SlotRef(tableName, IcebergTable.FILE_PATH);
+        selectList.addItem(new SelectListItem(filePathColumn, IcebergTable.FILE_PATH));
+
+        // Add _pos column
+        SlotRef posColumn = new SlotRef(tableName, IcebergTable.ROW_POSITION);
+        selectList.addItem(new SelectListItem(posColumn, IcebergTable.ROW_POSITION));
+
+        // No separate partition prefix — partition columns are already part of the full
+        // table schema in the data section below. Adding them here would create duplicate
+        // SlotRefs that the optimizer merges, changing the column count and breaking
+        // the BE layout assumptions (data_column_start, op_code_index).
+        // Partition shuffle uses the partition columns from the data section.
+
+        // Add full target-table schema: for assigned columns use the SET expression,
+        // for unassigned columns use SlotRef to keep original value.
+        // Skip hidden metadata columns (_file, _pos) — they are already in the prefix
+        // and must not appear in the data section written to Parquet files.
+        List<Column> dataColumns = icebergTable.getBaseSchema().stream()
+                .filter(col -> !col.isHidden())
+                .toList();
+        for (Column col : dataColumns) {
+            ColumnAssignment assign = assignmentByColName.get(col.getName().toLowerCase());
+            if (assign != null) {
+                Expr assignExpr = assign.getExpr();
+                if (assignExpr instanceof DefaultValueExpr) {
+                    // Iceberg V2 does not support column default values
+                    // (initial-default / write-default are V3 features)
+                    throw new SemanticException("DEFAULT value is not supported for Iceberg V2 tables");
+                }
+                selectList.addItem(new SelectListItem(assignExpr, col.getName()));
+            } else {
+                selectList.addItem(new SelectListItem(new SlotRef(tableName, col.getName()), col.getName()));
+            }
+        }
+
+        // Add op_code = OP_UPDATE as the last column
+        try {
+            selectList.addItem(new SelectListItem(
+                    new IntLiteral(IcebergRowDeltaSink.OpCode.UPDATE.value(), IntegerType.TINYINT), "op_code"));
+        } catch (Exception e) {
+            throw new SemanticException("analyze update failed", e);
+        }
+
+        // Create table relation with WHERE predicate
+        TableRelation tableRelation = new TableRelation(tableName);
+        SelectRelation selectRelation = new SelectRelation(
+                selectList,
+                tableRelation,
+                updateStmt.getWherePredicate(),
+                null,
+                null
+        );
+
+        // Create query statement
+        QueryStatement queryStatement = new QueryStatement(selectRelation);
+        queryStatement.setIsExplain(updateStmt.isExplain(), updateStmt.getExplainLevel());
+
+        // Analyze the query statement
+        new QueryAnalyzer(session).analyze(queryStatement);
+
+        // Cast data columns to target schema types.
+        // Layout: [_file, _pos, data_cols..., op_code]
+        // Only data_cols need casting — _file/_pos are fixed types, op_code is a literal.
+        List<Expr> outputExprs = queryStatement.getQueryRelation().getOutputExpression();
+        int dataColumnStart = 2;
+        List<Expr> castOutputExprs = Lists.newArrayList(outputExprs);
+        for (int i = 0; i < dataColumns.size(); i++) {
+            int outputIdx = dataColumnStart + i;
+            castOutputExprs.set(outputIdx,
+                    TypeManager.addCastExpr(outputExprs.get(outputIdx), dataColumns.get(i).getType()));
+        }
+        ((SelectRelation) queryStatement.getQueryRelation()).setOutputExpr(castOutputExprs);
+
+        // Pin the SELECT list aliases as the relation's explicit column names so the
+        // planner reads them via the standard getColumnOutputNames() path. Without
+        // this, QueryRelation falls back to scope-derived names which include hidden
+        // metadata columns (_file, _pos) twice for Iceberg.
+        ((SelectRelation) queryStatement.getQueryRelation()).setColumnOutputNames(
+                selectList.getItems().stream()
+                        .map(SelectListItem::getAlias)
+                        .collect(Collectors.toList()));
+
+        updateStmt.setTable(icebergTable);
+        updateStmt.setQueryStatement(queryStatement);
+    }
+
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         analyzeProperties(updateStmt, session);
 
@@ -87,6 +237,12 @@ public class UpdateAnalyzer {
             throw new SemanticException("The data of '%s' cannot be modified because '%s' is a materialized view,"
                     + "and the data of materialized view must be consistent with the base table.",
                     tableName.getTbl(), tableName.getTbl());
+        }
+
+        // Handle Iceberg table UPDATE separately (like DeleteAnalyzer does for DELETE)
+        if (table instanceof IcebergTable) {
+            analyzeIcebergTable(updateStmt, (IcebergTable) table, session);
+            return;
         }
 
         if (!table.supportsUpdate()) {

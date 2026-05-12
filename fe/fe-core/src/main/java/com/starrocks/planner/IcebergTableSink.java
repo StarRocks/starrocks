@@ -59,8 +59,7 @@ public class IcebergTableSink extends DataSink {
                 .toLowerCase();
         this.compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
                 sessionVariable.getConnectorSinkCompressionCodec());
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
-            sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
+        this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
         this.targetBranch = targetBranch;
 
         String catalogName = icebergTable.getCatalogName();
