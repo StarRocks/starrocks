@@ -305,17 +305,68 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
 StatusOr<MutableColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+    const size_t src_rows = offsets.size() - 1; // this->size() may be larger than offsets->size() - 1
+    const auto* __restrict repeat_offsets = offsets.data();
+
+    // Fast path for the common no-promote case. Build a plain uint32_t offset buffer locally,
+    // then transfer it into AdaptiveOffsets, avoiding the generic dst width dispatch.
+    if (LIKELY(!_offsets.is_large())) {
+        MutableColumnPtr small_result;
+        _offsets.visit_storage([&](const auto& src_buf) {
+            using SrcValue = typename std::decay_t<decltype(src_buf)>::value_type;
+            if constexpr (std::is_same_v<SrcValue, uint32_t>) {
+                const auto* __restrict src_offset_data = src_buf.data();
+                uint64_t total_size = 0;
+                for (size_t i = 0; i < src_rows; ++i) {
+                    const uint64_t bytes_size = src_offset_data[i + 1] - src_offset_data[i];
+                    total_size += bytes_size * (repeat_offsets[i + 1] - repeat_offsets[i]);
+                }
+
+                if (LIKELY(total_size <= std::numeric_limits<uint32_t>::max())) {
+                    auto dest = BinaryColumnBase<T>::create();
+                    auto& dest_bytes = dest->get_bytes();
+                    dest_bytes.resize(total_size);
+
+                    typename Offsets::Small small_offsets;
+                    raw::stl_vector_resize_uninitialized(&small_offsets, static_cast<size_t>(offsets.back()) + 1);
+
+                    const uint8_t* src_bytes = _data_base();
+                    auto* __restrict dest_bytes_data = dest_bytes.data();
+                    auto* __restrict dst_offset_data = small_offsets.data();
+                    uint64_t pos = 0;
+
+                    dst_offset_data[0] = 0;
+                    for (size_t i = 0; i < src_rows; ++i) {
+                        const uint64_t src_begin = src_offset_data[i];
+                        const size_t bytes_size = src_offset_data[i + 1] - src_begin;
+                        for (uint32_t j = repeat_offsets[i]; j < repeat_offsets[i + 1]; ++j) {
+                            strings::memcpy_inlined(dest_bytes_data + pos, src_bytes + src_begin, bytes_size);
+                            pos += bytes_size;
+                            dst_offset_data[j + 1] = static_cast<uint32_t>(pos);
+                        }
+                    }
+
+                    dest->get_offset().set_small_buffer(std::move(small_offsets));
+                    small_result = std::move(dest);
+                }
+            }
+        });
+
+        if (small_result != nullptr) {
+            return small_result;
+        }
+    }
+
     auto dest = BinaryColumnBase<T>::create();
     auto& dest_offsets = dest->get_offset();
     auto& dest_bytes = dest->get_bytes();
-    const size_t src_rows = offsets.size() - 1; // this->size() may be larger than offsets->size() - 1
-    uint64_t total_size = 0;                    // total size to copy
+    uint64_t total_size = 0; // total size to copy
 
     _offsets.visit_storage([&](const auto& src_buf) {
         const auto* __restrict src_offset_data = src_buf.data();
         for (size_t i = 0; i < src_rows; ++i) {
             const uint64_t bytes_size = src_offset_data[i + 1] - src_offset_data[i];
-            total_size += bytes_size * (offsets[i + 1] - offsets[i]);
+            total_size += bytes_size * (repeat_offsets[i + 1] - repeat_offsets[i]);
         }
     });
 
@@ -334,7 +385,7 @@ StatusOr<MutableColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>
         for (size_t i = 0; i < src_rows; ++i) {
             const uint64_t src_begin = src_offset_data[i];
             const size_t bytes_size = src_offset_data[i + 1] - src_begin;
-            for (uint32_t j = offsets[i]; j < offsets[i + 1]; ++j) {
+            for (uint32_t j = repeat_offsets[i]; j < repeat_offsets[i + 1]; ++j) {
                 strings::memcpy_inlined(dest_bytes_data + pos, src_bytes + src_begin, bytes_size);
                 pos += bytes_size;
                 dst_offset_data[j + 1] = static_cast<DstValue>(pos);
