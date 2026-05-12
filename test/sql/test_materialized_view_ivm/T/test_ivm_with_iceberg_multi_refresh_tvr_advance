@@ -40,6 +40,15 @@ AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi;
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
 
+-- Regression: EXPLAIN REFRESH only invokes getProcessExecPlan() and never
+-- calls execProcessExecPlan(). The IVM session-variable scope MUST be
+-- contained within prepareRefreshPlan() — leaking enable_ivm_refresh=true
+-- and tvr_target_mvid into the caller's ConnectContext would taint every
+-- subsequent statement in the session.
+[UC]EXPLAIN REFRESH MATERIALIZED VIEW test_mv_multi;
+SELECT @@enable_ivm_refresh;
+SELECT @@tvr_target_mvid;
+
 -- Iteration 1: +1 row → mv should have 3 rows. (Pre-fix: 3 ✓ — first
 -- post-baseline refresh happens to look correct because the persistent map
 -- starts at the baseline snapshot S0; this is the only refresh where the

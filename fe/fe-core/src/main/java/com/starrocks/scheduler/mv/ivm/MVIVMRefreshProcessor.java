@@ -87,13 +87,6 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
 
-    // IVM scope: enable_ivm_refresh is read both at plan-build (IvmRewriter) and at INSERT
-    // execution (InsertLoadTxnCallbackFactory), so the scope must span prepareRefreshPlan
-    // through executor.executePlan() in execProcessExecPlan. Reset paths: closeIvmScope.
-    private boolean savedEnableIvmRefresh;
-    private String savedTvrTargetMvId;
-    private boolean ivmScopeOpen = false;
-
     public MVIVMRefreshProcessor(Database db, MaterializedView mv,
                                  MvTaskRunContext mvContext,
                                  IMaterializedViewMetricsEntity mvEntity,
@@ -170,6 +163,14 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         final InsertStmt insertStmt = processExecPlan.insertStmt();
         final ExecPlan execPlan = processExecPlan.execPlan();
         final ConnectContext ctx = mvContext.getCtx();
+
+        // Scope enable_ivm_refresh around executor.executePlan so InsertLoadTxnCallbackFactory
+        // registers IVMInsertLoadTxnCallback for this INSERT (otherwise the persistent TVR
+        // map never advances and incremental refreshes accumulate duplicate rows).
+        boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
+        String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
+        ctx.getSessionVariable().setEnableIVMRefresh(true);
+        ctx.getSessionVariable().setTvrTargetMvid(GsonUtils.GSON.toJson(mv.getMvId()));
         try {
             try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
                 MaterializedView.AsyncRefreshContext mvRefreshContext =
@@ -186,8 +187,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
 
             return Constants.TaskRunState.SUCCESS;
         } finally {
-            // One set, one reset — close the scope opened in prepareRefreshPlan().
-            closeIvmScope(ctx);
+            ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
+            ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
         }
     }
 
@@ -459,14 +460,14 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .setQuerySource(QueryDetail.QuerySource.MV.name())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
 
-        // Open the IVM scope. Reset is deferred: normal path closes in execProcessExecPlan's
-        // finally; the catch below closes on prepare failure so MVHybridRefreshProcessor's
-        // PCT fallback plans without enable_ivm_refresh=true (#73004).
-        savedEnableIvmRefresh = ctx.getSessionVariable().isEnableIVMRefresh();
-        savedTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
+        // Scope enable_ivm_refresh to this method so IvmRewriter sees it but the variable
+        // doesn't leak — neither into MVHybridRefreshProcessor's PCT fallback after this
+        // throws (#73004), nor into the caller's session after `EXPLAIN REFRESH ...`
+        // (which runs prepareRefreshPlan without ever invoking execProcessExecPlan).
+        boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
+        String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
         ctx.getSessionVariable().setTvrTargetMvid(GsonUtils.GSON.toJson(mv.getMvId()));
-        ivmScopeOpen = true;
         try {
             final Set<Table> baseTables = snapshotBaseTables.values()
                     .stream()
@@ -502,19 +503,9 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 mvContext.setExecPlan(execPlan);
             }
             return insertStmt;
-        } catch (Exception e) {
-            closeIvmScope(ctx);
-            throw e;
-        }
-        // Scope stays open on normal completion; execProcessExecPlan() closes it.
-    }
-
-    /** Idempotent reset of the IVM scope opened in prepareRefreshPlan(). */
-    private void closeIvmScope(ConnectContext ctx) {
-        if (ivmScopeOpen) {
-            ctx.getSessionVariable().setEnableIVMRefresh(savedEnableIvmRefresh);
-            ctx.getSessionVariable().setTvrTargetMvid(savedTvrTargetMvId);
-            ivmScopeOpen = false;
+        } finally {
+            ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
+            ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
         }
     }
 
