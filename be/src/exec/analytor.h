@@ -221,11 +221,15 @@ private:
     // cannot evaluate window function until all the data of current partition is reached
     // For example, `cume_dist` need all the data to calculate
     void _materializing_process_for_half_unbounded_range_frame(RuntimeState* state);
-    // For window frame `ROWS BETWEEN N PRECEDING AND CURRENT ROW`
+    // For generic RANGE frames materialized and processed by definition.
+    void _materializing_process_for_range_frame(RuntimeState* state);
+    // For ROWS frames with finite bounds.
     void _materializing_process_for_sliding_frame(RuntimeState* state);
     void _materializing_process_for_range_offset_frame(RuntimeState* state);
     ProcessByPartitionFunc _materializing_process_impl = nullptr;
 
+    // Update all window aggregate states from the frame range [frame_start, frame_end) within the current
+    // buffered partition [partition_start, partition_end). Positions are local to the analytor's buffered columns.
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
     void _update_window_batch_removable_cumulatively();
 
@@ -260,24 +264,9 @@ private:
     FrameRange _get_frame_range() const {
         if (_is_range_window) {
             DCHECK(!_is_range_offset_window);
-            int64_t frame_start = _partition.start;
-            int64_t frame_end = _partition.end;
-            if (_range_start_boundary.type == RangeBoundaryType::CURRENT_ROW) {
-                frame_start = _peer_group.start;
-            } else {
-                DCHECK_EQ(_range_start_boundary.type, RangeBoundaryType::UNBOUNDED_PRECEDING);
-            }
-            if (_range_end_boundary.type == RangeBoundaryType::CURRENT_ROW) {
-                frame_end = _peer_group.end;
-            } else {
-                DCHECK_EQ(_range_end_boundary.type, RangeBoundaryType::UNBOUNDED_FOLLOWING);
-            }
-            frame_start = std::max<int64_t>(frame_start, _partition.start);
-            frame_end = std::min<int64_t>(frame_end, _partition.end);
-            if (frame_end < frame_start) {
-                frame_end = frame_start;
-            }
-            return {frame_start, frame_end};
+            DCHECK_EQ(_range_start_boundary.type, RangeBoundaryType::CURRENT_ROW);
+            DCHECK_EQ(_range_end_boundary.type, RangeBoundaryType::CURRENT_ROW);
+            return {_peer_group.start, _peer_group.end};
         } else if (_is_unbounded_preceding) {
             return {_partition.start, _current_row_position + _rows_end_offset + 1};
         } else {
