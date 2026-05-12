@@ -766,8 +766,8 @@ int64_t Analytor::_resolve_range_offset_boundary(const RangeBoundarySpec& bounda
 Analytor::FrameRange Analytor::_get_frame_for_range() {
     DCHECK(_is_range_window);
     if (!_is_range_offset_window) {
-        DCHECK_EQ(_range_start_boundary.type, RangeBoundaryType::CURRENT_ROW);
-        DCHECK_EQ(_range_end_boundary.type, RangeBoundaryType::CURRENT_ROW);
+        DCHECK(_range_start_boundary.type == RangeBoundaryType::CURRENT_ROW);
+        DCHECK(_range_end_boundary.type == RangeBoundaryType::CURRENT_ROW);
         return {_peer_group.start, _peer_group.end};
     }
 
