@@ -177,14 +177,6 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("time_travel_type",
                     () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
-    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL =
-            new MetricWithLabelGroup<>("operator_type",
-                    () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
-                            PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_DESC));
-    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL =
-            new MetricWithLabelGroup<>("operator_type",
-                    () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
-                            PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_DESC));
 
     // Per-catalog-type query counters
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TOTAL =
