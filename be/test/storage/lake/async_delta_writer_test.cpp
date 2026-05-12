@@ -16,6 +16,7 @@
 
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <random>
 #include <thread>
@@ -86,7 +87,8 @@ protected:
 
     void do_block_merger(bool use_profile);
 
-    constexpr static const char* const kTestDirectory = "test_lake_async_delta_writer";
+    // Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+    inline static const std::string kTestDirectory = "test_lake_async_delta_writer_" + std::to_string(getpid());
 
     int64_t _partition_id;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
