@@ -1115,4 +1115,42 @@ public class CreateFunctionStmtAnalyzerTest {
             }
         });
     }
+
+    public static class DateEval {
+        public java.time.LocalDateTime evaluate(java.time.LocalDate d, java.time.LocalDateTime ts) {
+            return ts;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDateDateTime() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(DateEval.class);
+            String createFunctionSql = buildFunction("datetime", "date, datetime");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJScalarUDFDateMismatchedJavaType() {
+        // Java method takes LocalDate but SQL declares STRING; analyzer must reject the mismatch.
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(DateEval.class);
+                String createFunctionSql = buildFunction("datetime", "string, datetime");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
 }
