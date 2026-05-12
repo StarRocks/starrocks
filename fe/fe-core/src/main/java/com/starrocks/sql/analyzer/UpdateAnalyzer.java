@@ -123,7 +123,7 @@ public class UpdateAnalyzer {
         for (String colName : assignmentByColName.keySet()) {
             Column col = icebergTable.getColumn(colName);
             if (col == null) {
-                throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
+                throw new SemanticException("table '%s' does not have column '%s'", tableName.getTbl(), colName);
             }
             if (col.isHidden()) {
                 throw new SemanticException("Updating metadata column '%s' is not allowed", colName);
@@ -256,7 +256,7 @@ public class UpdateAnalyzer {
         }
         for (String colName : assignmentByColName.keySet()) {
             if (table.getColumn(colName) == null) {
-                throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
+                throw new SemanticException("table '%s' does not have column '%s'", tableName.getTbl(), colName);
             }
         }
 

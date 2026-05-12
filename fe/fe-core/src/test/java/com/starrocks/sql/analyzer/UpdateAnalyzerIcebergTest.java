@@ -105,7 +105,7 @@ public class UpdateAnalyzerIcebergTest {
 
         SemanticException exception = assertThrows(SemanticException.class,
                 () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
-        assertTrue(exception.getMessage().contains("do not existing column"));
+        assertTrue(exception.getMessage().contains("does not have column"));
     }
 
     @Test

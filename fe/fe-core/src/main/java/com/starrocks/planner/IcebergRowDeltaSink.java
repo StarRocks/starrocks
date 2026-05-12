@@ -14,11 +14,13 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
@@ -176,8 +178,14 @@ public class IcebergRowDeltaSink extends DataSink {
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(false);
         tIcebergTableSink.setWrite_mode(TIcebergWriteMode.ROW_DELTA);
-        tIcebergTableSink.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(dataCompressionType));
-        tIcebergTableSink.setDelete_compression_type(PARQUET_COMPRESSION_TYPE_MAP.get(deleteCompressionType));
+        TCompressionType dataCompression = PARQUET_COMPRESSION_TYPE_MAP.get(dataCompressionType);
+        Preconditions.checkState(dataCompression != null,
+                "data file compression type not supported: " + dataCompressionType);
+        TCompressionType deleteCompression = PARQUET_COMPRESSION_TYPE_MAP.get(deleteCompressionType);
+        Preconditions.checkState(deleteCompression != null,
+                "delete file compression type not supported: " + deleteCompressionType);
+        tIcebergTableSink.setCompression_type(dataCompression);
+        tIcebergTableSink.setDelete_compression_type(deleteCompression);
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
