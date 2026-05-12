@@ -513,6 +513,24 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         @SuppressWarnings("unchecked")
         Map<BatchWriteId, MergeCommitJob> jobs = (Map<BatchWriteId, MergeCommitJob>)
                 FieldUtils.readField(batchWriteMgr, "mergeCommitJobs", true);
+        // Seed two jobs through the public API so onStopped() actually walks the map and
+        // calls coordinatorBackendAssigner.unregisterBatchWrite for each entry.
+        StreamLoadKvParams params1 = new StreamLoadKvParams(new HashMap<>() {
+            {
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "1");
+            }
+        });
+        StreamLoadKvParams params2 = new StreamLoadKvParams(new HashMap<>() {
+            {
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "1");
+            }
+        });
+        assertTrue(batchWriteMgr.requestCoordinatorBackends(tableId1, params1, UserIdentity.ROOT).isOk());
+        assertTrue(batchWriteMgr.requestCoordinatorBackends(tableId2, params2, UserIdentity.ROOT).isOk());
+        assertEquals(2, jobs.size(), "precondition: two merge-commit jobs registered");
+
         java.util.concurrent.ThreadPoolExecutor poolBeforeStop =
                 (java.util.concurrent.ThreadPoolExecutor) FieldUtils.readField(
                         batchWriteMgr, "threadPoolExecutor", true);
@@ -530,6 +548,46 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                         batchWriteMgr, "threadPoolExecutor", true);
         assertFalse(poolAfterRestart.isShutdown(),
                 "threadPoolExecutor must be rebuilt on re-election");
+    }
+
+    @Test
+    public void testOnStoppedSwallowsAssignerStopFailure() throws Exception {
+        // The per-handler try/catch around coordinatorBackendAssigner.stop() must absorb
+        // any failure so the rest of the drain (mergeCommitJobs clear and threadPoolExecutor
+        // shutdown) still runs.
+        CoordinatorBackendAssigner throwingAssigner = new CoordinatorBackendAssigner() {
+            @Override
+            public void start() {
+            }
+
+            @Override
+            public void stop() {
+                throw new RuntimeException("simulated assigner stop failure");
+            }
+
+            @Override
+            public void registerBatchWrite(long id, ComputeResource computeResource, TableId tableId, int expectParallel) {
+            }
+
+            @Override
+            public void unregisterBatchWrite(long id) {
+            }
+
+            @Override
+            public Optional<List<ComputeNode>> getBackends(long id) {
+                return Optional.empty();
+            }
+        };
+        FieldUtils.writeField(batchWriteMgr, "coordinatorBackendAssigner", throwingAssigner, true);
+
+        ThreadPoolExecutor poolBeforeStop = (ThreadPoolExecutor)
+                FieldUtils.readField(batchWriteMgr, "threadPoolExecutor", true);
+
+        // Should not throw despite assigner.stop() throwing.
+        MethodUtils.invokeMethod(batchWriteMgr, true, "onStopped");
+
+        assertTrue(poolBeforeStop.isShutdown(),
+                "threadPoolExecutor must still be shut down even when assigner.stop() throws");
     }
 
     @Test

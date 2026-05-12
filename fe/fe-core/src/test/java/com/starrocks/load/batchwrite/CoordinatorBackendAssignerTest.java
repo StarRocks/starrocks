@@ -28,6 +28,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -37,8 +39,10 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -274,6 +278,79 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
         assertSame(task2, queue.poll());
         assertSame(task3, queue.poll());
         assertSame(task4, queue.poll());
+    }
+
+    @Test
+    public void testDuplicateStartIsNoOp() throws Exception {
+        // Calling start() while the worker is already running must short-circuit on the
+        // "already running" guard instead of spawning a second worker thread that would
+        // race the first against taskPriorityQueue and warehouseMetas.
+        ExecutorService poolBefore = readSingleExecutor();
+        assigner.start();
+        ExecutorService poolAfter = readSingleExecutor();
+        assertSame(poolBefore, poolAfter, "duplicate start() must not replace the running executor");
+    }
+
+    @Test
+    public void testStopShutsDownExecutorAndStartRebuilds() throws Exception {
+        // stop() interrupts the scheduler worker so its blocking poll() returns and
+        // runSchedule exits; the executor must terminate within the drain timeout. A
+        // subsequent start() then creates a fresh executor for the re-elected leader.
+        ExecutorService originalExecutor = readSingleExecutor();
+        assigner.stop();
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalExecutor::isTerminated);
+
+        assigner.start();
+        ExecutorService rebuiltExecutor = readSingleExecutor();
+        assertNotNull(rebuiltExecutor);
+        assertNotSame(originalExecutor, rebuiltExecutor,
+                "stop() then start() must rebuild the executor");
+        assertFalse(rebuiltExecutor.isShutdown());
+    }
+
+    @Test
+    public void testStartRefusesWhenPreviousWorkerNotTerminated() throws Exception {
+        // Inject a shutdown-but-not-terminated executor to mimic a stop() that timed out
+        // because the worker was stuck. start() must refuse rather than spinning up a
+        // parallel worker, which would corrupt warehouseMetas.
+        ExecutorService blockedExecutor = Executors.newSingleThreadExecutor();
+        blockedExecutor.submit(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedExecutor.shutdown();
+
+        // Tear down the @BeforeEach pool first so it doesn't race the test.
+        ExecutorService before = readSingleExecutor();
+        assigner.stop();
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(before::isTerminated);
+
+        // Now plant the blocked executor and call start() - it must throw because the
+        // injected executor is shutdown-but-not-terminated.
+        writeSingleExecutor(blockedExecutor);
+
+        try {
+            assertThrows(IllegalStateException.class, () -> assigner.start());
+        } finally {
+            blockedExecutor.shutdownNow();
+        }
+    }
+
+    private ExecutorService readSingleExecutor() throws ReflectiveOperationException {
+        java.lang.reflect.Field field =
+                CoordinatorBackendAssignerImpl.class.getDeclaredField("singleExecutor");
+        field.setAccessible(true);
+        return (ExecutorService) field.get(assigner);
+    }
+
+    private void writeSingleExecutor(ExecutorService executor) throws ReflectiveOperationException {
+        java.lang.reflect.Field field =
+                CoordinatorBackendAssignerImpl.class.getDeclaredField("singleExecutor");
+        field.setAccessible(true);
+        field.set(assigner, executor);
     }
 
     private boolean containsLoadMeta(long loadId, long warehouseId) {

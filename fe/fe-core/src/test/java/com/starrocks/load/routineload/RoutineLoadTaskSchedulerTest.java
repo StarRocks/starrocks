@@ -337,4 +337,72 @@ public class RoutineLoadTaskSchedulerTest {
             blockedPool.shutdownNow();
         }
     }
+
+    @Test
+    public void testOnStoppedShutsDownPoolsAndStartRebuildsThem() {
+        // onStopped() must shutdownNow() both executors so their worker threads exit promptly
+        // during the drain. A subsequent start() must rebuild both pools so the scheduler is
+        // reusable when the FE is re-elected.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService originalScheduler =
+                Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        ExecutorService originalThreadPool = Deencapsulation.getField(scheduler, "threadPool");
+
+        Deencapsulation.invoke(scheduler, "onStopped");
+
+        Assertions.assertTrue(originalScheduler.isShutdown(),
+                "scheduledExecutorService must be shut down on demotion");
+        Assertions.assertTrue(originalThreadPool.isShutdown(),
+                "threadPool must be shut down on demotion");
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalScheduler::isTerminated);
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalThreadPool::isTerminated);
+
+        // The original pools are terminated, so start() should hit the rebuild branches.
+        scheduler.start();
+        ScheduledExecutorService rebuiltScheduler =
+                Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        ExecutorService rebuiltThreadPool = Deencapsulation.getField(scheduler, "threadPool");
+        Assertions.assertNotSame(originalScheduler, rebuiltScheduler,
+                "scheduledExecutorService must be rebuilt on re-election");
+        Assertions.assertNotSame(originalThreadPool, rebuiltThreadPool,
+                "threadPool must be rebuilt on re-election");
+        Assertions.assertFalse(rebuiltScheduler.isShutdown());
+        Assertions.assertFalse(rebuiltThreadPool.isShutdown());
+
+        scheduler.setStop();
+    }
+
+    @Test
+    public void testDelayPutToQueueSkipsWhenStopped() throws Exception {
+        // After onStopped() shuts down scheduledExecutorService, delayPutToQueue must skip
+        // cleanly instead of throwing - the next leader will re-divide the routine load.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService originalScheduler =
+                Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        Deencapsulation.invoke(scheduler, "onStopped");
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalScheduler::isTerminated);
+
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        KafkaTaskInfo taskInfo = new KafkaTaskInfo(new UUID(1, 1), job, 20000,
+                System.currentTimeMillis(), Maps.newHashMap(), Config.routine_load_task_timeout_second * 1000);
+
+        // delayPutToQueue is private; invoke through Deencapsulation. Must not throw.
+        Deencapsulation.invoke(scheduler, "delayPutToQueue", taskInfo, "test-msg");
+    }
+
+    @Test
+    public void testSubmitToScheduleSkipsWhenStopped() throws Exception {
+        // Mirror of the previous test: submitToSchedule's stopped-guard short-circuits when
+        // the threadPool was shut down, preventing RejectedExecutionException leakage.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ExecutorService originalThreadPool = Deencapsulation.getField(scheduler, "threadPool");
+        Deencapsulation.invoke(scheduler, "onStopped");
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalThreadPool::isTerminated);
+
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        KafkaTaskInfo taskInfo = new KafkaTaskInfo(new UUID(1, 1), job, 20000,
+                System.currentTimeMillis(), Maps.newHashMap(), Config.routine_load_task_timeout_second * 1000);
+
+        Deencapsulation.invoke(scheduler, "submitToSchedule", taskInfo);
+    }
 }

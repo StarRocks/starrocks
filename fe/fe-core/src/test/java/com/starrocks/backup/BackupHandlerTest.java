@@ -194,6 +194,26 @@ public class BackupHandlerTest {
     }
 
     @Test
+    public void testOnStoppedSwallowsRepoMgrStopFailure() throws Exception {
+        // The per-handler try/catch around repoMgr.stopGracefully must absorb any failure so
+        // a misbehaving RepositoryMgr cannot abort the leader-demotion drain (which would
+        // leave the FE in a half-demoted state). stopGracefully is final on LeaderDaemon;
+        // observe the safety net by making setStop() throw - stopGracefully calls setStop()
+        // before its own try/catch, so the exception bubbles up into BackupHandler's catch.
+        TestBackupHandler handler = new TestBackupHandler(GlobalStateMgr.getCurrentState());
+        RepositoryMgr throwingRepoMgr = new RepositoryMgr() {
+            @Override
+            public void setStop() {
+                throw new RuntimeException("simulated repo stop failure");
+            }
+        };
+        org.apache.commons.lang3.reflect.FieldUtils.writeField(handler, "repoMgr", throwingRepoMgr, true);
+
+        Assertions.assertDoesNotThrow(handler::callOnStopped,
+                "onStopped must absorb a throwing repoMgr.stopGracefully");
+    }
+
+    @Test
     public void testCreateAndDropRepository(@Mocked BrokerMgr brokerMgr) throws Exception {
         setUpMocker();
 
