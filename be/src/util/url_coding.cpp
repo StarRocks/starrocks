@@ -23,7 +23,7 @@
 #include <memory>
 #include <sstream>
 
-#include "base/utility/defer_op.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 static void encode_base64_internal(const std::string& in, std::string* out, const unsigned char* basis, bool padding) {
