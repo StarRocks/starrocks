@@ -64,17 +64,22 @@ StatusOr<int64_t> garbage_file_check(std::string_view root_location);
 Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
                       int64_t* vacuumed_file_size);
 
-// Delete load_spill subdirs under |root_location| whose hex-encoded txn_id is < |min_active_txn_id|.
-// Non-hex names matching the legacy pre-upgrade `load_spill/<uuid>/` layout are also reclaimed;
-// any other entry is skipped with a warning.
-// |*deleted_dirs|, if non-null, is incremented by the number of directories actually removed.
-Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, int64_t* deleted_dirs = nullptr);
-
-// Best-effort cleanup of load_spill/. Centralizes the config gate
-// (config::lake_enable_vacuum_load_spill) and error swallowing so vacuum_impl()
-// and vacuum_full_impl() cannot drift. |vacuumed_files|, if non-null, is
-// incremented by the number of reclaimed top-level load_spill subdirs.
-void try_vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files);
+// Reclaim expired load_spill directories under |root_location|.
+//
+// Two layouts coexist and are scanned at distinct paths:
+//   - Active layout `<root>/load_spill_txns/<txn_id_hex>/<load_id>/`: always
+//     scanned; gated by |min_active_txn_id|. A subdir is reclaimable iff its
+//     txn_id < min_active_txn_id.
+//   - Legacy layout `<root>/load_spill/<load_id_uuid>/` (no txn_id layer): gated
+//     by |cleanup_legacy_load_spill|. When false, the legacy tree is skipped
+//     entirely (with a throttled warning) because the caller cannot prove its
+//     subdirs are inactive. When true, every legacy subdir is unconditionally
+//     reclaimed. Legacy directories are written only by older BE versions before
+//     the txn_id layer was introduced.
+//
+// |*deleted_dirs|, if non-null, is incremented by the number of subdirs reclaimed.
+Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, bool cleanup_legacy_load_spill,
+                         int64_t* deleted_dirs = nullptr);
 
 StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
         FileSystem* fs, const std::string& metadata_root_location);

@@ -358,6 +358,19 @@ message VacuumRequest {
     // Whether enable shared file cleanup in vacuum.
     // This flag is used for both file-bundling tables and range-distribution tables.
     optional bool enable_shared_file_cleanup = 10;
+    // Authorize the vacuum worker to clean up the legacy load_spill layout, where
+    // each load is a direct child of <root>/load_spill/ keyed by load_id UUID
+    // (i.e. <root>/load_spill/<load_id_uuid>/). This layout was written by older
+    // BE versions before the txn_id-scoped layout was introduced; new code never
+    // creates it, but old data may still exist on storage.
+    //
+    // When false (default), the vacuum worker only reclaims the active layout
+    // (<root>/load_spill_txns/<txn_id>/<load_id>/) gated by min_active_txn_id;
+    // legacy directories are skipped with a throttled warning. When true, legacy
+    // directories are additionally reclaimed unconditionally. The caller (FE) should
+    // set this to true only after it can guarantee no in-flight load is still writing
+    // to the legacy layout (i.e. all BEs have been upgraded past the layout change).
+    optional bool cleanup_legacy_load_spill = 11;
 }
 
 message VacuumResponse {
@@ -398,6 +411,9 @@ message VacuumFullRequest {
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
     repeated int64 retain_versions = 7;
+    // Authorize cleanup of the legacy load_id-keyed load_spill layout.
+    // See VacuumRequest.cleanup_legacy_load_spill for the full semantics.
+    optional bool cleanup_legacy_load_spill = 8;
 }
 
 message VacuumFullResponse {

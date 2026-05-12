@@ -5102,17 +5102,29 @@ TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_shared_orphan
 // ============================================================================
 // vacuum_load_spill() unit tests
 //
-// vacuum_load_spill() reclaims expired sub-directories under <root>/load_spill/.
-// The real implementation classifies sub-directory names as follows:
-//   1. Lowercase hex string of length 1..16 that parses to a positive int64
-//      (i.e. a `txn_id` produced by the post-upgrade BE):
+// vacuum_load_spill() reclaims expired sub-directories under TWO physically
+// independent trees:
+//
+//   1. Active layout: <root>/load_spill_txns/<txn_id_hex>/...
+//      Children are 1..16-char lowercase-hex strings parsing to a positive
+//      int64 (`txn_id` written by the post-upgrade BE).
 //        * txn_id <  min_active_txn_id  -> delete  (expired)
 //        * txn_id >= min_active_txn_id  -> keep    (still active)
-//   2. 36-char canonical UUID (the pre-upgrade `load_id` directory layout):
-//        delete unconditionally (cluster has progressed past the loads).
-//   3. Anything else: skip and emit a throttled warning.
+//      Anything that is not a valid hex txn_id is left alone with a throttled
+//      warning (defensive: corruption / future format).
 //
-// These tests pin that contract so that future refactors cannot regress it.
+//   2. Legacy layout: <root>/load_spill/<load_id_uuid>/...
+//      Children are 36-char canonical UUIDs (the pre-upgrade load_id-keyed
+//      directory layout, also still emitted by non-Lake callers).
+//        * |cleanup_legacy_load_spill| == true  -> reclaim every entry under
+//                                                  the legacy tree, including
+//                                                  non-UUID children (the
+//                                                  caller asserts no BE still
+//                                                  writes here)
+//        * |cleanup_legacy_load_spill| == false -> the entire <root>/load_spill/
+//                                                  tree is skipped (no listing)
+//
+// These tests pin that contract so future refactors cannot regress it.
 // ============================================================================
 class LakeVacuumLoadSpillTest : public TestBase {
 public:
@@ -5128,8 +5140,20 @@ public:
 protected:
     constexpr static const char* const kTestDir = "./lake_vacuum_load_spill_test";
 
+    // Create <_test_dir>/load_spill_txns/<subdir>/<filename> with one byte of content.
+    // Used to populate the active (post-upgrade) layout.
+    void create_txns_spill_file(const std::string& subdir, const std::string& filename) {
+        std::string dir = join_path(join_path(_test_dir, kLoadSpillTxnsDirectoryName), subdir);
+        ASSERT_OK(fs::create_directories(dir));
+        std::string path = join_path(dir, filename);
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(path));
+        ASSERT_OK(f->append("x"));
+        ASSERT_OK(f->close());
+    }
+
     // Create <_test_dir>/load_spill/<subdir>/<filename> with one byte of content.
-    void create_spill_file(const std::string& subdir, const std::string& filename) {
+    // Used to populate the legacy (load_id-keyed) layout.
+    void create_legacy_spill_file(const std::string& subdir, const std::string& filename) {
         std::string dir = join_path(join_path(_test_dir, kLoadSpillDirectoryName), subdir);
         ASSERT_OK(fs::create_directories(dir));
         std::string path = join_path(dir, filename);
@@ -5138,7 +5162,14 @@ protected:
         ASSERT_OK(f->close());
     }
 
-    bool spill_subdir_exists(const std::string& subdir) {
+    bool txns_subdir_exists(const std::string& subdir) {
+        std::string dir = join_path(join_path(_test_dir, kLoadSpillTxnsDirectoryName), subdir);
+        auto st = FileSystem::Default()->path_exists(dir);
+        CHECK(st.ok() || st.is_not_found()) << st;
+        return st.ok();
+    }
+
+    bool legacy_subdir_exists(const std::string& subdir) {
         std::string dir = join_path(join_path(_test_dir, kLoadSpillDirectoryName), subdir);
         auto st = FileSystem::Default()->path_exists(dir);
         CHECK(st.ok() || st.is_not_found()) << st;
@@ -5146,100 +5177,202 @@ protected:
     }
 };
 
-// load_spill/ does not exist at all -> ignore_not_found should yield OK.
-TEST_F(LakeVacuumLoadSpillTest, no_load_spill_dir_returns_ok) {
-    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100);
+// Neither load_spill_txns/ nor load_spill/ exists -> ignore_not_found should
+// yield OK on both branches.
+TEST_F(LakeVacuumLoadSpillTest, no_load_spill_dirs_returns_ok) {
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/false);
     EXPECT_TRUE(st.ok()) << st;
+    auto st2 = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/true);
+    EXPECT_TRUE(st2.ok()) << st2;
 }
 
 // Hex txn_id strictly less than min_active_txn_id must be reclaimed.
 TEST_F(LakeVacuumLoadSpillTest, deletes_expired_hex_txn_dir) {
     // 0x32 == 50, min_active_txn_id == 100 -> expired.
-    create_spill_file("32", "spill-0");
-    create_spill_file("32", "spill-1");
-    ASSERT_TRUE(spill_subdir_exists("32"));
+    create_txns_spill_file("32", "spill-0");
+    create_txns_spill_file("32", "spill-1");
+    ASSERT_TRUE(txns_subdir_exists("32"));
 
     int64_t deleted = 0;
-    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, &deleted);
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/false, &deleted);
     ASSERT_TRUE(st.ok()) << st;
 
-    EXPECT_FALSE(spill_subdir_exists("32"));
+    EXPECT_FALSE(txns_subdir_exists("32"));
     EXPECT_EQ(1, deleted);
 }
 
 // Hex txn_id strictly greater than min_active_txn_id must be retained.
 TEST_F(LakeVacuumLoadSpillTest, keeps_active_hex_txn_dir) {
     // 0xc8 == 200, min_active_txn_id == 100 -> still active.
-    create_spill_file("c8", "spill-0");
+    create_txns_spill_file("c8", "spill-0");
 
     int64_t deleted = 0;
-    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, &deleted);
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/false, &deleted);
     ASSERT_TRUE(st.ok()) << st;
 
-    EXPECT_TRUE(spill_subdir_exists("c8"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
     EXPECT_EQ(0, deleted);
 }
 
 // Boundary: txn_id == min_active_txn_id must be retained (the comparison is `>=`).
 TEST_F(LakeVacuumLoadSpillTest, keeps_equal_hex_txn_dir) {
     // 0x64 == 100, min_active_txn_id == 100 -> equal, keep.
-    create_spill_file("64", "spill-0");
+    create_txns_spill_file("64", "spill-0");
 
     int64_t deleted = 0;
-    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, &deleted);
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/false, &deleted);
     ASSERT_TRUE(st.ok()) << st;
 
-    EXPECT_TRUE(spill_subdir_exists("64"));
+    EXPECT_TRUE(txns_subdir_exists("64"));
     EXPECT_EQ(0, deleted);
 }
 
-// 36-char canonical UUID is the pre-upgrade load_id layout. It must be reclaimed
-// unconditionally once the cluster has any positive min_active_txn_id, because
-// the upgrade barrier guarantees no in-flight load still references it.
-TEST_F(LakeVacuumLoadSpillTest, deletes_legacy_uuid_dir) {
+// 36-char canonical UUID is the legacy load_id directory layout. With
+// |cleanup_legacy_load_spill| set to true, the caller asserts the cluster
+// is past the upgrade barrier and the dir can be reclaimed.
+TEST_F(LakeVacuumLoadSpillTest, deletes_legacy_uuid_dir_when_pre_upgrade_enabled) {
     const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
-    create_spill_file(uuid, "spill-0");
-    ASSERT_TRUE(spill_subdir_exists(uuid));
+    create_legacy_spill_file(uuid, "spill-0");
+    ASSERT_TRUE(legacy_subdir_exists(uuid));
 
     int64_t deleted = 0;
-    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/1, &deleted);
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/1, /*cleanup_legacy_load_spill=*/true, &deleted);
     ASSERT_TRUE(st.ok()) << st;
 
-    EXPECT_FALSE(spill_subdir_exists(uuid));
+    EXPECT_FALSE(legacy_subdir_exists(uuid));
     EXPECT_EQ(1, deleted);
 }
 
-// Mixed scenario: every classification co-existing under load_spill/ at once.
-//   "32"                               -> expired hex (delete)
-//   "c8"                               -> active hex  (keep)
-//   "abcdef01-2345-6789-abcd-..."      -> legacy UUID (delete)
-//   "garbage_name"                     -> unrecognized (keep, warn)
-// Only the expired hex and the legacy UUID should be reclaimed.
-TEST_F(LakeVacuumLoadSpillTest, mixed_dirs) {
+// Symmetric to the case above: with |cleanup_legacy_load_spill|=false the
+// legacy UUID directory must be left untouched, even though min_active_txn_id
+// is large enough that any txn-ordered cleanup would otherwise be willing to
+// reclaim the directory. This pins the rolling-upgrade safety guarantee.
+TEST_F(LakeVacuumLoadSpillTest, keeps_legacy_uuid_dir_when_pre_upgrade_disabled) {
     const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
-    create_spill_file("32", "f1");           // expired (50 < 100)
-    create_spill_file("c8", "f2");           // active  (200 >= 100)
-    create_spill_file(uuid, "f3");           // legacy
-    create_spill_file("garbage_name", "f4"); // unrecognized
+    create_legacy_spill_file(uuid, "spill-0");
+    ASSERT_TRUE(legacy_subdir_exists(uuid));
 
     int64_t deleted = 0;
-    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, &deleted);
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/false, &deleted);
     ASSERT_TRUE(st.ok()) << st;
 
-    EXPECT_FALSE(spill_subdir_exists("32"));
-    EXPECT_TRUE(spill_subdir_exists("c8"));
-    EXPECT_FALSE(spill_subdir_exists(uuid));
-    EXPECT_TRUE(spill_subdir_exists("garbage_name"));
+    EXPECT_TRUE(legacy_subdir_exists(uuid));
+    EXPECT_EQ(0, deleted);
+}
+
+// Non-hex names under <root>/load_spill_txns/ are unexpected (corruption /
+// future format) and must be skipped without affecting valid siblings.
+TEST_F(LakeVacuumLoadSpillTest, skips_unrecognized_entry_under_txns_dir) {
+    create_txns_spill_file("32", "f1");           // expired hex, will be deleted
+    create_txns_spill_file("garbage_name", "f2"); // unrecognized, must be kept
+
+    int64_t deleted = 0;
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/false, &deleted);
+    ASSERT_TRUE(st.ok()) << st;
+
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("garbage_name"));
+    EXPECT_EQ(1, deleted);
+}
+
+// When |cleanup_legacy_load_spill| is true, the operator has asserted that no
+// BE still writes to the legacy tree, so every entry under it is stale and
+// reclaimable -- including non-UUID-named directories that may have been left
+// behind by older code paths. This pins that "reclaim everything" semantic.
+TEST_F(LakeVacuumLoadSpillTest, reclaims_all_legacy_entries_when_pre_upgrade_enabled) {
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_legacy_spill_file(uuid, "f1");
+    create_legacy_spill_file("garbage_name", "f2");
+
+    int64_t deleted = 0;
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/true, &deleted);
+    ASSERT_TRUE(st.ok()) << st;
+
+    EXPECT_FALSE(legacy_subdir_exists(uuid));
+    EXPECT_FALSE(legacy_subdir_exists("garbage_name"));
     EXPECT_EQ(2, deleted);
+}
+
+// Mixed scenario with |cleanup_legacy_load_spill|=true: every classification
+// across both trees, exercised in one call.
+//   load_spill_txns/32                 -> expired hex (delete)
+//   load_spill_txns/c8                 -> active hex  (keep)
+//   load_spill_txns/garbage            -> unrecognized in txns tree (keep)
+//   load_spill/<uuid>                  -> legacy (delete, flag=true)
+//   load_spill/garbage_name            -> stale entry in legacy tree (delete, flag=true)
+TEST_F(LakeVacuumLoadSpillTest, mixed_dirs_with_pre_upgrade_enabled) {
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "f1");             // expired (50 < 100)
+    create_txns_spill_file("c8", "f2");             // active  (200 >= 100)
+    create_txns_spill_file("garbage", "f3");        // unrecognized in txns tree
+    create_legacy_spill_file(uuid, "f4");           // legacy
+    create_legacy_spill_file("garbage_name", "f5"); // stale entry in legacy tree
+
+    int64_t deleted = 0;
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/true, &deleted);
+    ASSERT_TRUE(st.ok()) << st;
+
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
+    EXPECT_TRUE(txns_subdir_exists("garbage"));
+    EXPECT_FALSE(legacy_subdir_exists(uuid));
+    EXPECT_FALSE(legacy_subdir_exists("garbage_name"));
+    EXPECT_EQ(3, deleted);
+}
+
+// Mixed scenario with |cleanup_legacy_load_spill|=false: only the hex
+// expired branch is reclaimed; the entire legacy tree (including UUID and
+// garbage entries) is left untouched. This is the rolling-upgrade path:
+// the active layout is fully recyclable while the legacy tree is held back
+// until the operator opts in.
+TEST_F(LakeVacuumLoadSpillTest, mixed_dirs_with_pre_upgrade_disabled) {
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "f1");
+    create_txns_spill_file("c8", "f2");
+    create_txns_spill_file("garbage", "f3");
+    create_legacy_spill_file(uuid, "f4");
+    create_legacy_spill_file("garbage_name", "f5");
+
+    int64_t deleted = 0;
+    auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100, /*cleanup_legacy_load_spill=*/false, &deleted);
+    ASSERT_TRUE(st.ok()) << st;
+
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
+    EXPECT_TRUE(txns_subdir_exists("garbage"));
+    EXPECT_TRUE(legacy_subdir_exists(uuid));
+    EXPECT_TRUE(legacy_subdir_exists("garbage_name"));
+    EXPECT_EQ(1, deleted);
+}
+
+// |cleanup_legacy_load_spill| is orthogonal to the hex (txn_id) branch:
+// flipping it must not affect whether an active hex dir is retained. Pinning
+// this prevents future regressions where a refactor accidentally lets the
+// legacy gate also short-circuit the hex path.
+TEST_F(LakeVacuumLoadSpillTest, keeps_active_hex_txn_dir_regardless_of_pre_upgrade) {
+    create_txns_spill_file("c8", "spill-0");
+
+    for (bool flag : {false, true}) {
+        int64_t deleted = 0;
+        auto st = vacuum_load_spill(_test_dir, /*min_active_txn_id=*/100,
+                                    /*cleanup_legacy_load_spill=*/flag, &deleted);
+        ASSERT_TRUE(st.ok()) << "flag=" << flag << " st=" << st;
+        EXPECT_TRUE(txns_subdir_exists("c8")) << "flag=" << flag;
+        EXPECT_EQ(0, deleted) << "flag=" << flag;
+    }
 }
 
 // ============================================================================
 // vacuum() integration tests for load_spill cleanup
 //
 // These pin the wiring between the public vacuum() entry point and
-// vacuum_load_spill(): the spill cleanup must run iff BOTH
-//   (a) request.delete_txn_log() == true, AND
-//   (b) config::lake_enable_vacuum_load_spill == true.
+// vacuum_load_spill() at the integration boundary:
+//   - The spill cleanup runs iff request.delete_txn_log() == true.
+//   - Within that branch, request.cleanup_legacy_load_spill() further gates
+//     the cleanup of legacy load_id-named (UUID) sub-directories. The
+//     post-upgrade hex (txn_id) sub-directories are reclaimed regardless of
+//     this flag, so the old proto path -- where the field is left unset and
+//     defaults to false -- is also covered here.
 //
 // They complement the unit tests above (which exercise vacuum_load_spill()
 // directly) by guarding the integration boundary.
@@ -5262,8 +5395,25 @@ public:
 protected:
     constexpr static const char* const kTestDir = "./lake_vacuum_load_spill_integration_test";
 
-    // Same on-disk layout as LakeVacuumLoadSpillTest::create_spill_file.
-    void create_spill_file(const std::string& subdir, const std::string& filename) {
+    // Active layout helpers: <_test_dir>/load_spill_txns/<subdir>/<filename>.
+    void create_txns_spill_file(const std::string& subdir, const std::string& filename) {
+        std::string dir = join_path(join_path(_test_dir, kLoadSpillTxnsDirectoryName), subdir);
+        ASSERT_OK(fs::create_directories(dir));
+        std::string path = join_path(dir, filename);
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(path));
+        ASSERT_OK(f->append("x"));
+        ASSERT_OK(f->close());
+    }
+
+    bool txns_subdir_exists(const std::string& subdir) {
+        std::string dir = join_path(join_path(_test_dir, kLoadSpillTxnsDirectoryName), subdir);
+        auto st = FileSystem::Default()->path_exists(dir);
+        CHECK(st.ok() || st.is_not_found()) << st;
+        return st.ok();
+    }
+
+    // Legacy layout helpers: <_test_dir>/load_spill/<subdir>/<filename>.
+    void create_legacy_spill_file(const std::string& subdir, const std::string& filename) {
         std::string dir = join_path(join_path(_test_dir, kLoadSpillDirectoryName), subdir);
         ASSERT_OK(fs::create_directories(dir));
         std::string path = join_path(dir, filename);
@@ -5272,7 +5422,7 @@ protected:
         ASSERT_OK(f->close());
     }
 
-    bool spill_subdir_exists(const std::string& subdir) {
+    bool legacy_subdir_exists(const std::string& subdir) {
         std::string dir = join_path(join_path(_test_dir, kLoadSpillDirectoryName), subdir);
         auto st = FileSystem::Default()->path_exists(dir);
         CHECK(st.ok() || st.is_not_found()) << st;
@@ -5308,29 +5458,30 @@ protected:
     // Drives the vacuum() entry point with a fixed min_active_txn_id == 100.
     // "32" (== 50)  is expired,
     // "c8" (== 200) is still active.
-    void run_vacuum(bool delete_txn_log, VacuumResponse* response) {
+    // |cleanup_legacy_load_spill| forwards as VacuumRequest.cleanup_legacy_load_spill(),
+    // gating cleanup of legacy load_id-named (UUID) sub-directories under load_spill/.
+    void run_vacuum(bool delete_txn_log, bool cleanup_legacy_load_spill, VacuumResponse* response) {
         VacuumRequest request;
         request.add_tablet_ids(kTabletId);
         request.set_min_retain_version(1);
         request.set_grace_timestamp(::time(nullptr) + 60);
         request.set_min_active_txn_id(100);
         request.set_delete_txn_log(delete_txn_log);
+        request.set_cleanup_legacy_load_spill(cleanup_legacy_load_spill);
         vacuum(_tablet_mgr.get(), request, response);
     }
 
     static constexpr int64_t kTabletId = 90001;
 };
 
-// Both gates open: load_spill cleanup runs, expired hex dir is reclaimed,
-// active hex dir is retained. Pins the happy-path integration.
+// Both gates open and the legacy gate enabled: load_spill cleanup runs over
+// hex AND legacy UUID layouts. Pins the happy-path integration.
 //
 // We additionally place a real expired txn_log file (txn_id=50) and a real
 // active one (txn_id=200) under <_test_dir>/txn_log/ to verify that the
 // adjacent vacuum_txn_log() branch is not regressed by the new load_spill
 // piggyback right after it.
-TEST_F(LakeVacuumLoadSpillIntegrationTest, deletes_load_spill_when_enabled_and_delete_txn_log_true) {
-    ConfigResetGuard<bool> guard(&config::lake_enable_vacuum_load_spill, true);
-
+TEST_F(LakeVacuumLoadSpillIntegrationTest, deletes_load_spill_when_pre_upgrade_enabled_and_delete_txn_log_true) {
     put_dummy_tablet(kTabletId, /*version=*/1);
 
     // Real txn_log artifacts on disk -- if the new spill branch had thrown an
@@ -5340,20 +5491,24 @@ TEST_F(LakeVacuumLoadSpillIntegrationTest, deletes_load_spill_when_enabled_and_d
     ASSERT_TRUE(txn_log_exists(kTabletId, 50));
     ASSERT_TRUE(txn_log_exists(kTabletId, 200));
 
-    create_spill_file("32", "spill-0"); // 0x32 == 50  -> expired
-    create_spill_file("c8", "spill-0"); // 0xc8 == 200 -> active
-    ASSERT_TRUE(spill_subdir_exists("32"));
-    ASSERT_TRUE(spill_subdir_exists("c8"));
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "spill-0");   // 0x32 == 50  -> expired
+    create_txns_spill_file("c8", "spill-0");   // 0xc8 == 200 -> active
+    create_legacy_spill_file(uuid, "spill-0"); // legacy UUID, gated by pre_upgrade flag
+    ASSERT_TRUE(txns_subdir_exists("32"));
+    ASSERT_TRUE(txns_subdir_exists("c8"));
+    ASSERT_TRUE(legacy_subdir_exists(uuid));
 
     VacuumResponse response;
-    run_vacuum(/*delete_txn_log=*/true, &response);
+    run_vacuum(/*delete_txn_log=*/true, /*cleanup_legacy_load_spill=*/true, &response);
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code())
             << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
 
-    // Spill dirs: expired one gone, active one kept.
-    EXPECT_FALSE(spill_subdir_exists("32"));
-    EXPECT_TRUE(spill_subdir_exists("c8"));
+    // Spill dirs: expired hex gone, active hex kept, legacy UUID gone (flag=true).
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
+    EXPECT_FALSE(legacy_subdir_exists(uuid));
 
     // vacuum_txn_log() must still work unchanged: expired log gone, active kept.
     EXPECT_FALSE(txn_log_exists(kTabletId, 50));
@@ -5361,51 +5516,94 @@ TEST_F(LakeVacuumLoadSpillIntegrationTest, deletes_load_spill_when_enabled_and_d
 }
 
 // delete_txn_log == false short-circuits both vacuum_txn_log() and
-// vacuum_load_spill(); spill dirs must be left intact even with the config on.
+// vacuum_load_spill(); spill dirs must be left intact even with the legacy
+// gate on, because the spill branch is nested inside the txn_log branch.
 TEST_F(LakeVacuumLoadSpillIntegrationTest, skips_load_spill_when_delete_txn_log_false) {
-    ConfigResetGuard<bool> guard(&config::lake_enable_vacuum_load_spill, true);
-
     put_dummy_tablet(kTabletId, /*version=*/1);
-    create_spill_file("32", "spill-0"); // would be expired if cleanup ran
-    create_spill_file("c8", "spill-0");
+    create_txns_spill_file("32", "spill-0"); // would be expired if cleanup ran
+    create_txns_spill_file("c8", "spill-0");
 
     VacuumResponse response;
-    run_vacuum(/*delete_txn_log=*/false, &response);
+    run_vacuum(/*delete_txn_log=*/false, /*cleanup_legacy_load_spill=*/true, &response);
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code())
             << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
 
     // Both dirs must survive: cleanup never ran.
-    EXPECT_TRUE(spill_subdir_exists("32"));
-    EXPECT_TRUE(spill_subdir_exists("c8"));
+    EXPECT_TRUE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
 }
 
-// Config kill-switch: even with delete_txn_log=true, disabling the config
-// must skip vacuum_load_spill() entirely. This is the ops-level rollback path.
-TEST_F(LakeVacuumLoadSpillIntegrationTest, skips_load_spill_when_config_disabled) {
-    ConfigResetGuard<bool> guard(&config::lake_enable_vacuum_load_spill, false);
-
+// Pre-upgrade gate disabled: hex (txn_id) layout is still recyclable but the
+// legacy UUID layout must be held back. This is the rolling-upgrade path
+// where new BE has been deployed but FE has not yet started forwarding the
+// new request flag.
+TEST_F(LakeVacuumLoadSpillIntegrationTest, keeps_legacy_uuid_dir_when_pre_upgrade_disabled) {
     put_dummy_tablet(kTabletId, /*version=*/1);
-    create_spill_file("32", "spill-0"); // would be expired if cleanup ran
-    create_spill_file("c8", "spill-0");
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "spill-0");   // expired hex
+    create_txns_spill_file("c8", "spill-0");   // active hex
+    create_legacy_spill_file(uuid, "spill-0"); // legacy UUID -- must be held back
 
     VacuumResponse response;
-    run_vacuum(/*delete_txn_log=*/true, &response);
+    run_vacuum(/*delete_txn_log=*/true, /*cleanup_legacy_load_spill=*/false, &response);
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code())
             << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
 
-    // Both dirs must survive: config disabled the cleanup.
-    EXPECT_TRUE(spill_subdir_exists("32"));
-    EXPECT_TRUE(spill_subdir_exists("c8"));
+    // Hex path is unaffected by the legacy gate.
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
+    // Legacy UUID kept because the request opted out.
+    EXPECT_TRUE(legacy_subdir_exists(uuid));
+}
+
+// Old-FE compatibility: when the new VacuumRequest field is left unset on the
+// wire (proto2 default = false), the upgraded BE must read it back as false
+// and therefore NOT reclaim the legacy UUID directory. This pins the
+// rolling-upgrade safety guarantee at the proto-defaulting boundary -- a
+// future contributor flipping the proto default would immediately break this
+// test rather than silently corrupt in-flight loads on a real cluster.
+TEST_F(LakeVacuumLoadSpillIntegrationTest, keeps_legacy_uuid_dir_when_pre_upgrade_field_unset) {
+    put_dummy_tablet(kTabletId, /*version=*/1);
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "spill-0");   // expired hex
+    create_legacy_spill_file(uuid, "spill-0"); // legacy UUID
+
+    // Intentionally NOT using run_vacuum() helper: the helper unconditionally
+    // calls request.set_cleanup_legacy_load_spill(...), but this test must
+    // pin the on-the-wire "field unset" state to simulate an old FE that has
+    // not been upgraded to know about this field. Build the request manually.
+    VacuumRequest request;
+    request.add_tablet_ids(kTabletId);
+    request.set_min_retain_version(1);
+    request.set_grace_timestamp(::time(nullptr) + 60);
+    request.set_min_active_txn_id(100);
+    request.set_delete_txn_log(true);
+    // Intentionally do NOT call set_cleanup_legacy_load_spill(...) so the
+    // request goes on the wire with the field unset, simulating an old FE.
+    ASSERT_FALSE(request.has_cleanup_legacy_load_spill());
+
+    VacuumResponse response;
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code())
+            << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
+
+    // Hex path still runs -- the new branch is gated only by delete_txn_log.
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    // Legacy UUID kept because field unset means default-false on the BE side.
+    EXPECT_TRUE(legacy_subdir_exists(uuid));
 }
 
 // ============================================================================
 // vacuum_full() integration tests for load_spill cleanup
 //
 // Mirrors LakeVacuumLoadSpillIntegrationTest but drives vacuum_full() (the
-// AutoVacuum backstop). The same config gate must apply, and the expired
-// spill dir count must be surfaced through VacuumFullResponse::vacuumed_files.
+// AutoVacuum backstop). The hex (txn_id) layout is reclaimed unconditionally;
+// cleanup of the legacy load_id-named (UUID) layout is gated by
+// VacuumFullRequest.cleanup_legacy_load_spill(), and the count of reclaimed
+// dirs surfaces through VacuumFullResponse::vacuumed_files.
 // ============================================================================
 class LakeVacuumFullLoadSpillIntegrationTest : public TestBase {
 public:
@@ -5421,7 +5619,23 @@ public:
 protected:
     constexpr static const char* const kTestDir = "./lake_vacuum_full_load_spill_integration_test";
 
-    void create_spill_file(const std::string& subdir, const std::string& filename) {
+    void create_txns_spill_file(const std::string& subdir, const std::string& filename) {
+        std::string dir = join_path(join_path(_test_dir, kLoadSpillTxnsDirectoryName), subdir);
+        ASSERT_OK(fs::create_directories(dir));
+        std::string path = join_path(dir, filename);
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(path));
+        ASSERT_OK(f->append("x"));
+        ASSERT_OK(f->close());
+    }
+
+    bool txns_subdir_exists(const std::string& subdir) {
+        std::string dir = join_path(join_path(_test_dir, kLoadSpillTxnsDirectoryName), subdir);
+        auto st = FileSystem::Default()->path_exists(dir);
+        CHECK(st.ok() || st.is_not_found()) << st;
+        return st.ok();
+    }
+
+    void create_legacy_spill_file(const std::string& subdir, const std::string& filename) {
         std::string dir = join_path(join_path(_test_dir, kLoadSpillDirectoryName), subdir);
         ASSERT_OK(fs::create_directories(dir));
         std::string path = join_path(dir, filename);
@@ -5430,14 +5644,16 @@ protected:
         ASSERT_OK(f->close());
     }
 
-    bool spill_subdir_exists(const std::string& subdir) {
+    bool legacy_subdir_exists(const std::string& subdir) {
         std::string dir = join_path(join_path(_test_dir, kLoadSpillDirectoryName), subdir);
         auto st = FileSystem::Default()->path_exists(dir);
         CHECK(st.ok() || st.is_not_found()) << st;
         return st.ok();
     }
 
-    void run_vacuum_full(VacuumFullResponse* response) {
+    // |cleanup_legacy_load_spill| forwards as VacuumFullRequest.cleanup_legacy_load_spill(),
+    // gating cleanup of legacy load_id-named (UUID) sub-directories under load_spill/.
+    void run_vacuum_full(bool cleanup_legacy_load_spill, VacuumFullResponse* response) {
         VacuumFullRequest request;
         request.set_partition_id(1);
         request.set_tablet_id(kTabletId);
@@ -5445,53 +5661,96 @@ protected:
         request.set_grace_timestamp(::time(nullptr) + 60);
         request.set_min_check_version(0);
         request.set_max_check_version(10);
+        request.set_cleanup_legacy_load_spill(cleanup_legacy_load_spill);
         vacuum_full(_tablet_mgr.get(), request, response);
     }
 
     static constexpr int64_t kTabletId = 90002;
 };
 
-// vacuum_full() with config enabled: expired hex spill dir reclaimed, active
-// kept, and the count surfaces through response.vacuumed_files (FullVacuum's
-// reporting contract, which differs from AutoVacuum).
-TEST_F(LakeVacuumFullLoadSpillIntegrationTest, deletes_load_spill_when_enabled) {
-    ConfigResetGuard<bool> guard(&config::lake_enable_vacuum_load_spill, true);
-
-    create_spill_file("32", "spill-0"); // 0x32 == 50  -> expired
-    create_spill_file("c8", "spill-0"); // 0xc8 == 200 -> active
-    ASSERT_TRUE(spill_subdir_exists("32"));
-    ASSERT_TRUE(spill_subdir_exists("c8"));
+// vacuum_full() with the legacy gate enabled: expired hex dir reclaimed,
+// active hex retained, legacy UUID reclaimed (flag=true). The total count
+// surfaces through response.vacuumed_files (FullVacuum's reporting contract,
+// which differs from AutoVacuum).
+TEST_F(LakeVacuumFullLoadSpillIntegrationTest, deletes_load_spill_when_pre_upgrade_enabled) {
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "spill-0");   // 0x32 == 50  -> expired
+    create_txns_spill_file("c8", "spill-0");   // 0xc8 == 200 -> active
+    create_legacy_spill_file(uuid, "spill-0"); // legacy UUID, gated by pre_upgrade flag
+    ASSERT_TRUE(txns_subdir_exists("32"));
+    ASSERT_TRUE(txns_subdir_exists("c8"));
+    ASSERT_TRUE(legacy_subdir_exists(uuid));
 
     VacuumFullResponse response;
-    run_vacuum_full(&response);
+    run_vacuum_full(/*cleanup_legacy_load_spill=*/true, &response);
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code())
             << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
 
-    EXPECT_FALSE(spill_subdir_exists("32"));
-    EXPECT_TRUE(spill_subdir_exists("c8"));
-    // FullVacuum surfaces the reclaimed-dir count in its response.
-    EXPECT_GE(response.vacuumed_files(), 1);
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
+    EXPECT_FALSE(legacy_subdir_exists(uuid));
+    // FullVacuum surfaces the reclaimed-dir count (>= 2: hex "32" + uuid).
+    EXPECT_GE(response.vacuumed_files(), 2);
 }
 
-// vacuum_full() with config disabled must skip load_spill cleanup entirely,
-// independently of any other vacuum_full() responsibility. This is the
-// ops-level rollback path on the FullVacuum schedule.
-TEST_F(LakeVacuumFullLoadSpillIntegrationTest, skips_load_spill_when_config_disabled) {
-    ConfigResetGuard<bool> guard(&config::lake_enable_vacuum_load_spill, false);
-
-    create_spill_file("32", "spill-0"); // would be expired if cleanup ran
-    create_spill_file("c8", "spill-0");
+// vacuum_full() with the legacy gate disabled: hex (txn_id) layout is still
+// reclaimed normally, but the legacy UUID dir must be held back. This is the
+// rolling-upgrade path on the FullVacuum schedule.
+TEST_F(LakeVacuumFullLoadSpillIntegrationTest, keeps_legacy_uuid_dir_when_pre_upgrade_disabled) {
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "spill-0");   // expired hex
+    create_txns_spill_file("c8", "spill-0");   // active hex
+    create_legacy_spill_file(uuid, "spill-0"); // legacy UUID -- must be held back
 
     VacuumFullResponse response;
-    run_vacuum_full(&response);
+    run_vacuum_full(/*cleanup_legacy_load_spill=*/false, &response);
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code())
             << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
 
-    // Both dirs must survive: config disabled the cleanup.
-    EXPECT_TRUE(spill_subdir_exists("32"));
-    EXPECT_TRUE(spill_subdir_exists("c8"));
+    // Hex path is unaffected by the legacy gate.
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    EXPECT_TRUE(txns_subdir_exists("c8"));
+    // Legacy UUID kept because the request opted out.
+    EXPECT_TRUE(legacy_subdir_exists(uuid));
+}
+
+// Old-FE compatibility on the FullVacuum path: when the new VacuumFullRequest
+// field is left unset on the wire (proto2 default = false), the upgraded BE
+// must read it back as false and therefore NOT reclaim the legacy UUID
+// directory. Mirrors keeps_legacy_uuid_dir_when_pre_upgrade_field_unset on
+// the AutoVacuum path -- both daemons are potential rolling-upgrade race
+// triggers, so each is pinned independently.
+TEST_F(LakeVacuumFullLoadSpillIntegrationTest, keeps_legacy_uuid_dir_when_pre_upgrade_field_unset) {
+    const std::string uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    create_txns_spill_file("32", "spill-0");   // expired hex
+    create_legacy_spill_file(uuid, "spill-0"); // legacy UUID
+
+    // Intentionally NOT using run_vacuum_full() helper: see the matching
+    // comment on AutoVacuum's keeps_legacy_uuid_dir_when_pre_upgrade_field_unset.
+    // We need the on-the-wire VacuumFullRequest to have the new field unset.
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(kTabletId);
+    request.set_min_active_txn_id(100);
+    request.set_grace_timestamp(::time(nullptr) + 60);
+    request.set_min_check_version(0);
+    request.set_max_check_version(10);
+    // Intentionally do NOT call set_cleanup_legacy_load_spill(...) so the
+    // request goes on the wire with the field unset, simulating an old FE.
+    ASSERT_FALSE(request.has_cleanup_legacy_load_spill());
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code())
+            << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
+
+    // Hex path still runs.
+    EXPECT_FALSE(txns_subdir_exists("32"));
+    // Legacy UUID kept because field unset means default-false on the BE side.
+    EXPECT_TRUE(legacy_subdir_exists(uuid));
 }
 
 } // namespace starrocks::lake

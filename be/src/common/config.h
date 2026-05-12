@@ -1334,11 +1334,6 @@ CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
-// Whether vacuum should delete on-disk load_spill directories whose encoded txn_id is no longer
-// active. Keep disabled during rolling upgrade so that newly-upgraded BEs do not remove
-// legacy-format spill directories (directories without a txn_id layer) that are still being
-// written by BEs running the old code path. Enable only after the whole cluster is upgraded.
-CONF_mBool(lake_enable_vacuum_load_spill, "false");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");

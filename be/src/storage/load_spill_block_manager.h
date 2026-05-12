@@ -87,12 +87,14 @@ private:
 
 class LoadSpillBlockManager {
 public:
-    // txn_id: Lake write transaction id. When non-zero (Lake write path), the spill
-    // directory layout becomes <remote_spill_path>/load_spill/<txn_id_hex>/<load_id>/ so that
-    // offline vacuum can reclaim expired spill files by matching the <txn_id_hex> directory
-    // against the cluster-wide min_active_txn_id.
-    // For non-Lake callers (txn_id = 0), the legacy <remote_spill_path>/load_spill/<load_id>/
-    // layout is preserved to keep behaviour backward compatible.
+    // enable_vacuum_cleanup:
+    //   - true  (Lake write path): use <remote_spill_path>/load_spill_txns/<txn_id_hex>/<load_id>/
+    //           layout. Per-file deletion on release is skipped; expired subtrees are reclaimed
+    //           by vacuum. Requires non-zero txn_id.
+    //   - false (non-Lake callers, e.g. SpillPartitionChunkWriter): legacy
+    //           <remote_spill_path>/load_spill/<load_id>/ layout with inline per-file deletion.
+    // Directory names must stay in sync with lake::kLoadSpillTxnsDirectoryName /
+    // kLoadSpillDirectoryName and the vacuum entry in storage/lake/vacuum.cpp.
     LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
                           const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs,
                           bool enable_vacuum_cleanup = false, int64_t txn_id = 0)
@@ -101,10 +103,9 @@ public:
               _fs(std::move(fs)),
               _enable_vacuum_cleanup(enable_vacuum_cleanup),
               _txn_id(txn_id) {
-        if (txn_id != 0) {
-            // Lake write path: insert <txn_id_hex> layer so that vacuum_load_spill can
-            // identify expired directories by txn_id alone.
-            _remote_spill_path = remote_spill_path + "/load_spill/" + fmt::format("{:016x}", txn_id);
+        if (enable_vacuum_cleanup) {
+            DCHECK(txn_id != 0) << "vacuum cleanup mode requires non-zero txn_id";
+            _remote_spill_path = remote_spill_path + "/load_spill_txns/" + fmt::format("{:016x}", txn_id);
         } else {
             _remote_spill_path = remote_spill_path + "/load_spill";
         }

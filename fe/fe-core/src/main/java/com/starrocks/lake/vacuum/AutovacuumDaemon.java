@@ -128,10 +128,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (Config.lake_autovacuum_detect_vaccumed_version) {
             long minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
-                minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+                minRetainVersion = Math.max(1,
+                        partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
             } else {
-                minRetainVersion = Math.min(minRetainVersion, 
-                                        partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+                minRetainVersion = Math.min(minRetainVersion,
+                        partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
             }
             // the file before minRetainVersion vacuum success
             if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
@@ -194,12 +195,14 @@ public class AutovacuumDaemon extends FrontendDaemon {
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             } else {
-                minRetainVersion = Math.min(minRetainVersion, visibleVersion - Config.lake_autovacuum_max_previous_versions);
+                minRetainVersion = Math.min(minRetainVersion,
+                        visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
 
             preExtraFileSize = partition.getExtraFileSize();
             if (partition.getMetadataSwitchVersion() != 0) {
-                // If metadataSwitchVersion is not 0, it means that for versions prior to this, the value of 
+                // If metadataSwitchVersion is not 0, it means that for versions prior to this,
+                // the value of
                 // fileBundling should be the ​​opposite​​ of the current value.
                 fileBundling = !fileBundling;
             }
@@ -214,7 +217,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         // Resolve all tablet owners in a single batched RPC. The result serves both:
         // - enableSharedFileCleanup: collect candidate aggregator nodes (prefer a node
-        //   that owns at least one tablet), then assign all tablets to the chosen one.
+        // that owns at least one tablet), then assign all tablets to the chosen one.
         // - non-shared: assign each tablet to its first alive owner CN.
         // This avoids N per-tablet getComputeNodeAssignedToTablet RPCs in either path.
         Map<Long, List<Long>> shardToNodeIds = null;
@@ -263,7 +266,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 // Try batched result first: find first alive owner for this tablet.
                 ComputeNode pickNode = null;
                 List<Long> nodeIds = (shardToNodeIds != null)
-                        ? shardToNodeIds.get(lakeTablet.getId()) : null;
+                        ? shardToNodeIds.get(lakeTablet.getId())
+                        : null;
                 if (nodeIds != null) {
                     for (long nodeId : nodeIds) {
                         if (clusterInfo.checkBackendAlive(nodeId)
@@ -294,6 +298,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long vacuumedFileSize = 0;
         long vacuumedVersion = Long.MAX_VALUE;
         boolean needDeleteTxnLog = true;
+        boolean needCleanupLegacyLoadSpill = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<TabletInfoPB>> entry : nodeToTablets.entrySet()) {
             ComputeNode node = entry.getKey();
@@ -301,8 +306,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
             // vacuumRequest.tabletIds is deprecated, use tabletInfos instead.
             vacuumRequest.tabletInfos = entry.getValue();
             vacuumRequest.minRetainVersion = minRetainVersion;
-            vacuumRequest.graceTimestamp =
-                    startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
+            vacuumRequest.graceTimestamp = startTime / MILLISECONDS_PER_SECOND
+                    - Config.lake_autovacuum_grace_period_minutes * 60;
             if (vacuumImmediatelyPartition(partition)) {
                 // If the partition is in the ignore list, we set graceTimestamp to startTime.
                 // This means that the vacuum operation will not be delayed by graceTimestamp.
@@ -312,14 +317,17 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
             vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
-                                           db.getId(), table.getId(), partition.getParentId(), partition.getId());
+                    db.getId(), table.getId(), partition.getParentId(), partition.getId());
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
+            vacuumRequest.cleanupLegacyLoadSpill = needCleanupLegacyLoadSpill;
             vacuumRequest.enableFileBundling = fileBundling;
             vacuumRequest.enableSharedFileCleanup = enableSharedFileCleanup;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
+            // Legacy load_id UUID dir scan is also done on the first node only.
+            needCleanupLegacyLoadSpill = false;
             try {
                 LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 responseFutures.add(service.vacuum(vacuumRequest));
@@ -377,11 +385,14 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
             locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
             try {
-                // hasError is false means that the vacuum operation on all tablets was successful.
-                // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
+                // hasError is false means that the vacuum operation on all tablets was
+                // successful.
+                // the vacuumedVersion isthe minimum success vacuum version among all tablets
+                // within the partition which
                 // means that all the garbage files before the vacuumVersion have been deleted.
                 partition.setLastSuccVacuumVersion(vacuumedVersion);
-                if (partition.getMetadataSwitchVersion() != 0 && vacuumedVersion >= partition.getMetadataSwitchVersion()) {
+                if (partition.getMetadataSwitchVersion() != 0
+                        && vacuumedVersion >= partition.getMetadataSwitchVersion()) {
                     partition.setMetadataSwitchVersion(0);
                 }
                 long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
@@ -393,9 +404,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         MetricRepo.COUNTER_VACUUM_FILES_NUMBER.increase(vacuumedFiles);
         MetricRepo.COUNTER_VACUUM_FILES_BYTES.increase(vacuumedFileSize);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
+                "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, extraFileSize, 
+                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, extraFileSize,
                 System.currentTimeMillis() - startTime);
     }
 

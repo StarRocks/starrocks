@@ -17,6 +17,7 @@
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
+#include <optional>
 #include <set>
 #include <string_view>
 #include <unordered_map>
@@ -612,94 +613,94 @@ Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id,
 }
 
 // Reclaim load_spill subtrees that no longer correspond to any active load.
-//
-// Layout: <root>/load_spill/<txn_id_hex>/<load_id>/...
-//   - <txn_id_hex>: 16-char zero-padded lowercase hex of the Lake write txn_id.
-//     Safe to delete once txn_id < min_active_txn_id (load is committed/aborted
-//     and no in-flight reader still needs the spill files).
-//   - Pre-upgrade BEs wrote <root>/load_spill/<load_id_uuid>/ directly (no txn_id
-//     layer). During a rolling upgrade these orphan UUID dirs can pile up; we
-//     reclaim them once FE drives a vacuum with a positive min_active_txn_id,
-//     which proves the cluster has progressed past any load that could still
-//     reference them.
-Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, int64_t* deleted_dirs) {
+Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, bool cleanup_legacy_load_spill,
+                         int64_t* deleted_dirs) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_location));
     auto t0 = butil::gettimeofday_s();
     auto ret = Status::OK();
     int64_t local_deleted = 0;
-    auto load_spill_dir = join_path(root_location, kLoadSpillDirectoryName);
 
-    auto is_pre_upgrade_load_id = [](std::string_view name) {
-        // 36-char canonical UUID "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-        // emitted by print_id() / boost::uuids::to_string().
-        if (name.size() != 36) return false;
-        if (name[8] != '-' || name[13] != '-' || name[18] != '-' || name[23] != '-') return false;
-        auto is_hex = [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); };
-        for (size_t i = 0; i < name.size(); ++i) {
-            if (i == 8 || i == 13 || i == 18 || i == 23) continue;
-            if (!is_hex(name[i])) return false;
-        }
-        return true;
+    // Parse a directory name produced by fmt::format("{:016x}", txn_id). Returns
+    // nullopt for anything else (non-hex, overflow, non-positive) so the caller
+    // can skip and warn instead of aborting on corruption / stray garbage.
+    auto parse_hex_txn_id = [](std::string_view s) -> std::optional<int64_t> {
+        if (s.empty() || s.size() > 16) return std::nullopt;
+        StringParser::ParseResult res = StringParser::PARSE_FAILURE;
+        int64_t txn_id = StringParser::string_to_int<int64_t>(s.data(), s.size(), 16, &res);
+        if (res != StringParser::PARSE_SUCCESS || txn_id <= 0) return std::nullopt;
+        return txn_id;
     };
-    auto iter_st = ignore_not_found(fs->iterate_dir2(load_spill_dir, [&](DirEntry entry) {
-        // Some object-storage FS impls report non-dir entries here, skip them defensively.
-        if (entry.is_dir.has_value() && !entry.is_dir.value()) {
-            return true;
-        }
 
-        // Object storage typically surfaces CommonPrefixes with a trailing '/'. Normalize
-        // so the name-matching logic below works on both POSIX-style and S3-style listings.
+    // Object storage typically surfaces CommonPrefixes with a trailing '/'. Normalize
+    // so the name-matching logic below works on both POSIX-style and S3-style listings.
+    auto normalize_entry_name = [](DirEntry entry) -> std::string_view {
         std::string_view name = entry.name;
         if (!name.empty() && name.back() == '/') {
             name.remove_suffix(1);
         }
+        return name;
+    };
+
+    // ---- (1) Active layout: <root>/load_spill_txns/<txn_id_hex>/ ----
+    auto load_spill_txns_dir = join_path(root_location, kLoadSpillTxnsDirectoryName);
+    auto txns_iter_st = ignore_not_found(fs->iterate_dir2(load_spill_txns_dir, [&](DirEntry entry) {
+        // Some object-storage FS impls report non-dir entries here, skip them defensively.
+        if (entry.is_dir.has_value() && !entry.is_dir.value()) {
+            return true;
+        }
+        std::string_view name = normalize_entry_name(entry);
         if (name.empty()) {
             return true;
         }
 
-        bool need_delete = false;
-
-        auto is_hex_txn_id = [](std::string_view s) {
-            if (s.empty() || s.size() > 16) return false;
-            for (char c : s) {
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                    return false;
-                }
-            }
-            return true;
-        };
-
-        StringParser::ParseResult parse_res = StringParser::PARSE_FAILURE;
-        int64_t txn_id = 0;
-        if (is_hex_txn_id(name)) {
-            txn_id = StringParser::string_to_int<int64_t>(name.data(), name.size(), 16, &parse_res);
-        }
-        if (parse_res == StringParser::PARSE_SUCCESS && txn_id > 0) {
-            if (txn_id >= min_active_txn_id) {
-                return true; // still potentially in use
-            }
-            need_delete = true;
-        } else if (is_pre_upgrade_load_id(name)) {
-            need_delete = true; // see function-level comment for rationale
-        } else {
-            LOG_EVERY_N(WARNING, 100) << "Skip unrecognized entry under " << load_spill_dir << ": " << name;
+        auto parsed = parse_hex_txn_id(name);
+        if (!parsed.has_value()) {
+            LOG_EVERY_N(WARNING, 100) << "Skip unrecognized entry under " << load_spill_txns_dir << ": " << name;
             return true;
         }
 
-        if (!need_delete) {
-            return true;
+        int64_t txn_id = *parsed;
+        if (txn_id >= min_active_txn_id) {
+            return true; // still potentially in use
         }
-        auto sub_dir = join_path(load_spill_dir, std::string(name));
+
+        auto sub_dir = join_path(load_spill_txns_dir, std::string(name));
         auto st = ignore_not_found(fs->delete_dir_recursive(sub_dir));
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to delete load spill dir " << sub_dir << ": " << st;
+            LOG(WARNING) << "Fail to delete load spill txn dir " << sub_dir << ": " << st;
             ret.update(st);
             return false; // Stop listing on first hard error.
         }
         ++local_deleted;
         return true;
     }));
-    ret.update(iter_st);
+    ret.update(txns_iter_st);
+
+    // ---- (2) Legacy layout: <root>/load_spill/<load_id>/ ----
+    auto legacy_dir = join_path(root_location, kLoadSpillDirectoryName);
+    if (!cleanup_legacy_load_spill) {
+        LOG_EVERY_N(INFO, 1000) << "Skip legacy load_spill tree (caller did not opt in): " << legacy_dir;
+    } else {
+        auto legacy_iter_st = ignore_not_found(fs->iterate_dir2(legacy_dir, [&](DirEntry entry) {
+            std::string_view name = normalize_entry_name(entry);
+            if (name.empty()) {
+                return true;
+            }
+            auto sub_path = join_path(legacy_dir, std::string(name));
+            // is_dir is optional on some FS impls; default to dir-recursive when unknown.
+            const bool is_file = entry.is_dir.has_value() && !entry.is_dir.value();
+            auto st = is_file ? ignore_not_found(fs->delete_file(sub_path))
+                              : ignore_not_found(fs->delete_dir_recursive(sub_path));
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to delete legacy load spill entry " << sub_path << ": " << st;
+                ret.update(st);
+                return false;
+            }
+            ++local_deleted;
+            return true;
+        }));
+        ret.update(legacy_iter_st);
+    }
 
     auto t1 = butil::gettimeofday_s();
     g_vacuum_load_spill_latency << (t1 - t0);
@@ -711,18 +712,6 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
     return ret;
 }
 
-// See vacuum.h for contract / rationale.
-void try_vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files) {
-    if (!config::lake_enable_vacuum_load_spill) {
-        return;
-    }
-    int64_t deleted = 0;
-    auto st = vacuum_load_spill(root_location, min_active_txn_id, &deleted);
-    LOG_IF(WARNING, !st.ok()) << "Fail to vacuum load spill under " << root_location << ": " << st;
-    if (vacuumed_files != nullptr) {
-        *vacuumed_files += deleted;
-    }
-}
 Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
     if (UNLIKELY(tablet_mgr == nullptr)) {
         return Status::InvalidArgument("tablet_mgr is null");
@@ -784,10 +773,11 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
-        // Piggyback load-spill cleanup on the same trigger so it shares the txn_log
-        // retention semantics. AutoVacuum does NOT roll the deleted spill dir count
-        // into `vacuumed_files`; that's the FullVacuum backstop's job.
-        try_vacuum_load_spill(root_loc, min_active_txn_id, /*vacuumed_files=*/nullptr);
+        // Piggyback load-spill cleanup on delete_txn_log so it shares the same
+        // retention window. Best-effort: a failure here must not fail vacuum_impl.
+        auto spill_st = vacuum_load_spill(root_loc, min_active_txn_id, request.cleanup_legacy_load_spill(),
+                                          /*deleted_dirs=*/nullptr);
+        LOG_IF(WARNING, !spill_st.ok()) << "Fail to vacuum load spill under " << root_loc << ": " << spill_st;
     }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);

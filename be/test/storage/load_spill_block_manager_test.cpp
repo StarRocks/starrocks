@@ -132,6 +132,153 @@ TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_without_init) {
     ASSERT_OK(block_manager->clear_parent_path());
 }
 
+// Vacuum-cleanup mode places spill files under
+// <root>/load_spill_txns/<txn_id_hex>/<load_id>/, so that the vacuum job can reclaim
+// expired subtrees by comparing the encoded txn_id against min_active_txn_id. This
+// case verifies the on-disk layout matches that contract.
+TEST_F(LoadSpillBlockManagerTest, test_vacuum_cleanup_mode_path_layout) {
+    TUniqueId load_id;
+    load_id.hi = 0x1111;
+    load_id.lo = 0x2222;
+    constexpr int64_t kTxnId = 0x123456789abcdef0LL;
+
+    // In production, the spill path is served by starlet fs whose `create_missing_parent`
+    // option auto-creates intermediate directories. Under BE_TEST, the POSIX FS used by
+    // FileSystemFactory does not, and `init()` only calls create_dir_if_missing() on the
+    // full path, so the parent layer must be staged here. See LoadSpillBlockManager::init.
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(std::string(kTestDir) + "/load_spill_txns/123456789abcdef0"));
+
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+                                                                 /*enable_vacuum_cleanup=*/true, kTxnId);
+    ASSERT_OK(block_manager->init());
+
+    // Force a remote acquire so the directory tree actually materializes on disk.
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+    ASSERT_OK(block->append({Slice("vacuum_payload")}));
+    ASSERT_OK(block->flush());
+
+    // Expect the txn_id-scoped active layout.
+    std::string txns_path = std::string(kTestDir) + "/load_spill_txns/123456789abcdef0/" + print_id(load_id);
+    auto status = FileSystem::Default()->iterate_dir(txns_path, [](std::string_view) -> bool { return true; });
+    ASSERT_TRUE(status.ok()) << "Expected vacuum-cleanup layout at " << txns_path << ", got: " << status;
+
+    // The legacy load_spill/<load_id>/ tree must NOT be created in vacuum mode,
+    // otherwise vacuum_load_spill would never reclaim it without the legacy switch.
+    std::string legacy_path = std::string(kTestDir) + "/load_spill/" + print_id(load_id);
+    auto legacy_status = FileSystem::Default()->iterate_dir(legacy_path, [](std::string_view) -> bool { return true; });
+    ASSERT_TRUE(legacy_status.is_not_found())
+            << "Legacy path must not exist in vacuum mode, but got: " << legacy_status;
+
+    ASSERT_OK(block_manager->release_block(block));
+}
+
+// Legacy / non-Lake callers (the default ctor flags) keep the original
+// <root>/load_spill/<load_id>/ layout to preserve backward compatibility with
+// code paths whose container destructors handle inline deletion.
+TEST_F(LoadSpillBlockManagerTest, test_legacy_mode_path_layout) {
+    TUniqueId load_id;
+    load_id.hi = 0xaaaa;
+    load_id.lo = 0xbbbb;
+    // Pass txn_id explicitly to prove that, in legacy mode, txn_id is ignored
+    // and does NOT leak into the path.
+    constexpr int64_t kIgnoredTxnId = 0xdeadbeef;
+
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+                                                                 /*enable_vacuum_cleanup=*/false, kIgnoredTxnId);
+    ASSERT_OK(block_manager->init());
+
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+    ASSERT_OK(block->append({Slice("legacy_payload")}));
+    ASSERT_OK(block->flush());
+
+    std::string legacy_path = std::string(kTestDir) + "/load_spill/" + print_id(load_id);
+    auto status = FileSystem::Default()->iterate_dir(legacy_path, [](std::string_view) -> bool { return true; });
+    ASSERT_TRUE(status.ok()) << "Expected legacy layout at " << legacy_path << ", got: " << status;
+
+    // Nothing should have been written under load_spill_txns/.
+    std::string txns_root = std::string(kTestDir) + "/load_spill_txns";
+    auto txns_status = FileSystem::Default()->iterate_dir(txns_root, [](std::string_view) -> bool { return true; });
+    ASSERT_TRUE(txns_status.is_not_found())
+            << "load_spill_txns/ must not exist in legacy mode, but got: " << txns_status;
+
+    ASSERT_OK(block_manager->release_block(block));
+}
+
+// In vacuum-cleanup mode, release_block() must NOT delete the underlying spill
+// file: vacuum is the sole reclaim mechanism. In legacy mode, release_block()
+// keeps its historical inline-delete behaviour. This case pins both branches.
+TEST_F(LoadSpillBlockManagerTest, test_vacuum_cleanup_skips_file_deletion) {
+    auto find_any_file = [](const std::string& dir) -> std::string {
+        std::string found;
+        (void)FileSystem::Default()->iterate_dir(dir, [&](std::string_view name) {
+            found = std::string(name);
+            return false; // stop after first entry
+        });
+        return found;
+    };
+
+    // --- Vacuum mode: file persists after release_block() ---
+    {
+        TUniqueId load_id;
+        load_id.hi = 1;
+        load_id.lo = 2;
+        constexpr int64_t kTxnId = 0x42LL;
+        // Stage the txn-scoped parent dir; see comment in test_vacuum_cleanup_mode_path_layout.
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(std::string(kTestDir) +
+                                                              "/load_spill_txns/0000000000000042"));
+        auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+                                                                     /*enable_vacuum_cleanup=*/true, kTxnId);
+        ASSERT_OK(block_manager->init());
+        ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+        ASSERT_OK(block->append({Slice("keep_me")}));
+        ASSERT_OK(block->flush());
+
+        std::string load_dir = std::string(kTestDir) + "/load_spill_txns/0000000000000042/" + print_id(load_id);
+        std::string filename_before = find_any_file(load_dir);
+        ASSERT_FALSE(filename_before.empty()) << "Expected at least one spill file under " << load_dir;
+
+        ASSERT_OK(block_manager->release_block(block));
+        // The actual file deletion is performed in FileBlockContainer's dtor,
+        // which fires only when the last BlockPtr reference is dropped. Force
+        // that to happen here so the assertion below is meaningful.
+        block.reset();
+
+        // The file must still exist; vacuum will clean it up later.
+        std::string filename_after = find_any_file(load_dir);
+        ASSERT_FALSE(filename_after.empty()) << "Vacuum-cleanup mode must not delete files on release_block(), but "
+                                             << load_dir << " is empty after release.";
+    }
+
+    // --- Legacy mode: file deleted on release_block() ---
+    {
+        TUniqueId load_id;
+        load_id.hi = 3;
+        load_id.lo = 4;
+        auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+                                                                     /*enable_vacuum_cleanup=*/false, /*txn_id=*/0);
+        ASSERT_OK(block_manager->init());
+        ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+        ASSERT_OK(block->append({Slice("delete_me")}));
+        ASSERT_OK(block->flush());
+
+        std::string load_dir = std::string(kTestDir) + "/load_spill/" + print_id(load_id);
+        std::string filename_before = find_any_file(load_dir);
+        ASSERT_FALSE(filename_before.empty()) << "Expected at least one spill file under " << load_dir;
+        std::string file_path = load_dir + "/" + filename_before;
+
+        ASSERT_OK(block_manager->release_block(block));
+        // Drop the last BlockPtr ref so FileBlockContainer's dtor fires inline.
+        block.reset();
+
+        // Legacy behaviour: the dtor deletes the spill file inline. We assert
+        // the specific file we created is gone (the parent dir may linger
+        // depending on filesystem semantics).
+        auto exists_st = FileSystem::Default()->path_exists(file_path);
+        ASSERT_TRUE(exists_st.is_not_found())
+                << "Legacy mode must delete the spill file inline, but " << file_path << " still exists: " << exists_st;
+    }
+}
+
 class LoadSpillBlockMergeExecutorTest : public ::testing::Test {
 public:
     void SetUp() override {}
