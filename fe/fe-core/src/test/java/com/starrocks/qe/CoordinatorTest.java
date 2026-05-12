@@ -51,6 +51,8 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
@@ -70,6 +72,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class CoordinatorTest extends PlanTestBase {
@@ -302,4 +305,33 @@ public class CoordinatorTest extends PlanTestBase {
         Assertions.assertEquals(1, instances.size());
 
     }
+
+    @Test
+    public void testClearExternalResourcesOnlyOnce() {
+        AtomicInteger clearCount = new AtomicInteger();
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        ScanNode scanNode = new ScanNode(new PlanNodeId(0), desc, "counting-scan") {
+            @Override
+            public void clear() {
+                clearCount.incrementAndGet();
+            }
+
+            @Override
+            public java.util.List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+                return Collections.emptyList();
+            }
+
+            @Override
+            protected void toThrift(TPlanNode msg) {
+            }
+        };
+        DefaultCoordinator coordinatorWithScan = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, Lists.newArrayList(), Collections.singletonList(scanNode), new TDescriptorTable(), null);
+
+        coordinatorWithScan.clearExternalResources();
+        coordinatorWithScan.clearExternalResources();
+
+        Assertions.assertEquals(1, clearCount.get());
+    }
+
 }
