@@ -393,8 +393,10 @@ Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, Obj
         if (it != _partition_id_to_desc_map.end()) {
             auto* old_partition = it->second;
             if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
-                return Status::InternalError(
-                        fmt::format("Partition id {} already exists with different partition_key_exprs.", id));
+                return Status::InternalError(fmt::format(
+                        "Partition id {} already exists with different partition_key_exprs. "
+                        "new partition (thrift) = {}, old_partition = {}",
+                        id, apache::thrift::ThriftDebugString(thrift_partition), old_partition->debug_string()));
             }
             return Status::OK();
         }

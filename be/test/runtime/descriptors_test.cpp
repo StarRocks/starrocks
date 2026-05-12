@@ -107,7 +107,9 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdSameThriftIsDedupHit)
     ASSERT_EQ(first, second);
 }
 
-// Second call with the same partition_id but different thrift must fail.
+// Second call with the same partition_id but different thrift must fail, and the
+// error message must surface enough context (both the new thrift and the existing
+// partition's debug string) to help diagnose the mismatch.
 TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails) {
     constexpr int64_t partition_id = 3;
     THdfsPartition base = _make_partition();
@@ -118,6 +120,11 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails)
     Status s = _table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, conflict);
     ASSERT_FALSE(s.ok());
     ASSERT_TRUE(s.is_internal_error()) << s.to_string();
+
+    const std::string msg = s.to_string();
+    EXPECT_NE(std::string::npos, msg.find(std::to_string(partition_id))) << msg;
+    EXPECT_NE(std::string::npos, msg.find("partition_key_exprs")) << msg;
+    EXPECT_NE(std::string::npos, msg.find("old_partition")) << msg;
 
     // Existing entry must be unchanged.
     HdfsPartitionDescriptor* desc = _table_desc->get_partition(partition_id);
