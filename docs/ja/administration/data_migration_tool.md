@@ -330,7 +330,7 @@ enable_table_property_sync=false
 | source_cluster_user                       | ソースクラスターにログインするために使用されるユーザー名。このユーザーには、SYSTEMレベルでOPERATE権限が付与されている必要があります。 |
 | source_cluster_password                   | ソースクラスターにログインするために使用されるユーザーパスワード。      |
 | source_cluster_password_secret_key        | ソースクラスターのログインユーザーのパスワードを暗号化するために使用されるシークレットキー。デフォルト値は空の文字列であり、ログインパスワードが暗号化されていないことを意味します。`source_cluster_password` を暗号化したい場合は、SQLステートメント `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_ secret_key>'))` を使用して暗号化された `source_cluster_password` 文字列を取得できます。 |
-| source_cluster_token                      | ソースクラスターのトークン。クラスターのトークンを取得する方法については、以下を参照してください。 |[クラスタートークンの取得](#obtain-cluster-token)。 <br />**注記**<br />共有データクラスター間での移行では、ファイルがオブジェクトストレージから直接読み取られるため、クラスタートークンは不要です。共有データソースクラスター間でデータを移行したい場合は、これを空のままにするか、省略できます。 |
+| source_cluster_token                      | ソースクラスターのトークン。クラスターのトークンを取得する方法については、以下を参照してください。 [クラスタートークンの取得](#obtain-cluster-token)。 <br />**注記**<br />共有データクラスター間での移行では、ファイルがオブジェクトストレージから直接読み取られるため、クラスタートークンは不要です。共有データソースクラスター間でデータを移行したい場合は、これを空のままにするか、省略できます。 |
 | target_fe_host | ターゲットクラスターのFEのIPアドレスまたはFQDN（完全修飾ドメイン名）。 |
 | target_fe_query_port | ターゲットクラスターのFEのクエリポート（`query_port`）。 |
 | target_cluster_user | ターゲットクラスターへのログインに使用するユーザー名。このユーザーには、SYSTEMレベルでOPERATE権限が付与されている必要があります。 |
