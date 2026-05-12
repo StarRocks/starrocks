@@ -125,7 +125,7 @@ CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
 // Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
 CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
 
-CONF_Bool(enable_load_segment_parallel, "false");
+CONF_Bool(enable_load_segment_parallel, "true");
 
 // write buffer size before flush
 CONF_mInt64(write_buffer_size, "104857600");
