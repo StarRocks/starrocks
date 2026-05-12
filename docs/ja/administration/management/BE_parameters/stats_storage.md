@@ -35,7 +35,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-このトピックでは、以下の種類のFE構成について紹介します：
+このトピックでは、以下の種類のBE構成について紹介します：
 - [統計レポート](#統計レポート)
 - [ストレージ](#ストレージ)
 

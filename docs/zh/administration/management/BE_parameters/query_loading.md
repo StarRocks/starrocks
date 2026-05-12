@@ -30,7 +30,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [查询引擎](#查询引擎)
 - [导入导出](#导入导出)
 
